@@ -1,0 +1,6 @@
+@CastleDefense.Server_HostAddress = http://localhost:5056
+
+GET {{CastleDefense.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
