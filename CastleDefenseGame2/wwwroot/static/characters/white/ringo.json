@@ -1,0 +1,12 @@
+{
+    "name": "ringo",
+    "price": 5,
+    "health": 15,
+    "damage": 4,
+    "type": "black",
+    "speed": 13,
+    "size": 50,
+    "y": 400,
+    "team": "white",
+    "description": "its ya boi"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "bub",
+    "price": 2,
+    "health": 5,
+    "damage": 10,
+    "type": "black",
+    "speed": 3,
+    "size": 75,
+    "y": 375,
+    "team": "yellow",
+    "description": "Lamp"
+}

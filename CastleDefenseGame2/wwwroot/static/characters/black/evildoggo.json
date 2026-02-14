@@ -1,0 +1,12 @@
+{
+    "name": "evildoggo",
+    "price": 3,
+    "health": 11,
+    "damage": 3,
+    "type": "black",
+    "speed": 11,
+    "size": 50,
+    "y": 400,
+    "team": "black",
+    "description": "Like doggo, but corrupted by an evil force of black magic."
+}

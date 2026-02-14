@@ -1,0 +1,12 @@
+{
+    "name": "geico",
+    "price": 19,
+    "health": 27,
+    "damage": 7,
+    "type": "yellow",
+    "speed": 15,
+    "size": 50,
+    "y": 375,
+    "team": "green",
+    "description": "Save 10% or more on car insurance!"
+}

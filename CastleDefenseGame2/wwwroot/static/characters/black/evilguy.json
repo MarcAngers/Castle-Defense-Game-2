@@ -1,0 +1,12 @@
+{
+    "name": "evilguy",
+    "price": 230,
+    "health": 375,
+    "damage": 15,
+    "type": "black_MAX",
+    "speed": 2,
+    "size": 200,
+    "y": 250,
+    "team": "black",
+    "description": "The leader and creator of all the evil characters. His evilness knows no bounds."
+}

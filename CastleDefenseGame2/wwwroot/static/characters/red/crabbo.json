@@ -1,0 +1,12 @@
+{
+    "name": "crabbo",
+    "price": 3,
+    "health": 12,
+    "damage": 2,
+    "type": "red",
+    "speed": 10,
+    "size": 50,
+    "y": 400,
+    "team": "red",
+    "description": "Mess with crabbo, you get the stabbo."
+}

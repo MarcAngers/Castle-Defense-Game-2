@@ -1,0 +1,12 @@
+{
+    "name": "blobbo",
+    "price": 3,
+    "health": 10,
+    "damage": 2,
+    "type": "purple",
+    "speed": 8,
+    "size": 50,
+    "y": 400,
+    "team": "purple",
+    "description": "It's a uh... blob of something..."
+}

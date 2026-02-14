@@ -1,0 +1,12 @@
+{
+    "name": "spike",
+    "price": 5,
+    "health": 20,
+    "damage": 5,
+    "type": "white",
+    "speed": 7,
+    "size": 50,
+    "y": 400,
+    "team": "purple",
+    "description": "Unfortunately, he really enjoys hugs."
+}

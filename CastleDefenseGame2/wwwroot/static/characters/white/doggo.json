@@ -1,0 +1,12 @@
+{
+    "name": "doggo",
+    "price": 3,
+    "health": 10,
+    "damage": 2,
+    "type": "white",
+    "speed": 10,
+    "size": 50,
+    "y": 400,
+    "team": "white",
+    "description": "The basic unit. He's awesome. Excels at tearing down enemy castles."
+}

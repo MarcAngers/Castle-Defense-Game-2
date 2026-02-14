@@ -1,0 +1,12 @@
+{
+    "name": "doc",
+    "price": 5,
+    "health": 15,
+    "damage": 5,
+    "type": "yellow",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "yellow",
+    "description": "A distinguished Ducko of high stature and a successful medical career."
+}

@@ -1,0 +1,12 @@
+{
+    "name": "barry",
+    "price": 5,
+    "health": 17,
+    "damage": 3,
+    "type": "yellow",
+    "speed": 13,
+    "size": 75,
+    "y": 375,
+    "team": "red",
+    "description": "He's so cool. I mean just look at those sunglasses. He's a strawberry with sunglasses. Can you be more cool?"
+}

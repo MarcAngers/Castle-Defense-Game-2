@@ -4,7 +4,7 @@ using System.Text;
 
 namespace CastleDefense.Engine.Models
 {
-    public enum TeamColor
+    public enum TeamColour
     {
         White,
         Black,

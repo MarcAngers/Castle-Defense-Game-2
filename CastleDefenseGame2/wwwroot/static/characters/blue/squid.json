@@ -1,0 +1,12 @@
+{
+    "name": "squid",
+    "price": 17,
+    "health": 28,
+    "damage": 8,
+    "type": "red",
+    "speed": 12,
+    "size": 100,
+    "y": 400,
+    "team": "blue",
+    "description": "Specialized in attacking submarines, unfortunately not the most relevant skillset in this situation, but she does her best."
+}

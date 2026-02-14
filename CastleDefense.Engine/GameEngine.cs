@@ -1,19 +1,21 @@
-﻿using System;
+﻿using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Models;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using CastleDefense.Engine.Data;
-using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Engine
 {
     public class GameEngine
     {
-        private GameState _state;
+        public GameState _state;
 
         // Config
         public const int MAP_WIDTH = 1500;
         public const int TICKS_PER_SECOND = 30;
         private const int INCOME_FREQUENCY = 30;
+        private ConcurrentQueue<Action> _actionQueue = new ConcurrentQueue<Action>();
 
         // Optimization: Fast Lookup Cache
         private Dictionary<string, UnitDefinition> _unitCache;
@@ -37,8 +39,23 @@ namespace CastleDefense.Engine
             }
         }
 
+        public void EnqueueAction(Action action)
+        {
+            _actionQueue.Enqueue(action);
+        }
+
+        private void ProcessActions()
+        {
+            while (_actionQueue.TryDequeue(out var action))
+            {
+                action.Invoke();
+            }
+        }
+
         public void Tick()
         {
+            ProcessActions();
+
             if (_state.IsGameOver) return;
             _state.CurrentTick++;
 
@@ -56,6 +73,40 @@ namespace CastleDefense.Engine
 
             // 3. Movement & Combat
             MoveAndFight();
+        }
+
+        // The logic to safely spawn a unit
+        public void SpawnUnit(int side, string unitId)
+        {
+            // 1. Validation
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+            if (!_unitCache.ContainsKey(unitId)) return;
+
+            var def = _unitCache[unitId];
+
+            // 2. Check Cooldowns & Money
+            // (Assuming you implement CheckCooldown logic here similar to your TickCooldowns)
+            if (player.Money < def.Cost) return;
+
+            // 3. Deduct Cost
+            player.Money -= def.Cost;
+
+            // 4. Create Unit
+            Random random = new Random();
+            var newUnit = new Unit
+            {
+                DefinitionId = unitId,
+                Side = side,
+                CurrentHealth = def.MaxHealth,
+                MaxHealth = def.MaxHealth,
+                CurrentShield = def.MaxShield,
+                // Spawn Logic: Player 1 spawns at 0, Player 2 spawns at MAP_WIDTH
+                Position = (side == 1) ? 50 : MAP_WIDTH - 50,
+                YPosition = 400 + random.Next(-100, 101),
+                CurrentSpeed = def.MoveSpeed
+            };
+
+            _state.Units.Add(newUnit);
         }
 
         private void ProcessStatuses()
@@ -86,7 +137,7 @@ namespace CastleDefense.Engine
                 if (!_unitCache.ContainsKey(unit.DefinitionId)) continue;
                 var def = _unitCache[unit.DefinitionId];
 
-                // 1. Calculate Dynamic Speed Mod
+                // --- 1. Calculate Stats (Speed/CC) ---
                 float speedMod = 1.0f;
                 var speedStatuses = unit.Statuses.Where(s => s.Name == "Slow" || s.Name == "SpeedBuff");
                 foreach (var status in speedStatuses)
@@ -97,15 +148,24 @@ namespace CastleDefense.Engine
                 // Check Hard CC
                 if (unit.Statuses.Any(s => s.Name == "Freeze" || s.Name == "Stun")) speedMod = 0f;
 
-                // 2. Check for Enemies in Range
+                // Decrement Attack Cooldown
+                if (unit.AttackCooldown > 0) unit.AttackCooldown -= (1000f / TICKS_PER_SECOND);
+
+                // --- 2. Target Acquisition ---
+
+                // A. Check for Enemies in Range
                 var enemy = FindTarget(unit, def);
 
-                // Decrement Attack Cooldown (assuming Unit has this property)
-                if (unit.AttackCooldown > 0) unit.AttackCooldown -= (1000f / TICKS_PER_SECOND);
+                // B. Check Enemy Castle Distance
+                float distToCastle = GetDistanceToEnemyCastle(unit);
+                bool castleInRange = distToCastle <= def.Range;
+
+                // --- 3. Combat Logic ---
 
                 if (enemy != null)
                 {
-                    // --- COMBAT LOGIC ---
+                    // CASE: Fighting another Unit
+                    unit.CurrentSpeed = 0;
                     if (unit.AttackCooldown <= 0)
                     {
                         // Reset Cooldown
@@ -147,9 +207,18 @@ namespace CastleDefense.Engine
                         unit.Position -= (recoil * direction);
                     }
                 }
+                else if (castleInRange)
+                {
+                    // CASE: Fighting the Castle
+                    unit.CurrentSpeed = 0; // Stop moving
+                    if (unit.AttackCooldown <= 0)
+                    {
+                        AttackCastle(unit, def);
+                    }
+                }
                 else
                 {
-                    // --- MOVEMENT LOGIC ---
+                    // --- 4. Movement Logic ---
                     // Only move if speed > 0
                     unit.CurrentSpeed = def.MoveSpeed * speedMod;
 
@@ -160,13 +229,11 @@ namespace CastleDefense.Engine
                     }
                 }
 
-                // 3. Check Bounds (Despawn)
+                // --- 5. Bounds and Death Checks ---
                 if (unit.Position < -100 || unit.Position > MAP_WIDTH + 100)
                 {
                     unit.CurrentHealth = 0; // Kill it
                 }
-
-                // 4. Death Check
                 if (unit.CurrentHealth <= 0)
                 {
                     _state.Units.RemoveAt(i);
@@ -202,6 +269,54 @@ namespace CastleDefense.Engine
                 }
             }
             return bestTarget;
+        }
+
+        private float GetDistanceToEnemyCastle(Unit attacker)
+        {
+            // If Player 1 (Left), enemy castle is at MAP_WIDTH
+            if (attacker.Side == 1)
+            {
+                return Math.Abs(MAP_WIDTH - attacker.Position);
+            }
+            // If Player 2 (Right), enemy castle is at 0
+            else
+            {
+                return Math.Abs(attacker.Position - 0);
+            }
+        }
+
+        private void AttackCastle(Unit attacker, UnitDefinition def)
+        {
+            // 1. Identify Enemy
+            var enemyPlayer = attacker.Side == 1 ? _state.Player2 : _state.Player1;
+
+            // 2. Check Invulnerability (Divine Shield gadget)
+            if (enemyPlayer.IsInvulnerable)
+            {
+                if (_state.CurrentTick > enemyPlayer.InvulnerableUntilTick)
+                    enemyPlayer.IsInvulnerable = false;
+                else
+                    return; // No damage dealt
+            }
+
+            // 3. Reset Cooldown
+            attacker.AttackCooldown = (1000f / def.AttackSpeed);
+
+            // 4. Deal Damage
+            int damage = def.Damage;
+
+            // Siege units usually deal double damage to structures
+            if (def.AttackType == AttackType.Siege) damage *= 2;
+
+            enemyPlayer.CastleHealth -= damage;
+
+            // 5. Game Over Check
+            if (enemyPlayer.CastleHealth <= 0)
+            {
+                enemyPlayer.CastleHealth = 0;
+                _state.IsGameOver = true;
+                _state.WinnerSide = attacker.Side;
+            }
         }
 
         private void ApplyDamage(Unit target, int amount, AttackType type)

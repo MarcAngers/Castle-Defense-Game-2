@@ -1,0 +1,12 @@
+{
+    "name": "tiger",
+    "price": 58,
+    "health": 86,
+    "damage": 16,
+    "type": "orange",
+    "speed": 5,
+    "size": 100,
+    "y": 350,
+    "team": "orange",
+    "description": "Notice the moustache... Now notice the terror you feel."
+}

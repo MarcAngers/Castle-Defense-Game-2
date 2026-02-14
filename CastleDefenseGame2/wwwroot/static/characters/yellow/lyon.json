@@ -1,0 +1,12 @@
+{
+    "name": "lyon",
+    "price": 224,
+    "health": 293,
+    "damage": 35,
+    "type": "yellow_MAX",
+    "speed": 2,
+    "size": 200,
+    "y": 250,
+    "team": "yellow",
+    "description": "BEHOLD HIS MAJESTY!!!"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "snecko",
+    "price": 7,
+    "health": 18,
+    "damage": 6,
+    "type": "red",
+    "speed": 11,
+    "size": 100,
+    "y": 400,
+    "team": "green",
+    "description": "Some say that looking into his eye can cause serious confusion... I don't get it"
+}

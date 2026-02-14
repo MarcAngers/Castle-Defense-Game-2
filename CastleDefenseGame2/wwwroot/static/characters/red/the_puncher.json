@@ -1,0 +1,12 @@
+{
+    "name": "the_puncher",
+    "price": 16,
+    "health": 18,
+    "damage": 8,
+    "type": "white",
+    "speed": 15,
+    "size": 50,
+    "y": 400,
+    "team": "red",
+    "description": "2 minutes in the ring with this man?"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "evilminnow",
+    "price": 1,
+    "health": 8,
+    "damage": 3,
+    "type": "yellow",
+    "speed": 13,
+    "size": 50,
+    "y": 400,
+    "team": "black",
+    "description": "Like a normal minnow, but evil"
+}

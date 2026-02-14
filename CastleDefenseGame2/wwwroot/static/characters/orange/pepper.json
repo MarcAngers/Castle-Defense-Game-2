@@ -1,0 +1,12 @@
+{
+    "name": "pepper",
+    "price": 7,
+    "health": 14,
+    "damage": 7,
+    "type": "orange",
+    "speed": 9,
+    "size": 50,
+    "y": 400,
+    "team": "orange",
+    "description": "Obligatory \"she's hot\" joke"
+}

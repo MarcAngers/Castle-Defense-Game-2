@@ -1,0 +1,12 @@
+{
+    "name": "eggo",
+    "price": 69,
+    "health": 45,
+    "damage": 25,
+    "type": "white",
+    "speed": 15,
+    "size": 100,
+    "y": 350,
+    "team": "white",
+    "description": "Is that... A buff egg?!"
+}

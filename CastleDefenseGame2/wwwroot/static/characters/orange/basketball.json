@@ -1,0 +1,12 @@
+{
+    "name": "basketball",
+    "price": 1,
+    "health": 5,
+    "damage": 1,
+    "type": "black",
+    "speed": 20,
+    "size": 50,
+    "y": 400,
+    "team": "orange",
+    "description": "It's a basketball."
+}

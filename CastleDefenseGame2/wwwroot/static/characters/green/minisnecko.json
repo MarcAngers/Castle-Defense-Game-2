@@ -1,0 +1,12 @@
+{
+    "name": "minisnecko",
+    "price": 1,
+    "health": 8,
+    "damage": 1,
+    "type": "red",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "green",
+    "description": "s"
+}

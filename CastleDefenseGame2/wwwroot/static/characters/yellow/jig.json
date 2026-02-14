@@ -1,0 +1,12 @@
+{
+    "name": "jig",
+    "price": 7,
+    "health": 22,
+    "damage": 6,
+    "type": "red",
+    "speed": 15,
+    "size": 75,
+    "y": 375,
+    "team": "yellow",
+    "description": "She has many spots, each represents a victory in battle. Or maybe she's just a jaguar I dunno I thought that sounded cool."
+}

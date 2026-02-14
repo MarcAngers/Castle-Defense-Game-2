@@ -1,0 +1,12 @@
+{
+    "name": "froggo",
+    "price": 2,
+    "health": 12,
+    "damage": 2,
+    "type": "green",
+    "speed": 8,
+    "size": 50,
+    "y": 400,
+    "team": "green",
+    "description": "Hippity hoppity your castle is my property"
+}

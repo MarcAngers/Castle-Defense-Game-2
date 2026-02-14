@@ -1,0 +1,12 @@
+{
+    "name": "cub",
+    "price": 4,
+    "health": 16,
+    "damage": 4,
+    "type": "yellow",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "yellow",
+    "description": "Like doggo or catto, but yellow so now he's here."
+}

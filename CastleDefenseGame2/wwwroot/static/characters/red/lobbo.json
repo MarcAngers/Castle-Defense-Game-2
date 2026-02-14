@@ -1,0 +1,12 @@
+{
+    "name": "lobbo",
+    "price": 4,
+    "health": 14,
+    "damage": 3,
+    "type": "blue",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "red",
+    "description": "Mess with lobbo, you get the... damn I can't think of anything that rhymes... uh...\nLobbo, more like lobotomizer >:)"
+}

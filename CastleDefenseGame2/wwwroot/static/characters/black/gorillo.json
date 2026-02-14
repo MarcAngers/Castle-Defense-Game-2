@@ -1,0 +1,12 @@
+{
+    "name": "gorillo",
+    "price": 48,
+    "health": 75,
+    "damage": 20,
+    "type": "black",
+    "speed": 5,
+    "size": 75,
+    "y": 375,
+    "team": "black",
+    "description": "The evil henchmen of the evil realm. They are strong and unmoving in their goal to serve their leader."
+}

@@ -1,0 +1,12 @@
+{
+    "name": "draggo",
+    "price": 268,
+    "health": 345,
+    "damage": 21,
+    "type": "red_MAX",
+    "speed": 2,
+    "size": 200,
+    "y": 250,
+    "team": "red",
+    "description": "Killing a normal dragon is difficult enough... This is a fat dragon. How you gonna kill a fat dragon? Didn't think so."
+}

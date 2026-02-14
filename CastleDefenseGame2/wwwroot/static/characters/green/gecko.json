@@ -1,0 +1,12 @@
+{
+    "name": "gecko",
+    "price": 6,
+    "health": 16,
+    "damage": 5,
+    "type": "green",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "green",
+    "descrption": "I wonder if he licks his eyes... Weird"
+}

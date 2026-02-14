@@ -1,0 +1,12 @@
+{
+    "name": "durdle",
+    "price": 4,
+    "health": 20,
+    "damage": 2,
+    "type": "green",
+    "speed": 2,
+    "size": 75,
+    "y": 400,
+    "team": "green",
+    "description": "Slow and steady wins the race :)"
+}

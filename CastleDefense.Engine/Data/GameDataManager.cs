@@ -42,6 +42,7 @@ namespace CastleDefense.Engine.Data
                 Weight = wt,
                 Damage = dmg,
                 Range = range,
+                AttackSpeed = dmg * speed,
                 MoveSpeed = speed,
                 Width = width,
                 AttackType = attack,
@@ -58,13 +59,13 @@ namespace CastleDefense.Engine.Data
             var whiteTeam = new TeamDefinition
             {
                 Id = "team_white",
-                Color = TeamColor.White,
+                Color = TeamColour.White,
                 Name = "White Team",
                 PassiveName = "Efficiency",
                 PassiveDescription = "Gadget cooldowns are reduced by 20%.",
                 SignatureGadget = new GadgetDefinition
                 {
-                    Id = "white_sig_payday",
+                    Id = "sig_payday",
                     Name = "Payday",
                     Description = "Instantly grants $2000 cash.",
                     Slot = GadgetSlot.Signature,
@@ -76,49 +77,49 @@ namespace CastleDefense.Engine.Data
             };
 
             // 1. Doggo
-            whiteTeam.Roster.Add(CreateUnit("white_doggo", "Doggo", 1, 3,
+            whiteTeam.Roster.Add(CreateUnit("doggo", "Doggo", 1, 3,
                 10, 500, 2, 50, 10f, 50,
                 AttackType.Melee, ArmorType.None,
                 "The basic unit. He's awesome. Excels at tearing down enemy castles."));
 
             // 2. Catto (Changed range to 50 for consistency unless you want it ranged?)
-            whiteTeam.Roster.Add(CreateUnit("white_catto", "Catto", 2, 4,
+            whiteTeam.Roster.Add(CreateUnit("catto", "Catto", 2, 4,
                 10, 500, 3, 50, 10f, 50,
                 AttackType.Melee, ArmorType.None,
                 "I'm PAWsitive that she'll be a great addition to your army ;)"));
 
             // 3. Squirt (Ranged unit logic applied)
-            whiteTeam.Roster.Add(CreateUnit("white_squirt", "Squirt", 3, 4,
+            whiteTeam.Roster.Add(CreateUnit("squirt", "Squirt", 3, 4,
                 13, 650, 2, 300, 10f, 50,
                 AttackType.Ranged, ArmorType.None,
                 "Young squirrel with many dreams and aspirations."));
 
             // 4. Ringo
-            whiteTeam.Roster.Add(CreateUnit("white_ringo", "Ringo", 4, 5,
+            whiteTeam.Roster.Add(CreateUnit("ringo", "Ringo", 4, 5,
                 15, 750, 4, 50, 13f, 50,
                 AttackType.Melee, ArmorType.None,
                 "its ya boi"));
 
             // 5. Alpacco
-            whiteTeam.Roster.Add(CreateUnit("white_alpacco", "Alpacco", 5, 19,
+            whiteTeam.Roster.Add(CreateUnit("alpacco", "Alpacco", 5, 19,
                 30, 2250, 12, 50, 10f, 75,
                 AttackType.Melee, ArmorType.None,
                 "Fun Alpaca Fact #42:\nDid you know that alpaca fur is fire resistant?\n:D Fun"));
 
             // 6. Bread
-            whiteTeam.Roster.Add(CreateUnit("white_bread", "Bread", 6, 20,
+            whiteTeam.Roster.Add(CreateUnit("bread", "Bread", 6, 20,
                 40, 2000, 3, 50, 8f, 75,
                 AttackType.Melee, ArmorType.None,
                 "Imagine dying to a loaf of white bread... Embarassing."));
 
             // 7. Eggo
-            whiteTeam.Roster.Add(CreateUnit("white_eggo", "Eggo", 7, 69,
+            whiteTeam.Roster.Add(CreateUnit("eggo", "Eggo", 7, 69,
                 45, 4500, 25, 50, 15f, 100,
                 AttackType.Melee, ArmorType.None,
                 "Is that... A buff egg?!"));
 
             // 8. Corn (Ace)
-            whiteTeam.Roster.Add(CreateUnit("white_corn", "Corn", 8, 500,
+            whiteTeam.Roster.Add(CreateUnit("corn", "Corn", 8, 500,
                 1000, 20000, 100, 50, 1f, 200,
                 AttackType.Siege, ArmorType.Shield,
                 "So magestic that she clips the page and I'm too lazy to fix it :O", true));
@@ -229,7 +230,7 @@ namespace CastleDefense.Engine.Data
                 Type = GadgetType.SpawnUnit,
                 Cost = 2500,
                 CooldownMs = 45000,
-                SpawnUnitId = "white_doggo", // Default placeholder
+                SpawnUnitId = "doggo", // Default placeholder
                 Description = "Spawns 3 Guard units."
             });
         }

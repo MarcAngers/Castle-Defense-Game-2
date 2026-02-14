@@ -12,6 +12,7 @@ namespace CastleDefense.Engine.Models
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
+        public int SpriteSize { get; set; }
 
         // Progression
         public int Tier { get; set; }           // 1-8
@@ -23,7 +24,7 @@ namespace CastleDefense.Engine.Models
 
         // Combat Stats
         public int MaxHealth { get; set; }
-        public int MaxShield { get; set; }      // NEW: The "Blue Health" amount
+        public int MaxShield { get; set; }
         public int Weight { get; set; }
         public int Damage { get; set; }
         public int Range { get; set; }
@@ -48,7 +49,7 @@ namespace CastleDefense.Engine.Models
         public GadgetSlot Slot { get; set; }
         public GadgetType Type { get; set; }
 
-        public int Cost { get; set; }           // CHANGED: Was ManaCost
+        public int Cost { get; set; }
         public int CooldownMs { get; set; }
 
         // Data-Driven Effects
@@ -65,7 +66,7 @@ namespace CastleDefense.Engine.Models
     public class TeamDefinition
     {
         public string Id { get; set; }
-        public TeamColor Color { get; set; }
+        public TeamColour Color { get; set; }
         public string Name { get; set; }
         public string PassiveName { get; set; }
         public string PassiveDescription { get; set; }

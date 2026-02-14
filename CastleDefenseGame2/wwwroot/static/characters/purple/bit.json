@@ -1,0 +1,12 @@
+{
+    "name": "bit",
+    "price": 24,
+    "health": 26,
+    "damage": 9,
+    "type": "purple",
+    "speed": 12,
+    "size": 75,
+    "y": 375,
+    "team": "purple",
+    "description": "\"Nothin' but bits\""
+}

@@ -1,0 +1,12 @@
+{
+    "name": "judge",
+    "price": 24,
+    "health": 40,
+    "damage": 12,
+    "type": "yellow",
+    "speed": 6,
+    "size": 75,
+    "y": 375,
+    "team": "blue",
+    "description": "Don't let him rain on your parade :)"
+}

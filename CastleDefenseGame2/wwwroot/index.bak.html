@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Castle Defense</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <link rel="stylesheet" href="global-styles.css">
+</head>
+<body>
+    <div id="app-container"></div>
+    
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="uiLayer">
+        
+
+        <div id="screen-lobby" class="ui-screen hidden">
+            <div class="modal">
+                <h2>WAITING FOR PLAYER 2</h2>
+                <p>Share this Game ID:</p>
+                <div class="game-id-box" id="displayGameId">???</div>
+                <p class="status-blink">Waiting for opponent connection...</p>
+            </div>
+        </div>
+
+        <div id="screen-game-p1" class="ui-screen hidden">
+            <div class="hud-top">
+                <div class="player-stats" id="p1-stats">
+                    <div class="money">$ <span id="p1Money">0</span></div>
+                </div>
+            </div>
+
+            <div class="hud-bottom">
+                <div class="shop-section upgrades">
+                    <button class="upgrade-btn" onclick="buyUpgrade('income')">
+                        <span>📈</span>
+                        <div class="label">INCOME</div>
+                    </button>
+                    <button class="upgrade-btn" onclick="buyUpgrade('health')">
+                        <span>🏰</span>
+                        <div class="label">REPAIR</div>
+                    </button>
+                </div>
+
+                <div class="shop-section units" id="unitShopGrid"></div>
+
+                <div class="shop-section gadgets">
+                    <button class="gadget-btn offensive" onclick="useGadget('offensive')">⚔️</button>
+                    <div class="gadget-col">
+                        <button class="gadget-btn signature" onclick="useGadget('signature')">⭐</button>
+                        <button class="gadget-btn utility" onclick="useGadget('utility')">🛡️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="screen-game-p2" class="ui-screen hidden">
+            <div class="hud-top">
+                <div class="player-stats" id="p2-stats">
+                    <div class="money">$ <span id="p2Money">0</span></div>
+                </div>
+            </div>
+
+            <div class="hud-bottom">
+                <div class="shop-section upgrades">
+                    <button class="upgrade-btn" onclick="buyUpgrade('income')">
+                        <span>📈</span>
+                        <div class="label">INCOME</div>
+                    </button>
+                    <button class="upgrade-btn" onclick="buyUpgrade('health')">
+                        <span>🏰</span>
+                        <div class="label">REPAIR</div>
+                    </button>
+                </div>
+
+                <div class="shop-section units" id="unitShopGrid"></div>
+
+                <div class="shop-section gadgets">
+                    <button class="gadget-btn offensive" onclick="useGadget('offensive')">⚔️</button>
+                    <div class="gadget-col">
+                        <button class="gadget-btn signature" onclick="useGadget('signature')">⭐</button>
+                        <button class="gadget-btn utility" onclick="useGadget('utility')">🛡️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-gameover" class="ui-screen hidden">
+            <div class="modal">
+                <h1 id="winnerName">PLAYER 1 WINS!</h1>
+                <button onclick="location.reload()">MAIN MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

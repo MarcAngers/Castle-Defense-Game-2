@@ -1,0 +1,12 @@
+{
+    "name": "deus",
+    "price": 54,
+    "health": 107,
+    "damage": 7,
+    "type": "yellow",
+    "speed": 7,
+    "size": 100,
+    "y": 350,
+    "team": "yellow",
+    "description": "This calls for a crusade."
+}

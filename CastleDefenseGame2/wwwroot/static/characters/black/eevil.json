@@ -1,0 +1,12 @@
+{
+    "name": "eevil",
+    "price": 6,
+    "health": 19,
+    "damage": 6,
+    "type": "blue",
+    "speed": 15,
+    "size": 50,
+    "y": 400,
+    "team": "black",
+    "description": "Like an eel, but evil.\nHilarious."
+}

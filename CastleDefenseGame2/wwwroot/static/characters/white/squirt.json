@@ -1,0 +1,12 @@
+{
+    "name": "squirt",
+    "price": 4,
+    "health": 13,
+    "damage": 2,
+    "type": "blue",
+    "speed": 10,
+    "size": 50,
+    "y": 400,
+    "team": "white",
+    "description": "Young squirrel with many dreams and aspirations."
+}

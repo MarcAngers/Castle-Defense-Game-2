@@ -1,0 +1,12 @@
+{
+    "name": "phil",
+    "price": 4,
+    "health": 10,
+    "damage": 4,
+    "type": "orange",
+    "speed": 12,
+    "size": 50,
+    "y": 400,
+    "team": "orange",
+    "description": "I know what you're thinking, and yes, it's short for Philip."
+}
