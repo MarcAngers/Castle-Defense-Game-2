@@ -1,4 +1,5 @@
 import loader from './asset-loader.js';
+import connection from '../../../src/game-connection.js';
 
 export default class View {
     constructor(canvasId) {
@@ -10,11 +11,72 @@ export default class View {
         this.ctx = this.canvas.getContext('2d');
         this.ctx.imageSmoothingEnabled = false;
 
+        this.MAP_WIDTH = 1500;
+        this.cameraX = 0;
+
+        // Input State for Panning
+        this.isDragging = false;
+        this.startX = 0;
+        this.scrollStartCameraX = 0;
+
+        // --- CAMERA INPUT HANDLERS ---
+        this.canvas.addEventListener('mousedown', this.startPan);
+        this.canvas.addEventListener('touchstart', this.startPan, {passive: false});
+
+        window.addEventListener('mousemove', this.movePan);
+        window.addEventListener('touchmove', this.movePan, {passive: false});
+
+        window.addEventListener('mouseup', this.endPan);
+        window.addEventListener('touchend', this.endPan);
+
         this.latestState = null;
         this.latestMap = null;
 
         window.addEventListener('resize', this.resize);
         this.resize();
+    }
+
+    startPan = (e) => {
+        this.isDragging = true;
+        this.startX = this.getX(e);
+        this.scrollStartCameraX = this.cameraX;
+    }
+
+    movePan = (e) => {
+        if (!this.isDragging) return;
+        
+        // 1. getX() ALREADY returns Logical Game Units!
+        const currentX = this.getX(e);
+        const diff = this.startX - currentX; // This is a purely logical difference
+        
+        // 2. Apply directly to camera
+        this.cameraX = this.scrollStartCameraX + diff;
+        
+        // 3. Clamp using purely logical coordinates
+        const maxScroll = Math.max(0, this.MAP_WIDTH - this.logicalScreenWidth);
+        this.cameraX = Math.max(0, Math.min(this.cameraX, maxScroll));
+    }
+
+    endPan = () => {
+        this.isDragging = false;
+    }
+
+    // Helper for Mouse vs Touch coordinates
+    getX = (e) => {
+        if (!e) return 0;
+        
+        let physicalX = 0;
+        
+        if (e.touches && e.touches.length > 0) {
+            physicalX = e.touches[0].clientX;
+        } else if (e.changedTouches && e.changedTouches.length > 0) {
+            physicalX = e.changedTouches[0].clientX;
+        } else {
+            physicalX = e.clientX || 0;
+        }
+
+        // Convert to Logical Space immediately!
+        return physicalX / this.scale;
     }
 
     clear() {
@@ -35,18 +97,20 @@ export default class View {
         this.clear();
         this.latestState = state;
 
-        // --- APPLY CAMERA TRANSFORM ---
-        this.ctx.translate(-cameraX, 0);
+        this.ctx.save();
 
-        this.drawBackground(colour);
+        // --- APPLY CAMERA TRANSFORM ---
+        this.ctx.translate(-this.cameraX, 0);
+
+        this.drawBackground('white');
 
         // Draw Castles
-        drawCastle(state.player1, 1); 
-        drawCastle(state.player2, 2);
+        this.drawCastle(state.player1, 1); 
+        this.drawCastle(state.player2, 2);
 
         // Draw Units
         state.units.forEach(unit => {
-            drawUnit(unit);
+            this.drawUnit(unit);
         });
 
         // --- RESTORE CAMERA ---
@@ -54,11 +118,12 @@ export default class View {
     }
 
     drawUnit(unit) {
-        const img = assets.units[unit.definitionId];
+        console.log('drawing unit: ', unit);
+        const img = loader.assets[unit.definitionId];
     
         const x = unit.position;
-        const spriteSize = unit.spriteSize;
-        const y = unit.yposition;
+        const width = unit.width;
+        const y = unit.yPosition;
 
         if (img) {
             this.ctx.save();
@@ -68,7 +133,7 @@ export default class View {
                 this.ctx.drawImage(img, x, y);
             } else {
                 // Player 2: Face Left
-                this.ctx.translate(x + spriteSize, y); 
+                this.ctx.translate(x + width, y); 
                 this.ctx.scale(-1, 1);
                 this.ctx.drawImage(img, 0, 0);
             }
@@ -77,16 +142,16 @@ export default class View {
         } else {
             // Fallback Box
             this.ctx.fillStyle = unit.side === 1 ? 'red' : 'blue';
-            this.ctx.fillRect(x, y, spriteSize, spriteSize);
+            this.ctx.fillRect(x, y, width, width);
         }
 
         // Health Bar
-        drawHealthBar(x - 5, y - 10, spriteSize, unit.currentHealth, unit.maxHealth, unit.currentShield);
+        this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield);
     }
 
     drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield) {
         let pct = currentHealth/maxHealth;
-        let width = (spriteSize + 10) * currentHealth;
+        let width = (spriteSize + 10) * pct;
 
         this.ctx.fillStyle = "lightgray";
         this.ctx.fillRect(x, y, spriteSize + 10, 5);
@@ -108,27 +173,31 @@ export default class View {
     }
 
     drawCastle(playerState, side) {
-        const castleImg = playerState.castleHealth > 0 ? assets.buildings['castle'] : assets.buildings['rubble'];
+        const team = loader.assets.teamList[playerState.team];
+        const castleImg = playerState.castleHealth > 0 ? loader.assets.buildings[team + '-castle'] : loader.assets.buildings['dead-castle'];
         if (!castleImg) return;
 
-        const y = 400;
+        const y = 200;
         
-        ctx.save();
+        this.ctx.save();
         
         if (side === 1) {
             let x = 50;
-            ctx.drawImage(castleImg, x, y);
-            drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.ctx.drawImage(castleImg, x, y);
+
+            this.ctx.restore(); // Restore coordinate system for the health bar
+
+            this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         } else {
-            let x = 1250;
+            let x = 1450;
             
-            ctx.translate(x, y);
-            ctx.scale(-1, 1); 
-            ctx.drawImage(castleImg, 0, 0);
+            this.ctx.translate(x, y);
+            this.ctx.scale(-1, 1); 
+            this.ctx.drawImage(castleImg, 0, 0);
             
-            ctx.restore(); // Restore coordinate system for the health bar
+            this.ctx.restore(); // Restore coordinate system for the health bar
             
-            drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         }
     }
 
@@ -143,9 +212,8 @@ export default class View {
         const windowHeight = window.innerHeight;
 
         // 1. Calculate the fractional scale
-        // Example: Screen is 1080px tall, Game is 200px tall.
-        // Scale = 5.4 (not 5)
-        const scale = windowHeight / logicalHeight;
+        this.scale = windowHeight / logicalHeight;
+        this.logicalScreenWidth = windowWidth / this.scale;
 
         // 2. Set the CANVAS Internal Resolution (The buffer size)
         // We match the window size exactly so the browser doesn't stretch anything via CSS
@@ -160,14 +228,14 @@ export default class View {
         // Browser resets this on resize, so we must re-apply it every time.
         this.ctx.imageSmoothingEnabled = false;
 
-        this.ctx.scale(scale, scale);
+        this.ctx.scale(this.scale, this.scale);
 
         // 5. Restore previous canvas content
         this.draw();
 
         return { 
-            scale: scale,
-            width: windowWidth / scale, 
+            scale: this.scale,
+            width: this.logicalScreenWidth, 
             height: logicalHeight 
         };
     }

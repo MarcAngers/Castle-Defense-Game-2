@@ -7,6 +7,7 @@ class GameConnection {
         
         this.connection = null;
         this.currentGameId = null;
+        this.selectedTeam = "white";
         this.mySide = 0; // 1 = Left, 2 = Right
         this.latestState = null;
 
@@ -28,6 +29,10 @@ class GameConnection {
             this.latestState = state;
         });
 
+        this.connection.on("GameStarted", () => {
+            showScreen("game");
+        })
+
         try {
             await this.connection.start();
             console.log("SignalR Connected.");
@@ -40,13 +45,35 @@ class GameConnection {
         const response = await fetch(`${this.API_URL}/api/games`, { method: "POST" });
         const data = await response.json();
 
-        this.joinGame(data.gameId, p1Colour);
+        await this.joinGame(data.gameId, p1Colour);
     }
 
     joinGame = async (gameId, colour) => {
         this.currentGameId = gameId;
 
         await this.connection.invoke("JoinGame", gameId, colour);
+    }
+
+    getAllGames = async () => {
+        try {
+            const response = await fetch(`${this.API_URL}/api/games/all`);
+            
+            if (!response.ok) {
+                throw new Error("Failed to fetch the game list.");
+            }
+
+            const data = await response.json();
+            
+            return data; 
+
+        } catch (error) {
+            console.error("Error fetching games:", error);
+            return { activeGames: [], lobbyGames: [] }; 
+        }
+    }
+
+    spawnUnit = (unitId) => {
+        this.connection.invoke("SpawnUnit", this.currentGameId, unitId);
     }
 }
 

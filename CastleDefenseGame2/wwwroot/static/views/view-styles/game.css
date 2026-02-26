@@ -1,0 +1,47 @@
+#game {
+    padding-top: 0;
+}
+
+.money {
+    background-color: black;
+    padding: 15px 30px;
+    margin: 10px;
+    font-size: 28px;
+    border: 4px solid #FFFF00;
+}
+
+#hud-bottom {
+    bottom: 0;
+    position: fixed;
+    display: flex;
+    height: 20vh;
+}
+#upgrades {
+    width: 14vw;
+}
+#character-bar {
+    display: flex;
+    gap: 28px;
+    padding: 1vh;
+    width: 72vw;
+}
+.character {
+    display: inline-block;
+    height: 8vw; width: 8vw;
+    border: 0px solid black;
+    background-color: gray;
+    margin: auto;
+}
+.character img {   
+    height: 100%; width: 100%;
+
+    /* 1. Prevent Distortion */
+    object-fit: contain;
+    
+    /* 2. Pixel Art Scaling */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+#gadgets {
+    width: 14vw;
+}

@@ -49,8 +49,8 @@ namespace CastleDefense.Engine
         public TeamColour Team { get; set; }
 
         // Economy
-        public int Money { get; set; }
-        public int Income { get; set; }
+        public float Money { get; set; }
+        public float Income { get; set; }
 
         // Base
         public int CastleHealth { get; set; }
@@ -65,8 +65,8 @@ namespace CastleDefense.Engine
 
         public PlayerState()
         {
-            Money = 0;
-            Income = 5;
+            Money = 0f;
+            Income = 5f;
             CastleMaxHealth = 1000;
             CastleHealth = 1000;
         }
@@ -77,6 +77,7 @@ namespace CastleDefense.Engine
         public Guid InstanceId { get; set; } = Guid.NewGuid();
         public string DefinitionId { get; set; }
         public int Side { get; set; } // 1 (Left/P1) or 2 (Right/P2)
+        public int Width { get; set; }
 
         // Current Stats
         public int CurrentHealth { get; set; }

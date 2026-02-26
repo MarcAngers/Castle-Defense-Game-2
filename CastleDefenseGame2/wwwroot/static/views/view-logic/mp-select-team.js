@@ -71,11 +71,13 @@ export default async function initMPSelectTeam() {
     btnBack.onclick = () => {
         showScreen('main-menu');
     };
-    btnCreate.onclick = () => {
-        connection.createGame(selectedTeam);
+    btnCreate.onclick = async () => {
+        connection.selectedTeam = selectedTeam;
+        await connection.createGame(selectedTeam);
         showScreen('lobby');
     };
     btnJoin.onclick = () => {
+        connection.selectedTeam = selectedTeam;
         showScreen('game-browser');
     };
 }

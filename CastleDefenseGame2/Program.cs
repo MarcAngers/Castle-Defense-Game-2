@@ -4,9 +4,6 @@ using CastleDefense.Engine.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Initialize game data
-GameDataManager.Initialize();
-
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -31,5 +28,8 @@ app.UseStaticFiles();
 app.UseCors("AllowAll");
 app.MapControllers();
 app.MapHub<GameHub>("/gameHub");
+
+// Initialize game data
+GameDataManager.Initialize();
 
 app.Run();

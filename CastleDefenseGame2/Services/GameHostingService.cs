@@ -24,6 +24,15 @@ namespace CastleDefense.Api.Services
             return null;
         }
 
+        public GameListResult GetAllGameIds()
+        {
+            return new GameListResult
+            {
+                ActiveGames = _activeGames.Keys.ToList(),
+                LobbyGames = _lobbyGames.Keys.ToList()
+            };
+        }
+
         public string CreateGame()
         {
             var gameId = Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();
@@ -41,6 +50,7 @@ namespace CastleDefense.Api.Services
             {
                 // Move it to the active list (The loop picks it up instantly)
                 _activeGames.TryAdd(gameId, engine);
+                _hubContext.Clients.Group(gameId).SendAsync("GameStarted");
                 return gameId;
             }
             return gameId;

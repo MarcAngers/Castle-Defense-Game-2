@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
 using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Engine.Data
@@ -9,122 +12,170 @@ namespace CastleDefense.Engine.Data
         public static List<TeamDefinition> Teams { get; private set; } = new List<TeamDefinition>();
         public static List<GadgetDefinition> GenericGadgets { get; private set; } = new List<GadgetDefinition>();
 
+        private const int PRICE_MULTIPLIER = 10;
+        private const int COOLDOWN_PER_DOLLAR = 800;
+
         public static void Initialize()
         {
             Teams.Clear();
             GenericGadgets.Clear();
 
             LoadGenericGadgets();
-            LoadWhiteTeam();
+            LoadTeamsFromCsv();
         }
 
-        // --- THE BALANCING FORMULA ---
-        private const int PRICE_MULTIPLIER = 10;
-        private const int COOLDOWN_PER_DOLLAR = 800;
-
-        private static UnitDefinition CreateUnit(
-            string id, string name, int tier, int oldPrice,
-            int hp, int wt, int dmg, int range, float speed, int width,
-            AttackType attack, ArmorType armor, string desc, bool isAce = false)
+        private static void LoadTeamsFromCsv()
         {
-            int charges = Math.Max(1, 25 / oldPrice);
-            if (isAce) charges = 1;
+            var filePath = Path.Combine(AppContext.BaseDirectory, "Data", "master_roster.csv");
 
-            return new UnitDefinition
+            if (!File.Exists(filePath))
             {
-                Id = id,
-                Name = name,
-                Tier = tier,
-                Cost = oldPrice * PRICE_MULTIPLIER,
-                CooldownMs = oldPrice * COOLDOWN_PER_DOLLAR,
-                MaxCharges = charges,
-                MaxHealth = hp,
-                Weight = wt,
-                Damage = dmg,
-                Range = range,
-                AttackSpeed = dmg * speed,
-                MoveSpeed = speed,
-                Width = width,
-                AttackType = attack,
-                ArmorType = armor,
-                PushForce = wt * speed,
-                EffectiveWeight = wt - (speed * 20),
-                Description = desc,
-                IsAce = isAce
-            };
-        }
+                Console.WriteLine($"[WARNING] Could not find roster file at {filePath}");
+                return;
+            }
 
-        private static void LoadWhiteTeam()
-        {
-            var whiteTeam = new TeamDefinition
+            var lines = File.ReadAllLines(filePath);
+            if (lines.Length <= 1) return; // Exit if the file only has headers or is empty
+
+            // NUKE the invisible BOM character from the first line!
+            string cleanHeaderRow = lines[0].Replace("\uFEFF", "");
+
+            // 1. Read the header row so we know which column is which
+            var headers = ParseCsvRow(lines[0]).Select(h => h.Trim().ToLower()).ToList();
+
+            // We use a dictionary to dynamically build the teams as we find them in the CSV
+            var teamDictionary = new Dictionary<string, TeamDefinition>();
+
+            // 2. Parse all data rows
+            for (int i = 1; i < lines.Length; i++)
             {
-                Id = "team_white",
-                Color = TeamColour.White,
-                Name = "White Team",
-                PassiveName = "Efficiency",
-                PassiveDescription = "Gadget cooldowns are reduced by 20%.",
-                SignatureGadget = new GadgetDefinition
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                var cols = ParseCsvRow(lines[i]);
+
+                // Quick helper to grab a column by its header name safely
+                string GetCol(string name)
                 {
-                    Id = "sig_payday",
-                    Name = "Payday",
-                    Description = "Instantly grants $2000 cash.",
-                    Slot = GadgetSlot.Signature,
-                    Type = GadgetType.Economy,
-                    Cost = 0,
-                    CooldownMs = 45000,
-                    BaseValue = 2000
+                    int idx = headers.IndexOf(name.ToLower());
+                    return (idx >= 0 && idx < cols.Count) ? cols[idx].Trim() : string.Empty;
                 }
-            };
 
-            // 1. Doggo
-            whiteTeam.Roster.Add(CreateUnit("doggo", "Doggo", 1, 3,
-                10, 500, 2, 50, 10f, 50,
-                AttackType.Melee, ArmorType.None,
-                "The basic unit. He's awesome. Excels at tearing down enemy castles."));
+                string teamStr = GetCol("Team");
+                if (string.IsNullOrEmpty(teamStr)) continue; // Skip invalid rows
 
-            // 2. Catto (Changed range to 50 for consistency unless you want it ranged?)
-            whiteTeam.Roster.Add(CreateUnit("catto", "Catto", 2, 4,
-                10, 500, 3, 50, 10f, 50,
-                AttackType.Melee, ArmorType.None,
-                "I'm PAWsitive that she'll be a great addition to your army ;)"));
+                // --- REQUIRE BASE STATS ---
+                int tier = int.TryParse(GetCol("Tier"), out var t) ? t : 1;
+                int price = int.TryParse(GetCol("Price"), out var p) ? p : 0;
+                int hp = int.TryParse(GetCol("Health"), out var h) ? h : 0;
+                int dmg = int.TryParse(GetCol("Damage"), out var d) ? d : 0;
+                float speed = float.TryParse(GetCol("Speed"), out var sp) ? sp : 0f;
+                int width = int.TryParse(GetCol("Size"), out var sz) ? sz : 50;
 
-            // 3. Squirt (Ranged unit logic applied)
-            whiteTeam.Roster.Add(CreateUnit("squirt", "Squirt", 3, 4,
-                13, 650, 2, 300, 10f, 50,
-                AttackType.Ranged, ArmorType.None,
-                "Young squirrel with many dreams and aspirations."));
+                // --- DYNAMIC FALLBACKS ---
+                // If it's in the CSV, use it. Otherwise, calculate a smart default.
+                int weight = int.TryParse(GetCol("Weight"), out var w) ? w : (hp * 50);
+                int range = int.TryParse(GetCol("Range"), out var r) ? r : 50;
+                bool isAce = bool.TryParse(GetCol("IsAce"), out var a) ? a : (tier == 8);
 
-            // 4. Ringo
-            whiteTeam.Roster.Add(CreateUnit("ringo", "Ringo", 4, 5,
-                15, 750, 4, 50, 13f, 50,
-                AttackType.Melee, ArmorType.None,
-                "its ya boi"));
+                if (!Enum.TryParse<AttackType>(GetCol("AttackType"), true, out var attackType))
+                {
+                    attackType = isAce ? AttackType.Siege : (range > 50 ? AttackType.Ranged : AttackType.Melee);
+                }
 
-            // 5. Alpacco
-            whiteTeam.Roster.Add(CreateUnit("alpacco", "Alpacco", 5, 19,
-                30, 2250, 12, 50, 10f, 75,
-                AttackType.Melee, ArmorType.None,
-                "Fun Alpaca Fact #42:\nDid you know that alpaca fur is fire resistant?\n:D Fun"));
+                if (!Enum.TryParse<ArmorType>(GetCol("ArmorType"), true, out var armorType))
+                {
+                    armorType = isAce ? ArmorType.Shield : ArmorType.None;
+                }
 
-            // 6. Bread
-            whiteTeam.Roster.Add(CreateUnit("bread", "Bread", 6, 20,
-                40, 2000, 3, 50, 8f, 75,
-                AttackType.Melee, ArmorType.None,
-                "Imagine dying to a loaf of white bread... Embarassing."));
+                // --- APPLY BALANCING FORMULAS ---
+                int charges = Math.Max(1, 25 / (price > 0 ? price : 1));
+                if (isAce) charges = 1;
 
-            // 7. Eggo
-            whiteTeam.Roster.Add(CreateUnit("eggo", "Eggo", 7, 69,
-                45, 4500, 25, 50, 15f, 100,
-                AttackType.Melee, ArmorType.None,
-                "Is that... A buff egg?!"));
+                var unit = new UnitDefinition
+                {
+                    Id = GetCol("ID"),
+                    Name = GetCol("Name"),
+                    Tier = tier,
+                    Cost = price * PRICE_MULTIPLIER,
+                    CooldownMs = price * COOLDOWN_PER_DOLLAR,
+                    MaxCharges = charges,
+                    MaxHealth = hp,
+                    Damage = dmg,
+                    MoveSpeed = speed,
+                    Width = width,
+                    Description = GetCol("Description"),
 
-            // 8. Corn (Ace)
-            whiteTeam.Roster.Add(CreateUnit("corn", "Corn", 8, 500,
-                1000, 20000, 100, 50, 1f, 200,
-                AttackType.Siege, ArmorType.Shield,
-                "So magestic that she clips the page and I'm too lazy to fix it :O", true));
+                    Weight = weight,
+                    Range = range,
+                    AttackType = attackType,
+                    ArmorType = armorType,
+                    IsAce = isAce,
 
-            Teams.Add(whiteTeam);
+                    AttackSpeed = dmg * speed,
+                    PushForce = weight * speed,
+                    EffectiveWeight = weight - (speed * 20)
+                };
+
+                // --- BUILD THE 3D TEAM STRUCTURE ---
+                string teamKey = teamStr.ToLower();
+
+                // If this is the first time seeing this team, create it
+                if (!teamDictionary.ContainsKey(teamKey))
+                {
+                    Enum.TryParse<TeamColour>(teamStr, true, out var teamColor);
+                    teamDictionary[teamKey] = new TeamDefinition
+                    {
+                        Id = $"team_{teamKey}",
+                        Color = teamColor,
+                        Name = char.ToUpper(teamKey[0]) + teamKey.Substring(1) + " Team",
+                        PassiveName = "Team Passive",
+                        PassiveDescription = "Loaded from CSV",
+                        Roster = new List<UnitDefinition>()
+                    };
+                }
+
+                // Add the unit to the correct team's roster
+                teamDictionary[teamKey].Roster.Add(unit);
+            }
+
+            // 3. Finalize: Sort each roster by tier, then add to the master list
+            foreach (var team in teamDictionary.Values)
+            {
+                team.Roster = team.Roster.OrderBy(u => u.Tier).ToList();
+                Teams.Add(team);
+            }
+        }
+
+        // --- CUSTOM CSV PARSER ---
+        // Reads a row and safely ignores commas that are trapped inside quotes
+        private static List<string> ParseCsvRow(string row)
+        {
+            var result = new List<string>();
+            bool inQuotes = false;
+            var buffer = new StringBuilder();
+
+            for (int i = 0; i < row.Length; i++)
+            {
+                char c = row[i];
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes; // Toggle quote state
+                }
+                else if (c == ',' && !inQuotes)
+                {
+                    // End of column
+                    result.Add(buffer.ToString());
+                    buffer.Clear();
+                }
+                else
+                {
+                    buffer.Append(c);
+                }
+            }
+
+            // Add the final column
+            result.Add(buffer.ToString());
+            return result;
         }
 
         private static void LoadGenericGadgets()

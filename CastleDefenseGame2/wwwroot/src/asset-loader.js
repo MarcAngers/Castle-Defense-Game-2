@@ -3,13 +3,26 @@ class AssetLoader {
         const teamList = [ 'black', 'blue', 'green', 'orange', 'purple', 'red', 'white', 'yellow' ];
         this.assets = {
             'teamList': teamList,
-            'unitList': {}
+            'unitList': {},
+            'buildings': {}
         };
     }
 
     async loadAll() {
         for (const team of this.assets.teamList) {
             await this.loadAssets(team);
+
+            // Load dead castle once:
+            const img = new Image();
+            const buildingSrc = '../assets/buildings/';
+
+            img.src = buildingSrc + "dead-castle.png";
+            img.onload = () => {
+                this.assets.buildings["dead-castle"] = img;
+            };
+            img.onerror = () => {
+                console.error(`Failed to load ${imgDef.src}`);
+            };
         }
     }
 
@@ -40,19 +53,11 @@ class AssetLoader {
 
         // Load Castle/Gadget assets:
         // Need to add Gadget stuff to this
-        var img = new Image();
-        let buildingSrc = '../assets/buildings/';
+        const img = new Image();
+        const buildingSrc = '../assets/buildings/';
         img.src = buildingSrc + colour + "-castle.png";
         img.onload = () => {
-            this.assets[colour + "-castle"] = img;
-        };
-        img.onerror = () => {
-            console.error(`Failed to load ${imgDef.src}`);
-        };
-
-        img.src = buildingSrc + "dead-castle.png";
-        img.onload = () => {
-            this.assets["dead-castle"] = img;
+            this.assets.buildings[colour + "-castle"] = img;
         };
         img.onerror = () => {
             console.error(`Failed to load ${imgDef.src}`);

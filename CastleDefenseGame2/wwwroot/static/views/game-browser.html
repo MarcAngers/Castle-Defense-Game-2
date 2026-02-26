@@ -1,8 +1,22 @@
 <link rel="stylesheet" href="./static/views/view-styles/game-browser.css">
 
 <div id="game-browser" class="ui-screen">
-    <h1>JOIN GAME:</h1>
+    <h2 id="browser-title">JOIN GAME</h2>
+
+    <div id="game-browser-container">
+        <div id="game-id-input-column">
+            <h3>Game ID:</h3>
+            <input id="game-id-input" placeholder="Enter Game ID...">
+        </div>
+        <div id="game-id-input-column">
+            <h3>Game Browser</h3>
+            <div id="game-id-list">
+
+            </div>
+        </div>
+    </div>
 
     <button id="btnBack">Back</button>
+    <button id="btnRefresh">Refresh</button>
     <button id="btnJoin">Join Game</button>
 </div>

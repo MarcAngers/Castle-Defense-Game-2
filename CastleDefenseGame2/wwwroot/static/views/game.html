@@ -1,26 +1,35 @@
 <link rel="stylesheet" href="./static/views/view-styles/game.css">
+<canvas id="gameCanvas"></canvas>
 
 <div id="game" class="ui-screen">
-    <canvas id="gameCanvas"></canvas>
-
     <div id="game-hud">
-        <div class="hud-top">
+        <div id="hud-top">
             <div class="money">$ <span id="money">0</span></div>
+            <div class="income">+ $<span id="income">0</span>/MIN</div>
         </div>
 
-        <div class="hud-bottom">
-            <div class="shop-section upgrades">
+        <div id="hud-bottom">
+            <div class="shop-section" id="upgrades">
                 <button class="upgrade-btn" onclick="buyUpgrade('income')">
-                    <div class="label">INCREASE INCOME</div>
+                    <div class="label">+INCOME</div>
                 </button>
                 <button class="upgrade-btn" onclick="buyUpgrade('health')">
                     <div class="label">+HP</div>
                 </button>
             </div>
 
-            <div class="shop-section units" id="unitShopGrid"></div>
+            <div id="character-bar">
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+                <div class="character"></div>
+            </div>
 
-            <div class="shop-section gadgets">
+            <div class="shop-section" id="gadgets">
                 <button class="gadget-btn offensive" onclick="useGadget('offensive')">⚔️</button>
                 <button class="gadget-btn signature" onclick="useGadget('signature')">⭐</button>
                 <button class="gadget-btn utility" onclick="useGadget('utility')">🛡️</button>

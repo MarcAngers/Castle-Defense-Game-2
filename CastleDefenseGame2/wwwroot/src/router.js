@@ -14,7 +14,7 @@ const routes = {
     'main-menu': { path: '../static/views/main-menu.html', logic: initMainMenu },
     'sp-select-team': { path: '../static/views/sp-select-team.html', logic: initSPSelectTeam },
     'mp-select-team': { path: '../static/views/mp-select-team.html', logic: initMPSelectTeam },
-    'game-browser': { path: '../static/views/game-browser', logic: initGameBrowser },
+    'game-browser': { path: '../static/views/game-browser.html', logic: initGameBrowser },
     //'collection': { path: '../static/views/collection.html', logic: initCollection },
     //'singleplayer': { path: '../static/views/singleplayer.html', logic: initSingleplayer },
     //'multiplayer': { path: '../static/views/multiplayer.html', logic: initMultiplayer },

@@ -9,3 +9,26 @@ h2 {
     font-size: 20px;
     margin-top: 15vh;
 }
+
+.lobby-id-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px; /* Space between the text, box, and button */
+    margin-top: 15vh;
+    margin-bottom: 5vh;
+}
+.id-display-box {
+    color: #444;
+    background-color: white;
+    padding: 15px 30px;
+    margin-left: 40px;
+    
+    font-family: 'Press Start 2P', cursive; /* Retro pixel font */
+    font-weight: bold;
+    font-size: 18px;
+}
+
+#btnCopyLobbyId {
+    margin: 0;
+}

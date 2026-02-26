@@ -97,12 +97,13 @@ namespace CastleDefense.Engine
             {
                 DefinitionId = unitId,
                 Side = side,
+                Width = def.Width,
                 CurrentHealth = def.MaxHealth,
                 MaxHealth = def.MaxHealth,
                 CurrentShield = def.MaxShield,
                 // Spawn Logic: Player 1 spawns at 0, Player 2 spawns at MAP_WIDTH
                 Position = (side == 1) ? 50 : MAP_WIDTH - 50,
-                YPosition = 400 + random.Next(-100, 101),
+                YPosition = 300 + random.Next(0, 51),
                 CurrentSpeed = def.MoveSpeed
             };
 
@@ -273,15 +274,15 @@ namespace CastleDefense.Engine
 
         private float GetDistanceToEnemyCastle(Unit attacker)
         {
-            // If Player 1 (Left), enemy castle is at MAP_WIDTH
+            // If Player 1 (Left), enemy castle is at MAP_WIDTH - 200
             if (attacker.Side == 1)
             {
-                return Math.Abs(MAP_WIDTH - attacker.Position);
+                return Math.Abs(MAP_WIDTH - 200 - attacker.Position);
             }
-            // If Player 2 (Right), enemy castle is at 0
+            // If Player 2 (Right), enemy castle is at 200
             else
             {
-                return Math.Abs(attacker.Position - 0);
+                return Math.Abs(attacker.Position - 200);
             }
         }
 

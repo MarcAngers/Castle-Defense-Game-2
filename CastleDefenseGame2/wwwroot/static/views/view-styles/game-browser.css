@@ -1,0 +1,68 @@
+#game-browser {
+    color: black;
+    text-align: center;
+}
+
+#game-browser-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    margin: auto;
+    width: 50%;
+
+    gap: 20px;
+}
+#game-id-input-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: auto;
+
+    flex: 1;
+}
+
+#game-id-input {
+    color: #444;
+    background-color: white;
+    padding: 15px 30px;
+    
+    font-family: 'Press Start 2P', cursive; /* Retro pixel font */
+    font-weight: bold;
+}
+
+#game-id-list {
+    max-height: 140px;
+    overflow-y: auto; 
+    min-width: 250px;
+    max-width: 400px;
+    background: white;
+    border: 2px solid #333;
+}
+
+/* Individual rows */
+.game-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid #ddd;
+    cursor: pointer;
+    color: black;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+/* Hover effect so they know it's clickable */
+.game-list-item:hover {
+    background-color: #f0f0f0;
+}
+
+/* Remove the border from the very last item */
+.game-list-item:last-child {
+    border-bottom: none;
+}
+
+/* Visual cue for full games */
+.game-full {
+    opacity: 0.5; /* Greys out the 2/2 games */
+}

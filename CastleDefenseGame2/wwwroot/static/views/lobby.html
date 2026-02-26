@@ -1,11 +1,16 @@
 <link rel="stylesheet" href="./static/views/view-styles/lobby.css">
+<canvas id="bgCanvas"></canvas>
 
 <div id="lobby" class="ui-screen">
-    <canvas id="bgCanvas"></canvas>
-
     <div>
         <h1>WAITING FOR OPPONENT...</h1>
-        <h2 id="lobby-id">LOBBY ID: </h2>
+        <div class="lobby-id-wrapper">
+            <h3>LOBBY ID:</h3>
+            
+            <div class="id-display-box" id="lobby-id-text">WAITING...</div>
+            
+            <button id="btnCopyLobbyId" class="button">Copy</button>
+        </div>
         <button id="btnExit">Exit</button>
     </div>
 </div>

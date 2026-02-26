@@ -1,5 +1,4 @@
 ﻿using CastleDefense.Api.Services;
-using CastleDefense.Engine;  // From your Engine project
 using CastleDefense.Engine.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,15 +23,11 @@ namespace CastleDefense.Api.Controllers
         [HttpPost]
         public IActionResult CreateGame()
         {
-            // 2. Pass the colour into your Service
-            // (You will need to update your _gameService.CreateGame signature too!)
             string gameId = _gameService.CreateGame();
 
             return Ok(new { gameId = gameId });
         }
 
-        // GET: api/games/{id}
-        // Useful for the client to check if a game exists and get initial state
         [HttpGet("{id}")]
         public IActionResult GetGame(string id)
         {
@@ -43,9 +38,14 @@ namespace CastleDefense.Api.Controllers
                 return NotFound("Game not found");
             }
 
-            // We return the .State (Data), not the Engine (Logic)
-            // This gives the client the full initial board setup
             return Ok(engine._state);
+        }
+
+        [HttpGet("all")]
+        public IActionResult GetAllGames()
+        {
+            var games = _gameService.GetAllGameIds();
+            return Ok(games);
         }
     }
 }

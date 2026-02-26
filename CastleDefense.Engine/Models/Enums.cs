@@ -6,13 +6,13 @@ namespace CastleDefense.Engine.Models
 {
     public enum TeamColour
     {
-        White,
         Black,
-        Red,
         Blue,
         Green,
         Orange,
         Purple,
+        Red,
+        White,
         Yellow
     }
 
