@@ -5,34 +5,36 @@
     <div id="game-hud">
         <div id="hud-top">
             <div class="money">$ <span id="money">0</span></div>
-            <div class="income">+ $<span id="income">0</span>/MIN</div>
+            <div class="income">+ $<span id="income">0</span>/SEC</div>
         </div>
 
         <div id="hud-bottom">
             <div class="shop-section" id="upgrades">
-                <button class="upgrade-btn" onclick="buyUpgrade('income')">
-                    <div class="label">+INCOME</div>
+                <button class="upgrade-btn" id="btnInvest">
+                    <div>INVEST: $<span id="investment-price">0</span></div>
                 </button>
-                <button class="upgrade-btn" onclick="buyUpgrade('health')">
-                    <div class="label">+HP</div>
+                <button class="upgrade-btn" id="btnRepair">
+                    <div>REPAIR: $<span id="repair-price">0</span></div>
                 </button>
             </div>
 
             <div id="character-bar">
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
-                <div class="character"></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
+                <div class="character-icon-wrapper"><span class="price"></span><div class="character"></div></div>
             </div>
 
             <div class="shop-section" id="gadgets">
-                <button class="gadget-btn offensive" onclick="useGadget('offensive')">⚔️</button>
-                <button class="gadget-btn signature" onclick="useGadget('signature')">⭐</button>
-                <button class="gadget-btn utility" onclick="useGadget('utility')">🛡️</button>
+                <button class="gadget-btn" id="btnGadgetSignature">⭐</button>
+                <div id="gadget-container">
+                    <button class="gadget-btn" id="btnGadgetOffense">⚔️</button>
+                    <button class="gadget-btn" id="btnGadgetDefence">🛡️</button>
+                </div>
             </div>
         </div>
     </div>

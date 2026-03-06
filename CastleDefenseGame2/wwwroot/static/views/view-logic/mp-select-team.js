@@ -61,8 +61,13 @@ export default async function initMPSelectTeam() {
         team.addEventListener('click', handleTeamClick);
     }
 
-    // Select white team by default
-    document.getElementById('white').click();
+    // Select previously selected team, or white team by default
+    if (connection.selectedTeam != null) {
+        document.getElementById(connection.selectedTeam).click();
+    } 
+    else {
+        document.getElementById('white').click();
+    }
 
     const btnBack = document.getElementById('btnBack');
     const btnCreate = document.getElementById('btnCreate');

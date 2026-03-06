@@ -40,13 +40,4 @@ namespace CastleDefense.Engine.Models
         Defense,    // The Blue Slot (Walls, Heals)
         Signature   // The Team Slot (Black Hole, Stampede)
     }
-
-    public enum GadgetType
-    {
-        DirectDamage,   // Hits specific target or area
-        SpawnUnit,      // Summons units
-        StatusEffect,   // Freeze, Slow, Buff
-        ModifyTerrain,  // Walls, Fire on ground
-        Economy         // Money modification
-    }
 }

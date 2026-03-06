@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CastleDefense.Engine.Gadgets;
 using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Engine.Data
@@ -12,7 +13,10 @@ namespace CastleDefense.Engine.Data
         public static List<TeamDefinition> Teams { get; private set; } = new List<TeamDefinition>();
         public static List<GadgetDefinition> GenericGadgets { get; private set; } = new List<GadgetDefinition>();
 
-        private const int PRICE_MULTIPLIER = 10;
+        private const int DAMAGE_MULTIPLIER = 1;
+        private const int HEALTH_MULTIPLIER = 2;
+        private const int PRICE_MULTIPLIER = 1;
+        private const float ATTACK_SPEED_MULTIPLIER = 0.8f;
         private const int COOLDOWN_PER_DOLLAR = 800;
 
         public static void Initialize()
@@ -67,14 +71,16 @@ namespace CastleDefense.Engine.Data
                 int tier = int.TryParse(GetCol("Tier"), out var t) ? t : 1;
                 int price = int.TryParse(GetCol("Price"), out var p) ? p : 0;
                 int hp = int.TryParse(GetCol("Health"), out var h) ? h : 0;
+                int shield = int.TryParse(GetCol("Shield"), out var sh) ? sh : 0;
                 int dmg = int.TryParse(GetCol("Damage"), out var d) ? d : 0;
                 float speed = float.TryParse(GetCol("Speed"), out var sp) ? sp : 0f;
-                int width = int.TryParse(GetCol("Size"), out var sz) ? sz : 50;
+                int width = int.TryParse(GetCol("Width"), out var wd) ? wd : 50;
+                int height = int.TryParse(GetCol("Height"), out var ht) ? ht : 50;
 
                 // --- DYNAMIC FALLBACKS ---
                 // If it's in the CSV, use it. Otherwise, calculate a smart default.
-                int weight = int.TryParse(GetCol("Weight"), out var w) ? w : (hp * 50);
-                int range = int.TryParse(GetCol("Range"), out var r) ? r : 50;
+                int weight = int.TryParse(GetCol("Weight"), out var w) ? w : hp;
+                int range = int.TryParse(GetCol("Range"), out var r) ? r : 0;
                 bool isAce = bool.TryParse(GetCol("IsAce"), out var a) ? a : (tier == 8);
 
                 if (!Enum.TryParse<AttackType>(GetCol("AttackType"), true, out var attackType))
@@ -86,6 +92,17 @@ namespace CastleDefense.Engine.Data
                 {
                     armorType = isAce ? ArmorType.Shield : ArmorType.None;
                 }
+
+                // --- CALCULATE ATTACK SPEED ---
+                float calculatedAps = 0f;
+
+                if (dmg > 0)
+                {
+                    // The Doggo Formula: 0.4 * (Speed / Damage)
+                    calculatedAps = ATTACK_SPEED_MULTIPLIER * (speed / (float)dmg);
+                }
+
+                float finalAps = Math.Clamp(calculatedAps, 0.2f, 5.0f);
 
                 // --- APPLY BALANCING FORMULAS ---
                 int charges = Math.Max(1, 25 / (price > 0 ? price : 1));
@@ -99,21 +116,23 @@ namespace CastleDefense.Engine.Data
                     Cost = price * PRICE_MULTIPLIER,
                     CooldownMs = price * COOLDOWN_PER_DOLLAR,
                     MaxCharges = charges,
-                    MaxHealth = hp,
+                    MaxHealth = hp * HEALTH_MULTIPLIER,
+                    MaxShield = shield,
                     Damage = dmg,
                     MoveSpeed = speed,
                     Width = width,
+                    Height = height,
                     Description = GetCol("Description"),
 
                     Weight = weight,
-                    Range = range,
+                    Range = range,                               // All units are melee for now
                     AttackType = attackType,
                     ArmorType = armorType,
                     IsAce = isAce,
 
-                    AttackSpeed = dmg * speed,
-                    PushForce = weight * speed,
-                    EffectiveWeight = weight - (speed * 20)
+                    AttackSpeed = finalAps,
+                    PushForce = weight * speed * dmg,
+                    EffectiveWeight = tier * tier * weight / speed
                 };
 
                 // --- BUILD THE 3D TEAM STRUCTURE ---
@@ -180,109 +199,100 @@ namespace CastleDefense.Engine.Data
 
         private static void LoadGenericGadgets()
         {
-            // --- RED SLOT (Offense) ---
+            // --- Offensive Gadgets ---
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_nuke",
+                Id = "nuke",
                 Name = "The Nuke",
                 Slot = GadgetSlot.Offense,
-                Type = GadgetType.DirectDamage,
-                TargetsCastle = true,
-                Cost = 10000,
+                Cost = 50,
                 CooldownMs = 120000,
-                BaseValue = 500,
-                Radius = 200,
-                Description = "Massive area damage. Hurts Castles."
+                Description = "Massive area damage. Hurts Castles.",
+                GadgetEffect = new NukeEffect()
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_snipe",
+                Id = "snipe",
                 Name = "Snipe",
                 Slot = GadgetSlot.Offense,
-                Type = GadgetType.DirectDamage,
-                TargetsCastle = true,
-                Cost = 2000,
-                CooldownMs = 15000,
-                BaseValue = 100,
-                Radius = 0,
-                Description = "High single target damage."
+                Cost = 30,
+                CooldownMs = 90000,
+                BaseValue = 30,
+                Description = "High single target damage.",
+                GadgetEffect = new SnipeEffect()
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_napalm",
-                Name = "Napalm",
+                Id = "firebomb",
+                Name = "Fire Bomb",
                 Slot = GadgetSlot.Offense,
-                Type = GadgetType.ModifyTerrain,
-                TargetsCastle = true,
-                Cost = 4000,
-                CooldownMs = 30000,
+                Cost = 40,
+                CooldownMs = 90000,
+                BaseValue = 5,
+                Radius = 50,
                 DurationMs = 10000,
-                Description = "Sets ground on fire."
+                Description = "Sets ground on fire.",
+                GadgetEffect = new FirebombEffect()
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_freeze",
-                Name = "Orbital Freeze",
+                Id = "freeze",
+                Name = "Freeze Ray",
                 Slot = GadgetSlot.Offense,
-                Type = GadgetType.StatusEffect,
-                TargetsCastle = true,
-                Cost = 3000,
-                CooldownMs = 40000,
+                Cost = 45,
+                CooldownMs = 100000,
+                BaseValue = 10,
                 DurationMs = 5000,
-                Description = "Freezes units and Economy."
+                Description = "Freezes units.",
+                GadgetEffect = new FreezeEffect()
             });
 
-            // --- BLUE SLOT (Defense) ---
+            // --- Defensive Gadgets ---
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_medkit",
-                Name = "Medkit",
+                Id = "medpack",
+                Name = "Medpack",
                 Slot = GadgetSlot.Defense,
-                Type = GadgetType.StatusEffect,
-                Cost = 1000,
-                CooldownMs = 20000,
-                BaseValue = 50,
-                Radius = 300,
-                Description = "Heals units in area."
+                Cost = 25,
+                CooldownMs = 60000,
+                BaseValue = 30,
+                Description = "Heals all units."
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_wall",
-                Name = "The Wall",
+                Id = "wall",
+                Name = "Wall",
                 Slot = GadgetSlot.Defense,
-                Type = GadgetType.ModifyTerrain,
-                Cost = 1500,
-                CooldownMs = 30000,
-                BaseValue = 500, // Wall HP
+                Cost = 50,
+                CooldownMs = 120000,
+                BaseValue = 100,
                 Description = "Spawns a temporary barrier."
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_stim",
-                Name = "Stimpack",
+                Id = "speed",
+                Name = "Spped Boost",
                 Slot = GadgetSlot.Defense,
-                Type = GadgetType.StatusEffect,
-                Cost = 2000,
-                CooldownMs = 30000,
+                Cost = 30,
+                CooldownMs = 90000,
                 DurationMs = 6000,
                 Description = "Boosts speed and damage."
             });
 
             GenericGadgets.Add(new GadgetDefinition
             {
-                Id = "g_guards",
-                Name = "Reinforce",
+                Id = "reinforcements",
+                Name = "Reinforcements",
                 Slot = GadgetSlot.Defense,
-                Type = GadgetType.SpawnUnit,
-                Cost = 2500,
-                CooldownMs = 45000,
+                Cost = 40,
+                CooldownMs = 100000,
                 SpawnUnitId = "doggo", // Default placeholder
-                Description = "Spawns 3 Guard units."
+                Description = "Spawns 5 reinforcement units."
             });
         }
     }

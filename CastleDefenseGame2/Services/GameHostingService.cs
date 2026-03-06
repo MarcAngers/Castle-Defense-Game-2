@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
+﻿using CastleDefense.Api.Hubs;
 using CastleDefense.Engine;
-using CastleDefense.Api.Hubs;
 using CastleDefense.Engine.Models;
+using Microsoft.AspNetCore.SignalR;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace CastleDefense.Api.Services
 {
@@ -39,6 +40,11 @@ namespace CastleDefense.Api.Services
             var state = new GameState();
             var engine = new GameEngine(state);
 
+            engine.OnGadgetAnimation += (gadgetId, side, position, targetId) =>
+            {
+                _hubContext.Clients.Group(gameId).SendAsync("PlayGadgetAnimation", gadgetId, side, position, targetId);
+            };
+
             _lobbyGames.TryAdd(gameId, engine);
             
             return gameId;
@@ -67,17 +73,26 @@ namespace CastleDefense.Api.Services
                     var gameId = kvp.Key;
                     var engine = kvp.Value;
 
-                    // 1. Run Game Logic (process queue -> ticks -> physics)
-                    // We lock to ensure we don't send state while it's half-updated
+                    // 1. Run Game Logic
                     lock (engine)
                     {
                         engine.Tick();
                     }
 
-                    // 2. Broadcast State
-                    // We send the entire object. SignalR handles serialization.
-                    // Optimization: In the future, only send deltas.
-                    await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", engine._state);
+                    // 2. Check for Game Over BEFORE broadcasting the normal state
+                    if (engine._state.IsGameOver)
+                    {
+                        // Send a dedicated GameOver event with just the winning side
+                        await _hubContext.Clients.Group(gameId).SendAsync("GameOver", engine._state);
+
+                        // Remove the game from the active dictionary so it stops ticking forever!
+                        _activeGames.TryRemove(gameId, out _);
+                    }
+                    else
+                    {
+                        // 3. Game is still running, broadcast the normal state
+                        await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", engine._state);
+                    }
                 }
 
                 // Maintain 30 FPS

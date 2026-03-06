@@ -1,4 +1,6 @@
-﻿using CastleDefense.Engine.Models;
+﻿using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Gadgets;
+using CastleDefense.Engine.Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -9,6 +11,7 @@ namespace CastleDefense.Engine
     {
         public Guid GameId { get; set; }
         public TeamColour Map { get; set; }
+        public bool ShadowMap { get; set; }
         public bool IsGameOver { get; set; }
         public int WinnerSide { get; set; } // 0 = Playing, 1 = Player 1 (Left), 2 = Player 2 (Right)
 
@@ -18,6 +21,7 @@ namespace CastleDefense.Engine
         public PlayerState Player2 { get; set; }
 
         public List<Unit> Units { get; set; } = new List<Unit>();
+        public List<Hazard> Hazards { get; set; } = new List<Hazard>();
 
         public GameState() : this(GetRandomMap())
         {
@@ -27,11 +31,23 @@ namespace CastleDefense.Engine
         {
             GameId = Guid.NewGuid();
             Units = new List<Unit>();
+            ShadowMap = false;
 
             Player1 = new PlayerState();
             Player2 = new PlayerState();
 
             Map = map;
+            // I only have these maps built so far:
+            while (Map != TeamColour.White && Map != TeamColour.Orange && Map != TeamColour.Yellow && Map != TeamColour.Blue && Map != TeamColour.Purple)
+            {
+                Map = GetRandomMap();
+            }
+
+            if (map == TeamColour.Black)
+            {
+                ShadowMap = true;
+                Map = GetRandomMap();
+            }
         }
 
         private static TeamColour GetRandomMap()
@@ -49,14 +65,20 @@ namespace CastleDefense.Engine
         public TeamColour Team { get; set; }
 
         // Economy
-        public float Money { get; set; }
-        public float Income { get; set; }
+        public double Money { get; set; }
+        public double Income { get; set; }
+        public double InvestmentPrice { get; set; }
+        public int InvestmentCount { get; set; }
 
         // Base
         public int CastleHealth { get; set; }
         public int CastleMaxHealth { get; set; }
+        public int RepairPrice { get; set; }
         public bool IsInvulnerable { get; set; }
-        public long InvulnerableUntilTick { get; set; } // Logic for Divine Shield
+        public long InvulnerableUntilTick { get; set; }
+        public GadgetDefinition OffensiveGadget { get; set; }
+        public GadgetDefinition DefensiveGadget { get; set; }
+        public GadgetDefinition SignatureGadget { get; set; }
 
         // Cooldowns
         public Dictionary<string, int> UnitCharges { get; set; } = new Dictionary<string, int>();
@@ -65,31 +87,69 @@ namespace CastleDefense.Engine
 
         public PlayerState()
         {
-            Money = 0f;
-            Income = 5f;
+            Money = 0;
+            Income = 1.85;
+            InvestmentPrice = 5.55;
+            InvestmentCount = 0;
             CastleMaxHealth = 1000;
+            RepairPrice = 10;
             CastleHealth = 1000;
+
+            SignatureGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "firebomb");
+            OffensiveGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "nuke");
+            DefensiveGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "snipe");
         }
     }
 
     public class Unit
     {
+        // --- IDENTITY ---
         public Guid InstanceId { get; set; } = Guid.NewGuid();
         public string DefinitionId { get; set; }
         public int Side { get; set; } // 1 (Left/P1) or 2 (Right/P2)
-        public int Width { get; set; }
 
-        // Current Stats
+        // --- DRAWING & HITBOX ---
+        public int Width { get; set; }
+        public int Height { get; set; }
+
+
+        // --- HEALTH ---
         public int CurrentHealth { get; set; }
         public int MaxHealth { get; set; }
         public int CurrentShield { get; set; }
+
+        // --- POSITION & MOVEMENT ---
         public float Position { get; set; }
         public int YPosition { get; set; }
-        public float AttackCooldown { get; set; }
         public float CurrentSpeed { get; set; }
+        public float PendingKnockback { get; set; }
 
+        // --- COMBAT STATS ---
+        public int Damage { get; set; }
+        public int Range { get; set; }
+        public float AttackSpeed { get; set; }
+        public float AttackCooldown { get; set; } // The active running timer
+
+        // --- PHYSICS & MECHANICS ---
+        public int Weight { get; set; }
+        public float PushForce { get; set; }
+        public float EffectiveWeight { get; set; }
+        public AttackType AttackType { get; set; }
+        public ArmorType ArmorType { get; set; }
+
+        // --- ACTIVE EFFECTS ---
         // Stacking Status Effects (Poisoned + Frozen + Burning)
         public List<ActiveStatus> Statuses { get; set; } = new List<ActiveStatus>();
+    }
+
+    public class Hazard
+    {
+        public string Type { get; set; } // "Fire", "Ice", "PoisonCloud", etc.
+        public int Side { get; set; }
+
+        public float Position { get; set; } // The starting X coordinate (left edge)
+        public float Width { get; set; }    // How far the hazard stretches
+        public int ExpiresAtTick { get; set; } // When the hazard disappears
     }
 
     public class ActiveStatus
@@ -97,5 +157,12 @@ namespace CastleDefense.Engine
         public string Name { get; set; } // "Freeze", "Burn", "Poison", "SpeedBuff"
         public long ExpiresAtTick { get; set; }
         public float Value { get; set; }   // e.g., Burn Damage amount, or Speed % boost
+
+        public ActiveStatus(string name, long tick, float value)
+        {
+            Name = name;
+            ExpiresAtTick = tick;
+            Value = value;
+        }
     }
 }

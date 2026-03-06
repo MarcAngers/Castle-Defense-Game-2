@@ -4,12 +4,15 @@ class GameConnection {
     constructor() {
         // API Configuration
         this.API_URL = "http://localhost:5168";
+
+        this.gadgetAnimationListeners = [];
         
         this.connection = null;
         this.currentGameId = null;
         this.selectedTeam = "white";
         this.mySide = 0; // 1 = Left, 2 = Right
         this.latestState = null;
+        this.winningSide = 0;
 
         this.buildConnection();
     }
@@ -17,7 +20,7 @@ class GameConnection {
     buildConnection = async () => {
         // --- SIGNALR CONNECTION ---
         this.connection = new signalR.HubConnectionBuilder()
-            .withUrl(`${this.API_URL}/gameHub`)
+            .withUrl(`/gameHub`)
             .build();
 
         this.connection.on("GameJoined", (side, state) => {
@@ -30,7 +33,19 @@ class GameConnection {
         });
 
         this.connection.on("GameStarted", () => {
+            this.winningSide = 0;
             showScreen("game");
+        });
+
+        this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
+            console.log("sniping: ", targetId);
+            this.gadgetAnimationListeners.forEach(ga => ga(gadgetId, side, position, targetId));
+        });
+
+        this.connection.on("GameOver", (state) => {
+            this.latestState = state;
+            this.winningSide = state.winningSide;
+            showScreen("game-over");
         })
 
         try {
@@ -42,7 +57,7 @@ class GameConnection {
     }
 
     createGame = async (p1Colour) => {
-        const response = await fetch(`${this.API_URL}/api/games`, { method: "POST" });
+        const response = await fetch(`/api/games`, { method: "POST" });
         const data = await response.json();
 
         await this.joinGame(data.gameId, p1Colour);
@@ -56,7 +71,7 @@ class GameConnection {
 
     getAllGames = async () => {
         try {
-            const response = await fetch(`${this.API_URL}/api/games/all`);
+            const response = await fetch(`/api/games/all`);
             
             if (!response.ok) {
                 throw new Error("Failed to fetch the game list.");
@@ -74,6 +89,21 @@ class GameConnection {
 
     spawnUnit = (unitId) => {
         this.connection.invoke("SpawnUnit", this.currentGameId, unitId);
+    }
+
+    invest = () => {
+        this.connection.invoke("Invest", this.currentGameId);
+    }
+    repair = () => {
+        this.connection.invoke("Repair", this.currentGameId);
+    }
+
+    useGadget = (gadgetId, position) => {
+        this.connection.invoke("UseGadget", this.currentGameId, gadgetId, position);
+    }
+
+    onPlayGadgetAnimation = (callback) => {
+        this.gadgetAnimationListeners.push(callback);
     }
 }
 

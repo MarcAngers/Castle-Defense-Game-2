@@ -1,20 +1,29 @@
-import { showScreen } from '../../../src/router.js';
 import View from '../../../src/view.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
 
 export default function initGameScreen() {
-    const gameView = new View('gameCanvas');
-    let myTeam = null
+    let startingCameraX = 0;
+    let myTeam = null;
     if (connection.mySide == 1) {
         myTeam = loader.assets.teamList[connection.latestState.player1.team];
     }
     if (connection.mySide == 2) {
         myTeam = loader.assets.teamList[connection.latestState.player2.team];
+        startingCameraX = 2000;
     }
-    initShopUI(myTeam);
+    const gameView = new View('gameCanvas', startingCameraX);
+    initShopUI(myTeam, gameView);
+
+    let animationFrameId;
 
     const gameLoop = () => {
+        if (connection.winningSide != 0) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            return;
+        }
+        
         gameView.clear();
 
         if (connection.latestState) {
@@ -22,7 +31,7 @@ export default function initGameScreen() {
             updateUI(connection.latestState, connection.mySide);
         }
 
-        requestAnimationFrame(gameLoop);
+        animationFrameId = requestAnimationFrame(gameLoop);
     };
 
     requestAnimationFrame(gameLoop);
@@ -31,20 +40,26 @@ export default function initGameScreen() {
 function updateUI(state, side) {
     const money = document.getElementById('money');
     const income = document.getElementById('income');
+    const investment = document.getElementById('investment-price');
+    const repair = document.getElementById('repair-price');
 
     if (side == 1) {
-        money.innerHTML = state.player1.money;
-        income.innerHTML = state.player1.income;
+        money.innerHTML = Math.floor(state.player1.money);
+        income.innerHTML = state.player1.income.toFixed(1);
+        investment.innerHTML = Math.ceil(state.player1.investmentPrice);
+        repair.innerHTML = state.player1.repairPrice;
     }
     if (side == 2) {
-        money.innerHTML = state.player2.money;
-        income.innerHTML = state.player2.income;
+        money.innerHTML = Math.floor(state.player2.money);
+        income.innerHTML = state.player2.income.toFixed(1);
+        investment.innerHTML = Math.ceil(state.player2.investmentPrice);
+        repair.innerHTML = state.player2.repairPrice;
     }
 
     // Update shop cooldowns:
 }
 
-function initShopUI(team) {
+function initShopUI(team, gameView) {
     if (connection.mySide == 1) {
         document.getElementById('hud-top').style.float = 'left';
     }
@@ -52,8 +67,23 @@ function initShopUI(team) {
         document.getElementById('hud-top').style.float = 'right';
     }
 
+    const btnInvest = document.getElementById('btnInvest');
+    const btnRepair = document.getElementById('btnRepair');
+
+    btnInvest.addEventListener('click', () => {
+        connection.invest();
+    });
+    btnRepair.addEventListener('click', () => {
+        connection.repair();
+    });
+
     document.getElementById('character-bar').style.backgroundColor = team;
+    if (team == 'white' || team == 'yellow') {
+        document.getElementById('character-bar').style.color = 'black';
+    }
+
     const teamImages = loader.getTeam(team);
+    const priceElements = document.getElementsByClassName('price');
     const characterElements = document.getElementsByClassName('character');
 
     Array.from(characterElements).forEach((character, index) => {
@@ -78,9 +108,23 @@ function initShopUI(team) {
 
             character.addEventListener('click', (e) => {
                 connection.spawnUnit(e.target.parentElement.id);
-            })
+            });
+
+            priceElements[index].innerHTML = '$' + loader.getUnitStats(character.id).price;
         }
     });
 
+    const btnGadgetSignature = document.getElementById('btnGadgetSignature');
+    const btnGadgetOffense = document.getElementById('btnGadgetOffense');
+    const btnGadgetDefence = document.getElementById('btnGadgetDefence');
 
+    btnGadgetSignature.addEventListener('click', () => {
+        gameView.targetingGadgetId = "firebomb";
+    });
+    btnGadgetOffense.addEventListener('click', () => {
+        gameView.targetingGadgetId = "nuke";
+    });
+    btnGadgetDefence.addEventListener('click', () => {
+        gameView.targetingGadgetId = "snipe";
+    });
 }

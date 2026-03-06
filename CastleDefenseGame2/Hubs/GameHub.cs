@@ -72,5 +72,62 @@ namespace CastleDefense.Api.Hubs
                 game.SpawnUnit(side, unitId);
             });
         }
+
+        public void Invest(string gameId)
+        {
+            var game = _gameService.GetGame(gameId);
+            if (game == null) return;
+
+            // Identify which player is calling
+            int side = 0;
+            if (game._state.Player1.ConnectionId == Context.ConnectionId) side = 1;
+            else if (game._state.Player2.ConnectionId == Context.ConnectionId) side = 2;
+
+            if (side == 0) return; // Spectators can't invest
+
+            // THREAD SAFETY: We do NOT modify State here. We queue it.
+            game.EnqueueAction(() =>
+            {
+                game.Invest(side);
+            });
+        }
+
+        public void Repair(string gameId)
+        {
+            var game = _gameService.GetGame(gameId);
+            if (game == null) return;
+
+            // Identify which player is calling
+            int side = 0;
+            if (game._state.Player1.ConnectionId == Context.ConnectionId) side = 1;
+            else if (game._state.Player2.ConnectionId == Context.ConnectionId) side = 2;
+
+            if (side == 0) return; // Spectators can't repair
+
+            // THREAD SAFETY: We do NOT modify State here. We queue it.
+            game.EnqueueAction(() =>
+            {
+                game.Repair(side);
+            });
+        }
+
+        public void UseGadget(string gameId, string gadgetId, float position)
+        {
+            var game = _gameService.GetGame(gameId);
+            if (game == null) return;
+
+            // Identify which player is calling
+            int side = 0;
+            if (game._state.Player1.ConnectionId == Context.ConnectionId) side = 1;
+            else if (game._state.Player2.ConnectionId == Context.ConnectionId) side = 2;
+
+            if (side == 0) return; // Spectators can't repair
+
+            // THREAD SAFETY: We do NOT modify State here. We queue it.
+            game.EnqueueAction(() =>
+            {
+                game.UseGadget(side, gadgetId, (int)position);
+            });
+        }
     }
 }

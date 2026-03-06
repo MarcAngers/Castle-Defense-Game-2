@@ -5,6 +5,7 @@ import connection from '../../../src/game-connection.js';
 export default function initLobby() {
     let lobbyView = new View('bgCanvas');  
     lobbyView.drawBackground('white');
+    lobbyView.drawForeground('white');
 
     document.getElementById('lobby-id-text').innerText = connection.currentGameId;
 

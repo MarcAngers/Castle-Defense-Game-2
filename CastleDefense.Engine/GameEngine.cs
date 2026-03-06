@@ -1,8 +1,10 @@
 ﻿using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Gadgets;
 using CastleDefense.Engine.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 
 namespace CastleDefense.Engine
@@ -12,13 +14,25 @@ namespace CastleDefense.Engine
         public GameState _state;
 
         // Config
-        public const int MAP_WIDTH = 1500;
+        public const int MAP_WIDTH = 2000;
         public const int TICKS_PER_SECOND = 30;
         private const int INCOME_FREQUENCY = 30;
         private ConcurrentQueue<Action> _actionQueue = new ConcurrentQueue<Action>();
 
         // Optimization: Fast Lookup Cache
-        private Dictionary<string, UnitDefinition> _unitCache;
+        private Dictionary<string, UnitDefinition> _unitCache;        
+        private Dictionary<string, GadgetDefinition> _gadgetCache;
+
+        // Event for successful gadget use
+        // Parameters: string gadgetId, int side, int position
+        public event Action<string, int, int, Guid> OnGadgetAnimation;
+
+        private class ScheduledEvent
+        {
+            public int ExecuteAtTick { get; set; }
+            public Action Action { get; set; }
+        }
+        private List<ScheduledEvent> _scheduledEvents = new List<ScheduledEvent>();
 
         public GameEngine(GameState state)
         {
@@ -37,6 +51,13 @@ namespace CastleDefense.Engine
                         _unitCache[unit.Id] = unit;
                 }
             }
+
+            _gadgetCache = new Dictionary<string, GadgetDefinition>();
+            foreach (var gadget in GameDataManager.GenericGadgets)
+            {
+                if (!_gadgetCache.ContainsKey(gadget.Id))
+                    _gadgetCache[gadget.Id] = gadget;
+            }
         }
 
         public void EnqueueAction(Action action)
@@ -52,9 +73,32 @@ namespace CastleDefense.Engine
             }
         }
 
+        public void ScheduleAction(int delayInTicks, Action action)
+        {
+            _scheduledEvents.Add(new ScheduledEvent
+            {
+                ExecuteAtTick = (int)_state.CurrentTick + delayInTicks,
+                Action = action
+            });
+        }
+
+        public void TriggerGadgetAnimation(string gadgetId, int side, int position, Guid instanceId = new Guid())
+        {
+            OnGadgetAnimation?.Invoke(gadgetId, side, position, instanceId);
+        }
+
         public void Tick()
         {
             ProcessActions();
+
+            for (int i = _scheduledEvents.Count - 1; i >= 0; i--)
+            {
+                if (_state.CurrentTick >= _scheduledEvents[i].ExecuteAtTick)
+                {
+                    _scheduledEvents[i].Action.Invoke();
+                    _scheduledEvents.RemoveAt(i);
+                }
+            }
 
             if (_state.IsGameOver) return;
             _state.CurrentTick++;
@@ -68,14 +112,16 @@ namespace CastleDefense.Engine
             TickCooldowns(_state.Player1);
             TickCooldowns(_state.Player2);
 
-            // 2. Process Status Effects
+            // 2. Process Gadget Effects
+            ProcessHazards();
+
+            // 3. Process Status Effects
             ProcessStatuses();
 
-            // 3. Movement & Combat
+            // 4. Movement & Combat
             MoveAndFight();
         }
 
-        // The logic to safely spawn a unit
         public void SpawnUnit(int side, string unitId)
         {
             // 1. Validation
@@ -95,19 +141,129 @@ namespace CastleDefense.Engine
             Random random = new Random();
             var newUnit = new Unit
             {
+                // --- IDENTITY & UI ---
                 DefinitionId = unitId,
                 Side = side,
+                Height = def.Height,
                 Width = def.Width,
+                PendingKnockback = 0,
+
+                // --- HEALTH & POSITION ---
                 CurrentHealth = def.MaxHealth,
                 MaxHealth = def.MaxHealth,
                 CurrentShield = def.MaxShield,
-                // Spawn Logic: Player 1 spawns at 0, Player 2 spawns at MAP_WIDTH
-                Position = (side == 1) ? 50 : MAP_WIDTH - 50,
-                YPosition = 300 + random.Next(0, 51),
-                CurrentSpeed = def.MoveSpeed
+                Position = (side == 1) ? 100 : MAP_WIDTH - 100,
+                YPosition = 360 - def.Height + random.Next(0, 51),
+
+                // --- COMBAT STATS (Copied so they can be buffed/debuffed!) ---
+                CurrentSpeed = def.MoveSpeed,
+                Damage = def.Damage,
+                Range = def.Range,
+                AttackSpeed = def.AttackSpeed,
+
+                // --- PHYSICS & MECHANICS ---
+                Weight = def.Weight,
+                PushForce = def.PushForce,
+                EffectiveWeight = def.EffectiveWeight,
+                AttackType = def.AttackType,
+                ArmorType = def.ArmorType
             };
 
             _state.Units.Add(newUnit);
+        }
+
+        public void Invest(int side)
+        {
+            // 1. Validation
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            if (player.Money < player.InvestmentPrice) return;
+
+            // 2. Deduct cost
+            player.Money -= player.InvestmentPrice;
+
+            // 3. Increase income and next investment price
+            player.InvestmentCount++;
+            player.Income = 1.85 * Math.Pow(1.25, player.InvestmentCount);
+            player.InvestmentPrice = player.Income * (player.InvestmentCount + 3);
+        }
+
+        public void Repair(int side)
+        {
+            // 1. Validation
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            if (player.Money < player.RepairPrice) return;
+
+            // 2. Deduct cost
+            player.Money -= player.RepairPrice;
+
+            // 3. Increase health and repair price
+            player.CastleHealth = Math.Min(player.CastleHealth + 200, player.CastleMaxHealth);
+            player.RepairPrice += 5;
+        }
+
+        public void UseGadget(int side, string gadgetId, int position)
+        {
+            // 1. Validation
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            if (!_gadgetCache.ContainsKey(gadgetId)) return;
+
+            if (gadgetId != player.OffensiveGadget.Id && gadgetId != player.DefensiveGadget.Id && gadgetId != player.SignatureGadget.Id) return;
+
+            var def = _gadgetCache[gadgetId];
+
+            // (Assuming you implement CheckCooldown logic here similar to your TickCooldowns)
+            
+            if (player.Money < def.Cost) return;
+
+            // 2. Deduct Cost
+            player.Money -= def.Cost;
+
+            // 3. Activate Gadget Effect
+            def.GadgetEffect.Execute(this, side, position);
+        }
+
+        private void ProcessHazards()
+        {
+            // 1. Clean up expired hazards (The fire burns out)
+            _state.Hazards.RemoveAll(h => h.ExpiresAtTick <= _state.CurrentTick);
+
+            // 2. Apply effects for active hazards
+            foreach (var hazard in _state.Hazards)
+            {
+                if (hazard.Type == "Fire")
+                {
+                    // Find every unit currently standing inside the fire's X-coordinates
+                    foreach (var unit in _state.Units)
+                    {
+                        // 1D Hitbox overlap check: 
+                        // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                        if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
+                        {
+                            // Check if they are already burning!
+                            var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Burn");
+
+                            if (existingBurn != null)
+                            {
+                                // They are already on fire! Just keep the fire going.
+                                // Refresh the duration to last 3 seconds AFTER they leave the zone.
+                                existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                            }
+                            else
+                            {
+                                // They just stepped into the fire! Ignite them.
+                                unit.Statuses.Add(new ActiveStatus(
+                                    "Burn",
+                                    _state.CurrentTick + (TICKS_PER_SECOND * 3),
+                                    1f // 1 damage per tick (30 dps)
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private void ProcessStatuses()
@@ -121,10 +277,8 @@ namespace CastleDefense.Engine
                 var burns = unit.Statuses.Where(s => s.Name == "Burn" || s.Name == "Poison");
                 foreach (var burn in burns)
                 {
-                    // FIX: Cast Value to int
-                    // FIX: Use a neutral AttackType (e.g., Siege or a new 'True' type) for DoTs 
-                    // to ensure they aren't arbitrarily blocked by shields unless intended.
-                    ApplyDamage(unit, (int)burn.Value, AttackType.Siege);
+                    // Change to AttackType.Magic later?
+                    ApplyDamage(unit, (int)burn.Value, AttackType.Melee, 0);
                 }
             }
         }
@@ -146,16 +300,28 @@ namespace CastleDefense.Engine
                     speedMod *= status.Value; // Multiplicative stacking (e.g. 0.5 * 1.5 = 0.75)
                 }
 
-                // Check Hard CC
-                if (unit.Statuses.Any(s => s.Name == "Freeze" || s.Name == "Stun")) speedMod = 0f;
-
                 // Decrement Attack Cooldown
                 if (unit.AttackCooldown > 0) unit.AttackCooldown -= (1000f / TICKS_PER_SECOND);
+
+                // Check for hard CC
+                if (unit.Statuses.Any(s => s.Name == "Freeze" || s.Name == "Stun" || s.Name == "Knockback"))
+                {
+                    speedMod = 0f;
+                    
+                    // Duplicate death logic here so we don't miss it
+                    if (unit.CurrentHealth <= 0)
+                    {
+                        _state.Units.RemoveAt(i);
+                    }
+
+                    // Do not attack if hard CC'd
+                    continue;
+                }
 
                 // --- 2. Target Acquisition ---
 
                 // A. Check for Enemies in Range
-                var enemy = FindTarget(unit, def);
+                var enemies = FindTargets(unit, def);
 
                 // B. Check Enemy Castle Distance
                 float distToCastle = GetDistanceToEnemyCastle(unit);
@@ -163,49 +329,25 @@ namespace CastleDefense.Engine
 
                 // --- 3. Combat Logic ---
 
-                if (enemy != null)
+                if (enemies.Count > 0)
                 {
-                    // CASE: Fighting another Unit
+                    // CASE: Fighting other Units
                     unit.CurrentSpeed = 0;
-                    if (unit.AttackCooldown <= 0)
+                    if (unit.AttackCooldown <= 0 && def.AttackSpeed > 0)
                     {
-                        // Reset Cooldown
+                        // Reset Cooldown ONCE for the attacker
                         unit.AttackCooldown = (1000f / def.AttackSpeed);
 
-                        // Apply Damage
-                        ApplyDamage(enemy, def.Damage, def.AttackType);
+                        // Calculate Attacker's Base Force
+                        float impactForce = def.PushForce;
+                        if (def.AttackType == AttackType.Siege) impactForce *= 2;
+                        if (def.AttackType == AttackType.Ranged || def.AttackType == AttackType.Magic) impactForce /= 2;
 
-                        // --- PHYSICS & MOMENTUM ---
-                        var enemyDef = _unitCache[enemy.DefinitionId];
-
-                        // Calculate Force based on Definitions + Current Speed Mod + Attack Type
-                        // Fast units hit harder (Momentum)
-                        float impactForce = def.PushForce * speedMod;
-                        if (def.AttackType == AttackType.Siege)
+                        // Apply Damage and Knockback to EVERY enemy in range!
+                        foreach (var enemy in enemies)
                         {
-                            impactForce *= 2;
+                            ApplyDamage(enemy, def.Damage, def.AttackType, impactForce);
                         }
-                        if (def.AttackType == AttackType.Ranged || def.AttackType == AttackType.Magic)
-                        {
-                            impactForce /= 2;
-                        }
-
-                        // Calculate Resistance (Enemy weight)
-                        // We prevent division by zero by clamping min weight
-                        float resistance = Math.Max(1f, enemyDef.EffectiveWeight);
-
-                        // Calculate Knockback
-                        float knockbackDist = impactForce / resistance;
-
-                        // Apply Knockback to Enemy
-                        // Determine direction (Enemy is to the right? Push right.)
-                        float direction = (enemy.Position > unit.Position) ? 1f : -1f;
-                        enemy.Position += (knockbackDist * direction);
-
-                        // OPTIONAL: Self-Recoil (Newton's 3rd Law)
-                        // The attacker also bounces back slightly based on enemy density
-                        float recoil = (enemyDef.PushForce / Math.Max(1f, def.EffectiveWeight)) * 0.5f;
-                        unit.Position -= (recoil * direction);
                     }
                 }
                 else if (castleInRange)
@@ -230,63 +372,81 @@ namespace CastleDefense.Engine
                     }
                 }
 
-                // --- 5. Bounds and Death Checks ---
-                if (unit.Position < -100 || unit.Position > MAP_WIDTH + 100)
-                {
-                    unit.CurrentHealth = 0; // Kill it
-                }
+                // --- 5. Death Check ---
                 if (unit.CurrentHealth <= 0)
                 {
                     _state.Units.RemoveAt(i);
                 }
             }
+
+            for (int i = _state.Units.Count - 1; i >= 0; i--)
+            {
+                var unit = _state.Units[i];
+
+                // Apply any knockback they received this tick
+                if (unit.PendingKnockback != 0)
+                {
+                    unit.Position += unit.PendingKnockback;
+                    unit.PendingKnockback = 0f; // Reset for next tick
+                    unit.Statuses.Add(new ActiveStatus(
+                        "Knockback",
+                        _state.CurrentTick + 30,
+                        0f
+                    ));
+                }
+            }
         }
 
-        private Unit FindTarget(Unit attacker, UnitDefinition attackerDef)
+        private List<Unit> FindTargets(Unit attacker, UnitDefinition attackerDef)
         {
-            Unit bestTarget = null;
-            float bestDist = 9999f;
+            List<Unit> validTargets = new List<Unit>();
 
             foreach (var other in _state.Units)
             {
                 if (other.Side == attacker.Side) continue; // Friend
 
-                // Flying Check
                 var otherDef = _unitCache[other.DefinitionId];
                 if (otherDef.ArmorType == ArmorType.Flying && attackerDef.AttackType != AttackType.Ranged)
                     continue;
 
-                float dist = Math.Abs(attacker.Position - other.Position);
+                // 1. DIRECTION CHECK: Do not attack enemies behind you!
+                if (attacker.Side == 1 && other.Position < attacker.Position) continue;
+                if (attacker.Side == 2 && other.Position > attacker.Position) continue;
+
+                // 2. HITBOX MATH: Calculate Edge-to-Edge distance
+                float centerDist = Math.Abs(attacker.Position - other.Position);
+                float edgeToEdgeDist = centerDist - (attackerDef.Width / 2f) - (otherDef.Width / 2f);
+
+                float actualDist = Math.Max(0f, edgeToEdgeDist);
 
                 // Range Check
-                // (Optimized: Checking dist <= Range allows for simple "in range" logic)
-                if (dist <= attackerDef.Range)
+                if (actualDist <= attackerDef.Range)
                 {
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestTarget = other;
-                    }
+                    // Add THEM ALL!
+                    validTargets.Add(other);
                 }
             }
-            return bestTarget;
+
+            return validTargets;
         }
 
-        private float GetDistanceToEnemyCastle(Unit attacker)
+        public float GetDistanceToEnemyCastle(Unit attacker)
         {
             // If Player 1 (Left), enemy castle is at MAP_WIDTH - 200
             if (attacker.Side == 1)
             {
-                return Math.Abs(MAP_WIDTH - 200 - attacker.Position);
+                float dist = MAP_WIDTH - 200 - (attacker.Position + attacker.Width);
+                return Math.Max(0f, dist);
             }
             // If Player 2 (Right), enemy castle is at 200
             else
             {
-                return Math.Abs(attacker.Position - 200);
+                float dist = attacker.Position - 200;
+                return Math.Max(0f, dist);
             }
         }
 
-        private void AttackCastle(Unit attacker, UnitDefinition def)
+        public void AttackCastle(Unit attacker, UnitDefinition def)
         {
             // 1. Identify Enemy
             var enemyPlayer = attacker.Side == 1 ? _state.Player2 : _state.Player1;
@@ -320,7 +480,7 @@ namespace CastleDefense.Engine
             }
         }
 
-        private void ApplyDamage(Unit target, int amount, AttackType type)
+        public void ApplyDamage(Unit target, int amount, AttackType type, float impactForce)
         {
             // Shield Logic
             if (target.CurrentShield > 0)
@@ -339,6 +499,17 @@ namespace CastleDefense.Engine
             else
             {
                 target.CurrentHealth -= amount;
+            }
+
+            // --- PHYSICS & MOMENTUM ---
+            var enemyDef = _unitCache[target.DefinitionId];
+            float resistance = Math.Max(1f, enemyDef.EffectiveWeight);
+            float knockbackDist = impactForce / resistance;
+
+            if (knockbackDist > 10f)
+            {
+                float direction = (target.Side == 1) ? -1f : 1f;
+                target.PendingKnockback += (knockbackDist * direction);
             }
         }
 

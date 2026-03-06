@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 
 using System.Collections.Generic;
+using CastleDefense.Engine.Gadgets;
 
 namespace CastleDefense.Engine.Models
 {
@@ -12,7 +13,8 @@ namespace CastleDefense.Engine.Models
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
-        public int SpriteSize { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
 
         // Progression
         public int Tier { get; set; }           // 1-8
@@ -30,7 +32,6 @@ namespace CastleDefense.Engine.Models
         public int Range { get; set; }
         public float MoveSpeed { get; set; }
         public float AttackSpeed { get; set; }
-        public int Width { get; set; }
 
         // Mechanics
         public AttackType AttackType { get; set; }
@@ -46,8 +47,8 @@ namespace CastleDefense.Engine.Models
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
+        public IGadgetEffect GadgetEffect { get; set; }
         public GadgetSlot Slot { get; set; }
-        public GadgetType Type { get; set; }
 
         public int Cost { get; set; }
         public int CooldownMs { get; set; }
@@ -58,8 +59,6 @@ namespace CastleDefense.Engine.Models
         public int DurationMs { get; set; }
         public string SpawnUnitId { get; set; }
         public int PushForce { get; set; }
-
-        public bool TargetsCastle { get; set; }
     }
 
     // --- The Blueprint for a Team ---

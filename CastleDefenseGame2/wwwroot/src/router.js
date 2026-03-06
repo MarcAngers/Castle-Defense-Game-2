@@ -5,6 +5,7 @@ import initMPSelectTeam from '../static/views/view-logic/mp-select-team.js';
 import initGameBrowser from '../static/views/view-logic/game-browser.js';
 import initLobby from '../static/views/view-logic/lobby.js';
 import initGameScreen from '../static/views/view-logic/game.js';
+import initGameOverScreen from '../static/views/view-logic/game-over.js';
 
 const appContainer = document.getElementById('app-container');
 
@@ -19,7 +20,8 @@ const routes = {
     //'singleplayer': { path: '../static/views/singleplayer.html', logic: initSingleplayer },
     //'multiplayer': { path: '../static/views/multiplayer.html', logic: initMultiplayer },
     'lobby': { path: '../static/views/lobby.html', logic: initLobby },
-    'game': { path: '../static/views/game.html', logic: initGameScreen }
+    'game': { path: '../static/views/game.html', logic: initGameScreen },
+    'game-over': { path: '../static/views/game-over.html', logic: initGameOverScreen }
 };
 
 export async function showScreen(name) {

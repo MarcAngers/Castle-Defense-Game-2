@@ -1,6 +1,11 @@
+button {
+    font-size: 11px;
+}
+
 #game-browser {
     color: black;
     text-align: center;
+    padding-top: 12px;
 }
 
 #game-browser-container {

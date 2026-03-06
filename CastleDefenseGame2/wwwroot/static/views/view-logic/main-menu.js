@@ -4,6 +4,7 @@ import View from '../../../src/view.js';
 export default async function initMainMenu() {
     let mainMenuView = new View('bgCanvas');  
     mainMenuView.drawBackground('white');
+    mainMenuView.drawForeground('white');
 
     const btnSP = document.getElementById('btnSingleplayer');
     const btnMP = document.getElementById('btnMultiplayer');
