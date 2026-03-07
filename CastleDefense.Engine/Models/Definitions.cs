@@ -38,7 +38,6 @@ namespace CastleDefense.Engine.Models
         public ArmorType ArmorType { get; set; }
         public float PushForce { get; set; }
         public float EffectiveWeight { get; set; }
-        public bool IsAce { get; set; }
     }
 
     // --- The Blueprint for a Gadget ---
@@ -54,10 +53,12 @@ namespace CastleDefense.Engine.Models
         public int CooldownMs { get; set; }
 
         // Data-Driven Effects
-        public int BaseValue { get; set; }      // Damage/Heal/Cash amount
+        public int BaseValue { get; set; }      // Damage/Heal/Cash amount/etc.
         public int Radius { get; set; }
-        public int DurationMs { get; set; }
-        public string SpawnUnitId { get; set; }
+        public int Delay { get; set; }
+        public int HazardDuration { get; set; }
+        public int StatusDuration { get; set; }
+
         public int PushForce { get; set; }
     }
 

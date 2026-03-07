@@ -1,0 +1,9 @@
+ID,Name,Slot,Cost,BaseValue,Radius,Delay,PushForce,HazardDuration,StatusDuration,CooldownMs,Description
+nuke,The Nuke,Offense,50,40,300,48,50000,0,0,120000,Massive area damage. Hurts Castles.
+snipe,Snipe,Offense,30,50,0,70,500000,0,0,90000,High single target damage.
+firebomb,Fire Bomb,Offense,40,1,100,48,0,120,90,90000,Sets ground on fire.
+freeze,Freeze Ray,Offense,45,10,0,48,0,0,150,100000,Freezes units.
+heal,Heal,Defense,25,1,0,0,0,0,90,60000,Heals all units.
+wall,Wall,Defense,50,200,0,0,0,0,0,120000,Spawns a temporary barrier.
+speed,Speed,Defense,30,2,0,0,0,0,0,90000,Boosts speed.
+reinforcements,Reinforcements,Defense,40,1,0,0,0,0,0,100000,Spawns 5 reinforcement units.

@@ -38,7 +38,6 @@ class GameConnection {
         });
 
         this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
-            console.log("sniping: ", targetId);
             this.gadgetAnimationListeners.forEach(ga => ga(gadgetId, side, position, targetId));
         });
 

@@ -7,7 +7,7 @@ export default class FreezeAnimator {
         this.startX = this.side === 1 ? 150 : 1850; 
         
         // Aimed right at the chest-height of the units (Assuming ground is 400)
-        this.targetY = 380; 
+        this.targetY = 340; 
 
         this.timer = 0;
         this.duration = 2500; // 2s charge-up + 0.5s blast

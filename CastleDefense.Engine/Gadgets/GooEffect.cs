@@ -2,25 +2,25 @@
 
 namespace CastleDefense.Engine.Gadgets
 {
-    public class FirebombEffect : IGadgetEffect
+    public class GooEffect : IGadgetEffect
     {
         private readonly GadgetDefinition _def;
 
-        public FirebombEffect(GadgetDefinition def)
+        public GooEffect(GadgetDefinition def)
         {
             _def = def;
         }
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            engine.TriggerGadgetAnimation("firebomb", side, position);
+            engine.TriggerGadgetAnimation("goo", side, position);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>
             {
-                var fireZone = new Hazard
+                var gooZone = new Hazard
                 {
-                    Type = "Fire",
+                    Type = "Goo",
                     Side = side,
                     BaseValue = _def.BaseValue,
                     Position = position - _def.Radius,
@@ -28,7 +28,7 @@ namespace CastleDefense.Engine.Gadgets
                     ExpiresAtTick = (int)engine._state.CurrentTick + _def.HazardDuration
                 };
 
-                engine._state.Hazards.Add(fireZone);
+                engine._state.Hazards.Add(gooZone);
             });
         }
     }

@@ -9,6 +9,7 @@ class AssetLoader {
             background: {},
             gadgets: {},        // Gadget animation assets
             hazards: {},        // Hazard animation assets
+            particles: {},      // Particles for status effects and map ambience
         };
     }
 
@@ -16,17 +17,19 @@ class AssetLoader {
         // 1. Fetch and parse the CSV as the absolute first step
         await this.loadMasterCSV();
 
-        // 2. Load the Dead Castle once
-        await this.loadImage('buildings', 'dead-castle', '../assets/buildings/dead-castle.png');
-
-        // 3. Loop through the dynamically generated team list to load their images
+        // 2. Loop through the dynamically generated team list to load their images
         for (const team of this.assets.teamList) {
             await this.loadAssets(team);
         }
 
+        // 3. Load all assets for Gadgets, Hazards, and Particle effects
         await this.loadGadgets();
-
         await this.loadHazards();
+        await this.loadParticles();
+
+        // 4. Load unique assets once
+        await this.loadImage('buildings', 'dead-castle', '../assets/buildings/dead-castle.png');
+        await this.loadImage('wall', 'wall', '../assets/units/wall.png');
     }
 
     async loadMasterCSV() {
@@ -113,6 +116,22 @@ class AssetLoader {
 
         for (const hazardId of hazardAssetList) {
             await this.loadImage('hazards', hazardId, `../assets/hazards/${hazardId}.png`);
+        }
+    }
+
+    async loadParticles() {
+        const particleAssetList = [
+            'burn',
+            'freeze',
+            'heal',
+            'rage',
+            'slow',
+            'speed',
+            'poison',
+        ];
+
+        for (const particleId of particleAssetList) {
+            await this.loadImage('particles', particleId, `../assets/particles/${particleId}.png`);
         }
     }
 

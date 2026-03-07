@@ -122,9 +122,9 @@ function initShopUI(team, gameView) {
         gameView.targetingGadgetId = "firebomb";
     });
     btnGadgetOffense.addEventListener('click', () => {
-        gameView.targetingGadgetId = "nuke";
+        gameView.targetingGadgetId = "reinforcements";
     });
     btnGadgetDefence.addEventListener('click', () => {
-        gameView.targetingGadgetId = "snipe";
+        gameView.targetingGadgetId = "freeze";
     });
 }

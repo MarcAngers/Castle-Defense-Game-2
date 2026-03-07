@@ -1,17 +1,20 @@
-﻿using System;
+﻿using CastleDefense.Engine.Gadgets;
+using CastleDefense.Engine.Models;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics.Metrics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
-using CastleDefense.Engine.Gadgets;
-using CastleDefense.Engine.Models;
+using System.Timers;
 
 namespace CastleDefense.Engine.Data
 {
     public static class GameDataManager
     {
         public static List<TeamDefinition> Teams { get; private set; } = new List<TeamDefinition>();
-        public static List<GadgetDefinition> GenericGadgets { get; private set; } = new List<GadgetDefinition>();
+        public static List<GadgetDefinition> Gadgets { get; private set; } = new List<GadgetDefinition>();
 
         private const int DAMAGE_MULTIPLIER = 1;
         private const int HEALTH_MULTIPLIER = 2;
@@ -22,9 +25,9 @@ namespace CastleDefense.Engine.Data
         public static void Initialize()
         {
             Teams.Clear();
-            GenericGadgets.Clear();
+            Gadgets.Clear();
 
-            LoadGenericGadgets();
+            LoadGadgetsFromCsv();
             LoadTeamsFromCsv();
         }
 
@@ -128,7 +131,6 @@ namespace CastleDefense.Engine.Data
                     Range = range,                               // All units are melee for now
                     AttackType = attackType,
                     ArmorType = armorType,
-                    IsAce = isAce,
 
                     AttackSpeed = finalAps,
                     PushForce = weight * speed * dmg,
@@ -165,6 +167,97 @@ namespace CastleDefense.Engine.Data
             }
         }
 
+        private static void LoadGadgetsFromCsv()
+        {
+            var filePath = Path.Combine(AppContext.BaseDirectory, "Data", "master_gadgets.csv");
+
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine($"[WARNING] Could not find gadgets file at {filePath}");
+                return;
+            }
+
+            var lines = File.ReadAllLines(filePath);
+            if (lines.Length <= 1) return;
+
+            string cleanHeaderRow = lines[0].Replace("\uFEFF", "");
+            var headers = ParseCsvRow(cleanHeaderRow).Select(h => h.Trim().ToLower()).ToList();
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                var cols = ParseCsvRow(lines[i]);
+
+                string GetCol(string name)
+                {
+                    int idx = headers.IndexOf(name.ToLower());
+                    return (idx >= 0 && idx < cols.Count) ? cols[idx].Trim() : string.Empty;
+                }
+
+                string id = GetCol("ID");
+                if (string.IsNullOrEmpty(id)) continue;
+
+                // --- PARSE DATA WITH SAFE FALLBACKS ---
+                Enum.TryParse<GadgetSlot>(GetCol("Slot"), true, out var slot);
+                int cost = int.TryParse(GetCol("Cost"), out var c) ? c : 0;
+                int baseValue = int.TryParse(GetCol("BaseValue"), out var bv) ? bv : 0;
+                int radius = int.TryParse(GetCol("Radius"), out var r) ? r : 0;
+                int delay = int.TryParse(GetCol("Delay"), out var d) ? d : 0;
+                int pushForce = int.TryParse(GetCol("PushForce"), out var pf) ? pf : 0;
+                int hazardDuration = int.TryParse(GetCol("HazardDuration"), out var hd) ? hd : 0;
+                int StatusDuration = int.TryParse(GetCol("StatusDuration"), out var sd) ? sd : 0;
+                int cooldownMs = int.TryParse(GetCol("CooldownMs"), out var cm) ? cm : 60000;
+                string effectType = GetCol("ID");
+
+                var gadgetDef = new GadgetDefinition
+                {
+                    Id = id,
+                    Name = GetCol("Name"),
+                    Slot = slot,
+                    Cost = cost,
+                    BaseValue = baseValue,
+                    Radius = radius,
+                    Delay = delay,
+                    PushForce = pushForce,
+                    HazardDuration = hazardDuration,
+                    StatusDuration = StatusDuration,
+                    CooldownMs = cooldownMs,
+                    Description = GetCol("Description")
+                };
+
+                // --- ATTACH THE EFFECT LOGIC ---
+                // We pass the definition directly into the constructor!
+                gadgetDef.GadgetEffect = CreateGadgetEffect(effectType, gadgetDef);
+
+                Gadgets.Add(gadgetDef);
+            }
+        }
+
+        // A clean factory method to map strings to your actual C# classes
+        private static IGadgetEffect CreateGadgetEffect(string effectType, GadgetDefinition def)
+        {
+            return effectType.ToLower() switch
+            {
+                "nuke" => new NukeEffect(def),
+                "snipe" => new SnipeEffect(def),
+                "firebomb" => new FirebombEffect(def),
+                "freeze" => new FreezeEffect(def),
+                "heal" => new HealEffect(def),
+                "wall" => new WallEffect(def),
+                "speed" => new SpeedEffect(def),
+                "reinforcements" => new ReinforcementsEffect(def),
+                "cash" => new CashEffect(def),
+                "rage" => new RageEffect(def),
+                "goo" => new GooEffect(def),
+                "poison" => new PoisonEffect(def),
+                "divine" => new DivineEffect(def),
+                "meteor" => new MeteorEffect(def),
+                "wave" => new WaveEffect(def),
+                "blackhole" => new BlackholeEffect(def),
+            };
+        }
+
         // --- CUSTOM CSV PARSER ---
         // Reads a row and safely ignores commas that are trapped inside quotes
         private static List<string> ParseCsvRow(string row)
@@ -197,103 +290,33 @@ namespace CastleDefense.Engine.Data
             return result;
         }
 
-        private static void LoadGenericGadgets()
+        public static UnitDefinition WallDefinition()
         {
-            // --- Offensive Gadgets ---
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "nuke",
-                Name = "The Nuke",
-                Slot = GadgetSlot.Offense,
-                Cost = 50,
-                CooldownMs = 120000,
-                Description = "Massive area damage. Hurts Castles.",
-                GadgetEffect = new NukeEffect()
-            });
-
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "snipe",
-                Name = "Snipe",
-                Slot = GadgetSlot.Offense,
-                Cost = 30,
-                CooldownMs = 90000,
-                BaseValue = 30,
-                Description = "High single target damage.",
-                GadgetEffect = new SnipeEffect()
-            });
-
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "firebomb",
-                Name = "Fire Bomb",
-                Slot = GadgetSlot.Offense,
-                Cost = 40,
-                CooldownMs = 90000,
-                BaseValue = 5,
-                Radius = 50,
-                DurationMs = 10000,
-                Description = "Sets ground on fire.",
-                GadgetEffect = new FirebombEffect()
-            });
-
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "freeze",
-                Name = "Freeze Ray",
-                Slot = GadgetSlot.Offense,
-                Cost = 45,
-                CooldownMs = 100000,
-                BaseValue = 10,
-                DurationMs = 5000,
-                Description = "Freezes units.",
-                GadgetEffect = new FreezeEffect()
-            });
-
-            // --- Defensive Gadgets ---
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "medpack",
-                Name = "Medpack",
-                Slot = GadgetSlot.Defense,
-                Cost = 25,
-                CooldownMs = 60000,
-                BaseValue = 30,
-                Description = "Heals all units."
-            });
-
-            GenericGadgets.Add(new GadgetDefinition
+            return new UnitDefinition
             {
                 Id = "wall",
-                Name = "Wall",
-                Slot = GadgetSlot.Defense,
-                Cost = 50,
-                CooldownMs = 120000,
-                BaseValue = 100,
-                Description = "Spawns a temporary barrier."
-            });
+                Name = "wall",
+                Tier = 4,
+                Cost = 0,
+                CooldownMs = 0,
+                MaxCharges = 1,
+                MaxHealth = 200 * HEALTH_MULTIPLIER,
+                MaxShield = 0,
+                Damage = 0,
+                MoveSpeed = 0,
+                Width = 75,
+                Height = 150,
+                Description = "The Wall",
 
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "speed",
-                Name = "Spped Boost",
-                Slot = GadgetSlot.Defense,
-                Cost = 30,
-                CooldownMs = 90000,
-                DurationMs = 6000,
-                Description = "Boosts speed and damage."
-            });
+                Weight = int.MaxValue,
+                Range = 0,
+                AttackType = AttackType.Support,
+                ArmorType = ArmorType.None,
 
-            GenericGadgets.Add(new GadgetDefinition
-            {
-                Id = "reinforcements",
-                Name = "Reinforcements",
-                Slot = GadgetSlot.Defense,
-                Cost = 40,
-                CooldownMs = 100000,
-                SpawnUnitId = "doggo", // Default placeholder
-                Description = "Spawns 5 reinforcement units."
-            });
+                AttackSpeed = 0,
+                PushForce = 0,
+                EffectiveWeight = float.MaxValue
+            };
         }
     }
 }

@@ -95,9 +95,9 @@ namespace CastleDefense.Engine
             RepairPrice = 10;
             CastleHealth = 1000;
 
-            SignatureGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "firebomb");
-            OffensiveGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "nuke");
-            DefensiveGadget = GameDataManager.GenericGadgets.Find(g => g.Id == "snipe");
+            SignatureGadget = GameDataManager.Gadgets.Find(g => g.Id == "firebomb");
+            OffensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == "reinforcements");
+            DefensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == "freeze");
         }
     }
 
@@ -146,6 +146,7 @@ namespace CastleDefense.Engine
     {
         public string Type { get; set; } // "Fire", "Ice", "PoisonCloud", etc.
         public int Side { get; set; }
+        public float BaseValue { get; set; }
 
         public float Position { get; set; } // The starting X coordinate (left edge)
         public float Width { get; set; }    // How far the hazard stretches

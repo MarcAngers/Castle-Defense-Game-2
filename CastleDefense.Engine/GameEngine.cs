@@ -53,11 +53,13 @@ namespace CastleDefense.Engine
             }
 
             _gadgetCache = new Dictionary<string, GadgetDefinition>();
-            foreach (var gadget in GameDataManager.GenericGadgets)
+            foreach (var gadget in GameDataManager.Gadgets)
             {
                 if (!_gadgetCache.ContainsKey(gadget.Id))
                     _gadgetCache[gadget.Id] = gadget;
             }
+
+            _unitCache["wall"] = GameDataManager.WallDefinition();
         }
 
         public void EnqueueAction(Action action)
@@ -122,7 +124,7 @@ namespace CastleDefense.Engine
             MoveAndFight();
         }
 
-        public void SpawnUnit(int side, string unitId)
+        public void SpawnUnit(int side, string unitId, bool ignoreCost = false)
         {
             // 1. Validation
             var player = side == 1 ? _state.Player1 : _state.Player2;
@@ -132,10 +134,13 @@ namespace CastleDefense.Engine
 
             // 2. Check Cooldowns & Money
             // (Assuming you implement CheckCooldown logic here similar to your TickCooldowns)
-            if (player.Money < def.Cost) return;
+            if (!ignoreCost)
+            {
+                if (player.Money < def.Cost) return;
 
-            // 3. Deduct Cost
-            player.Money -= def.Cost;
+                // 3. Deduct Cost
+                player.Money -= def.Cost;
+            }
 
             // 4. Create Unit
             Random random = new Random();
@@ -155,7 +160,7 @@ namespace CastleDefense.Engine
                 Position = (side == 1) ? 100 : MAP_WIDTH - 100,
                 YPosition = 360 - def.Height + random.Next(0, 51),
 
-                // --- COMBAT STATS (Copied so they can be buffed/debuffed!) ---
+                // --- COMBAT STATS ---
                 CurrentSpeed = def.MoveSpeed,
                 Damage = def.Damage,
                 Range = def.Range,
@@ -168,6 +173,12 @@ namespace CastleDefense.Engine
                 AttackType = def.AttackType,
                 ArmorType = def.ArmorType
             };
+
+            if (unitId == "wall")
+            {
+                newUnit.Position = (side == 1) ? 600 : MAP_WIDTH - 600;
+                newUnit.YPosition = 240;
+            }
 
             _state.Units.Add(newUnit);
         }
@@ -233,35 +244,186 @@ namespace CastleDefense.Engine
             // 2. Apply effects for active hazards
             foreach (var hazard in _state.Hazards)
             {
-                if (hazard.Type == "Fire")
+                switch (hazard.Type)  
                 {
-                    // Find every unit currently standing inside the fire's X-coordinates
-                    foreach (var unit in _state.Units)
-                    {
-                        // 1D Hitbox overlap check: 
-                        // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                        if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
+                    case "Fire":
+                        // Find every unit currently standing inside the fire's X-coordinates
+                        foreach (var unit in _state.Units)
                         {
-                            // Check if they are already burning!
-                            var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Burn");
-
-                            if (existingBurn != null)
+                            // 1D Hitbox overlap check: 
+                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
                             {
-                                // They are already on fire! Just keep the fire going.
-                                // Refresh the duration to last 3 seconds AFTER they leave the zone.
-                                existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                                // Check if they are already burning!
+                                var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Burn");
+
+                                if (existingBurn != null)
+                                {
+                                    // They are already on fire! Just keep the fire going.
+                                    // Refresh the duration to last 3 seconds AFTER they leave the zone.
+                                    existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                                }
+                                else
+                                {
+                                    // They just stepped into the fire! Ignite them.
+                                    unit.Statuses.Add(new ActiveStatus(
+                                        "Burn",
+                                        _state.CurrentTick + (TICKS_PER_SECOND * 3),
+                                        hazard.BaseValue
+                                    ));
+                                }
+                            }
+                        }
+                        break;
+
+                    case "Goo":
+                        foreach (var unit in _state.Units)
+                        {
+                            // 1D Hitbox overlap check: 
+                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
+                            {
+                                // If it's an enemy, slow it
+                                if (unit.Side != hazard.Side)
+                                {
+                                    // Check if they are already slowed
+                                    var existingSlow = unit.Statuses.FirstOrDefault(s => s.Name == "Slow");
+
+                                    if (existingSlow != null)
+                                    {
+                                        existingSlow.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                                    }
+                                    else
+                                    {
+                                        // They just stepped into the goo! Slow them.
+                                        unit.Statuses.Add(new ActiveStatus(
+                                            "Slow",
+                                            _state.CurrentTick + (TICKS_PER_SECOND * 3),
+                                            0.5f // Slow them to half speed
+                                        ));
+                                    }
+                                }
                             }
                             else
                             {
-                                // They just stepped into the fire! Ignite them.
-                                unit.Statuses.Add(new ActiveStatus(
-                                    "Burn",
-                                    _state.CurrentTick + (TICKS_PER_SECOND * 3),
-                                    1f // 1 damage per tick (30 dps)
-                                ));
+                                // It's an ally, heal them!
+                                var existingHeal = unit.Statuses.FirstOrDefault(s => s.Name == "Heal");
+
+                                if (existingHeal != null)
+                                {
+                                    // They are already on fire! Just keep the fire going.
+                                    // Refresh the duration to last 3 seconds AFTER they leave the zone.
+                                    existingHeal.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                                }
+                                else
+                                {
+                                    // They just stepped into the fire! Ignite them.
+                                    unit.Statuses.Add(new ActiveStatus(
+                                        "Heal",
+                                        _state.CurrentTick + (TICKS_PER_SECOND * 3),
+                                        -1f * hazard.BaseValue
+                                    ));
+                                }
                             }
                         }
-                    }
+                        break;
+
+                    case "Poison":
+                        foreach (var unit in _state.Units)
+                        {
+                            // 1D Hitbox overlap check: 
+                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
+                            {
+                                // Poison only affects enemy units
+                                if (unit.Side != hazard.Side)
+                                {
+                                    // Check if they are already poisoned
+                                    var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Poison");
+
+                                    if (existingBurn != null)
+                                    {
+                                        // They are already on fire! Just keep the fire going.
+                                        // Refresh the duration to last 3 seconds AFTER they leave the zone.
+                                        existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
+                                    }
+                                    else
+                                    {
+                                        // They just stepped into the fire! Ignite them.
+                                        unit.Statuses.Add(new ActiveStatus(
+                                            "Poison",
+                                            _state.CurrentTick + (TICKS_PER_SECOND * 3),
+                                            hazard.BaseValue
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        break;
+
+                    case "Wave":
+                        float direction = (hazard.Side == 1) ? -1f : 1f;
+                        var enemies = _state.Units.Where(u => u.Side != hazard.Side).ToList();
+
+                        foreach (var enemy in enemies)
+                        {
+                            // 1D Hitbox overlap check: 
+                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                            if (enemy.Position + enemy.Width >= hazard.Position && enemy.Position <= hazard.Position + hazard.Width)
+                            {
+                                // Launch the unit
+                                enemy.PendingKnockback += (1000 * direction);
+                            }
+                        }
+
+                        // Move the wave
+                        hazard.Position += 10 * direction;
+
+                        break;
+
+                    case "Blackhole":
+                        foreach (var unit in _state.Units)
+                        {
+                            // 1D Hitbox overlap check: 
+                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
+                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
+                            {
+                                // Pull the unit in
+                                var hazardCenter = hazard.Position + hazard.Width / 2;
+                                float pullDirection = 1f;
+
+                                if (unit.Position + unit.Width > hazardCenter)
+                                {
+                                    pullDirection = -1f;
+                                }
+                                unit.Position += (unit.CurrentSpeed + 2) * pullDirection;
+
+                                // If the unit is IN the black hole, deal damage to them
+                                if (unit.Position + unit.Width >= (hazardCenter - 50) && unit.Position <= (hazardCenter + 50))
+                                {
+                                    // Check if they are already blackholed
+                                    var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Blackhole");
+
+                                    if (existingBurn != null)
+                                    {
+                                        existingBurn.ExpiresAtTick = _state.CurrentTick + 10;
+                                    }
+                                    else
+                                    {
+                                        unit.Statuses.Add(new ActiveStatus(
+                                            "Blackhole",
+                                            _state.CurrentTick + 10,
+                                            hazard.BaseValue
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+
+                        // Move the wave
+                        hazard.Position += 10 * direction;
+
+                        break;
                 }
             }
         }
@@ -274,7 +436,7 @@ namespace CastleDefense.Engine
                 unit.Statuses.RemoveAll(s => s.ExpiresAtTick <= _state.CurrentTick);
 
                 // Apply DoT (Damage over Time)
-                var burns = unit.Statuses.Where(s => s.Name == "Burn" || s.Name == "Poison");
+                var burns = unit.Statuses.Where(s => s.Name == "Burn" || s.Name == "Poison" || s.Name == "Heal");
                 foreach (var burn in burns)
                 {
                     // Change to AttackType.Magic later?
@@ -294,7 +456,7 @@ namespace CastleDefense.Engine
 
                 // --- 1. Calculate Stats (Speed/CC) ---
                 float speedMod = 1.0f;
-                var speedStatuses = unit.Statuses.Where(s => s.Name == "Slow" || s.Name == "SpeedBuff");
+                var speedStatuses = unit.Statuses.Where(s => s.Name == "Slow" || s.Name == "Speed");
                 foreach (var status in speedStatuses)
                 {
                     speedMod *= status.Value; // Multiplicative stacking (e.g. 0.5 * 1.5 = 0.75)
@@ -338,6 +500,13 @@ namespace CastleDefense.Engine
                         // Reset Cooldown ONCE for the attacker
                         unit.AttackCooldown = (1000f / def.AttackSpeed);
 
+                        float dmgMod = 1.0f;
+                        var dmgStatuses = unit.Statuses.Where(s => s.Name == "Rage");
+                        foreach (var status in speedStatuses)
+                        {
+                            dmgMod *= status.Value; // Multiplicative stacking (e.g. 0.5 * 1.5 = 0.75)
+                        }
+
                         // Calculate Attacker's Base Force
                         float impactForce = def.PushForce;
                         if (def.AttackType == AttackType.Siege) impactForce *= 2;
@@ -346,7 +515,7 @@ namespace CastleDefense.Engine
                         // Apply Damage and Knockback to EVERY enemy in range!
                         foreach (var enemy in enemies)
                         {
-                            ApplyDamage(enemy, def.Damage, def.AttackType, impactForce);
+                            ApplyDamage(enemy, (int)(def.Damage * dmgMod), def.AttackType, impactForce);
                         }
                     }
                 }
@@ -450,38 +619,51 @@ namespace CastleDefense.Engine
         {
             // 1. Identify Enemy
             var enemyPlayer = attacker.Side == 1 ? _state.Player2 : _state.Player1;
-
-            // 2. Check Invulnerability (Divine Shield gadget)
-            if (enemyPlayer.IsInvulnerable)
-            {
-                if (_state.CurrentTick > enemyPlayer.InvulnerableUntilTick)
-                    enemyPlayer.IsInvulnerable = false;
-                else
-                    return; // No damage dealt
-            }
-
-            // 3. Reset Cooldown
+            
+            // 2. Reset Cooldown
             attacker.AttackCooldown = (1000f / def.AttackSpeed);
 
-            // 4. Deal Damage
+            // 3. Deal Damage
             int damage = def.Damage;
 
             // Siege units usually deal double damage to structures
             if (def.AttackType == AttackType.Siege) damage *= 2;
 
-            enemyPlayer.CastleHealth -= damage;
+            DamageCastle(enemyPlayer, damage);
+        }
+
+        public void DamageCastle(PlayerState player, int damage)
+        {
+            // Invulnerability check:
+            if (player.IsInvulnerable)
+            {
+                if (_state.CurrentTick > player.InvulnerableUntilTick)
+                    player.IsInvulnerable = false;
+                else
+                    return; // No damage dealt
+            }
+
+            player.CastleHealth -= damage;
 
             // 5. Game Over Check
-            if (enemyPlayer.CastleHealth <= 0)
+            if (player.CastleHealth <= 0)
             {
-                enemyPlayer.CastleHealth = 0;
+                player.CastleHealth = 0;
                 _state.IsGameOver = true;
-                _state.WinnerSide = attacker.Side;
+                _state.WinnerSide = player.Side == 1 ? 2 : 1;
             }
         }
 
+        // Negative damage => heal
         public void ApplyDamage(Unit target, int amount, AttackType type, float impactForce)
         {
+            // Check if unit is invulnerable
+            if (target.Statuses.Any(s => s.Name == "Invulnerable"))
+            {
+                // Invulnerable units take no damage or knockback
+                return;
+            }
+
             // Shield Logic
             if (target.CurrentShield > 0)
             {
@@ -495,10 +677,21 @@ namespace CastleDefense.Engine
                     target.CurrentHealth += target.CurrentShield; // (CurrentShield is negative here)
                     target.CurrentShield = 0;
                 }
+                else
+                {
+                    // Shielded units don't get knocked back
+                    return;
+                }
             }
             else
             {
                 target.CurrentHealth -= amount;
+
+                // Handle overheal
+                if (target.CurrentHealth > target.MaxHealth)
+                {
+                    target.CurrentHealth = target.MaxHealth;
+                }
             }
 
             // --- PHYSICS & MOMENTUM ---

@@ -1,5 +1,6 @@
 import loader from './asset-loader.js';
 import AnimationManager from './animation-manager.js';
+import VisualUnit from './visual-unit.js';
 import connection from './game-connection.js';
 
 export default class View {
@@ -58,6 +59,17 @@ export default class View {
         connection.onPlayGadgetAnimation((gadgetId, side, position, targetId) => {
             this.animationManager.triggerAnimation(gadgetId, side, position, targetId);
         });
+
+        // Statuses:
+        this.StatusColorMap = {
+            "Burn": [255, 0, 0, 0.5],           // Red
+            "Freeze": [0, 162, 232, 0.5],       // Blue
+            "Poison": [163, 73, 164, 0.5],      // Purple
+            "Rage": [136, 0, 21, 0.5],          // Burgundy
+            "Heal": [0, 255, 50, 0.5],          // Green
+            "Speed": [255, 255, 255, 0.5],      // White
+            "Slow": [112, 146, 190, 0.5],       // Blue-Gray  
+        };
     }
 
     startPan = (e) => {
@@ -223,29 +235,41 @@ export default class View {
             this.ctx.rotate(rotation);
 
             // --- STATUS TINTING LOGIC ---
-            const isBurning = unit.statuses && unit.statuses.some(s => s.name === "Burn");
-            const isFrozen = unit.statuses && unit.statuses.some(s => s.name === "Freeze");
+            let imageToDraw = img; 
+            let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
+            let activeTintCount = 0;
 
-            let imageToDraw = img; // Default to the raw image
+            if (unit.statuses && unit.statuses.length > 0) {
+                for (const status of unit.statuses) {
+                    if (this.StatusColorMap[status.name]) {
+                        const [r, g, b, a] = this.StatusColorMap[status.name];
+                        totalR += r;
+                        totalG += g;
+                        totalB += b;
+                        totalA += a;
+                        activeTintCount++;
+                    }
+                }
+            }
 
-            if (isBurning || isFrozen) {
-                // 1. Clear the scratchpad from the last unit
+            if (activeTintCount > 0) {
+                // Average the colors together!
+                const finalR = Math.floor(totalR / activeTintCount);
+                const finalG = Math.floor(totalG / activeTintCount);
+                const finalB = Math.floor(totalB / activeTintCount);
+                const finalA = totalA / activeTintCount;
+
                 this.scratchCanvas.width = width;
                 this.scratchCanvas.height = height;
 
-                // 2. Draw the raw sprite onto the scratchpad
                 this.scratchCtx.globalCompositeOperation = 'source-over';
                 this.scratchCtx.drawImage(img, 0, 0, width, height);
-
-                // 3. Set the magic blend mode
                 this.scratchCtx.globalCompositeOperation = 'source-atop';
-
-                // 4. Fill the box with color (it will only stick to the sprite!)
-                // Will need to adjust this later when adding more status effects
-                this.scratchCtx.fillStyle = isBurning ? 'rgba(255, 50, 0, 0.5)' : 'rgba(0, 150, 255, 0.5)';
+                
+                // Apply our newly mixed color
+                this.scratchCtx.fillStyle = `rgba(${finalR}, ${finalG}, ${finalB}, ${finalA})`;
                 this.scratchCtx.fillRect(0, 0, width, height);
 
-                // 5. Swap the image reference so the main canvas uses our scratchpad
                 imageToDraw = this.scratchCanvas;
             }
             
@@ -263,6 +287,37 @@ export default class View {
             // Fallback Box
             this.ctx.fillStyle = unit.side === 1 ? 'red' : 'blue';
             this.ctx.fillRect(x, y, width, width);
+        }
+
+        // --- DRAW STATUS PARTICLES ---
+        if (visualUnit && visualUnit.particles && visualUnit.particles.length > 0) {
+            this.ctx.save();
+
+            const centerX = x + (width / 2);
+            const centerY = y + (height / 2);
+            this.ctx.translate(centerX, centerY);
+
+            visualUnit.particles.forEach(p => {
+                // Safely grab the image asset from the 'statuses' folder
+                const particleImg = loader.assets['particles'] && loader.assets['particles'][p.imageKey];
+                if (!particleImg) return;
+
+                const progress = p.life / p.maxLife; // 1.0 down to 0.0
+                
+                // Fade out smoothly during the last half of its life
+                this.ctx.globalAlpha = Math.min(1, progress * 2); 
+
+                // Draw the particle centered on its calculated offset
+                this.ctx.drawImage(
+                    particleImg, 
+                    p.offsetX - (p.size / 2), 
+                    p.offsetY - (p.size / 2), 
+                    p.size, 
+                    p.size
+                );
+            });
+
+            this.ctx.restore();
         }
 
         // Health Bar
@@ -390,88 +445,5 @@ export default class View {
             width: this.logicalScreenWidth, 
             height: logicalHeight 
         };
-    }
-}
-
-class VisualUnit {
-    constructor(serverUnit) {
-        this.id = serverUnit.instanceId;
-        this.logicalX = serverUnit.position;
-        
-        // Visual Offsets
-        this.visualOffsetX = 0;
-        this.visualOffsetY = 0;
-        
-        // Animation Timers
-        this.knockbackTimer = 0;
-        this.knockbackDuration = 1000; // ms
-        this.knockbackStartX = 0;
-        this.knockbackTargetX = 0;
-        
-        this.attackTimer = 0;
-        this.attackDuration = 50; // ms
-        
-        this.lastCooldown = serverUnit.attackCooldown;
-    }
-
-    update(serverUnit, deltaTime) {
-        // 1. Detect Knockback (Sudden large movement against their facing direction)
-        const deltaX = serverUnit.position - this.logicalX;
-        const direction = serverUnit.side === 1 ? 1 : -1;
-        
-        // If they moved backwards by more than a couple pixels instantly, they got hit!
-        if (deltaX * direction < -5) {
-            this.knockbackTimer = this.knockbackDuration;
-            this.knockbackStartX = this.logicalX;
-            this.knockbackTargetX = serverUnit.position;
-        }
-
-        // 2. Detect Attack (Cooldown reset from ~0 to Max)
-        if (this.lastCooldown < serverUnit.attackCooldown) {
-            this.attackTimer = this.attackDuration;
-        }
-        this.lastCooldown = serverUnit.attackCooldown;
-        
-        // Update logical position
-        this.logicalX = serverUnit.position;
-
-        // 3. Process Animations
-        this.processAnimations(deltaTime, direction);
-    }
-
-    processAnimations(deltaTime, direction) {
-        this.visualOffsetX = 0;
-        this.visualOffsetY = 0;
-        this.visualRotation = 0;
-
-        // Process Knockback (The Parabola)
-        if (this.knockbackTimer > 0) {
-            this.knockbackTimer -= deltaTime;
-            let t = 1 - (this.knockbackTimer / this.knockbackDuration); // 0 to 1
-            if (t > 1) t = 1;
-
-            // Smoothly slide X to the new position
-            const distance = this.knockbackTargetX - this.knockbackStartX;
-            this.visualOffsetX = (this.knockbackStartX + (distance * t)) - this.logicalX;
-
-            const bounceHeight = Math.abs(distance) * 0.5; 
-
-            // The Parabola Math for the Y Bounce
-            const arcHeight = 1 - Math.pow(2 * t - 1, 2);
-            this.visualOffsetY = -bounceHeight * arcHeight;
-
-            const flightDirection = distance >= 0 ? 1 : -1; // Are we flying right or left?
-            
-            this.visualRotation = (Math.PI / 4) * flightDirection;
-        }
-        if (this.knockbackTimer <= 0) {
-            this.visualRotation = 0;
-        }
-
-        // Process Attack Lunge
-        if (this.attackTimer > 0) {
-            this.attackTimer -= deltaTime;
-            this.visualOffsetX += 5 * direction;
-        }
     }
 }

@@ -1,13 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Engine.Gadgets
 {
     public class SnipeEffect : IGadgetEffect
     {
-        private int damage = 50;
-        private int delay = 70;
+        private readonly GadgetDefinition _def;
+
+        public SnipeEffect(GadgetDefinition def)
+        {
+            _def = def;
+        }
         public void Execute(GameEngine engine, int side, int position)
         {
             var enemies = engine._state.Units.Where(u => u.Side != side).ToList();
@@ -35,9 +37,9 @@ namespace CastleDefense.Engine.Gadgets
             engine.TriggerGadgetAnimation("snipe", side, position, target.InstanceId);
 
             // Schedule the gadget effect to happen after the animation
-            engine.ScheduleAction(delay, () =>
+            engine.ScheduleAction(_def.Delay, () =>
             {
-                engine.ApplyDamage(target, damage, Models.AttackType.Melee, 500000);
+                engine.ApplyDamage(target, _def.BaseValue, Models.AttackType.Melee, _def.PushForce);
             });
         }
     }
