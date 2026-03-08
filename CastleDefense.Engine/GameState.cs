@@ -37,16 +37,23 @@ namespace CastleDefense.Engine
             Player2 = new PlayerState();
 
             Map = map;
-            // I only have these maps built so far:
-            while (Map != TeamColour.White && Map != TeamColour.Orange && Map != TeamColour.Yellow && Map != TeamColour.Blue && Map != TeamColour.Purple)
-            {
-                Map = GetRandomMap();
-            }
 
-            if (map == TeamColour.Black)
+            if (Map == TeamColour.Black)
             {
-                ShadowMap = true;
-                Map = GetRandomMap();
+                Random rand = new Random();
+
+                // 50/50 for regular black map, or shadow version of a different map
+                if (rand.Next(2) == 0)
+                {
+                    ShadowMap = true;
+                    Map = GetRandomMap();
+
+                    // 1/8 chance to still get the black map
+                    if (Map == TeamColour.Black)
+                    {
+                        ShadowMap = false;
+                    }
+                }
             }
         }
 
