@@ -98,13 +98,16 @@ namespace CastleDefense.Engine
             Income = 1.85;
             InvestmentPrice = 5.55;
             InvestmentCount = 0;
-            CastleMaxHealth = 1000;
-            RepairPrice = 10;
-            CastleHealth = 1000;
+            CastleMaxHealth = 100000;
+            RepairPrice = 4000;
+            CastleHealth = 100000;
+        }
 
-            SignatureGadget = GameDataManager.Gadgets.Find(g => g.Id == "firebomb");
-            OffensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == "reinforcements");
-            DefensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == "freeze");
+        public void SetLoadout(string[] loadout)
+        {
+            OffensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == loadout[0]);
+            DefensiveGadget = GameDataManager.Gadgets.Find(g => g.Id == loadout[1]);
+            SignatureGadget = GameDataManager.Gadgets.Find(g => g.Id == loadout[2]);
         }
     }
 

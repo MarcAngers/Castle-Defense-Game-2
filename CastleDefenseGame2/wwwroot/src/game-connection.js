@@ -10,6 +10,7 @@ class GameConnection {
         this.connection = null;
         this.currentGameId = null;
         this.selectedTeam = "white";
+        this.selectedLoadout = [];
         this.mySide = 0; // 1 = Left, 2 = Right
         this.latestState = null;
         this.winningSide = 0;
@@ -38,6 +39,7 @@ class GameConnection {
         });
 
         this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
+            console.log("Play animation for:", gadgetId, side, position);
             this.gadgetAnimationListeners.forEach(ga => ga(gadgetId, side, position, targetId));
         });
 
@@ -55,17 +57,17 @@ class GameConnection {
         }
     }
 
-    createGame = async (p1Colour) => {
+    createGame = async () => {
         const response = await fetch(`/api/games`, { method: "POST" });
         const data = await response.json();
 
-        await this.joinGame(data.gameId, p1Colour);
+        await this.joinGame(data.gameId, this.selectedTeam);
     }
 
-    joinGame = async (gameId, colour) => {
+    joinGame = async (gameId) => {
         this.currentGameId = gameId;
 
-        await this.connection.invoke("JoinGame", gameId, colour);
+        await this.connection.invoke("JoinGame", gameId, this.selectedTeam, this.selectedLoadout);
     }
 
     getAllGames = async () => {

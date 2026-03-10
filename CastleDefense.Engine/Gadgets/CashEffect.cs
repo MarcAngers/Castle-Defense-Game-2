@@ -13,8 +13,13 @@ namespace CastleDefense.Engine.Gadgets
         }
         public void Execute(GameEngine engine, int side, int position)
         {
-            var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
-            player.Money += _def.BaseValue;
+            engine.TriggerGadgetAnimation("cash", side, position);
+
+            engine.ScheduleAction(_def.Delay, () =>
+            {
+                var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
+                player.Money += _def.BaseValue;
+            });
         }
     }
 }

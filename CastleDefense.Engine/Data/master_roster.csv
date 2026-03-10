@@ -1,65 +1,65 @@
 Team,Tier,ID,Name,Price,Health,Damage,AttackSpeed,DPS,Speed,Width,Height,Description
-black,1,evildoggo,evildoggo,3,11,3,2.933333333,8.8,11,50,50,"Like doggo, but corrupted by an evil force of black magic."
-black,2,evilminnow,evilminnow,2,7,3,3.466666667,10.4,13,50,50,"Like a normal minnow, but evil"
-black,3,eevil,eevil,5,17,6,2,12,15,50,50,"Like an eel, but evil. Hilarious."
-black,4,evilnom,evilnom,5,14,9,1.155555556,10.4,13,50,50,NOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOM
-black,5,evilbirdo,evilbirdo,5,22,12,0.8666666667,10.4,13,50,50,"Like a bird, but evil"
-black,6,weirdo,weirdo,17,59,50,0.2,10,1,100,100,No one knows what it is or where it comes from... This character will cost a random amount of money based on how much money you currently have (minimum of $2) All of the units stats (including damage type) are randomly generated based on how much money is spent on it.
-black,7,gorillo,gorillo,17,191,87,0.2,17.4,5,75,75,The evil henchmen of the evil realm. They are strong and unmoving in their goal to serve their leader.
-black,8,evilguy,evilguy,130,1454,1150,0.2,230,2,200,200,The leader and creator of all the evil characters. His evilness knows no bounds.
-blue,1,fishy,fishy,3,9,3,3.2,9.6,12,50,50,It's a fish...
-blue,2,lite,lite,5,6,10,1.12,11.2,14,50,50,Enjoys reading the paper and zapping things
-blue,3,leggo,leggo,4,16,4,3,12,15,50,50,A fish that has evolved to optimize land-based combat.
-blue,4,eel,eel,4,16,6,1.866666667,11.2,14,50,50,"He's like a snake, but in the water, but on land"
-blue,5,squid,squid,6,23,14,0.6857142857,9.6,12,100,50,"Specialized in attacking submarines, unfortunately not the most relevant skillset in this situation, but she does her best."
-blue,6,judge,judge,19,87,38,0.2,7.6,6,75,75,Don't let him rain on your parade :)
-blue,7,octoboi,octoboi,21,218,94,0.2,18.8,4,100,100,Straight faced. No remorse. No feelings. Lethal suction cups
-blue,8,lightningbear,lightningbear,172,1229,1800,0.2,360,4,200,200,"When you see a bear, you should get to the water as it is the safest place to avoid bears. When you're in the water and you hear thunder, you should get to land to be safe from the lightning... WHAT WILL YOU DO?!"
-green,1,froggo,froggo,2,12,2,3.2,6.4,8,50,50,Hippity hoppity your castle is my property
-green,2,minisnecko,minisnecko,1,4,1,9.6,9.6,12,50,50,s
-green,3,durdle,durdle,3,26,2,0.8,1.6,2,75,50,Slow and steady wins the race :)
-green,4,snecko,snecko,4,15,7,1.257142857,8.8,11,100,50,Some say that looking into his eye can cause serious confusion... I don't get it
-green,5,gecko,gecko,3,15,10,0.96,9.6,12,50,50,
-green,6,nom,nom,11,40,47,0.2042553191,9.6,12,50,50,nomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnom
-green,7,geico,geico,3,48,61,0.2,12.2,15,50,75,Save 10% or more on car insurance!
-green,8,trogdor,trogdor,160,1176,1750,0.2,350,5,200,200,BURNINATING THE COUNTRYSIDE! BURNINATING ALL THE PEASANTS!!! TROGDOR!!!!!
-orange,1,phil,phil,4,10,4,2.4,9.6,12,50,50,"I know what you're thinking, and yes, it's short for Philip."
-orange,2,chippy,chippy,5,18,4,2,8,10,50,50,He gets very mad when people try to invade his personal space.
-orange,3,pepper,pepper,5,14,7,1.028571429,7.2,9,50,50,"Obligatory ""she's hot"" joke"
-orange,4,scott,scott,5,14,9,1.333333333,12,15,50,50,Can light most things on fire. Not water though.
-orange,5,zander,zander,3,19,8,1.4,11.2,14,75,75,HE'S NOT CHARMANDER OKAY
-orange,6,basketball,basketball,1,12,12,1.6,19.2,24,50,50,It's a basketball.
-orange,7,tiger,tiger,27,233,113,0.2,22.6,5,100,100,Notice the moustache... Now notice the terror you feel.
-orange,8,hwy,hwy,176,1224,1850,0.2,370,3,200,200,"He was just breathing fire. You can tell 'cause there's still a little bit there. I don't think you wanna mess with that... Like he looks scary enough, but then there's fire too? Yikes dude."
-purple,1,blobbo,blobbo,3,16,2,3.2,6.4,8,50,50,It's a uh... blob of something...
-purple,2,vile,vile,4,9,6,1.6,9.6,12,50,50,Get it?
-purple,3,cant,cant,1,1,3,4,12,15,50,50,"She is armed with a poison tipped fang of the dragon she just killed. Yes, she just killed a dragon. The name is misleading."
-purple,4,spike,spike,5,19,7,0.8,5.6,7,50,50,"Unfortunately, he really enjoys hugs."
-purple,5,bit,bit,12,22,29,0.3310344828,9.6,12,75,75,"""Nothin' but bits"""
-purple,6,cube,cube,12,42,49,0.3265306122,16,20,50,50,CUBE
-purple,7,monky,monky,32,279,112,0.2,22.4,7,100,100,His shield is as impenetrable as his beard is luscious.
-purple,8,bigblobbo,bigblobbo,120,1403,1100,0.2,220,2,200,200,Large and in charge.
-red,1,derpyberd,derpyberd,1,3,2,4,8,10,50,50,lol
-red,2,crabbo,crabbo,3,10,4,2,8,10,50,50,"Mess with crabbo, you get the stabbo."
-red,3,barry,barry,3,17,3,3.466666667,10.4,13,75,75,He's so cool. I mean just look at those sunglasses. He's a strawberry with sunglasses. Can you be more cool?
-red,4,lobbo,lobbo,2,11,4,2.4,9.6,12,50,50,"Mess with lobbo, you get the... damn I can't think of anything that rhymes... uh... Lobbo, more like lobotomizer >:)"
-red,5,birdo,birdo,4,19,11,0.8727272727,9.6,12,50,50,Her name is birdo and she is actually a bird. SMH Nintendo
-red,6,the_puncher,the_puncher,16,48,58,0.2068965517,12,15,50,50,2 minutes in the ring with this man?
-red,7,caw,caw,39,277,137,0.2,27.4,10,100,100,So colorful :)
-red,8,draggo,draggo,168,1601,1350,0.2,270,2,200,200,Killing a normal dragon is difficult enough... This is a fat dragon. How you gonna kill a fat dragon? Didn't think so.
-white,1,doggo,doggo,3,12,3,2.666666667,8,10,50,50,The basic unit. He's awesome. Excels at tearing down enemy castles.
-white,2,catto,catto,3,13,3,2.666666667,8,10,50,50,I'm PAWsitive that she'll be a great addition to your army ;)
-white,3,squirt,squirt,3,14,3,2.666666667,8,10,50,50,Young squirrel with many dreams and aspirations.
-white,4,ringo,ringo,3,14,5,2.08,10.4,13,50,50,its ya boi
-white,5,alpacco,alpacco,10,31,17,0.4705882353,8,10,75,75,Fun Alpaca Fact #42: Did you know that alpaca fur is fire resistant? :D Fun
-white,6,bread,bread,17,92,32,0.2,6.4,8,75,50,Imagine dying to a loaf of white bread... Embarassing.
-white,7,eggo,eggo,34,178,186,0.2,37.2,15,100,100,Is that... A buff egg?!
-white,8,corn,corn,200,1715,1500,0.2,300,1,200,350,So magestic that she clips the page and I'm too lazy to fix it :O
-yellow,1,ducko,ducko,3,13,3,2.666666667,8,10,50,50,quack quack motherf***er
-yellow,2,minnow,minnow,1,2,2,4.8,9.6,12,50,50,smol boi
-yellow,3,cub,cub,3,13,4,2.4,9.6,12,50,50,"Like doggo or catto, but yellow so now he's here."
-yellow,4,doc,doc,3,12,6,1.6,9.6,12,50,50,A distinguished Ducko of high stature and a successful medical career.
-yellow,5,jig,jig,4,18,11,1.090909091,12,15,75,75,"She has many spots, each represents a victory in battle. Or maybe she's just a jaguar I dunno I thought that sounded cool."
-yellow,6,bub,bub,7,35,34,0.2,6.8,3,75,75,Lamp
-yellow,7,deus,deus,19,244,76,0.2,15.2,7,100,100,This calls for a crusade.
-yellow,8,lyon,lyon,124,997,1600,0.2,320,2,200,200,BEHOLD HIS MAJESTY!!!
+black,1,evildoggo,evildoggo,3,11,3,2.133333333,6.4,8,50,50,"Like doggo, but corrupted by an evil force of black magic."
+black,2,evilminnow,evilminnow,2,4,4,4,16,10,50,50,"Like a normal minnow, but evil"
+black,3,eevil,eevil,13,26,8,4.2,33.6,14,50,50,"Like an eel, but evil. Hilarious."
+black,4,evilnom,evilnom,25,82,23,1.808695652,41.6,13,50,50,NOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOM
+black,5,evilbirdo,evilbirdo,64,253,67,1.552238806,104,13,50,50,"Like a bird, but evil"
+black,6,weirdo,weirdo,338,1102,384,0.9,345.6,12,100,100,No one knows what it is or where it comes from... This character will cost a random amount of money based on how much money you currently have (minimum of $2) All of the units stats (including damage type) are randomly generated based on how much money is spent on it.
+black,7,gorillo,gorillo,1183,6710,2210,0.4966515837,1097.6,4,75,75,The evil henchmen of the evil realm. They are strong and unmoving in their goal to serve their leader.
+black,8,evilguy,evilguy,14040,84240,31055,0.2,6211,2,200,200,The leader and creator of all the evil characters. His evilness knows no bounds.
+blue,1,fishy,fishy,3,9,3,2.4,7.2,9,50,50,It's a fish...
+blue,2,lite,lite,8,16,7,2.514285714,17.6,11,50,50,Enjoys reading the paper and zapping things
+blue,3,leggo,leggo,12,27,7,4.8,33.6,14,50,50,A fish that has evolved to optimize land-based combat.
+blue,4,eel,eel,23,67,17,2.635294118,44.8,14,50,50,"He's like a snake, but in the water, but on land"
+blue,5,squid,squid,62,265,75,1.28,96,12,100,50,"Specialized in attacking submarines, unfortunately not the most relevant skillset in this situation, but she does her best."
+blue,6,judge,judge,376,2095,372,0.5419354839,201.6,7,75,75,Don't let him rain on your parade :)
+blue,7,octoboi,octoboi,1379,10420,2620,0.3141984733,823.2,3,100,100,Straight faced. No remorse. No feelings. Lethal suction cups
+blue,8,lightningbear,lightningbear,19416,73740,49062,0.2,9812.4,4,200,200,"When you see a bear, you should get to the water as it is the safest place to avoid bears. When you're in the water and you hear thunder, you should get to land to be safe from the lightning... WHAT WILL YOU DO?!"
+green,1,froggo,froggo,2,12,2,2,4,5,50,50,Hippity hoppity your castle is my property
+green,2,minisnecko,minisnecko,1,3,2,5,10,12,50,50,s
+green,3,durdle,durdle,4,59,2,2.4,4.8,2,75,50,Slow and steady wins the race :)
+green,4,snecko,snecko,21,81,15,2.346666667,35.2,11,100,50,Some say that looking into his eye can cause serious confusion... I don't get it
+green,5,gecko,gecko,46,197,59,1.627118644,96,12,50,50,
+green,6,nom,nom,214,759,426,0.7436619718,316.8,11,50,50,nomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnom
+green,7,geico,geico,207,1030,250,5,1250,7,50,75,Save 10% or more on car insurance!
+green,8,trogdor,trogdor,17880,70510,47250,0.2,9450,5,200,200,BURNINATING THE COUNTRYSIDE! BURNINATING ALL THE PEASANTS!!! TROGDOR!!!!!
+orange,1,phil,phil,4,10,4,1.8,7.2,9,50,50,"I know what you're thinking, and yes, it's short for Philip."
+orange,2,chippy,chippy,8,24,4,2.8,11.2,7,50,50,He gets very mad when people try to invade his personal space.
+orange,3,pepper,pepper,9,32,10,1.92,19.2,8,50,50,"Obligatory ""she's hot"" joke"
+orange,4,scott,scott,25,68,25,1.92,48,15,50,50,Can light most things on fire. Not water though.
+orange,5,zander,zander,46,169,51,2.196078431,112,14,75,75,HE'S NOT CHARMANDER OKAY
+orange,6,basketball,basketball,21,54,87,5,435,23,50,50,It's a basketball.
+orange,7,tiger,tiger,1673,9500,2990,0.367090301,1097.6,4,100,100,Notice the moustache... Now notice the terror you feel.
+orange,8,hwy,hwy,19928,73740,50356,0.2,10071.2,3,200,200,"He was just breathing fire. You can tell 'cause there's still a little bit there. I don't think you wanna mess with that... Like he looks scary enough, but then there's fire too? Yikes dude."
+purple,1,blobbo,blobbo,3,16,2,2,4,5,50,50,It's a uh... blob of something...
+purple,2,vile,vile,5,13,5,2.88,14.4,9,50,50,Get it?
+purple,3,cant,cant,1,3,5,5,25,12,50,50,"She is armed with a poison tipped fang of the dragon she just killed. Yes, she just killed a dragon. The name is misleading."
+purple,4,spike,spike,25,152,45,0.4977777778,22.4,7,50,50,"Unfortunately, he really enjoys hugs."
+purple,5,bit,bit,91,389,135,0.7111111111,96,12,75,75,"""Nothin' but bits"""
+purple,6,cube,cube,348,717,438,1.249315068,547.2,19,50,50,CUBE
+purple,7,monky,monky,1918,10870,2960,0.3708108108,1097.6,4,100,100,His shield is as impenetrable as his beard is luscious.
+purple,8,bigblobbo,bigblobbo,12760,80180,29653,0.2,5930.6,2,200,200,Large and in charge.
+red,1,derpyberd,derpyberd,1,3,2,2.8,5.6,7,50,50,lol
+red,2,crabbo,crabbo,4,13,4,2.8,11.2,7,50,50,"Mess with crabbo, you get the stabbo."
+red,3,barry,barry,10,23,8,3.6,28.8,12,75,75,He's so cool. I mean just look at those sunglasses. He's a strawberry with sunglasses. Can you be more cool?
+red,4,lobbo,lobbo,13,45,16,2.4,38.4,12,50,50,"Mess with lobbo, you get the... damn I can't think of anything that rhymes... uh... Lobbo, more like lobotomizer >:)"
+red,5,birdo,birdo,51,218,63,1.523809524,96,12,50,50,Her name is birdo and she is actually a bird. SMH Nintendo
+red,6,the_puncher,the_puncher,324,842,492,0.8780487805,432,15,50,50,2 minutes in the ring with this man?
+red,7,caw,caw,2361,7650,3710,0.5177358491,1920.8,7,100,100,So colorful :)
+red,8,draggo,draggo,18904,96058,36670,0.2,7334,2,200,200,Killing a normal dragon is difficult enough... This is a fat dragon. How you gonna kill a fat dragon? Didn't think so.
+white,1,doggo,doggo,3,12,3,1.866666667,5.6,7,50,50,The basic unit. He's awesome. Excels at tearing down enemy castles.
+white,2,catto,catto,4,13,3,3.733333333,11.2,7,50,50,I'm PAWsitive that she'll be a great addition to your army ;)
+white,3,squirt,squirt,9,31,5,4.32,21.6,9,50,50,Young squirrel with many dreams and aspirations.
+white,4,ringo,ringo,18,57,15,2.773333333,41.6,13,50,50,its ya boi
+white,5,alpacco,alpacco,81,416,87,0.9195402299,80,10,75,75,Fun Alpaca Fact #42: Did you know that alpaca fur is fire resistant? :D Fun
+white,6,bread,bread,338,1654,336,0.6857142857,230.4,8,75,50,Imagine dying to a loaf of white bread... Embarassing.
+white,7,eggo,eggo,2066,4690,5180,0.5297297297,2744,10,100,100,Is that... A buff egg?!
+white,8,corn,corn,23000,105820,40500,0.2,8100,1,200,350,So magestic that she clips the page and I'm too lazy to fix it :O
+yellow,1,ducko,ducko,3,13,3,1.866666667,5.6,7,50,50,quack quack motherf***er
+yellow,2,minnow,minnow,1,6,1,5,5,12,50,50,smol boi
+yellow,3,cub,cub,9,27,5,5,25,11,50,50,"Like doggo or catto, but yellow so now he's here."
+yellow,4,doc,doc,17,58,16,2.4,38.4,12,50,50,A distinguished Ducko of high stature and a successful medical career.
+yellow,5,jig,jig,60,205,63,1.904761905,120,15,75,75,"She has many spots, each represents a victory in battle. Or maybe she's just a jaguar I dunno I thought that sounded cool."
+yellow,6,bub,bub,136,1331,348,0.3310344828,115.2,4,75,75,Lamp
+yellow,7,deus,deus,1281,7260,1880,0.5838297872,1097.6,4,100,100,This calls for a crusade.
+yellow,8,lyon,lyon,13272,57219,43220,0.2,8644,2,200,200,BEHOLD HIS MAJESTY!!!

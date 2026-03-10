@@ -13,7 +13,7 @@ namespace CastleDefense.Api.Hubs
             _gameService = gameService;
         }
 
-        public async Task JoinGame(string gameId, string teamName)
+        public async Task JoinGame(string gameId, string teamName, string[] loadout)
         {
             if (!Enum.TryParse(teamName, true, out TeamColour team))
             {
@@ -37,12 +37,14 @@ namespace CastleDefense.Api.Hubs
                     side = 1;
                     game._state.Player1.ConnectionId = Context.ConnectionId;
                     game._state.Player1.Team = team;
+                    game._state.Player1.SetLoadout(loadout);
                 }
                 else if (string.IsNullOrEmpty(game._state.Player2.ConnectionId))
                 {
                     side = 2;
                     game._state.Player2.ConnectionId = Context.ConnectionId;
                     game._state.Player2.Team = team;
+                    game._state.Player2.SetLoadout(loadout);
                     _gameService.StartGame(gameId);
                 }
             }
@@ -121,7 +123,7 @@ namespace CastleDefense.Api.Hubs
             if (game._state.Player1.ConnectionId == Context.ConnectionId) side = 1;
             else if (game._state.Player2.ConnectionId == Context.ConnectionId) side = 2;
 
-            if (side == 0) return; // Spectators can't repair
+            if (side == 0) return; // Spectators can't use gadgets
 
             // THREAD SAFETY: We do NOT modify State here. We queue it.
             game.EnqueueAction(() =>

@@ -50,7 +50,7 @@ export default class FirebombAnimator {
             ctx.rotate(angle); 
             
             // Assuming the bomb sprite is 50x50
-            ctx.drawImage(bombImg, -25, -25, 50, 50);
+            ctx.drawImage(bombImg, -37.5, -37.5, 75, 75);
             ctx.restore();
 
             return; // Don't draw the fire yet!

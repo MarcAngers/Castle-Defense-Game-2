@@ -48,6 +48,7 @@ namespace CastleDefense.Engine.Models
         public string Description { get; set; }
         public IGadgetEffect GadgetEffect { get; set; }
         public GadgetSlot Slot { get; set; }
+        public bool Targeted { get; set; }
 
         public int Cost { get; set; }
         public int CooldownMs { get; set; }

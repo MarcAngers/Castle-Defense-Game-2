@@ -9,16 +9,12 @@ h2 {
     font-size: 18px;
 }
 
-#sp-select-team {
-    padding-top: 5vh;
-    color: black;
-}
-#mp-select-team {
+#select-team {
     padding-top: 5vh;
     color: black;
 }
 
-#team-select {
+#team-bar {
     display: flex;
     justify-content: space-evenly;
     padding: 0.5em;

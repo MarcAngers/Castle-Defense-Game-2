@@ -8,6 +8,7 @@ class AssetLoader {
             foreground: {},     // Map assets
             background: {},
             gadgets: {},        // Gadget animation assets
+            gadgetData: {},     // Store the CSV gadget stats for the UI to use
             hazards: {},        // Hazard animation assets
             particles: {},      // Particles for status effects and map ambience
         };
@@ -16,6 +17,7 @@ class AssetLoader {
     async loadAll() {
         // 1. Fetch and parse the CSV as the absolute first step
         await this.loadMasterCSV();
+        await this.loadMasterGadgetsCSV();
 
         // 2. Loop through the dynamically generated team list to load their images
         for (const team of this.assets.teamList) {
@@ -73,6 +75,35 @@ class AssetLoader {
             this.assets.unitData[unitId] = unitStats;
         }
     }
+    async loadMasterGadgetsCSV() {
+        const response = await fetch('../assets/master_gadgets.csv');
+        const csvText = await response.text();
+        
+        // Strip the invisible BOM character if it exists
+        const cleanText = csvText.replace(/^\uFEFF/, '');
+        const rows = this.parseCSV(cleanText);
+
+        if (rows.length < 2) return;
+
+        // Map header indices so we aren't guessing column numbers
+        const headers = rows[0].map(h => h.toLowerCase());
+        const idIdx = headers.indexOf('id');
+        
+        // Parse the data rows
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.length < headers.length) continue;
+
+            const gadgetId = row[idIdx];
+
+            // Save all the juicy stats for your UI to use later
+            const gadgetStats = {};
+            for (let j = 0; j < headers.length; j++) {
+                gadgetStats[headers[j]] = row[j];
+            }
+            this.assets.gadgetData[gadgetId] = gadgetStats;
+        }
+    }
 
     async loadAssets(colour) {
         // Load Map assets:
@@ -97,10 +128,23 @@ class AssetLoader {
 
     async loadGadgets() {
         const gadgetAssetList = [
-            'nuke',
-            'mushroom-cloud',
+            'blackhole',
+            'cash',
+            'divine',
             'firebomb',
+            'freeze',
+            'goo',
+            'heal',
+            'meteor',
+            'mushroom-cloud',
+            'nuke',
+            'poison',
+            'rage',
+            'reinforcements',
             'snipe',
+            'speed',
+            'wall',
+            'wave',
         ];
 
         for (const gadgetId of gadgetAssetList) {
@@ -110,8 +154,13 @@ class AssetLoader {
 
     async loadHazards() {
         const hazardAssetList = [
+            'blackhole-1',
+            'blackhole-2',
             'fire-1',
             'fire-2',
+            'goo',
+            'poison',
+            'wave',
         ];
 
         for (const hazardId of hazardAssetList) {
@@ -206,6 +255,15 @@ class AssetLoader {
             teamArray.push(this.assets[unit]);
         }
         return teamArray;
+    }
+
+    getGadgetsBySlot(slotName) {
+        const gadgetData = this.assets['gadgetData'];
+
+        return Object.values(gadgetData).filter(gadget => 
+            // Using toLowerCase() makes this perfectly bulletproof against typos in the CSV
+            String(gadget.Slot).toLowerCase() === String(slotName).toLowerCase()
+        );
     }
 }
 

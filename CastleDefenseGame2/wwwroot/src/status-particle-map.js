@@ -55,6 +55,48 @@ const StatusParticleMap = {
             sway: 0                                         // No sway
         })
     },
+    "Poison": {
+        imageKey: "poison",          
+        spawnRate: 0.03,             
+        life: 600,                  
+        size: 20,                   
+        
+        spawn: (w, h) => ({
+            offsetX: (Math.random() * w) - (w / 2), 
+            offsetY: h/2 - 20,                              // Spawn near the bottom of the unit
+            vx: 0,                                          // No horizontal drift
+            vy: -0.3 - Math.random() * 0.2,                 // Slowly move up
+            sway: 0.25                                      // Slight sway
+        })
+    },
+    "Slow": {
+        imageKey: "slow",          
+        spawnRate: 0.01,             
+        life: 600,                  
+        size: 20,                   
+        
+        spawn: (w, h) => ({
+            offsetX: (Math.random() * w) - (w / 2), 
+            offsetY: -h/2 + 20,                             // Spawn near the top of the unit
+            vx: 0,                                          // No horizontal drift
+            vy: 0.8 + Math.random() * 0.5,                  // Quickly move down
+            sway: 0                                         // No sway
+        })
+    },
+    "Rage": {
+        imageKey: "rage",          
+        spawnRate: 0.06,             
+        life: 200,                  
+        size: 20,                   
+        
+        spawn: (w, h) => ({
+            offsetX: (Math.random() * w) - (w / 2), 
+            offsetY: -h/2,                                  // Spawn at the top of the unit
+            vx: 0,                                          // No horizontal drift
+            vy: 0,                                          // No vertical movement
+            sway: 0                                         // No sway
+        })
+    },
 };
 
 export default StatusParticleMap;

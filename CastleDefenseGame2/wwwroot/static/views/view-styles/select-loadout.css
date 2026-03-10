@@ -1,0 +1,58 @@
+button {
+    font-size: 11px;
+}
+
+h1 {
+    font-size: 22px;
+    margin-bottom: 0.33em;
+}
+h2 {
+    font-size: 16px;
+    margin-bottom: 0.33em;
+}
+h5 {
+    font-size: 12px;
+    margin-top: 0.33em;
+    margin-bottom: 0.33em;
+}
+
+#select-loadout {
+    padding: 2em;
+    padding-top: 0;
+    color: black;
+}
+
+#offensive-gadget-bar, #defensive-gadget-bar, #signature-gadget {
+    display: flex;
+    justify-content: space-evenly;
+    margin: auto;
+}
+
+#gadget-container {
+    display: flex;
+}
+.gadget {
+    display: block !important;
+    height: 15vh; width: 15vh;
+    padding: 0.5em;
+    margin: auto;
+    border: 2vh solid black;
+    background-color: lightgray;
+}
+.selected {
+    border: 2vh solid lightgreen;
+}
+.gadget img {
+    height: 100%; width: 100%;
+
+    /* 1. Prevent Distortion */
+    object-fit: contain;
+    
+    /* 2. Pixel Art Scaling */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.f-2 {
+    flex: 2;
+}

@@ -102,7 +102,19 @@ namespace CastleDefense.Engine.Data
                 if (dmg > 0)
                 {
                     // The Doggo Formula: 0.4 * (Speed / Damage)
-                    calculatedAps = ATTACK_SPEED_MULTIPLIER * (speed / (float)dmg);
+                    if (tier < 6)
+                    {
+                        calculatedAps = ATTACK_SPEED_MULTIPLIER * (tier * 2 * speed / (float)dmg);
+                    }
+                    // Try to keep the attack speed reasonable in higher tiers
+                    else if (tier < 7)
+                    {
+                        calculatedAps = ATTACK_SPEED_MULTIPLIER * (tier * tier * speed / (float)dmg);
+                    }
+                    else if (tier >= 7)
+                    {
+                        calculatedAps = ATTACK_SPEED_MULTIPLIER * (tier * tier * tier * speed / (float)dmg);
+                    }
                 }
 
                 float finalAps = Math.Clamp(calculatedAps, 0.2f, 5.0f);
@@ -200,6 +212,7 @@ namespace CastleDefense.Engine.Data
 
                 // --- PARSE DATA WITH SAFE FALLBACKS ---
                 Enum.TryParse<GadgetSlot>(GetCol("Slot"), true, out var slot);
+                int targeted = int.TryParse(GetCol("Targeted"), out var t) ? t : 1;
                 int cost = int.TryParse(GetCol("Cost"), out var c) ? c : 0;
                 int baseValue = int.TryParse(GetCol("BaseValue"), out var bv) ? bv : 0;
                 int radius = int.TryParse(GetCol("Radius"), out var r) ? r : 0;
@@ -215,6 +228,7 @@ namespace CastleDefense.Engine.Data
                     Id = id,
                     Name = GetCol("Name"),
                     Slot = slot,
+                    Targeted = (targeted == 1),
                     Cost = cost,
                     BaseValue = baseValue,
                     Radius = radius,
@@ -300,7 +314,7 @@ namespace CastleDefense.Engine.Data
                 Cost = 0,
                 CooldownMs = 0,
                 MaxCharges = 1,
-                MaxHealth = 200 * HEALTH_MULTIPLIER,
+                MaxHealth = 400 * HEALTH_MULTIPLIER,
                 MaxShield = 0,
                 Damage = 0,
                 MoveSpeed = 0,

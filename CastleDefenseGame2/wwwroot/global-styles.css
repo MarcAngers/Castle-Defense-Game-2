@@ -74,7 +74,8 @@ button:active {
 .ui-screen button, 
 .ui-screen input, 
 .ui-screen #game-id-list,
-.ui-screen #team-select,
-.ui-screen .character {
+.ui-screen #team-bar,
+.ui-screen .character,
+.ui-screen .gadget {
     pointer-events: auto;
 }

@@ -1,7 +1,7 @@
 import initLoading from '../static/views/view-logic/loading.js';
 import initMainMenu from '../static/views/view-logic/main-menu.js';
-import initSPSelectTeam from '../static/views/view-logic/sp-select-team.js';
-import initMPSelectTeam from '../static/views/view-logic/mp-select-team.js';
+import initSelectTeam from '../static/views/view-logic/select-team.js';
+import initSelectLoadout from '../static/views/view-logic/select-loadout.js';
 import initGameBrowser from '../static/views/view-logic/game-browser.js';
 import initLobby from '../static/views/view-logic/lobby.js';
 import initGameScreen from '../static/views/view-logic/game.js';
@@ -13,8 +13,8 @@ const appContainer = document.getElementById('app-container');
 const routes = {
     'loading': { path: '../static/views/loading.html', logic: initLoading },
     'main-menu': { path: '../static/views/main-menu.html', logic: initMainMenu },
-    'sp-select-team': { path: '../static/views/sp-select-team.html', logic: initSPSelectTeam },
-    'mp-select-team': { path: '../static/views/mp-select-team.html', logic: initMPSelectTeam },
+    'select-team': { path: '../static/views/select-team.html', logic: initSelectTeam },
+    'select-loadout': { path: '../static/views/select-loadout.html', logic: initSelectLoadout },
     'game-browser': { path: '../static/views/game-browser.html', logic: initGameBrowser },
     //'collection': { path: '../static/views/collection.html', logic: initCollection },
     //'singleplayer': { path: '../static/views/singleplayer.html', logic: initSingleplayer },

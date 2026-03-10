@@ -1,7 +1,4 @@
 ﻿using CastleDefense.Engine.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace CastleDefense.Engine.Gadgets
 {

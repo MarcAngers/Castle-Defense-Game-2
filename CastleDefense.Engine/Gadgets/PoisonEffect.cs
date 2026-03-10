@@ -22,6 +22,7 @@ namespace CastleDefense.Engine.Gadgets
                 {
                     Type = "Poison",
                     Side = side,
+                    BaseValue = _def.BaseValue,
                     Position = position - _def.Radius,
                     Width = _def.Radius * 2,
                     ExpiresAtTick = (int)engine._state.CurrentTick + _def.HazardDuration

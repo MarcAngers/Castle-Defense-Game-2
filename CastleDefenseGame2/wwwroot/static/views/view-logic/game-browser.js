@@ -18,14 +18,14 @@ export default async function initGameBrowser() {
     await loadGames();
 
     btnBack.onclick = () => {
-        showScreen('mp-select-team');
+        showScreen('select-loadout');
     };
     btnRefresh.onclick = () => {
         loadGames();
     }
     btnJoin.onclick = async () => {
-        await connection.joinGame(inputField.value, connection.selectedTeam);
-        
+        await connection.joinGame(inputField.value, connection.selectedTeam, connection.selectedLoadout);
+
         showScreen('game');
     };
 }

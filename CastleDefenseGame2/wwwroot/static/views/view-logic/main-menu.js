@@ -12,10 +12,10 @@ export default async function initMainMenu() {
     //const btnMP = document.getElementById('btnMultiplayer');
     
     btnSP.onclick = () => {
-        showScreen('sp-select-team');
+        //showScreen('select-team');
     };
     btnMP.onclick = () => {
-        showScreen('mp-select-team');
+        showScreen('select-team');
     };
     btnCollection.onclick = () => {
         showScreen('collection');

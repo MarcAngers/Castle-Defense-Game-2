@@ -57,6 +57,24 @@ function updateUI(state, side) {
     }
 
     // Update shop cooldowns:
+
+    // Update gadget section:
+    // let signatureGadget, offensiveGadget, defensiveGadget;
+
+    // const btnGadgetSignature = document.getElementById('btnGadgetSignature');
+    // const btnGadgetOffense = document.getElementById('btnGadgetOffense');
+    // const btnGadgetDefence = document.getElementById('btnGadgetDefence');
+
+    // if (side == 1) {
+    //     signatureGadget = state.player1.signatureGadget.Id;
+    //     offensiveGadget = state.player1.offensiveGadget.Id;
+    //     defensiveGadget = state.player1.defensiveGadget.Id;
+    // }
+    // if (side == 2) {
+    //     signatureGadget = state.player2.signatureGadget.Id;
+    //     offensiveGadget = state.player2.offensiveGadget.Id;
+    //     defensiveGadget = state.player2.defensiveGadget.Id;
+    // }
 }
 
 function initShopUI(team, gameView) {
@@ -118,13 +136,54 @@ function initShopUI(team, gameView) {
     const btnGadgetOffense = document.getElementById('btnGadgetOffense');
     const btnGadgetDefence = document.getElementById('btnGadgetDefence');
 
+    // Set image and price for offensive gadget button
+    let price = document.createElement('span');
+    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[0]]['cost'] + ': ';
+    btnGadgetOffense.appendChild(price);
+    let source = loader.assets.gadgets[connection.selectedLoadout[0]];
+    let img = document.createElement('img');
+    if (typeof source === 'string') {
+            img.src = source;
+        } else {
+            img.src = source.src; // If it's already a new Image() object
+        }
+    btnGadgetOffense.appendChild(img);
+
+    // Set image and price for defensive gadget button
+    price = document.createElement('span');
+    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[1]]['cost'] + ': ';
+    btnGadgetDefence.appendChild(price);
+    source = loader.assets.gadgets[connection.selectedLoadout[1]];
+    img = document.createElement('img');
+    if (typeof source === 'string') {
+            img.src = source;
+        } else {
+            img.src = source.src; // If it's already a new Image() object
+        }
+    btnGadgetDefence.appendChild(img);
+
+    // Set image and price for signature gadget button
+    price = document.createElement('span');
+    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[2]]['cost'] + ': ';
+    btnGadgetSignature.appendChild(price);
+    source = loader.assets.gadgets[connection.selectedLoadout[2]];
+    img = document.createElement('img');
+    if (typeof source === 'string') {
+            img.src = source;
+        } else {
+            img.src = source.src; // If it's already a new Image() object
+        }
+    btnGadgetSignature.appendChild(img);
+
     btnGadgetSignature.addEventListener('click', () => {
-        gameView.targetingGadgetId = "firebomb";
+        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
     });
+
     btnGadgetOffense.addEventListener('click', () => {
-        gameView.targetingGadgetId = "reinforcements";
+        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[0]);
     });
+
     btnGadgetDefence.addEventListener('click', () => {
-        gameView.targetingGadgetId = "freeze";
+        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
     });
 }

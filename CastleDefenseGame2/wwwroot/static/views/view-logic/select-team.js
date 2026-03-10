@@ -2,7 +2,7 @@ import { showScreen } from '../../../src/router.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
 
-export default async function initMPSelectTeam() {
+export default async function initSelectTeam() {
     let selectedTeam = null;
     const teamElements = document.getElementsByClassName('team');
     
@@ -22,11 +22,11 @@ export default async function initMPSelectTeam() {
         selectedTeam = clickedElement.id;
 
         // Set background colour
-        document.getElementById('mp-select-team').style.backgroundColor = selectedTeam;
+        document.getElementById('select-team').style.backgroundColor = selectedTeam;
         if (selectedTeam == 'black')
-            document.getElementById('mp-select-team').style.color = 'white';
+            document.getElementById('select-team').style.color = 'white';
         else 
-            document.getElementById('mp-select-team').style.color = 'black';
+            document.getElementById('select-team').style.color = 'black';
 
         // Set character images
         document.getElementById('team-name').innerHTML = selectedTeam.toUpperCase() + ' TEAM:';
@@ -70,19 +70,13 @@ export default async function initMPSelectTeam() {
     }
 
     const btnBack = document.getElementById('btnBack');
-    const btnCreate = document.getElementById('btnCreate');
-    const btnJoin = document.getElementById('btnJoin');
+    const btnSelect = document.getElementById('btnSelect');
 
     btnBack.onclick = () => {
         showScreen('main-menu');
     };
-    btnCreate.onclick = async () => {
+    btnSelect.onclick = async () => {
         connection.selectedTeam = selectedTeam;
-        await connection.createGame(selectedTeam);
-        showScreen('lobby');
-    };
-    btnJoin.onclick = () => {
-        connection.selectedTeam = selectedTeam;
-        showScreen('game-browser');
+        showScreen('select-loadout');
     };
 }

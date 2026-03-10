@@ -19,7 +19,7 @@ namespace CastleDefense.Engine.Gadgets
             {
                 Type = "Wave",
                 Side = side,
-                Position = side == 1 ? 0 : 2000,
+                Position = side == 1 ? -100 : 2100,
                 Width = _def.Radius * 2,
                 ExpiresAtTick = (int)engine._state.CurrentTick + _def.HazardDuration
             };

@@ -1,5 +1,6 @@
 import loader from './asset-loader.js';
 import AnimationManager from './animation-manager.js';
+import GadgetManager from './gadget-manager.js';
 import VisualUnit from './visual-unit.js';
 import connection from './game-connection.js';
 
@@ -26,13 +27,7 @@ export default class View {
         this.startX = 0;
         this.scrollStartCameraX = 0;
 
-        // Gadget targeting
-        this.targetingGadgetId = null; 
-        this.crosshairWorldX = 0;
-
         // --- CAMERA INPUT HANDLERS ---
-        this.canvas.addEventListener('click', this.fireGadget);
-
         this.canvas.addEventListener('mousedown', this.startPan);
         this.canvas.addEventListener('touchstart', this.startPan, {passive: false});
 
@@ -46,6 +41,8 @@ export default class View {
 
         window.addEventListener('resize', this.resize);
         this.resize();
+
+        this.gadgetManager = new GadgetManager(this);
 
         // Scratch canvas for status effects:
         this.scratchCanvas = document.createElement('canvas');
@@ -68,7 +65,8 @@ export default class View {
             "Rage": [136, 0, 21, 0.5],          // Burgundy
             "Heal": [0, 255, 50, 0.5],          // Green
             "Speed": [255, 255, 255, 0.5],      // White
-            "Slow": [112, 146, 190, 0.5],       // Blue-Gray  
+            "Slow": [112, 146, 190, 0.5],       // Blue-Gray
+            "Blackhole": [0, 0, 0, 0.5],        // Black
         };
     }
 
@@ -180,25 +178,22 @@ export default class View {
             this.drawUnit(unit, this.visualUnits[unit.instanceId]);
         });
 
-        // --- DRAW TARGETING CROSSHAIR ---
-        if (this.targetingGadgetId) {
+        // --- 1. DRAW TARGETED CROSSHAIR (World Space) ---
+        if (this.gadgetManager && this.gadgetManager.activeGadgetId && this.gadgetManager.isTargeted) {
             this.ctx.save();
             
-            // Bright red, dashed line for that geometric, tactile feel
             this.ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
             this.ctx.lineWidth = 4;
-            this.ctx.setLineDash([15, 10]); // Creates the dashed effect
+            this.ctx.setLineDash([15, 10]); 
             
             this.ctx.beginPath();
-            // Draw from top of screen to the bottom
-            this.ctx.moveTo(this.crosshairWorldX, 0);
-            this.ctx.lineTo(this.crosshairWorldX, 500); // 500 is your logicalHeight
+            this.ctx.moveTo(this.gadgetManager.crosshairWorldX, 0);
+            this.ctx.lineTo(this.gadgetManager.crosshairWorldX, 500); 
             this.ctx.stroke();
             
-            // Optional: Draw a little target indicator at the bottom
             this.ctx.fillStyle = 'rgba(255, 50, 50, 0.5)';
             this.ctx.beginPath();
-            this.ctx.arc(this.crosshairWorldX, 400, 20, 0, Math.PI * 2);
+            this.ctx.arc(this.gadgetManager.crosshairWorldX, 400, 20, 0, Math.PI * 2);
             this.ctx.fill();
 
             this.ctx.restore();
@@ -206,6 +201,24 @@ export default class View {
 
         // --- RESTORE CAMERA ---
         this.ctx.restore(); // Go back to "Screen" coords (0,0 is top left)
+
+        // --- 2. DRAW UNTARGETED ICON (Screen Space) ---
+        // Drawn AFTER the camera is restored so it ignores panning and perfectly follows the mouse!
+        if (this.gadgetManager && this.gadgetManager.activeGadgetId && !this.gadgetManager.isTargeted) {
+            const img = loader.assets.gadgets[this.gadgetManager.activeGadgetId];
+            if (img) {
+                this.ctx.save();
+                this.ctx.globalAlpha = 0.7; 
+                // Draw exactly centered on the raw logical screen coordinates
+                this.ctx.drawImage(
+                    img, 
+                    this.gadgetManager.cursorLogicalX - 25, 
+                    this.gadgetManager.cursorLogicalY - 25, 
+                    50, 50
+                );
+                this.ctx.restore();
+            }
+        }
 
         // Garbage Collection: Remove VisualUnits for dead server units
         const currentServerUnitIds = new Set(state.units.map(u => u.instanceId));
@@ -224,6 +237,8 @@ export default class View {
         const width = unit.width || 50;
         const height = unit.height || 50;
         const rotation = visualUnit ? visualUnit.visualRotation : 0;
+
+        let isInvulnerable = false;
 
         if (img) {
             this.ctx.save();
@@ -248,6 +263,8 @@ export default class View {
                         totalB += b;
                         totalA += a;
                         activeTintCount++;
+                    } else if (status.name == 'Invulnerable') {
+                        isInvulnerable = true;
                     }
                 }
             }
@@ -280,8 +297,7 @@ export default class View {
                 // Player 2: Face Left
                 this.ctx.scale(-1, 1);
                 this.ctx.drawImage(imageToDraw, -width / 2, -height / 2, width, height);
-            }
-            
+            }            
             this.ctx.restore();
         } else {
             // Fallback Box
@@ -322,6 +338,12 @@ export default class View {
 
         // Health Bar
         this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield);
+
+        // If the unit is invulnerable, draw a divine shield over it
+        if (isInvulnerable) {
+            const shieldImage = loader.assets.gadgets['divine'];
+            this.ctx.drawImage(shieldImage, x, y, width, height);
+        }
     }
 
     drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield) {
@@ -353,18 +375,18 @@ export default class View {
         if (!castleImg) return;
 
         const y = 200;
+        let x = 50;
         
         this.ctx.save();
         
         if (side === 1) {
-            let x = 50;
             this.ctx.drawImage(castleImg, x, y);
 
             this.ctx.restore(); // Restore coordinate system for the health bar
 
             this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         } else {
-            let x = this.MAP_WIDTH - 50;
+            x = this.MAP_WIDTH - 50;
             
             this.ctx.translate(x, y);
             this.ctx.scale(-1, 1); 
@@ -373,6 +395,14 @@ export default class View {
             this.ctx.restore(); // Restore coordinate system for the health bar
             
             this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+        }
+
+        // If the player is invulnerable, draw a divine shield over their castle:
+        if (playerState.isInvulnerable) {
+            console.log("drawing shield...");
+            const shieldImage = loader.assets.gadgets['divine'];
+            if (x > 1000) x -= 200;
+            this.ctx.drawImage(shieldImage, x, y, 200, 200);
         }
     }
 
@@ -392,25 +422,6 @@ export default class View {
 
         this.ctx.drawImage(loader.get('foreground')[colour], 0, 0);
         this.ctx.filter = 'none';
-    }
-
-    fireGadget = (e) => {
-        if (!this.targetingGadgetId) return;
-
-        // Prevent firing if they were just trying to pan the camera
-        // (If startX and currentX are different, they dragged)
-        const currentX = this.getX(e);
-        if (Math.abs(this.startX - currentX) > 10) return;
-
-        // 1. Calculate final World X within the bounds of the castles
-        let targetX = currentX + this.cameraX;
-        const finalTargetX = Math.min(Math.max(targetX, 200), 1800);
-
-        // 2. Send it to the server! 
-        connection.useGadget(this.targetingGadgetId, finalTargetX);
-
-        // 3. Turn off targeting mode
-        this.targetingGadgetId = null;
     }
 
     resize = () => {
