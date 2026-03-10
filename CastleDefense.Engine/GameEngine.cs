@@ -199,7 +199,7 @@ namespace CastleDefense.Engine
 
             // 3. Increase income and next investment price
             player.InvestmentCount++;
-            player.Income = 1.85 * Math.Pow(1.25, player.InvestmentCount);
+            player.Income = 0.31 * Math.Pow(3.36, player.InvestmentCount);
             player.InvestmentPrice = player.Income * (player.InvestmentCount + 3);
         }
 
