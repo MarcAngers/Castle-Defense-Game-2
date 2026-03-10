@@ -156,6 +156,8 @@ namespace CastleDefense.Engine
                 Height = def.Height,
                 Width = def.Width,
                 PendingKnockback = 0,
+                LastKnockbackTick = 0,
+                AttacksWithoutKnockback = 0,
 
                 // --- HEALTH & POSITION ---
                 CurrentHealth = def.MaxHealth,
@@ -574,6 +576,10 @@ namespace CastleDefense.Engine
                         _state.CurrentTick + 30,
                         0f
                     ));
+                    unit.AttacksWithoutKnockback = 0;
+
+                    // Make the unit immune to knockback for 3 seconds
+                    unit.LastKnockbackTick = _state.CurrentTick + 3 * TICKS_PER_SECOND;
                 }
             }
         }
@@ -710,14 +716,28 @@ namespace CastleDefense.Engine
             }
 
             // --- PHYSICS & MOMENTUM ---
+            if (target.LastKnockbackTick < _state.CurrentTick)
+            {
+                return;
+            }
+
             var enemyDef = _unitCache[target.DefinitionId];
             float resistance = Math.Max(1f, enemyDef.EffectiveWeight);
             float knockbackDist = impactForce / resistance;
+            knockbackDist = Math.Min(knockbackDist, 3000f);
+
+            if (target.AttacksWithoutKnockback >= 25)
+            {
+                knockbackDist = 25f;
+            }
 
             if (knockbackDist > 10f)
             {
                 float direction = (target.Side == 1) ? -1f : 1f;
                 target.PendingKnockback += (knockbackDist * direction);
+            } else
+            {
+                target.AttacksWithoutKnockback++;
             }
         }
 

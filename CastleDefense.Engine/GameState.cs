@@ -133,6 +133,8 @@ namespace CastleDefense.Engine
         public int YPosition { get; set; }
         public float CurrentSpeed { get; set; }
         public float PendingKnockback { get; set; }
+        public long LastKnockbackTick {  get; set; }
+        public int AttacksWithoutKnockback { get; set; }
 
         // --- COMBAT STATS ---
         public int Damage { get; set; }
