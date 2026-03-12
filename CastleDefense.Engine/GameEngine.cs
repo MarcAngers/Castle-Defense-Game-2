@@ -201,8 +201,10 @@ namespace CastleDefense.Engine
 
             // 3. Increase income and next investment price
             player.InvestmentCount++;
-            player.Income = 0.31 * Math.Pow(3.36, player.InvestmentCount);
-            player.InvestmentPrice = player.Income * (player.InvestmentCount + 3);
+            // Equation for player income: e^(                  0.0109x^3                 +                    0.0011x^2                +           0.4351x                + 0.5268                     log R^2 = 0.9997
+            player.Income = Math.Pow(Math.E, 0.0109 * Math.Pow(player.InvestmentCount, 3) + 0.0011 * Math.Pow(player.InvestmentCount, 2) + 0.4351 * player.InvestmentCount + 0.5268);
+            // Each investment should take twice as long as the last
+            player.InvestmentPrice = player.Income * (player.InvestmentCount * 5 + 10);
         }
 
         public void Repair(int side)
@@ -578,8 +580,8 @@ namespace CastleDefense.Engine
                     ));
                     unit.AttacksWithoutKnockback = 0;
 
-                    // Make the unit immune to knockback for 3 seconds
-                    unit.LastKnockbackTick = _state.CurrentTick + 3 * TICKS_PER_SECOND;
+                    // Make the unit immune to knockback for 2 seconds
+                    unit.LastKnockbackTick = _state.CurrentTick + 2 * TICKS_PER_SECOND;
                 }
             }
         }
@@ -716,7 +718,7 @@ namespace CastleDefense.Engine
             }
 
             // --- PHYSICS & MOMENTUM ---
-            if (target.LastKnockbackTick < _state.CurrentTick)
+            if (_state.CurrentTick < target.LastKnockbackTick)
             {
                 return;
             }

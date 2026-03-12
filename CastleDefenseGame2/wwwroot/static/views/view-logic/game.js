@@ -18,7 +18,7 @@ export default function initGameScreen() {
     let animationFrameId;
 
     const gameLoop = () => {
-        if (connection.winningSide != 0) {
+        if (connection.winnerSide != 0) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
             return;

@@ -10,8 +10,8 @@ export default class BlackholeAnimator {
         this.targetY = 300; 
 
         this.timer = 0;
-        // 2s startup + 5s active black hole = 8 seconds total
-        this.duration = 8000;   
+        // 2s startup + 7s active black hole = 9 seconds total
+        this.duration = 9000;   
         this.isFinished = false;
 
         this.shakeX = 0;
@@ -28,9 +28,9 @@ export default class BlackholeAnimator {
             return;
         }
 
-        // --- CONSTANT GRAVITY RUMBLE (2000ms to 7500ms) ---
+        // --- CONSTANT GRAVITY RUMBLE (2000ms to 8500ms) ---
         // A tiny, high-frequency vibration while the black hole is open
-        if (this.timer >= 2000 && this.timer < 7500) {
+        if (this.timer >= 2000 && this.timer < 8500) {
             this.shakeX = (Math.random() * 2 - 1) * 2;
             this.shakeY = (Math.random() * 2 - 1) * 2;
         } else {
@@ -47,12 +47,12 @@ export default class BlackholeAnimator {
         if (this.timer < 2000) {
             // Fade in to 70% opacity black over 2 seconds
             darkAlpha = (this.timer / 2000) * 0.7; 
-        } else if (this.timer < 7500) {
+        } else if (this.timer < 8500) {
             // Hold the darkness while the black hole is active
             darkAlpha = 0.7; 
         } else {
             // Fade the light back in during the final 500ms
-            darkAlpha = 0.7 * (1 - ((this.timer - 7500) / 500)); 
+            darkAlpha = 0.7 * (1 - ((this.timer - 8500) / 500)); 
         }
 
         if (darkAlpha > 0) {
@@ -97,8 +97,8 @@ export default class BlackholeAnimator {
             }
 
             // Fade out the sprite smoothly at the very end
-            if (this.timer > 7500) {
-                const fadeProgress = (this.timer - 7500) / 500;
+            if (this.timer > 8500) {
+                const fadeProgress = (this.timer - 8500) / 500;
                 ctx.globalAlpha = 1.0 - fadeProgress;
             }
 

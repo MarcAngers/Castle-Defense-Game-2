@@ -13,7 +13,7 @@ class GameConnection {
         this.selectedLoadout = [];
         this.mySide = 0; // 1 = Left, 2 = Right
         this.latestState = null;
-        this.winningSide = 0;
+        this.winnerSide = 0;
 
         this.buildConnection();
     }
@@ -34,7 +34,7 @@ class GameConnection {
         });
 
         this.connection.on("GameStarted", () => {
-            this.winningSide = 0;
+            this.winnerSide = 0;
             showScreen("game");
         });
 
@@ -45,7 +45,7 @@ class GameConnection {
 
         this.connection.on("GameOver", (state) => {
             this.latestState = state;
-            this.winningSide = state.winningSide;
+            this.winnerSide = state.winnerSide;
             showScreen("game-over");
         })
 

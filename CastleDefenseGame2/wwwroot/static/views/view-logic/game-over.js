@@ -3,13 +3,13 @@ import View from '../../../src/view.js';
 import connection from '../../../src/game-connection.js';
 
 export default function initGameScreen() {
-    const gameOverView = new View('bgCanvas', connection.winningSide == 1 ? 2000 : 0);
+    const gameOverView = new View('bgCanvas', connection.winnerSide == 1 ? 2000 : 0);
     gameOverView.drawGameState(connection.latestState);
 
     let viewingStats = true;
     let animationFrameId;
 
-    document.getElementById('game-over-title').innerHTML = 'P' + connection.winningSide + ' WINS!!!';
+    document.getElementById('game-over-title').innerHTML = 'P' + connection.winnerSide + ' WINS!!!';
     document.getElementById('game-time').innerHTML = 'GAME TIME: ' + formatGameTime(connection.latestState.currentTick);
 
     const btnMainMenu = document.getElementById('btnMainMenu');

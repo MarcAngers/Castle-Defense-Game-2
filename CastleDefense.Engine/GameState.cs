@@ -95,8 +95,8 @@ namespace CastleDefense.Engine
         public PlayerState()
         {
             Money = 0;
-            Income = 1.85;
-            InvestmentPrice = 5.55;
+            Income = 2;
+            InvestmentPrice = 3;
             InvestmentCount = 0;
             CastleMaxHealth = 100000;
             RepairPrice = 4000;
