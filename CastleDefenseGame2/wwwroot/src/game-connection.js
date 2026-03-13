@@ -5,7 +5,7 @@ class GameConnection {
         // API Configuration
         this.API_URL = "http://localhost:5168";
 
-        this.gadgetAnimationListeners = [];
+        this.gadgetAnimationCallback = null;
         
         this.connection = null;
         this.currentGameId = null;
@@ -39,8 +39,9 @@ class GameConnection {
         });
 
         this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
-            console.log("Play animation for:", gadgetId, side, position);
-            this.gadgetAnimationListeners.forEach(ga => ga(gadgetId, side, position, targetId));
+            if (this.gadgetAnimationCallback) {
+                this.gadgetAnimationCallback(gadgetId, side, position, targetId);
+            }
         });
 
         this.connection.on("GameOver", (state) => {
@@ -66,6 +67,8 @@ class GameConnection {
 
     joinGame = async (gameId) => {
         this.currentGameId = gameId;
+        this.winnerSide = 0;
+        this.latestState = null;
 
         await this.connection.invoke("JoinGame", gameId, this.selectedTeam, this.selectedLoadout);
     }
@@ -104,7 +107,7 @@ class GameConnection {
     }
 
     onPlayGadgetAnimation = (callback) => {
-        this.gadgetAnimationListeners.push(callback);
+        this.gadgetAnimationCallback = callback;
     }
 }
 

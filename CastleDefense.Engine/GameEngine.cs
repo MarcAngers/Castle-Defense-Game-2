@@ -1,4 +1,5 @@
 ﻿using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Gadgets;
 using CastleDefense.Engine.Models;
 using System;
@@ -233,14 +234,20 @@ namespace CastleDefense.Engine
 
             var def = _gadgetCache[gadgetId];
 
-            // (Assuming you implement CheckCooldown logic here similar to your TickCooldowns)
-            
+            if (player.GadgetCooldowns.ContainsKey(gadgetId) && player.GadgetCooldowns[gadgetId] > 0)
+            {
+                return; // Gadget is still on cooldown, do nothing!
+            }
+
             if (player.Money < def.Cost) return;
 
             // 2. Deduct Cost
             player.Money -= def.Cost;
 
-            // 3. Activate Gadget Effect
+            // 3. Apply gadget cooldown (converting ms to game ticks)
+            player.GadgetCooldowns[gadgetId] = def.CooldownMs / (1000 / TICKS_PER_SECOND);
+
+            // 4. Activate Gadget Effect
             def.GadgetEffect.Execute(this, side, position);
         }
 
@@ -252,183 +259,7 @@ namespace CastleDefense.Engine
             // 2. Apply effects for active hazards
             foreach (var hazard in _state.Hazards)
             {
-                switch (hazard.Type)  
-                {
-                    case "Fire":
-                        // Find every unit currently standing inside the fire's X-coordinates
-                        foreach (var unit in _state.Units)
-                        {
-                            // 1D Hitbox overlap check: 
-                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
-                            {
-                                // Check if they are already burning!
-                                var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Burn");
-
-                                if (existingBurn != null)
-                                {
-                                    // They are already on fire! Just keep the fire going.
-                                    // Refresh the duration to last 3 seconds AFTER they leave the zone.
-                                    existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
-                                }
-                                else
-                                {
-                                    // They just stepped into the fire! Ignite them.
-                                    unit.Statuses.Add(new ActiveStatus(
-                                        "Burn",
-                                        _state.CurrentTick + (TICKS_PER_SECOND * 3),
-                                        hazard.BaseValue
-                                    ));
-                                }
-                            }
-                        }
-                        break;
-
-                    case "Goo":
-                        foreach (var unit in _state.Units)
-                        {
-                            // 1D Hitbox overlap check: 
-                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
-                            {
-                                // If it's an enemy, slow it
-                                if (unit.Side != hazard.Side)
-                                {
-                                    // Check if they are already slowed
-                                    var existingSlow = unit.Statuses.FirstOrDefault(s => s.Name == "Slow");
-
-                                    if (existingSlow != null)
-                                    {
-                                        existingSlow.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
-                                    }
-                                    else
-                                    {
-                                        // They just stepped into the goo! Slow them.
-                                        unit.Statuses.Add(new ActiveStatus(
-                                            "Slow",
-                                            _state.CurrentTick + (TICKS_PER_SECOND * 3),
-                                            0.5f // Slow them to half speed
-                                        ));
-                                    }
-                                }
-                                else
-                                {
-                                    // It's an ally, heal them!
-                                    var existingHeal = unit.Statuses.FirstOrDefault(s => s.Name == "Heal");
-
-                                    if (existingHeal != null)
-                                    {
-                                        // They are already on fire! Just keep the fire going.
-                                        // Refresh the duration to last 3 seconds AFTER they leave the zone.
-                                        existingHeal.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
-                                    }
-                                    else
-                                    {
-                                        // They just stepped into the fire! Ignite them.
-                                        unit.Statuses.Add(new ActiveStatus(
-                                            "Heal",
-                                            _state.CurrentTick + (TICKS_PER_SECOND * 3),
-                                            -1f * hazard.BaseValue
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                        break;
-
-                    case "Poison":
-                        foreach (var unit in _state.Units)
-                        {
-                            // 1D Hitbox overlap check: 
-                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
-                            {
-                                // Poison only affects enemy units
-                                if (unit.Side != hazard.Side)
-                                {
-                                    // Check if they are already poisoned
-                                    var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Poison");
-
-                                    if (existingBurn != null)
-                                    {
-                                        // They are already on fire! Just keep the fire going.
-                                        // Refresh the duration to last 3 seconds AFTER they leave the zone.
-                                        existingBurn.ExpiresAtTick = _state.CurrentTick + (TICKS_PER_SECOND * 3);
-                                    }
-                                    else
-                                    {
-                                        // They just stepped into the fire! Ignite them.
-                                        unit.Statuses.Add(new ActiveStatus(
-                                            "Poison",
-                                            _state.CurrentTick + (TICKS_PER_SECOND * 3),
-                                            hazard.BaseValue
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                        break;
-
-                    case "Wave":
-                        float direction = (hazard.Side == 1) ? 1f : -1f;
-                        var enemies = _state.Units.Where(u => u.Side != hazard.Side).ToList();
-
-                        foreach (var enemy in enemies)
-                        {
-                            // 1D Hitbox overlap check: 
-                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                            if (enemy.Position + enemy.Width >= hazard.Position && enemy.Position <= hazard.Position + hazard.Width)
-                            {
-                                // Launch the unit
-                                enemy.PendingKnockback += (1500 * direction);
-                            }
-                        }
-
-                        // Move the wave
-                        hazard.Position += 10 * direction;
-
-                        break;
-
-                    case "Blackhole":
-                        var hazardCenter = hazard.Position + hazard.Width / 2;
-                        float pullDirection = 1f;
-
-                        foreach (var unit in _state.Units)
-                        {
-                            // 1D Hitbox overlap check: 
-                            // Unit's right edge > Hazard's left edge AND Unit's left edge < Hazard's right edge
-                            if (unit.Position + unit.Width >= hazard.Position && unit.Position <= hazard.Position + hazard.Width)
-                            {
-                                // Pull the unit in
-                                if (unit.Position + unit.Width / 2 > hazardCenter)
-                                {
-                                    pullDirection = -1f;
-                                }
-                                unit.Position += (unit.CurrentSpeed + 2) * pullDirection;
-
-                                // If the unit is IN the black hole, deal damage to them
-                                if (unit.Position + unit.Width >= (hazardCenter - 100) && unit.Position <= (hazardCenter + 100))
-                                {
-                                    // Check if they are already blackholed
-                                    var existingBurn = unit.Statuses.FirstOrDefault(s => s.Name == "Blackhole");
-
-                                    if (existingBurn != null)
-                                    {
-                                        existingBurn.ExpiresAtTick = _state.CurrentTick + 10;
-                                    }
-                                    else
-                                    {
-                                        unit.Statuses.Add(new ActiveStatus(
-                                            "Blackhole",
-                                            _state.CurrentTick + 10,
-                                            hazard.BaseValue
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                }
+                hazard.ProcessEffect(_state);
             }
         }
 
@@ -751,7 +582,7 @@ namespace CastleDefense.Engine
 
         private void TickCooldowns(PlayerState player)
         {
-            // (Same as your previous implementation)
+            // Tick unit cooldowns?
             foreach (var key in player.CooldownTimers.Keys.ToList())
             {
                 if (player.CooldownTimers[key] > 0)
@@ -771,6 +602,15 @@ namespace CastleDefense.Engine
                             }
                         }
                     }
+                }
+            }
+
+            // Tick gadget cooldowns
+            foreach (var key in player.GadgetCooldowns.Keys.ToList())
+            {
+                if (player.GadgetCooldowns[key] > 0)
+                {
+                    player.GadgetCooldowns[key]--;
                 }
             }
         }

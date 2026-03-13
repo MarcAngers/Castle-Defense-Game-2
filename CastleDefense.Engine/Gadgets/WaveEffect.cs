@@ -1,4 +1,6 @@
-﻿using CastleDefense.Engine.Models;
+﻿using CastleDefense.Engine.Definitions;
+using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Models.Hazards;
 
 namespace CastleDefense.Engine.Gadgets
 {
@@ -15,7 +17,7 @@ namespace CastleDefense.Engine.Gadgets
         {
             engine.TriggerGadgetAnimation("wave", side, position);
 
-            var waveZone = new Hazard
+            var waveZone = new WaveHazard
             {
                 Type = "Wave",
                 Side = side,

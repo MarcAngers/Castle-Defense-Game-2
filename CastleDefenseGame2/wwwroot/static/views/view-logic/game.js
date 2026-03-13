@@ -28,7 +28,7 @@ export default function initGameScreen() {
 
         if (connection.latestState) {
             gameView.drawGameState(connection.latestState);
-            updateUI(connection.latestState, connection.mySide);
+            updateUI(connection.latestState);
         }
 
         animationFrameId = requestAnimationFrame(gameLoop);
@@ -37,44 +37,89 @@ export default function initGameScreen() {
     requestAnimationFrame(gameLoop);
 }
 
-function updateUI(state, side) {
+function updateUI(state) {
+    const pState = connection.mySide == 1 ? state.player1 : state.player2;
     const money = document.getElementById('money');
     const income = document.getElementById('income');
     const investment = document.getElementById('investment-price');
     const repair = document.getElementById('repair-price');
 
-    if (side == 1) {
-        money.innerHTML = Math.floor(state.player1.money);
-        income.innerHTML = state.player1.income.toFixed(1);
-        investment.innerHTML = Math.ceil(state.player1.investmentPrice);
-        repair.innerHTML = state.player1.repairPrice;
+    money.innerHTML = Math.floor(pState.money);
+    income.innerHTML = pState.income.toFixed(1);
+    investment.innerHTML = Math.ceil(pState.investmentPrice);
+    repair.innerHTML = pState.repairPrice;
+
+    // -------- UPDATE SHOP --------
+    // --- Update Invest/Repair Affordability ---
+    const btnInvest = document.getElementById('btnInvest');
+    if (btnInvest) btnInvest.disabled = pState.money < pState.investmentPrice;
+
+    const btnRepair = document.getElementById('btnRepair');
+    if (btnRepair) btnRepair.disabled = pState.money < pState.repairPrice;
+
+    // --- Update Unit Affordability ---
+    const characterElements = document.getElementsByClassName('character');
+    Array.from(characterElements).forEach(charDiv => {
+        const unitId = charDiv.id;
+        if (!unitId) return;
+
+        const stats = loader.getUnitStats(unitId);
+        if (!stats) return;
+
+        // Note: Check how your JSON is formatted (price vs Price)
+        const cost = stats.price || stats.Price; 
+
+        // Apply or remove the custom CSS class based purely on funds!
+        if (pState.money < cost) {
+            charDiv.classList.add('disabled');
+        } else {
+            charDiv.classList.remove('disabled');
+        }
+    });
+    
+    // 2. Helper function to process each gadget button cleanly
+    function updateGadgetButton(btnElementId, gadgetDef) {
+        const button = document.getElementById(btnElementId);
+        if (!button || !gadgetDef) return;
+
+        // Safely handle C# JSON serialization casing
+        const gadgetId = gadgetDef.id || gadgetDef.Id;
+        const cost = gadgetDef.cost || gadgetDef.Cost;
+        const cooldownMs = gadgetDef.cooldownMs || gadgetDef.CooldownMs;
+
+        // Check if the timer exists in the dictionary, default to 0
+        const remainingTicks = pState.gadgetCooldowns[gadgetId] || 0;
+
+        // 30 server ticks per second
+        const maxTicks = cooldownMs / (1000 / 30); 
+
+        // Calculate the percentage for the CSS overlay
+        let percent = 0;
+        if (remainingTicks > 0 && maxTicks > 0) {
+            percent = (remainingTicks / maxTicks) * 100;
+        }
+
+        // Apply it directly to the CSS variable!
+        button.style.setProperty('--cooldown-pct', `${percent}%`);
+
+        // Disable the button entirely if it's on cooldown OR they are too poor
+        if (remainingTicks > 0 || pState.money < cost) {
+            button.disabled = true;
+            
+            // Failsafe: If they are currently targeting with a gadget they 
+            // suddenly can't afford/use, cancel their targeting!
+            if (window.gameView && window.gameView.gadgetManager && window.gameView.gadgetManager.activeGadgetId === gadgetId) {
+                window.gameView.gadgetManager.cancelTargeting();
+            }
+        } else {
+            button.disabled = false;
+        }
     }
-    if (side == 2) {
-        money.innerHTML = Math.floor(state.player2.money);
-        income.innerHTML = state.player2.income.toFixed(1);
-        investment.innerHTML = Math.ceil(state.player2.investmentPrice);
-        repair.innerHTML = state.player2.repairPrice;
-    }
 
-    // Update shop cooldowns:
-
-    // Update gadget section:
-    // let signatureGadget, offensiveGadget, defensiveGadget;
-
-    // const btnGadgetSignature = document.getElementById('btnGadgetSignature');
-    // const btnGadgetOffense = document.getElementById('btnGadgetOffense');
-    // const btnGadgetDefence = document.getElementById('btnGadgetDefence');
-
-    // if (side == 1) {
-    //     signatureGadget = state.player1.signatureGadget.Id;
-    //     offensiveGadget = state.player1.offensiveGadget.Id;
-    //     defensiveGadget = state.player1.defensiveGadget.Id;
-    // }
-    // if (side == 2) {
-    //     signatureGadget = state.player2.signatureGadget.Id;
-    //     offensiveGadget = state.player2.offensiveGadget.Id;
-    //     defensiveGadget = state.player2.defensiveGadget.Id;
-    // }
+    // 3. Execute for all three slots
+    updateGadgetButton('btnGadgetOffense', pState.offensiveGadget);
+    updateGadgetButton('btnGadgetDefence', pState.defensiveGadget);
+    updateGadgetButton('btnGadgetSignature', pState.signatureGadget);
 }
 
 function initShopUI(team, gameView) {
@@ -125,6 +170,8 @@ function initShopUI(team, gameView) {
             character.appendChild(img);
 
             character.addEventListener('click', (e) => {
+                if (character.classList.contains('disabled')) return;
+
                 connection.spawnUnit(e.target.parentElement.id);
             });
 

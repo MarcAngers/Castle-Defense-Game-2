@@ -1,4 +1,6 @@
-﻿using CastleDefense.Engine.Models;
+﻿using CastleDefense.Engine.Definitions;
+using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Models.Hazards;
 
 namespace CastleDefense.Engine.Gadgets
 {
@@ -18,7 +20,7 @@ namespace CastleDefense.Engine.Gadgets
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>
             {
-                var blackhole = new Hazard
+                var blackhole = new BlackholeHazard
                 {
                     Type = "Blackhole",
                     Side = side,

@@ -1,17 +1,17 @@
 ID,Name,Slot,Targeted,Cost,BaseValue,Radius,Delay,PushForce,HazardDuration,StatusDuration,CooldownMs,Description
-nuke,Nuke,Offense,1,50,200,300,48,50000,0,0,45000,Massive area damage. Hurts Castles.
-snipe,Sniper Rifle,Offense,1,60,1500,0,70,500000,0,0,60000,High single target damage.
-firebomb,Fire Bomb,Offense,1,45,12,150,48,0,120,90,30000,Sets ground on fire.
-freeze,Freeze Ray,Offense,0,30,10,0,48,0,0,150,30000,Freezes units.
-heal,Team Heal,Defense,0,25,15,0,0,0,0,90,45000,Heals all units.
-wall,The Wall,Defense,0,50,400,0,0,0,0,0,60000,Spawns a temporary barrier.
-speed,Speed Boost,Defense,0,30,2,0,0,0,0,120,30000,Boosts speed.
-reinforcements,Reinforcements,Defense,0,12,1,0,0,0,0,0,10000,Spawns 5 reinforcement units.
-cash,Cash Drop,Signature,0,65,100,0,48,0,0,0,90000,Gain an instant cash injection
-rage,Rage,Signature,0,30,2,0,0,0,0,120,30000,Works all units up into a blind rage
-goo,Goo Ball,Signature,1,70,20,200,48,0,180,90,45000,Spills goo on the field. Heals allies and slows enemies
-poison,Poison Gas,Signature,1,65,22,200,48,0,120,90,45000,Spawns a dangerous poison cloud
-divine,Divine Shield,Signature,0,50,0,0,48,0,0,150,60000,Provides a divine shield of protection making you and your units invulnerable for a short time
-meteor,Meteor Strike,Signature,1,75,500,750,70,100000,0,90,60000,Calls down a giant meteor from the sky dealing massive damage to enemy units
-wave,Tidal Wave,Signature,0,40,0,100,0,0,210,0,60000,"Sends a huge tidal wave at the opposing castle, dealing damage and pushing all enemies back"
-blackhole,Black Hole,Signature,1,80,16,750,48,0,150,10,90000,Creates a giant black hole on the field that pulls in and damages all units
+nuke,Nuke,Offense,1,50,200,300,48,50000,0,0,7500,Massive area damage. Hurts Castles.
+snipe,Sniper Rifle,Offense,1,60,1500,0,70,500000,0,0,10000,High single target damage.
+firebomb,Fire Bomb,Offense,1,45,12,150,48,0,120,90,5000,Sets ground on fire.
+freeze,Freeze Ray,Offense,0,30,10,0,48,0,0,150,5000,Freezes units.
+heal,Team Heal,Defense,0,25,15,0,0,0,0,90,7500,Heals all units.
+wall,The Wall,Defense,0,50,400,0,0,0,0,0,10000,Spawns a temporary barrier.
+speed,Speed Boost,Defense,0,30,2,0,0,0,0,120,5000,Boosts speed.
+reinforcements,Reinforcements,Defense,0,12,1,0,0,0,0,0,3000,Spawns 5 reinforcement units.
+cash,Cash Drop,Signature,0,65,100,0,48,0,0,0,15000,Gain an instant cash injection
+rage,Rage,Signature,0,30,2,0,0,0,0,120,5000,Works all units up into a blind rage
+goo,Goo Ball,Signature,1,70,20,200,48,0,180,90,7500,Spills goo on the field. Heals allies and slows enemies
+poison,Poison Gas,Signature,1,65,22,200,48,0,120,90,7500,Spawns a dangerous poison cloud
+divine,Divine Shield,Signature,0,50,0,0,48,0,0,150,10000,Provides a divine shield of protection making you and your units invulnerable for a short time
+meteor,Meteor Strike,Signature,1,75,500,750,70,100000,0,90,10000,Calls down a giant meteor from the sky dealing massive damage to enemy units
+wave,Tidal Wave,Signature,0,40,0,100,0,0,210,0,15000,"Sends a huge tidal wave at the opposing castle, dealing damage and pushing all enemies back"
+blackhole,Black Hole,Signature,1,80,16,750,48,0,150,10,15000,Creates a giant black hole on the field that pulls in and damages all units

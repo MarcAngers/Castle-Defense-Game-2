@@ -1,4 +1,5 @@
-﻿using CastleDefense.Engine.Gadgets;
+﻿using CastleDefense.Engine.Definitions;
+using CastleDefense.Engine.Gadgets;
 using CastleDefense.Engine.Models;
 using System;
 using System.Collections.Generic;

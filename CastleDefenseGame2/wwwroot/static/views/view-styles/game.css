@@ -33,6 +33,10 @@ button {
     width: 100%;
     height: 50%;
 }
+.upgrade-btn:disabled {
+    filter: grayscale(100%) brightness(60%);
+    cursor: not-allowed;
+}
 #character-bar {
     position: fixed;
     bottom: 0;
@@ -53,6 +57,8 @@ button {
     width: 100%;
     background-color: lightgray;
     margin: auto;
+    cursor: pointer;
+    transition: filter 0.2s; /* Keeps the gray-out effect smooth */
 }
 .character img {   
     height: 100%; width: 100%;
@@ -64,6 +70,12 @@ button {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
 }
+/* The only thing you need to keep is this! */
+.character.disabled {
+    filter: grayscale(100%) brightness(60%);
+    cursor: not-allowed;
+}
+
 #gadgets {
     position: fixed;
     bottom: 0;
@@ -71,19 +83,47 @@ button {
     width: 14vw;
     height: 25vh;
 }
+
+/* --- GADGET BUTTON STYLES --- */
 .btnGadget {
     display: flex;
     width: 100%;
     height: 33.4%;
     align-items: center;
+    
+    /* Overlay Locks */
+    position: relative; 
+    overflow: hidden;   
+    
+    /* Overrides the global padding/margin to fit the sidebar */
+    margin: 0;
+    padding: 5px;
+    
+    transition: filter 0.2s; 
 }
+
 .btnGadget img {   
     height: 100%; width: 100%;
-
-    /* 1. Prevent Distortion */
     object-fit: contain;
-    
-    /* 2. Pixel Art Scaling */
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+}
+
+/* The Shrinking Cooldown Overlay */
+.btnGadget::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: var(--cooldown-pct, 0%);
+    background-color: rgba(0, 0, 0, 0.75); 
+    pointer-events: none; 
+    transition: height 0.1s linear; 
+}
+
+/* The simple gray-out effect for when you are broke or on cooldown */
+.btnGadget:disabled {
+    filter: grayscale(100%) brightness(60%);
+    cursor: not-allowed;
 }

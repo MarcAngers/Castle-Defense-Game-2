@@ -1,5 +1,5 @@
 ﻿using CastleDefense.Engine.Data;
-using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Definitions;
 
 namespace CastleDefense.Engine.Gadgets
 {
