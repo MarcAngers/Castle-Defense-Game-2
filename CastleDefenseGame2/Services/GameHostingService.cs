@@ -44,6 +44,10 @@ namespace CastleDefense.Api.Services
             {
                 _hubContext.Clients.Group(gameId).SendAsync("PlayGadgetAnimation", gadgetId, side, position, targetId);
             };
+            engine.OnGadgetUpgraded += (side, newGadgetDef) =>
+            {
+                _hubContext.Clients.Group(gameId).SendAsync("GadgetUpgraded", side, newGadgetDef);
+            };
 
             _lobbyGames.TryAdd(gameId, engine);
             

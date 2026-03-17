@@ -127,3 +127,101 @@ button {
     filter: grayscale(100%) brightness(60%);
     cursor: not-allowed;
 }
+
+/* --- GADGET BUTTON XP BARS --- */
+.xp-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 8px; /* A thin black bar */
+    background-color: black;
+    z-index: 5; /* Keeps it above the gadget image and cooldown wash */
+}
+
+.xp-fill {
+    height: 100%;
+    /* Tied to a CSS variable, defaults to 0% */
+    width: var(--xp-pct, 0%); 
+    background-color: cyan; /* Neon arcade green */
+    transition: width 0.3s ease-out;
+}
+
+.xp-text {
+    position: absolute;
+    /* This centers the text vertically and horizontally over the bar */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    
+    color: cyan;
+    font-size: 14px; /* Much larger than the 8px bar so it overflows */
+    font-family: 'Press Start 2P', cursive;
+    
+    /* The crisp black outline trick */
+    text-shadow: 
+        -2px -2px 0 #000,  
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000;
+}
+
+/* --- GADGET UPGRADE EFFECTS --- */
+/* The white flash: */
+.upgrade-flash::before {
+    content: '';
+    position: absolute;
+    inset: 0; /* Stretches to cover the whole button */
+    background-color: white;
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none; /* Allows clicks to pass through */
+    animation: flashFade 0.6s ease-out;
+}
+.btnGadget.upgrade-flash:disabled,
+.btnGadget.upgrade-flash[disabled] {
+    filter: none !important; 
+}
+
+@keyframes flashFade {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* --- THE FULL-WIDTH FLYING CHEVRONS --- */
+.upgrade-chevron {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 40px; /* How thick the chevron band is */
+    
+    /* We grab the color assigned by JS, defaulting to white */
+    background-color: var(--chevron-color, #ffffff);
+    
+    /* This carves the rectangle into a perfect upward-pointing chevron! */
+    clip-path: polygon(50% 0%, 100% 50%, 100% 100%, 50% 50%, 0% 100%, 0% 50%);
+    
+    z-index: 11;
+    opacity: 0;
+    pointer-events: none;
+    
+    /* Start hidden below the button */
+    transform: translateY(80px); 
+    
+    animation: chevronFly 0.6s ease-in-out forwards;
+}
+
+@keyframes chevronFly {
+    0% { 
+        opacity: 0; 
+        transform: translateY(80px); 
+    }
+    30% { 
+        opacity: 0.9; /* Slightly transparent to blend the overlapping layers */
+    }
+    100% { 
+        opacity: 0; 
+        /* Fly completely off the top of the button */
+        transform: translateY(-80px); 
+    }
+}

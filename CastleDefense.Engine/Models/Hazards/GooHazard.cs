@@ -1,9 +1,13 @@
-﻿namespace CastleDefense.Engine.Models.Hazards
+﻿using System.Drawing;
+
+namespace CastleDefense.Engine.Models.Hazards
 {
     public class GooHazard : Hazard
     {
         public override void ProcessEffect(GameState state)
         {
+            var player = Side == 1 ? state.Player1 : state.Player2;
+
             foreach (var unit in state.Units)
             {
                 // 1D Hitbox overlap check: 
@@ -28,6 +32,8 @@
                                 state.CurrentTick + (30 * 3),
                                 0.5f // Slow them to half speed
                             ));
+
+                            player.AddGadgetXp("goo", 10);
                         }
                     }
                     else
@@ -49,6 +55,8 @@
                                 state.CurrentTick + (30 * 3),
                                 -1f * this.BaseValue
                             ));
+
+                            player.AddGadgetXp("goo", 10);
                         }
                     }
                 }

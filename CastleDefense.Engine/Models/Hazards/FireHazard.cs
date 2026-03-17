@@ -26,7 +26,9 @@
                         unit.Statuses.Add(new ActiveStatus(
                             "Burn",
                             state.CurrentTick + (30 * 3),
-                            this.BaseValue
+                            this.BaseValue,
+                            this.Side,
+                            this.SourceGadgetId
                         ));
                     }
                 }

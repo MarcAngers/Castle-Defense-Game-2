@@ -15,7 +15,10 @@ namespace CastleDefense.Engine.Gadgets
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            engine.TriggerGadgetAnimation("blackhole", side, position);
+            engine.TriggerGadgetAnimation(_def.Id, side, position);
+
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "blackhole", baseXp);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>
@@ -23,6 +26,7 @@ namespace CastleDefense.Engine.Gadgets
                 var blackhole = new BlackholeHazard
                 {
                     Type = "Blackhole",
+                    SourceGadgetId = _def.Id,
                     Side = side,
                     BaseValue = _def.BaseValue,
                     Position = position - _def.Radius,

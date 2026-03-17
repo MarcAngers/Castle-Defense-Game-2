@@ -6,6 +6,7 @@
         public Guid InstanceId { get; set; } = Guid.NewGuid();
         public string DefinitionId { get; set; }
         public int Side { get; set; } // 1 (Left/P1) or 2 (Right/P2)
+        public int Tier { get; set; }
 
         // --- DRAWING & HITBOX ---
         public int Width { get; set; }

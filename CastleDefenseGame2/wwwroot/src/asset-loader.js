@@ -32,6 +32,9 @@ class AssetLoader {
         // 4. Load unique assets once
         await this.loadImage('buildings', 'dead-castle', '../assets/buildings/dead-castle.png');
         await this.loadImage('wall', 'wall', '../assets/units/wall.png');
+        await this.loadImage('wall_2', 'wall_2', '../assets/units/wall_2.png');
+        await this.loadImage('wall_3', 'wall_3', '../assets/units/wall_3.png');
+
     }
 
     async loadMasterCSV() {
@@ -132,17 +135,34 @@ class AssetLoader {
             'cash',
             'divine',
             'firebomb',
+            'firebomb_2',
+            'firebomb_3',
             'freeze',
+            'freeze_2',
+            'freeze_3',
             'goo',
             'heal',
+            'heal_2',
+            'heal_3',
             'meteor',
             'mushroom-cloud',
             'nuke',
+            'nuke_2',
+            'nuke_3',
             'poison',
+            'poison_2',
+            'poison_3',
             'rage',
+            'rage_2',
+            'rage_3',
             'reinforcements',
+            'shield',
             'snipe',
+            'snipe_2',
+            'snipe_3',
             'speed',
+            'speed_2',
+            'speed_3',
             'wall',
             'wave',
         ];
@@ -158,8 +178,14 @@ class AssetLoader {
             'blackhole-2',
             'fire-1',
             'fire-2',
+            'fire_2-1',
+            'fire_2-2',
+            'fire_3-1',
+            'fire_3-2',
             'goo',
             'poison',
+            'poison_2',
+            'poison_3',
             'wave',
         ];
 

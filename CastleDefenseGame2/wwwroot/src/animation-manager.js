@@ -10,11 +10,19 @@ export default class AnimationManager {
     }
 
     triggerAnimation(gadgetId, side, position, targetId) {
-        const AnimatorClass = AnimatorRegistry[gadgetId];
+        // 1. Extract the base ID and level from the string (e.g., "nuke_2" -> "nuke", 2)
+        const parts = gadgetId.split('_');
+        const baseId = parts[0].toLowerCase(); // Use this to lookup the animator
+        const level = parts.length > 1 ? parseInt(parts[1], 10) || 1 : 1;
+
+        // 2. Look up the animator using the clean baseId
+        const AnimatorClass = AnimatorRegistry[baseId];
+        
         if (AnimatorClass) {
-            this.activeAnimations.push(new AnimatorClass(side, position, targetId));
+            // 3. Pass the newly extracted level as the 4th argument!
+            this.activeAnimations.push(new AnimatorClass(side, position, targetId, level));
         } else {
-            console.warn(`No animator found for gadget: ${gadgetId}`);
+            console.warn(`No animator found for gadget: ${baseId} (Raw ID: ${gadgetId})`);
         }
     }
 

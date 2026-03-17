@@ -1,6 +1,7 @@
 ﻿using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
 using CastleDefense.Engine.Models.Hazards;
+using System.Numerics;
 
 namespace CastleDefense.Engine.Gadgets
 {
@@ -15,7 +16,10 @@ namespace CastleDefense.Engine.Gadgets
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            engine.TriggerGadgetAnimation("poison", side, position);
+            engine.TriggerGadgetAnimation(_def.Id, side, position);
+
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "poison", baseXp);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>

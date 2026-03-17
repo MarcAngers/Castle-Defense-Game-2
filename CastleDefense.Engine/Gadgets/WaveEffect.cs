@@ -15,11 +15,15 @@ namespace CastleDefense.Engine.Gadgets
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            engine.TriggerGadgetAnimation("wave", side, position);
+            engine.TriggerGadgetAnimation(_def.Id, side, position);
+
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "wave", baseXp);
 
             var waveZone = new WaveHazard
             {
                 Type = "Wave",
+                SourceGadgetId = _def.Id,
                 Side = side,
                 Position = side == 1 ? -100 : 2100,
                 Width = _def.Radius * 2,

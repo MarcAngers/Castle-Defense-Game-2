@@ -28,6 +28,7 @@ namespace CastleDefense.Engine
         // Event for successful gadget use
         // Parameters: string gadgetId, int side, int position
         public event Action<string, int, int, Guid> OnGadgetAnimation;
+        public event Action<int, GadgetDefinition> OnGadgetUpgraded;
 
         private class ScheduledEvent
         {
@@ -40,6 +41,9 @@ namespace CastleDefense.Engine
         {
             _state = state;
             BuildCache();
+
+            _state.Player1.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
+            _state.Player2.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
         }
 
         private void BuildCache()
@@ -61,7 +65,9 @@ namespace CastleDefense.Engine
                     _gadgetCache[gadget.Id] = gadget;
             }
 
-            _unitCache["wall"] = GameDataManager.WallDefinition();
+            _unitCache["wall"] = GameDataManager.WallDefinition(1);
+            _unitCache["wall_2"] = GameDataManager.WallDefinition(2);
+            _unitCache["wall_3"] = GameDataManager.WallDefinition(3);
         }
 
         public void EnqueueAction(Action action)
@@ -129,7 +135,7 @@ namespace CastleDefense.Engine
             MoveAndFight();
         }
 
-        public void SpawnUnit(int side, string unitId, bool ignoreCost = false)
+        public void SpawnUnit(int side, string unitId, bool ignoreCost = false, float position = -1, int yposition = -1)
         {
             // 1. Validation
             var player = side == 1 ? _state.Player1 : _state.Player2;
@@ -147,13 +153,27 @@ namespace CastleDefense.Engine
                 player.Money -= def.Cost;
             }
 
-            // 4. Create Unit
             Random random = new Random();
+            if (position == -1)
+            {
+                position = (side == 1) ? 100 : MAP_WIDTH - 100;
+            }
+            if (yposition == -1)
+            {
+                yposition = 360 - def.Height + random.Next(0, 51);
+                if (def.Id == "wall_2")
+                    yposition -= 100;
+                if (def.Id == "wall_3")
+                    yposition -= 300;
+            }
+
+            // 4. Create Unit
             var newUnit = new Unit
             {
                 // --- IDENTITY & UI ---
                 DefinitionId = unitId,
                 Side = side,
+                Tier = def.Tier,
                 Height = def.Height,
                 Width = def.Width,
                 PendingKnockback = 0,
@@ -164,8 +184,8 @@ namespace CastleDefense.Engine
                 CurrentHealth = def.MaxHealth,
                 MaxHealth = def.MaxHealth,
                 CurrentShield = def.MaxShield,
-                Position = (side == 1) ? 100 : MAP_WIDTH - 100,
-                YPosition = 360 - def.Height + random.Next(0, 51),
+                Position = position,
+                YPosition = yposition,
 
                 // --- COMBAT STATS ---
                 CurrentSpeed = def.MoveSpeed,
@@ -181,10 +201,12 @@ namespace CastleDefense.Engine
                 ArmorType = def.ArmorType
             };
 
-            if (unitId == "wall")
+            // Give Monky a shield
+            if (unitId == "monky")
             {
-                newUnit.Position = (side == 1) ? 600 : MAP_WIDTH - 600;
-                newUnit.YPosition = 240;
+                newUnit.CurrentHealth /= 2;
+                newUnit.MaxHealth /= 2;
+                newUnit.CurrentShield = newUnit.CurrentHealth;
             }
 
             _state.Units.Add(newUnit);
@@ -219,8 +241,17 @@ namespace CastleDefense.Engine
             player.Money -= player.RepairPrice;
 
             // 3. Increase health and repair price
-            player.CastleHealth = Math.Min(player.CastleHealth + 10000, player.CastleMaxHealth);
-            player.RepairPrice += 500;
+            player.RepairCount++;
+            double rp = Math.Pow(Math.E, 0.0109 * Math.Pow(player.RepairCount, 3) + 0.0011 * Math.Pow(player.RepairCount, 2) + 0.4351 * player.RepairCount + 0.5268);
+            player.RepairPrice = (int)rp * (player.RepairCount * 5 + 10);
+            if (player.RepairCount >= 8)
+                player.RepairPrice *= 2;
+
+            float pct = (float)player.CastleHealth / player.CastleMaxHealth;
+            // Equation for increasing castle health: e^(               0.0065x^3                   +                 0.0182x^2                +           0.0406x           + 6.7731                     log R^2 = 0.9986
+            player.CastleMaxHealth = (int)Math.Pow(Math.E, 0.0065 * Math.Pow((player.RepairCount+1), 3) + 0.0182 * Math.Pow((player.RepairCount+1), 2) + 0.0406 * (player.RepairCount+1) + 6.7731);
+            // Increase castle health and heal by 10%:
+            player.CastleHealth = (int)Math.Min(player.CastleMaxHealth * (pct + 0.1), player.CastleMaxHealth);
         }
 
         public void UseGadget(int side, string gadgetId, int position)
@@ -253,13 +284,20 @@ namespace CastleDefense.Engine
 
         private void ProcessHazards()
         {
-            // 1. Clean up expired hazards (The fire burns out)
-            _state.Hazards.RemoveAll(h => h.ExpiresAtTick <= _state.CurrentTick);
-
-            // 2. Apply effects for active hazards
-            foreach (var hazard in _state.Hazards)
+            // Iterate backwards so we can safely remove them
+            for (int i = _state.Hazards.Count - 1; i >= 0; i--)
             {
-                hazard.ProcessEffect(_state);
+                var hazard = _state.Hazards[i];
+
+                if (hazard.ExpiresAtTick <= _state.CurrentTick)
+                {
+                    hazard.OnExpire(_state);
+                    _state.Hazards.RemoveAt(i);
+                }
+                else
+                {
+                    hazard.ProcessEffect(_state);
+                }
             }
         }
 
@@ -274,8 +312,34 @@ namespace CastleDefense.Engine
                 var burns = unit.Statuses.Where(s => s.Name == "Burn" || s.Name == "Poison" || s.Name == "Heal" || s.Name == "Blackhole");
                 foreach (var burn in burns)
                 {
+                    // Add XP for damage/healing done by gadgets
+                    if (burn.Name == "Heal")
+                    {
+                        AddGadgetXp(burn.Side, burn.SourceGadgetId, -1 * (int)burn.Value);
+                    } else
+                    {
+                        AddGadgetXp(burn.Side, burn.SourceGadgetId, (int)burn.Value);
+                    }
+
+                    int healthBefore = unit.CurrentHealth;
+
                     // Change to AttackType.Magic later?
                     ApplyDamage(unit, (int)burn.Value, AttackType.Melee, 0);
+
+                    if (burn.Name == "Blackhole")
+                    {
+                        if (healthBefore > 0 && unit.CurrentHealth <= 0)
+                        {
+                            // Verify this status actually has an owner to credit
+                            if (!string.IsNullOrEmpty(burn.SourceGadgetId))
+                            {
+                                var player = burn.Side == 1 ? _state.Player1 : _state.Player2;
+
+                                // Award the Kill XP!
+                                player.AddGadgetXp(burn.SourceGadgetId, 25);
+                            }
+                        }
+                    }  
                 }
             }
 
@@ -497,7 +561,11 @@ namespace CastleDefense.Engine
                 return; // No damage dealt
             }
 
-            player.CastleHealth -= damage;
+            // Prevent 1-shots
+            if (player.CastleMaxHealth == player.CastleMaxHealth && damage >= player.CastleMaxHealth)
+                player.CastleHealth = 1;
+            else
+                player.CastleHealth -= damage;
 
             // 5. Game Over Check
             if (player.CastleHealth <= 0)
@@ -559,22 +627,33 @@ namespace CastleDefense.Engine
             float knockbackDist = impactForce / resistance;
             knockbackDist = Math.Min(knockbackDist, 3000f);
 
-            if (target.AttacksWithoutKnockback >= 25)
+            if (target.AttacksWithoutKnockback >= 50)
             {
                 knockbackDist = 25f;
             }
 
             if (knockbackDist > 10f)
             {
+                // Walls can only be knocked back a tiny bit
+                if (target.DefinitionId.StartsWith("wall"))
+                    knockbackDist = 10f;
+
                 float direction = (target.Side == 1) ? -1f : 1f;
                 target.PendingKnockback += (knockbackDist * direction);
             } else
             {
-                target.AttacksWithoutKnockback++;
+                if (amount > 0)
+                    target.AttacksWithoutKnockback++;
             }
         }
 
-        // ... GiveIncome and TickCooldowns remain unchanged ...
+        public void AddGadgetXp(int side, string gadgetId, int amount)
+        {
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            player.AddGadgetXp(gadgetId, amount);
+        }
+
         private void GiveIncome(PlayerState player)
         {
             player.Money += player.Income;

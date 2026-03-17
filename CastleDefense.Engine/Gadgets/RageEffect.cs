@@ -14,6 +14,9 @@ namespace CastleDefense.Engine.Gadgets
         }
         public void Execute(GameEngine engine, int side, int position)
         {
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "rage", baseXp);
+
             var allies = engine._state.Units.Where(u => u.Side == side).ToList();
 
             foreach (var ally in allies)
@@ -23,6 +26,8 @@ namespace CastleDefense.Engine.Gadgets
                     engine._state.CurrentTick + _def.StatusDuration,
                     _def.BaseValue
                 ));
+
+                engine.AddGadgetXp(side, "rage", 20);
             }
         }
     }

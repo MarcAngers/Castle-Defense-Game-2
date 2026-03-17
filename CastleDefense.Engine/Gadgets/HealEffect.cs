@@ -15,6 +15,9 @@ namespace CastleDefense.Engine.Gadgets
         public void Execute(GameEngine engine, int side, int position)
         {
             // Heal gadget works immediately
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "heal", baseXp);
+
             var allies = engine._state.Units.Where(u => u.Side == side).ToList();
 
             foreach (var ally in allies)

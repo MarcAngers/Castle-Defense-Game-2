@@ -1,6 +1,6 @@
 Team,Tier,ID,Name,Price,Health,Damage,AttackSpeed,DPS,Speed,Width,Height,Description
-black,1,evildoggo,evildoggo,3,11,3,2.133333333,6.4,8,50,50,"Like doggo, but corrupted by an evil force of black magic."
-black,2,evilminnow,evilminnow,2,4,4,4,16,10,50,50,"Like a normal minnow, but evil"
+black,1,evilminnow,evilminnow,2,5,4,2,8,10,50,50,"Like a normal minnow, but evil"
+black,2,evildoggo,evildoggo,3,8,4,3.2,12.8,8,50,50,"Like doggo, but corrupted by an evil force of black magic."
 black,3,eevil,eevil,13,26,8,4.2,33.6,14,50,50,"Like an eel, but evil. Hilarious."
 black,4,evilnom,evilnom,25,82,23,1.808695652,41.6,13,50,50,NOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOM
 black,5,evilbirdo,evilbirdo,64,253,67,1.552238806,104,13,50,50,"Like a bird, but evil"
@@ -15,25 +15,25 @@ blue,5,squid,squid,62,265,75,1.28,96,12,100,50,"Specialized in attacking submari
 blue,6,judge,judge,376,2095,372,0.5419354839,201.6,7,75,75,Don't let him rain on your parade :)
 blue,7,octoboi,octoboi,1379,10420,2620,0.3141984733,823.2,3,100,100,Straight faced. No remorse. No feelings. Lethal suction cups
 blue,8,lightningbear,lightningbear,19416,73740,49062,0.2,9812.4,4,200,200,"When you see a bear, you should get to the water as it is the safest place to avoid bears. When you're in the water and you hear thunder, you should get to land to be safe from the lightning... WHAT WILL YOU DO?!"
-green,1,froggo,froggo,2,12,2,2,4,5,50,50,Hippity hoppity your castle is my property
-green,2,minisnecko,minisnecko,1,3,2,5,10,12,50,50,s
+green,1,minisnecko,minisnecko,1,2,2,4.8,9.6,12,50,50,s
+green,2,froggo,froggo,2,9,2,4,8,5,50,50,Hippity hoppity your castle is my property
 green,3,durdle,durdle,4,59,2,2.4,4.8,2,75,50,Slow and steady wins the race :)
 green,4,snecko,snecko,21,81,15,2.346666667,35.2,11,100,50,Some say that looking into his eye can cause serious confusion... I don't get it
 green,5,gecko,gecko,46,197,59,1.627118644,96,12,50,50,
-green,6,nom,nom,214,759,426,0.7436619718,316.8,11,50,50,nomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnom
-green,7,geico,geico,207,1030,250,5,1250,7,50,75,Save 10% or more on car insurance!
+green,6,geico,geico,212,1181,420,0.48,201.6,7,50,75,Save 10% or more on car insurance!
+green,7,nom,nom,707,1458,1976,1.527530364,3018.4,11,50,50,nomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnomnom
 green,8,trogdor,trogdor,17880,70510,47250,0.2,9450,5,200,200,BURNINATING THE COUNTRYSIDE! BURNINATING ALL THE PEASANTS!!! TROGDOR!!!!!
 orange,1,phil,phil,4,10,4,1.8,7.2,9,50,50,"I know what you're thinking, and yes, it's short for Philip."
 orange,2,chippy,chippy,8,24,4,2.8,11.2,7,50,50,He gets very mad when people try to invade his personal space.
 orange,3,pepper,pepper,9,32,10,1.92,19.2,8,50,50,"Obligatory ""she's hot"" joke"
-orange,4,scott,scott,25,68,25,1.92,48,15,50,50,Can light most things on fire. Not water though.
-orange,5,zander,zander,46,169,51,2.196078431,112,14,75,75,HE'S NOT CHARMANDER OKAY
-orange,6,basketball,basketball,21,54,87,5,435,23,50,50,It's a basketball.
+orange,4,basketball,basketball,15,27,54,1.362962963,73.6,23,50,50,It's a basketball.
+orange,5,scott,scott,25,86,30,4,120,15,50,50,Can light most things on fire. Not water though.
+orange,6,zander,zander,146,886,37,5,185,14,75,75,HE'S NOT CHARMANDER OKAY
 orange,7,tiger,tiger,1673,9500,2990,0.367090301,1097.6,4,100,100,Notice the moustache... Now notice the terror you feel.
 orange,8,hwy,hwy,19928,73740,50356,0.2,10071.2,3,200,200,"He was just breathing fire. You can tell 'cause there's still a little bit there. I don't think you wanna mess with that... Like he looks scary enough, but then there's fire too? Yikes dude."
-purple,1,blobbo,blobbo,3,16,2,2,4,5,50,50,It's a uh... blob of something...
-purple,2,vile,vile,5,13,5,2.88,14.4,9,50,50,Get it?
-purple,3,cant,cant,1,3,5,5,25,12,50,50,"She is armed with a poison tipped fang of the dragon she just killed. Yes, she just killed a dragon. The name is misleading."
+purple,1,cant,cant,1,2,5,1.92,9.6,12,50,50,"She is armed with a poison tipped fang of the dragon she just killed. Yes, she just killed a dragon. The name is misleading."
+purple,2,blobbo,blobbo,2,9,2,4,8,5,50,50,It's a uh... blob of something...
+purple,3,vile,vile,5,16,13,1.661538462,21.6,9,50,50,Get it?
 purple,4,spike,spike,25,152,45,0.4977777778,22.4,7,50,50,"Unfortunately, he really enjoys hugs."
 purple,5,bit,bit,91,389,135,0.7111111111,96,12,75,75,"""Nothin' but bits"""
 purple,6,cube,cube,348,717,438,1.249315068,547.2,19,50,50,CUBE
@@ -55,8 +55,8 @@ white,5,alpacco,alpacco,81,416,87,0.9195402299,80,10,75,75,Fun Alpaca Fact #42: 
 white,6,bread,bread,338,1654,336,0.6857142857,230.4,8,75,50,Imagine dying to a loaf of white bread... Embarassing.
 white,7,eggo,eggo,2066,4690,5180,0.5297297297,2744,10,100,100,Is that... A buff egg?!
 white,8,corn,corn,23000,105820,40500,0.2,8100,1,200,350,So magestic that she clips the page and I'm too lazy to fix it :O
-yellow,1,ducko,ducko,3,13,3,1.866666667,5.6,7,50,50,quack quack motherf***er
-yellow,2,minnow,minnow,1,6,1,5,5,12,50,50,smol boi
+yellow,1,minnow,minnow,2,5,3,3.2,9.6,12,50,50,smol boi
+yellow,2,ducko,ducko,3,13,3,3.733333333,11.2,7,50,50,quack quack
 yellow,3,cub,cub,9,27,5,5,25,11,50,50,"Like doggo or catto, but yellow so now he's here."
 yellow,4,doc,doc,17,58,16,2.4,38.4,12,50,50,A distinguished Ducko of high stature and a successful medical career.
 yellow,5,jig,jig,60,205,63,1.904761905,120,15,75,75,"She has many spots, each represents a victory in battle. Or maybe she's just a jaguar I dunno I thought that sounded cool."

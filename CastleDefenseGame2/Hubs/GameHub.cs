@@ -35,6 +35,7 @@ namespace CastleDefense.Api.Hubs
                 if (string.IsNullOrEmpty(game._state.Player1.ConnectionId))
                 {
                     side = 1;
+                    game._state.Player1.Side = side;
                     game._state.Player1.ConnectionId = Context.ConnectionId;
                     game._state.Player1.Team = team;
                     game._state.Player1.SetLoadout(loadout);
@@ -42,6 +43,7 @@ namespace CastleDefense.Api.Hubs
                 else if (string.IsNullOrEmpty(game._state.Player2.ConnectionId))
                 {
                     side = 2;
+                    game._state.Player2.Side = side;
                     game._state.Player2.ConnectionId = Context.ConnectionId;
                     game._state.Player2.Team = team;
                     game._state.Player2.SetLoadout(loadout);

@@ -6,6 +6,7 @@ class GameConnection {
         this.API_URL = "http://localhost:5168";
 
         this.gadgetAnimationCallback = null;
+        this.gadgetUpgradedCallback = null;
         
         this.connection = null;
         this.currentGameId = null;
@@ -40,7 +41,14 @@ class GameConnection {
 
         this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
             if (this.gadgetAnimationCallback) {
+                console.log("Playing animation for: ", gadgetId);
                 this.gadgetAnimationCallback(gadgetId, side, position, targetId);
+            }
+        });
+
+        this.connection.on("GadgetUpgraded", (side, upgradedDef) => {
+            if (this.gadgetUpgradedCallback) {
+                this.gadgetUpgradedCallback(side, upgradedDef);
             }
         });
 
@@ -108,6 +116,9 @@ class GameConnection {
 
     onPlayGadgetAnimation = (callback) => {
         this.gadgetAnimationCallback = callback;
+    }
+    onGadgetUpgraded = (callback) => {
+        this.gadgetUpgradedCallback = callback;
     }
 }
 

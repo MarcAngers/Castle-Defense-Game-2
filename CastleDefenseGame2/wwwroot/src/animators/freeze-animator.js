@@ -1,20 +1,50 @@
+import loader from '../asset-loader.js';
+
 export default class FreezeAnimator {
-    constructor(side, targetX, targetId) {
+    constructor(side, targetX, targetId, level = 1) {
         this.side = side;
-        // The targetX parameter is ignored visually since it spans the whole map!
+        this.level = level;
         
-        // Starts at the castle
         this.startX = this.side === 1 ? 150 : 1850; 
-        
-        // Aimed right at the chest-height of the units (Assuming ground is 400)
         this.targetY = 340; 
 
         this.timer = 0;
-        this.duration = 2500; // 2s charge-up + 0.5s blast
+        
+        // --- THE DURATION FIX ---
+        // Level 3 gets an extra 10 seconds (10000ms) for the lingering ice effect!
+        this.duration = this.level === 3 ? 12500 : 2500; 
         this.isFinished = false;
 
         this.shakeX = 0;
         this.shakeY = 0;
+
+        // --- TIER SETTINGS ---
+        if (this.level === 1) {
+            this.chargeMaxHeight = 75;  
+            this.blastMaxHeight = 60;   
+            this.shakeIntensity = 5;    
+            this.chargeAlpha = 0.2;     
+        } else if (this.level === 3) {
+            this.chargeMaxHeight = 300; 
+            this.blastMaxHeight = 250;  
+            this.shakeIntensity = 25;   
+            this.chargeAlpha = 0.6;     
+            
+            this.snowflakes = [];
+            for (let i = 0; i < 60; i++) {
+                this.snowflakes.push({
+                    x: Math.random() * (window.innerWidth || 2000),
+                    y: Math.random() * (window.innerHeight || 1000),
+                    scale: 0.5 + Math.random() * 2,
+                    angle: Math.random() * Math.PI * 2 
+                });
+            }
+        } else {
+            this.chargeMaxHeight = 150;
+            this.blastMaxHeight = 120;
+            this.shakeIntensity = 12;
+            this.chargeAlpha = 0.4;
+        }
     }
 
     update(deltaTime) {
@@ -27,11 +57,10 @@ export default class FreezeAnimator {
             return;
         }
 
-        // --- PHASE 3: SCREEN SHAKE (2000ms to 2500ms) ---
-        // The screen violently shakes ONLY when the beam actually fires
+        // --- SCREEN SHAKE (2000ms to 2500ms) ---
         if (this.timer >= 2000 && this.timer < 2500) {
             const shakeProgress = (this.timer - 2000) / 500; 
-            const intensity = 12 * (1 - shakeProgress); 
+            const intensity = this.shakeIntensity * (1 - shakeProgress); 
 
             this.shakeX = (Math.random() * 2 - 1) * intensity;
             this.shakeY = (Math.random() * 2 - 1) * intensity;
@@ -44,43 +73,68 @@ export default class FreezeAnimator {
     draw(ctx, state) {
         ctx.save();
 
-        // Calculate how far the beam needs to go. 
-        // 1500 spans the entire map width. A negative width perfectly fires to the left!
         const beamWidth = this.side === 1 ? 2000 : -2000;
 
         // --- PHASE 1: THE CHARGE UP (0ms to 2000ms) ---
         if (this.timer < 2000) {
-            const t = this.timer / 2000; // Progress from 0.0 to 1.0
+            const t = this.timer / 2000; 
 
-            // Height starts at a massive 150px and violently collapses down to 2px
-            const currentHeight = 150 - (148 * t);
-
-            // Add a randomized alpha flicker to make it feel unstable and energetic
-            const alpha = 0.4 + (Math.random() * 0.4); 
+            const currentHeight = this.chargeMaxHeight - ((this.chargeMaxHeight - 2) * t);
+            const alpha = this.chargeAlpha + (Math.random() * 0.4); 
             ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
 
-            // Center the rectangle vertically by offsetting Y by half its height
             ctx.fillRect(this.startX, this.targetY - (currentHeight / 2), beamWidth, currentHeight);
         } 
         // --- PHASE 2: THE FREEZE BLAST (2000ms to 2500ms) ---
-        else {
-            const t = (this.timer - 2000) / 500; // Progress from 0.0 to 1.0
-
-            // The beam starts at 120px thick and rapidly tapers off to 0px as it dissipates
-            const currentHeight = 120 * (1 - t);
-            
-            // Fades out from fully opaque to invisible over the half second
+        else if (this.timer < 2500) { // <-- BOUNDED TO 2500ms!
+            const t = (this.timer - 2000) / 500; 
+            const currentHeight = this.blastMaxHeight * (1 - t);
             const globalAlpha = 1 - t;
 
-            // 1. The Glow (Outer Light Blue)
             ctx.fillStyle = `rgba(150, 220, 255, ${globalAlpha})`;
             ctx.fillRect(this.startX, this.targetY - (currentHeight / 2), beamWidth, currentHeight);
 
-            // 2. The Core (Inner Pure White)
-            // Making the core 30% of the total height gives it a piercing, hot center
             const coreHeight = currentHeight * 0.3;
             ctx.fillStyle = `rgba(255, 255, 255, ${globalAlpha})`;
             ctx.fillRect(this.startX, this.targetY - (coreHeight / 2), beamWidth, coreHeight);
+        }
+
+        // --- PHASE 3: THE LEVEL 3 FULL SCREEN FREEZE (2000ms to 12500ms) ---
+        if (this.level === 3 && this.timer >= 2000) {
+            ctx.save();
+            ctx.resetTransform(); 
+            
+            const w = window.innerWidth || 2000;
+            const h = window.innerHeight || 1000;
+
+            // Calculate a new alpha that stays solid for 8 seconds, 
+            // then thaws (fades out) over the final 2 seconds (10500ms to 12500ms)
+            let freezeAlpha = 1.0;
+            if (this.timer > 10500) {
+                freezeAlpha = Math.max(0, 1.0 - ((this.timer - 10500) / 2000));
+            }
+
+            ctx.fillStyle = `rgba(100, 200, 255, ${freezeAlpha * 0.35})`;
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.strokeStyle = `rgba(150, 230, 255, ${freezeAlpha * 0.6})`;
+            ctx.lineWidth = 40;
+            ctx.strokeRect(0, 0, w, h);
+
+            const flakeImg = loader.assets['gadgets']['freeze'];
+            if (flakeImg) {
+                ctx.globalAlpha = freezeAlpha * 0.8;
+                this.snowflakes.forEach(flake => {
+                    ctx.save();
+                    ctx.translate(flake.x, flake.y);
+                    ctx.rotate(flake.angle);
+                    ctx.scale(flake.scale, flake.scale);
+                    ctx.drawImage(flakeImg, -10, -10, 20, 20); 
+                    ctx.restore();
+                });
+            }
+            
+            ctx.restore();
         }
 
         ctx.restore();

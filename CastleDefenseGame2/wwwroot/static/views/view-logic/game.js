@@ -114,6 +114,21 @@ function updateUI(state) {
         } else {
             button.disabled = false;
         }
+
+        const baseId = gadgetId.split('_')[0].toLowerCase();
+        const currentXp = pState.gadgetXp[baseId] || 0;
+        const upgradeCost = gadgetDef.upgradeCost || gadgetDef.UpgradeCost;
+
+        // --- USE THE HELPER ---
+        const currentLevel = getGadgetLevel(gadgetId);
+
+        // Lock the bar at 100% if they hit Level 3
+        if (currentLevel >= 3 || !upgradeCost || upgradeCost <= 0) {
+            button.style.setProperty('--xp-pct', '100%');
+        } else {
+            const xpPercent = Math.min((currentXp / upgradeCost) * 100, 100);
+            button.style.setProperty('--xp-pct', `${xpPercent}%`);
+        }
     }
 
     // 3. Execute for all three slots
@@ -184,43 +199,29 @@ function initShopUI(team, gameView) {
     const btnGadgetDefence = document.getElementById('btnGadgetDefence');
 
     // Set image and price for offensive gadget button
-    let price = document.createElement('span');
-    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[0]]['cost'] + ': ';
-    btnGadgetOffense.appendChild(price);
-    let source = loader.assets.gadgets[connection.selectedLoadout[0]];
-    let img = document.createElement('img');
-    if (typeof source === 'string') {
-            img.src = source;
-        } else {
-            img.src = source.src; // If it's already a new Image() object
-        }
-    btnGadgetOffense.appendChild(img);
+    const loadout0 = connection.selectedLoadout[0];
+    buildGadgetDOM(
+        btnGadgetOffense, 
+        loader.assets.gadgetData[loadout0].cost || loader.assets.gadgetData[loadout0].Cost, 
+        loader.assets.gadgets[loadout0],
+        getGadgetLevel(loadout0)
+    );
 
-    // Set image and price for defensive gadget button
-    price = document.createElement('span');
-    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[1]]['cost'] + ': ';
-    btnGadgetDefence.appendChild(price);
-    source = loader.assets.gadgets[connection.selectedLoadout[1]];
-    img = document.createElement('img');
-    if (typeof source === 'string') {
-            img.src = source;
-        } else {
-            img.src = source.src; // If it's already a new Image() object
-        }
-    btnGadgetDefence.appendChild(img);
+    const loadout1 = connection.selectedLoadout[1];
+    buildGadgetDOM(
+        btnGadgetDefence, 
+        loader.assets.gadgetData[loadout1].cost || loader.assets.gadgetData[loadout1].Cost, 
+        loader.assets.gadgets[loadout1],
+        getGadgetLevel(loadout1)
+    );
 
-    // Set image and price for signature gadget button
-    price = document.createElement('span');
-    price.innerHTML = '$' + loader.assets.gadgetData[connection.selectedLoadout[2]]['cost'] + ': ';
-    btnGadgetSignature.appendChild(price);
-    source = loader.assets.gadgets[connection.selectedLoadout[2]];
-    img = document.createElement('img');
-    if (typeof source === 'string') {
-            img.src = source;
-        } else {
-            img.src = source.src; // If it's already a new Image() object
-        }
-    btnGadgetSignature.appendChild(img);
+    const loadout2 = connection.selectedLoadout[2];
+    buildGadgetDOM(
+        btnGadgetSignature, 
+        loader.assets.gadgetData[loadout2].cost || loader.assets.gadgetData[loadout2].Cost, 
+        loader.assets.gadgets[loadout2],
+        getGadgetLevel(loadout2)
+    );
 
     btnGadgetSignature.addEventListener('click', () => {
         gameView.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
@@ -233,4 +234,120 @@ function initShopUI(team, gameView) {
     btnGadgetDefence.addEventListener('click', () => {
         gameView.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
     });
+
+    connection.onGadgetUpgraded((side, newGadgetDef) => {
+        if (side !== connection.mySide) return;
+
+        const gadgetId = newGadgetDef.id || newGadgetDef.Id;
+        let targetBtnId = null;
+
+        // Helper to strip the string down to just "nuke", "firebomb", etc.
+        const getBaseId = (id) => id.split('_')[0].toLowerCase();
+        
+        const incomingBase = getBaseId(gadgetId);
+
+        if (incomingBase === getBaseId(connection.selectedLoadout[0])) {
+            targetBtnId = 'btnGadgetOffense';
+            connection.selectedLoadout[0] = gadgetId;
+        }
+        else if (incomingBase === getBaseId(connection.selectedLoadout[1])) {
+            targetBtnId = 'btnGadgetDefence';
+            connection.selectedLoadout[1] = gadgetId;
+        }
+        else if (incomingBase === getBaseId(connection.selectedLoadout[2])) {
+            targetBtnId = 'btnGadgetSignature';
+            connection.selectedLoadout[2] = gadgetId;
+        }
+
+        if (targetBtnId) {
+            applyUpgradeToButton(targetBtnId, newGadgetDef);
+        }
+    });
+}
+
+function buildGadgetDOM(btnElement, cost, imgSrc, currentLevel) {
+    btnElement.innerHTML = ''; 
+    
+    const priceSpan = document.createElement('span');
+    priceSpan.innerHTML = '$' + cost + ': ';
+    btnElement.appendChild(priceSpan);
+
+    if (imgSrc) {
+        const img = document.createElement('img');
+        img.src = typeof imgSrc === 'string' ? imgSrc : imgSrc.src;
+        btnElement.appendChild(img);
+    }
+
+    const xpContainer = document.createElement('div');
+    xpContainer.className = 'xp-container';
+    
+    xpContainer.innerHTML = `
+        <div class="xp-fill"></div>
+        <span class="xp-text">Lvl: ${currentLevel}</span>
+    `;
+    
+    btnElement.appendChild(xpContainer);
+}
+
+function applyUpgradeToButton(btnId, gadgetDef) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+
+    // --- 1. PLAY VISUALS ---
+    btn.classList.add('upgrade-flash');
+    
+    // A mix of bright white and varying shades of gray for depth
+    const chevronColors = ['#ffffff', '#aaaaaa', '#dddddd', '#777777', '#ffffff'];
+    
+    // Spawn 5 full-width chevrons, tightly staggered
+    for (let i = 0; i < chevronColors.length; i++) {
+        setTimeout(() => {
+            const chevron = document.createElement('div');
+            chevron.classList.add('upgrade-chevron');
+            
+            // Inject the specific shade for this chevron
+            chevron.style.setProperty('--chevron-color', chevronColors[i]);
+            
+            btn.appendChild(chevron);
+            
+            // Clean up the DOM node after it finishes flying
+            setTimeout(() => chevron.remove(), 600);
+        }, i * 90); // 90ms stagger creates a smooth, overlapping wave
+    }
+
+    // Clean up the flash class
+    setTimeout(() => btn.classList.remove('upgrade-flash'), 800);
+
+    // --- 2. UPDATE IMAGE & PRICE ---
+    const cost = gadgetDef.cost || gadgetDef.Cost;
+    const gadgetId = gadgetDef.id || gadgetDef.Id;
+    const currentLevel = getGadgetLevel(gadgetId);
+
+    // Clear out the old elements
+    btn.innerHTML = '';
+    
+    // Build the new price tag
+    const priceSpan = document.createElement('span');
+    priceSpan.innerHTML = '$' + cost + ': ';
+    btn.appendChild(priceSpan);
+
+    // Build the new image
+    const baseId = gadgetId.split('_')[0].toLowerCase();
+    // If there's no new image, fallback to the same old one
+    const imgSrc = loader.assets.gadgets[gadgetId] || loader.assets.gadgets[baseId];
+    if (imgSrc) {
+        const img = document.createElement('img');
+        img.src = typeof imgSrc === 'string' ? imgSrc : imgSrc.src;
+        btn.appendChild(img);
+    }
+
+    buildGadgetDOM(btn, cost, imgSrc, currentLevel);
+}
+
+// --- HELPER: Derives level strictly from the ID string ---
+function getGadgetLevel(gadgetId) {
+    if (!gadgetId) return 1;
+    const parts = gadgetId.split('_');
+    // If it has an underscore (e.g., ["nuke", "2"]), parse the number. Otherwise, Level 1.
+    return parts.length > 1 ? parseInt(parts[1], 10) || 1 : 1;
 }

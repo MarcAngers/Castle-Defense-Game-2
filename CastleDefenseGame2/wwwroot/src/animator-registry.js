@@ -8,7 +8,7 @@ import PoisonAnimator from './animators/poison-animator.js';
 import DivineAnimator from './animators/divine-animator.js';
 import MeteorAnimator from './animators/meteor-animator.js';
 import WaveAnimator from './animators/wave-animator.js';
-import BlackholeAnimator from './animators/blackhold-animator.js';
+import BlackholeAnimator from './animators/blackhole-animator.js';
 
 // 2. Map the string ID from your C# server to the JavaScript class
 export const AnimatorRegistry = {

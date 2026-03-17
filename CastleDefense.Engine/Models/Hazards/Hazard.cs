@@ -3,6 +3,7 @@
     public abstract class Hazard
     {
         public string Type { get; set; } // "Fire", "Ice", "PoisonCloud", etc.
+        public string SourceGadgetId { get; set; }
         public int Side { get; set; }
         public float BaseValue { get; set; }
 
@@ -11,5 +12,6 @@
         public int ExpiresAtTick { get; set; } // When the hazard disappears
 
         public abstract void ProcessEffect(GameState state);
+        public virtual void OnExpire(GameState state) { }
     }
 }

@@ -15,7 +15,10 @@ namespace CastleDefense.Engine.Gadgets
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            engine.TriggerGadgetAnimation("goo", side, position);
+            engine.TriggerGadgetAnimation(_def.Id, side, position);
+
+            var baseXp = _def.Level == 2 ? 1000 : 100;
+            engine.AddGadgetXp(side, "goo", baseXp);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>

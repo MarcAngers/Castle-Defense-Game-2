@@ -205,7 +205,8 @@ export default class View {
         // --- 2. DRAW UNTARGETED ICON (Screen Space) ---
         // Drawn AFTER the camera is restored so it ignores panning and perfectly follows the mouse!
         if (this.gadgetManager && this.gadgetManager.activeGadgetId && !this.gadgetManager.isTargeted) {
-            const img = loader.assets.gadgets[this.gadgetManager.activeGadgetId];
+                const baseId = this.gadgetManager.activeGadgetId.split('_')[0].toLowerCase();
+                const img = loader.assets.gadgets[this.activeGadgetId] || loader.assets.gadgets[baseId];            
             if (img) {
                 this.ctx.save();
                 this.ctx.globalAlpha = 0.7; 
@@ -338,11 +339,18 @@ export default class View {
 
         // Health Bar
         this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield);
+        // Draw health text for units? (might prefer 100hp segments similar to)
+        // this.drawHealthText(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth);
 
+        // If the unit has shield health, draw a shield over it
+        if (unit.currentShield > 0) {
+            const shieldImage = loader.assets.gadgets['shield'];
+            this.ctx.drawImage(shieldImage, x, y, width, height);
+        }
         // If the unit is invulnerable, draw a divine shield over it
         if (isInvulnerable) {
-            const shieldImage = loader.assets.gadgets['divine'];
-            this.ctx.drawImage(shieldImage, x, y, width, height);
+            const divineShieldImage = loader.assets.gadgets['divine'];
+            this.ctx.drawImage(divineShieldImage, x, y, width, height);
         }
     }
 
@@ -353,20 +361,25 @@ export default class View {
         this.ctx.fillStyle = "lightgray";
         this.ctx.fillRect(x, y, spriteSize + 10, 5);
 
-        if (pct > 0.75)
-        this.ctx.fillStyle = "green";
-            else if (pct > 0.30)
-        this.ctx.fillStyle = "yellow";
-            else if (pct > 0.10)
-        this.ctx.fillStyle = "red";
-            else
-        this.ctx.fillStyle = "darkred";
+        if (pct > 0.75) {
+            this.ctx.fillStyle = "limegreen";
+        } else if (pct > 0.30) {
+            this.ctx.fillStyle = "yellow";
+        } else if (pct > 0.10) {
+            this.ctx.fillStyle = "red";
+        } else {
+            this.ctx.fillStyle = "darkred";
+        }
 
         this.ctx.fillRect(x, y, width, 5);
 
         // Draw shield
-        this.ctx.fillStyle = "lightblue";
-        this.ctx.fillRect(x, y - 5, currentShield, 5);
+        if (currentShield > 0) {
+            let shieldPct = currentShield / maxHealth;
+            let shieldWidth = Math.min((spriteSize + 10) * shieldPct, (spriteSize + 30));
+            this.ctx.fillStyle = "cyan";
+            this.ctx.fillRect(x, y - 5, shieldWidth, 5);
+        }               
     }
 
     drawCastle(playerState, side) {
@@ -385,6 +398,7 @@ export default class View {
             this.ctx.restore(); // Restore coordinate system for the health bar
 
             this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthText(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         } else {
             x = this.MAP_WIDTH - 50;
             
@@ -395,15 +409,41 @@ export default class View {
             this.ctx.restore(); // Restore coordinate system for the health bar
             
             this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthText(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         }
 
         // If the player is invulnerable, draw a divine shield over their castle:
         if (playerState.isInvulnerable) {
-            console.log("drawing shield...");
             const shieldImage = loader.assets.gadgets['divine'];
             if (x > 1000) x -= 200;
             this.ctx.drawImage(shieldImage, x, y, 200, 200);
         }
+    }
+
+    drawHealthText(x, y, spriteSize, currentHealth, maxHealth) {
+        // Format with commas and ensure we don't display decimals if health gets fractional
+        const healthText = `${Math.ceil(currentHealth).toLocaleString()}/${maxHealth.toLocaleString()}`;
+        
+        this.ctx.save();
+        this.ctx.fillStyle = "white";
+        this.ctx.strokeStyle = "black"; 
+        this.ctx.lineWidth = 3; // Thick outline for readability
+        
+        // Feel free to swap this to your retro font if you prefer!
+        this.ctx.font = '10px "Press Start 2P", cursive'; 
+        this.ctx.textAlign = "center";
+        
+        // Center the text horizontally over the health bar
+        const centerX = x + (spriteSize + 10) / 2;
+        
+        // Shift the Y position up so it sits right above the shield/bar
+        const textY = y - 5; 
+
+        // Draw outline first, then the white fill inside
+        this.ctx.strokeText(healthText, centerX, textY);
+        this.ctx.fillText(healthText, centerX, textY);
+
+        this.ctx.restore();
     }
 
     drawBackground = (colour) => {

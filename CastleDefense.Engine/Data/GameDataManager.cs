@@ -18,9 +18,9 @@ namespace CastleDefense.Engine.Data
         public static List<GadgetDefinition> Gadgets { get; private set; } = new List<GadgetDefinition>();
 
         private const int DAMAGE_MULTIPLIER = 1;
-        private const int HEALTH_MULTIPLIER = 2;
+        private const int HEALTH_MULTIPLIER = 1;
         private const int PRICE_MULTIPLIER = 1;
-        private const float ATTACK_SPEED_MULTIPLIER = 0.8f;
+        private const float ATTACK_SPEED_MULTIPLIER = 1f;
         private const int COOLDOWN_PER_DOLLAR = 800;
 
         public static void Initialize()
@@ -215,13 +215,14 @@ namespace CastleDefense.Engine.Data
                 Enum.TryParse<GadgetSlot>(GetCol("Slot"), true, out var slot);
                 int targeted = int.TryParse(GetCol("Targeted"), out var t) ? t : 1;
                 int cost = int.TryParse(GetCol("Cost"), out var c) ? c : 0;
+                int upgradeCost = int.TryParse(GetCol("UpgradeCost"), out var uc) ? uc : 1000;
                 int baseValue = int.TryParse(GetCol("BaseValue"), out var bv) ? bv : 0;
                 int radius = int.TryParse(GetCol("Radius"), out var r) ? r : 0;
                 int delay = int.TryParse(GetCol("Delay"), out var d) ? d : 0;
                 int pushForce = int.TryParse(GetCol("PushForce"), out var pf) ? pf : 0;
                 int hazardDuration = int.TryParse(GetCol("HazardDuration"), out var hd) ? hd : 0;
                 int StatusDuration = int.TryParse(GetCol("StatusDuration"), out var sd) ? sd : 0;
-                int cooldownMs = int.TryParse(GetCol("CooldownMs"), out var cm) ? cm : 60000;
+                int cooldownMs = int.TryParse(GetCol("CooldownMs"), out var cm) ? cm : 10000;
                 string effectType = GetCol("ID");
 
                 var gadgetDef = new GadgetDefinition
@@ -229,8 +230,10 @@ namespace CastleDefense.Engine.Data
                     Id = id,
                     Name = GetCol("Name"),
                     Slot = slot,
+                    NextTierId = GetCol("NextTierId"),
                     Targeted = (targeted == 1),
                     Cost = cost,
+                    UpgradeCost = upgradeCost,
                     BaseValue = baseValue,
                     Radius = radius,
                     Delay = delay,
@@ -252,7 +255,9 @@ namespace CastleDefense.Engine.Data
         // A clean factory method to map strings to your actual C# classes
         private static IGadgetEffect CreateGadgetEffect(string effectType, GadgetDefinition def)
         {
-            return effectType.ToLower() switch
+            string baseEffect = effectType.Split('_')[0].ToLower();
+
+            return baseEffect switch
             {
                 "nuke" => new NukeEffect(def),
                 "snipe" => new SnipeEffect(def),
@@ -270,6 +275,8 @@ namespace CastleDefense.Engine.Data
                 "meteor" => new MeteorEffect(def),
                 "wave" => new WaveEffect(def),
                 "blackhole" => new BlackholeEffect(def),
+
+                _ => throw new ArgumentException($"Unknown gadget effect type: {effectType}")
             };
         }
 
@@ -305,8 +312,14 @@ namespace CastleDefense.Engine.Data
             return result;
         }
 
-        public static UnitDefinition WallDefinition()
+        public static UnitDefinition WallDefinition(int level)
         {
+            var healthMultiplier = 1;
+            if (level == 2) healthMultiplier = 15;
+            if (level == 3) healthMultiplier = 150;
+
+            var sizeMultiplier = level == 3 ? 6 : level;
+
             return new UnitDefinition
             {
                 Id = "wall",
@@ -315,12 +328,12 @@ namespace CastleDefense.Engine.Data
                 Cost = 0,
                 CooldownMs = 0,
                 MaxCharges = 1,
-                MaxHealth = 400 * HEALTH_MULTIPLIER,
+                MaxHealth = 400 * healthMultiplier * HEALTH_MULTIPLIER,
                 MaxShield = 0,
                 Damage = 0,
                 MoveSpeed = 0,
-                Width = 75,
-                Height = 150,
+                Width = 75 * sizeMultiplier,
+                Height = 150 * sizeMultiplier,
                 Description = "The Wall",
 
                 Weight = int.MaxValue,
