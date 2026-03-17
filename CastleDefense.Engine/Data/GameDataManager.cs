@@ -70,6 +70,7 @@ namespace CastleDefense.Engine.Data
 
                 string teamStr = GetCol("Team");
                 if (string.IsNullOrEmpty(teamStr)) continue; // Skip invalid rows
+                Enum.TryParse<TeamColour>(teamStr, true, out var teamColor);
 
                 // --- REQUIRE BASE STATS ---
                 int tier = int.TryParse(GetCol("Tier"), out var t) ? t : 1;
@@ -96,6 +97,7 @@ namespace CastleDefense.Engine.Data
                 {
                     armorType = isAce ? ArmorType.Shield : ArmorType.None;
                 }
+
 
                 // --- CALCULATE ATTACK SPEED ---
                 float calculatedAps = 0f;
@@ -128,6 +130,7 @@ namespace CastleDefense.Engine.Data
                 {
                     Id = GetCol("ID"),
                     Name = GetCol("Name"),
+                    Team = teamColor,
                     Tier = tier,
                     Cost = price * PRICE_MULTIPLIER,
                     CooldownMs = price * COOLDOWN_PER_DOLLAR,
@@ -156,7 +159,6 @@ namespace CastleDefense.Engine.Data
                 // If this is the first time seeing this team, create it
                 if (!teamDictionary.ContainsKey(teamKey))
                 {
-                    Enum.TryParse<TeamColour>(teamStr, true, out var teamColor);
                     teamDictionary[teamKey] = new TeamDefinition
                     {
                         Id = $"team_{teamKey}",
