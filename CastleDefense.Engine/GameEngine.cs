@@ -272,6 +272,38 @@ namespace CastleDefense.Engine
 
             if (player.Money < def.Cost) return;
 
+            // --- Bot Auto-Targeting Logic (-1) ---
+            if (position == -1)
+            {
+                var enemies = _state.Units.Where(u => u.Side != side).ToList();
+
+                if (enemies.Count > 0)
+                {
+                    if (side == 1)
+                    {
+                        // P1 targets P2's units. They are closest to P1 when X is lowest.
+                        // They are moving left, so we lead them by subtracting 300.
+                        var closestEnemy = enemies.OrderBy(e => e.Position).First();
+                        position = (int)closestEnemy.Position - 300;
+                    }
+                    else
+                    {
+                        // P2 targets P1's units. They are closest to P2 when X is highest.
+                        // They are moving right, so we lead them by adding 300.
+                        var closestEnemy = enemies.OrderByDescending(e => e.Position).First();
+                        position = (int)closestEnemy.Position + 300;
+                    }
+                }
+                else
+                {
+                    // Fallback: If no enemies exist, drop it in the dead center
+                    position = MAP_WIDTH / 2;
+                }
+
+                // Clamp the final target to stay at least 100 units away from the castles
+                position = Math.Max(300, Math.Min(MAP_WIDTH - 300, position));
+            }
+
             // 2. Deduct Cost
             player.Money -= def.Cost;
 
@@ -691,6 +723,82 @@ namespace CastleDefense.Engine
                 {
                     player.GadgetCooldowns[key]--;
                 }
+            }
+        }
+
+        // ------------- AI VIBE CODE ---------------
+        // We track previous health to calculate immediate rewards!
+        private int _prevP1CastleHealth;
+        private int _prevP2CastleHealth;
+
+        public StepResult Step(int actionP1, int actionP2)
+        {
+            // 1. Record the "Before" state for reward calculation
+            _prevP1CastleHealth = _state.Player1.CastleHealth;
+            _prevP2CastleHealth = _state.Player2.CastleHealth;
+
+            // 2. Decode the AI's chosen action and execute it
+            ApplyAction(1, actionP1);
+            ApplyAction(2, actionP2);
+
+            // 3. Advance the simulation by EXACTLY one tick
+            Tick();
+
+            // 4. Calculate how well the AI did on this specific tick
+            float stepReward = CalculateReward();
+
+            // 5. Flatten the new game state for the AI's neural network
+            float[] newState = GetStateVector();
+
+            return new StepResult
+            {
+                State = newState,
+                Reward = stepReward,
+                IsDone = _state.IsGameOver
+            };
+        }
+
+        private void ApplyAction(int side, int actionId)
+        {
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            // --- Actions 1 through 8: Dynamic Unit Spawning ---
+            if (actionId >= 1 && actionId <= 8)
+            {
+                // Arrays are 0-indexed, so Action 1 looks at Roster[0] (Tier 1)
+                int rosterIndex = actionId - 1;
+
+                // Grab the roster for this specific player's team
+                var teamRoster = GameDataManager.Teams.Find(t => t.Color == player.Team).Roster;
+
+                if (rosterIndex < teamRoster.Count)
+                {
+                    SpawnUnit(side, teamRoster[rosterIndex].Id);
+                }
+                return;
+            }
+
+            // --- Actions 9 through 13: Abilities and Economy ---
+            switch (actionId)
+            {
+                case 0:
+                    // Do Nothing (Crucial so the AI can save up money!)
+                    break;
+                case 9:
+                    Invest(side);
+                    break;
+                case 10:
+                    Repair(side); // Now your "Upgrade Castle" logic
+                    break;
+                case 11:
+                    if (player.DefensiveGadget != null) UseGadget(side, player.DefensiveGadget.Id, -1);
+                    break;
+                case 12:
+                    if (player.OffensiveGadget != null) UseGadget(side, player.OffensiveGadget.Id, -1);
+                    break;
+                case 13:
+                    if (player.SignatureGadget != null) UseGadget(side, player.SignatureGadget.Id, -1);
+                    break;
             }
         }
     }
