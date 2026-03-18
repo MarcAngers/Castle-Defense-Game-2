@@ -120,14 +120,11 @@ export default async function initSelectLoadout() {
         gadget.addEventListener('click', handleDGadgetClick);
     }
 
-    // TODO: Select previously selected loadout, or white team by default
-    // if (connection.selectedTeam != null) {
-    //     document.getElementById(connection.selectedTeam).click();
-    // } 
-    // else {
-        document.getElementById('nuke').click();
-        document.getElementById('heal').click();
-    // }
+    // Select previously selected loadout, or nuke/heal by default
+    let initialOSelect = connection.selectedLoadout[0] || 'nuke';
+    let initialDSelect = connection.selectedLoadout[1] || 'heal';
+    document.getElementById(initialOSelect).click();
+    document.getElementById(initialDSelect).click();
 
     const btnBack = document.getElementById('btnBack');
     const btnCreate = document.getElementById('btnCreate');

@@ -20,9 +20,9 @@ wall_3,The Wall,Defense,,1,6000,,48000,0,0,0,0,0,10000,Spawns a temporary barrie
 speed,Speed Boost,Defense,speed_2,0,30,1000,2,0,0,0,0,90,5000,Boosts speed.
 speed_2,Speed Boost,Defense,speed_3,0,450,15000,4,0,0,0,0,150,5000,Boosts speed.
 speed_3,Speed Boost,Defense,,0,3600,,10,0,0,0,0,300,5000,Boosts speed.
-reinforcements,Reinforcements,Defense,reinforcements_2,0,12,1000,1,0,0,0,0,0,3000,Spawns 5 reinforcement units.
-reinforcements_2,Reinforcements,Defense,reinforcements_3,0,180,15000,5,0,0,0,0,0,3000,Spawns 5 reinforcement units.
-reinforcements_3,Reinforcements,Defense,,0,1440,,7,0,0,0,0,0,3000,Spawns 5 reinforcement units.
+reinforcements,Reinforcements,Defense,reinforcements_2,0,12,1000,1,0,0,0,0,0,4000,Spawns 5 reinforcement units.
+reinforcements_2,Reinforcements,Defense,reinforcements_3,0,180,15000,5,0,0,0,0,0,6000,Spawns 5 reinforcement units.
+reinforcements_3,Reinforcements,Defense,,0,1440,,7,0,0,0,0,0,8000,Spawns 5 reinforcement units.
 cash,Cash Drop,Signature,cash_2,0,65,1000,100,0,48,0,0,0,15000,Gain an instant cash injection
 cash_2,Cash Drop,Signature,cash_3,0,975,15000,1500,0,48,0,0,0,15000,Gain an instant cash injection
 cash_3,Cash Drop,Signature,,0,7800,,12000,0,48,0,0,0,15000,Gain an instant cash injection
@@ -35,7 +35,7 @@ goo_3,Goo Ball,Signature,,1,8400,,2400,1000,48,0,240,90,10000,Spills goo on the 
 poison,Poison Gas,Signature,poison_2,1,65,1000,22,100,48,0,120,90,7500,Spawns a dangerous poison cloud
 poison_2,Poison Gas,Signature,poison_3,1,975,15000,330,200,48,0,150,90,7500,Spawns a dangerous poison cloud
 poison_3,Poison Gas,Signature,,1,7800,,2640,400,48,0,300,120,7500,Spawns a dangerous poison cloud
-divine,Divine Shield,Signature,divine_2,0,50,1000,175,0,48,0,0,150,10000,Provides a divine shield of protection making you and your units invulnerable for a short time
+divine,Divine Shield,Signature,divine_2,0,50,1000,100,0,48,0,0,150,10000,Provides a divine shield of protection making you and your units invulnerable for a short time
 divine_2,Divine Shield,Signature,divine_3,0,750,15000,2500,0,48,0,0,300,10000,Provides a divine shield of protection making you and your units invulnerable for a short time
 divine_3,Divine Shield,Signature,,0,6000,,0,0,48,0,0,300,20000,Provides a divine shield of protection making you and your units invulnerable for a short time
 meteor,Meteor Strike,Signature,meteor_2,1,75,1000,500,750,70,100000,0,90,10000,Calls down a giant meteor from the sky dealing massive damage to enemy units

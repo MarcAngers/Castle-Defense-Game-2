@@ -15,7 +15,7 @@ namespace CastleDefense.Engine.Gadgets
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
+            var baseXp = _def.Level == 2 ? 1000 : 50;
             engine.AddGadgetXp(side, "cash", baseXp);
 
             if (_def.Level < 3)

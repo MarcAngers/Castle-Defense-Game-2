@@ -40,7 +40,7 @@ namespace CastleDefense.Engine.Gadgets
                     }
                 }
 
-                int bonusXp = totalDamageDealt / 10;
+                int bonusXp = totalDamageDealt / 5;
 
                 if (bonusXp > 0)
                 {

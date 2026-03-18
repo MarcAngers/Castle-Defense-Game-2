@@ -19,7 +19,6 @@
 
             foreach (var unit in state.Units)
             {
-                // BUG FIX: Reset pull direction for EACH unit!
                 float pullDirection = 1f;
 
                 // 1D Hitbox overlap check
@@ -27,7 +26,7 @@
                 {
                     float unitCenter = unit.Position + unit.Width / 2;
 
-                    // --- 2. THE EVENT HORIZON (Level 3 Only) ---
+                    // --- 2. THE EVENT HORIZON ---
                     if (level == 3 && unitCenter >= hazardCenter - 50 && unitCenter <= hazardCenter + 50)
                     {
                         // Only the strongest units can survive the black hole!
@@ -37,25 +36,27 @@
                             continue; // Skip the rest of the logic since this unit is dead   
                         }
                     }
-
                     // --- 3. PULL THE UNIT IN ---
-                    if (unitCenter > hazardCenter)
+                    else
                     {
-                        pullDirection = -1f;
+                        if (unitCenter > hazardCenter)
+                        {
+                            pullDirection = -1f;
+                        }
+
+                        // Calculate how far they are from the center (0 = dead center, radius = edge)
+                        float radius = this.Width / 2f;
+                        float distance = Math.Abs(unitCenter - hazardCenter);
+
+                        // Invert the distance so it's stronger in the middle (1.0 at center, 0.0 at edge)
+                        float proximityMultiplier = Math.Max(0, 1f - (distance / radius));
+
+                        // Base pull guarantees they can't escape. Bonus pull yanks them hard into the center!
+                        float basePull = unit.CurrentSpeed + 2f;
+                        float bonusPull = 15f * proximityMultiplier;
+
+                        unit.Position += (basePull + bonusPull) * pullDirection;
                     }
-
-                    // Calculate how far they are from the center (0 = dead center, radius = edge)
-                    float radius = this.Width / 2f;
-                    float distance = Math.Abs(unitCenter - hazardCenter);
-
-                    // Invert the distance so it's stronger in the middle (1.0 at center, 0.0 at edge)
-                    float proximityMultiplier = Math.Max(0, 1f - (distance / radius));
-
-                    // Base pull guarantees they can't escape. Bonus pull yanks them hard into the center!
-                    float basePull = unit.CurrentSpeed + 2f;
-                    float bonusPull = 15f * proximityMultiplier;
-
-                    unit.Position += (basePull + bonusPull) * pullDirection;
 
                     // --- 4. APPLY DAMAGE OVER TIME ---
                     // If the unit is deep IN the black hole (but outside the event horizon)

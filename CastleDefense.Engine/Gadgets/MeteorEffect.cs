@@ -75,7 +75,7 @@ namespace CastleDefense.Engine.Gadgets
                                 _def.Id
                             ));
 
-                            engine.AddGadgetXp(side, "meteor", 10);
+                            engine.AddGadgetXp(side, "meteor", 50);
                         }
                     }
                 });

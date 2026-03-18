@@ -36,11 +36,11 @@ namespace CastleDefense.Engine.Models
         public PlayerState()
         {
             Money = 0;
-            Income = 2; //2
+            Income = 1000; //2
             InvestmentPrice = 18;
             InvestmentCount = 0;
-            CastleHealth = 800;
-            CastleMaxHealth = 800;
+            CastleHealth = 1000;
+            CastleMaxHealth = 1000;
             RepairPrice = 20;
             RepairCount = 0;
         }

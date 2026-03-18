@@ -17,9 +17,9 @@ export default class CashAnimator {
         // Level 3 drops multiple Level 2 crates, so it shares the "cash_2" data
         const dataKey = this.level === 1 ? 'cash' : 'cash_2';
         const gadgetData = loader.assets.gadgetData[dataKey];
-        
+
         // Grab the BaseValue (falling back to 100 just in case the dictionary isn't loaded yet)
-        this.amount = gadgetData ? (gadgetData.baseValue || gadgetData.BaseValue || 100) : 100; 
+        this.amount = gadgetData ? (gadgetData.basevalue || gadgetData.BaseValue) : 100; 
 
         this.timer = 0;
         // 2s drop + 1.5s floating text = 3.5s total duration
