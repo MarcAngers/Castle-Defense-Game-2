@@ -426,3 +426,20 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Python Virtual Environments
+venv/
+.env/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Machine Learning Models
+*.zip
+*.onnx
+
+# C# Build Artifacts
+bin/
+obj/
