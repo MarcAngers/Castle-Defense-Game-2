@@ -1,5 +1,6 @@
 ﻿using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
+using System.Numerics;
 
 namespace CastleDefense.Engine.Models
 {
@@ -19,7 +20,7 @@ namespace CastleDefense.Engine.Models
         // Base
         public int CastleHealth { get; set; }
         public int CastleMaxHealth { get; set; }
-        public int RepairPrice { get; set; }
+        public double RepairPrice { get; set; }
         public int RepairCount { get; set; }
         public bool IsInvulnerable { get; set; }
         public long InvulnerableUntilTick { get; set; }
@@ -36,13 +37,41 @@ namespace CastleDefense.Engine.Models
         public PlayerState()
         {
             Money = 0;
-            Income = 1000; //2
+            Income = 2; //2
             InvestmentPrice = 18;
             InvestmentCount = 0;
-            CastleHealth = 1000;
-            CastleMaxHealth = 1000;
+            CastleHealth = 2000;
+            CastleMaxHealth = 2000;
             RepairPrice = 20;
             RepairCount = 0;
+        }
+
+        public PlayerState(int timeSkip) : this()
+        {
+            if (timeSkip == 0) return;
+
+            for (int i = 1; i <= timeSkip; i++)
+            {
+                InvestmentCount++;
+                Income = Math.Pow(Math.E, 0.0109 * Math.Pow(InvestmentCount, 3) + 0.0011 * Math.Pow(InvestmentCount, 2) + 0.4351 * InvestmentCount + 0.5268);
+                InvestmentPrice = Income * (InvestmentCount * 4 + 8);
+
+                RepairCount++;
+                double rp = Math.Pow(Math.E, 0.0109 * Math.Pow(RepairCount, 3) + 0.0011 * Math.Pow(RepairCount, 2) + 0.4351 * RepairCount + 0.5268);
+                RepairPrice = rp * (RepairCount * 5 + 5);
+                if (RepairCount >= 8)
+                    RepairPrice *= 2;
+
+                float pct = (float)CastleHealth / CastleMaxHealth;
+                CastleMaxHealth = 1000 + 11000 * RepairCount;
+                CastleHealth = (int)Math.Min(CastleMaxHealth * (pct + 0.2), CastleMaxHealth);
+            }
+
+            // Don't start at full HP
+            CastleHealth = (int)(0.75 * CastleMaxHealth);
+
+            // Start with a bit of money
+            Money += Income;
         }
 
         public void SetLoadout(string[] loadout)

@@ -15,4 +15,13 @@
     <ProjectReference Include="..\CastleDefense.Engine\CastleDefense.Engine.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="AI_Models\castle_defense_bot.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="AI_Models\castle_defense_bot.onnx.data">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

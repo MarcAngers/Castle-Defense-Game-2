@@ -12,10 +12,12 @@ namespace CastleDefense.Api.Services
         private readonly ConcurrentDictionary<string, GameEngine> _activeGames = new();
         private readonly ConcurrentDictionary<string, GameEngine> _lobbyGames = new();
         private readonly IHubContext<GameHub> _hubContext;
+        private readonly AIBrain _aiBrain;
 
-        public GameHostingService(IHubContext<GameHub> hubContext)
+        public GameHostingService(IHubContext<GameHub> hubContext, AIBrain aiBrain)
         {
             _hubContext = hubContext;
+            _aiBrain = aiBrain;
         }
 
         public GameEngine GetGame(string gameId)
@@ -34,10 +36,11 @@ namespace CastleDefense.Api.Services
             };
         }
 
-        public string CreateGame()
+        public string CreateGame(string gameMode)
         {
             var gameId = Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();
             var state = new GameState();
+            state.GameMode = gameMode;
             var engine = new GameEngine(state);
 
             engine.OnGadgetAnimation += (gadgetId, side, position, targetId) =>
@@ -80,6 +83,27 @@ namespace CastleDefense.Api.Services
                     // 1. Run Game Logic
                     lock (engine)
                     {
+                        if (engine._state.GameMode == "sp" || engine._state.GameMode == "vai")
+                        {
+                            if (engine._state.CurrentTick % 15 == 0)
+                            {
+                                // Get the board from Player 2's perspective
+                                float[] aiState = engine._state.GetStateVector(2);
+                                int[] aiActionMask = engine._state.GetActionMask(2);
+                                // 1. Check for values > 1.0 (The Python Clipping Bug)
+                                bool outOfBounds = aiState.Any(val => val > 1.01f || val < -0.01f);
+                                if (outOfBounds) Console.WriteLine("[WARNING] The array contains values outside the 0.0 - 1.0 range!");
+
+                                // Ask the neural network for its best move
+                                int aiAction = _aiBrain.GetBestAction(aiState, aiActionMask);
+
+                                if (aiAction != 0)
+                                {
+                                    engine.ApplyAction(2, aiAction);
+                                }
+                            }                           
+                        }
+
                         engine.Tick();
                     }
 

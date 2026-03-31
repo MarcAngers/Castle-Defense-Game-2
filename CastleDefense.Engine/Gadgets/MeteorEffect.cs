@@ -63,7 +63,7 @@ namespace CastleDefense.Engine.Gadgets
                     {
                         if (Math.Abs(enemy.Position - dropPos) <= _def.Radius)
                         {
-                            engine.ApplyDamage(enemy, _def.BaseValue, Models.AttackType.Melee, _def.PushForce);
+                            engine.ApplyDamage(enemy, (int)_def.BaseValue, Models.AttackType.Melee, _def.PushForce);
 
                             // Note: I added the attribution tags here so the meteor 
                             // properly gets Kill XP if the burn finishes them off!

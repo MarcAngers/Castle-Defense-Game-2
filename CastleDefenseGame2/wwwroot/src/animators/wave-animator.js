@@ -18,10 +18,10 @@ export default class WaveAnimator {
         this.waveSize = gadgetData ? (gadgetData.radius || gadgetData.Radius || 200) : 200;
         
         // Get the server duration in ticks (e.g., 5 seconds = 150 ticks)
-        const hazardTicks = gadgetData ? (gadgetData.hazardDuration || gadgetData.HazardDuration || 210) : 210;
+        const hazardTicks = gadgetData ? (gadgetData.hazardduration || gadgetData.HazardDuration || 210) : 210;
         
         // Convert server ticks (30 per sec) to frontend milliseconds!
-        this.duration = (hazardTicks / 30) * 1000;
+        this.duration = (hazardTicks / 20) * 1000;
 
         this.timer = 0;
         this.isFinished = false;

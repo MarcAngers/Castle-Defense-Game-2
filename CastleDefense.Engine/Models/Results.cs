@@ -12,8 +12,15 @@ namespace CastleDefense.Engine.Models
 
     public class StepResult
     {
-        public float[] State { get; set; }
-        public float Reward { get; set; }
+        public float[] P1State { get; set; }
+        public float[] P2State { get; set; }
+
+        public int[] P1ActionMask { get; set; }
+        public int[] P2ActionMask { get; set; }
+
+        public float P1Reward { get; set; }
+        public float P2Reward { get; set; }
+
         public bool IsDone { get; set; }
     }
 }

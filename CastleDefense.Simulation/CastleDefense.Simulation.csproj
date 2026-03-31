@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CastleDefense.Engine\CastleDefense.Engine.csproj" />
+    <ProjectReference Include="..\CastleDefenseGame2\CastleDefenseGame2.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -19,6 +19,10 @@
 
             foreach (var unit in state.Units)
             {
+                // Evilguy is immune to the effects of the black hole!
+                if (unit.DefinitionId == "evilguy")
+                    continue;
+
                 float pullDirection = 1f;
 
                 // 1D Hitbox overlap check
@@ -89,14 +93,20 @@
 
             foreach (var unit in state.Units)
             {
+                // Evilguy is immune to the effects of the black hole!
+                if (unit.DefinitionId == "evilguy")
+                    continue;
+
                 // If they are inside the black hole when it vanishes...
                 if (unit.Position + unit.Width >= this.Position && unit.Position <= this.Position + this.Width)
                 {
                     // Push them violently AWAY from the center
-                    float pushDirection = (unit.Position + unit.Width / 2 > hazardCenter) ? 1f : -1f;
+                    float pushDirection = (unit.Side == 1) ? -1f : 1f;
 
-                    // 1500 is a massive knockback, adjust as needed!
-                    unit.PendingKnockback += (500 * pushDirection);
+                    if (unit.Tier == 8)
+                        unit.PendingKnockback += (25 * pushDirection);
+                    else
+                        unit.PendingKnockback += (500 * pushDirection);
                 }
             }
         }

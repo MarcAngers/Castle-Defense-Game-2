@@ -2,6 +2,7 @@ import initLoading from '../static/views/view-logic/loading.js';
 import initMainMenu from '../static/views/view-logic/main-menu.js';
 import initSelectTeam from '../static/views/view-logic/select-team.js';
 import initSelectLoadout from '../static/views/view-logic/select-loadout.js';
+import initSelectLevel from '../static/views/view-logic/select-level.js';
 import initGameBrowser from '../static/views/view-logic/game-browser.js';
 import initLobby from '../static/views/view-logic/lobby.js';
 import initGameScreen from '../static/views/view-logic/game.js';
@@ -15,6 +16,7 @@ const routes = {
     'main-menu': { path: '../static/views/main-menu.html', logic: initMainMenu },
     'select-team': { path: '../static/views/select-team.html', logic: initSelectTeam },
     'select-loadout': { path: '../static/views/select-loadout.html', logic: initSelectLoadout },
+    'select-level': { path: '../static/views/select-level.html', logic: initSelectLevel },
     'game-browser': { path: '../static/views/game-browser.html', logic: initGameBrowser },
     //'collection': { path: '../static/views/collection.html', logic: initCollection },
     //'singleplayer': { path: '../static/views/singleplayer.html', logic: initSingleplayer },

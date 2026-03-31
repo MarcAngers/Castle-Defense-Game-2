@@ -27,8 +27,16 @@ namespace CastleDefense.Engine.Gadgets
 
                 foreach (var enemy in enemies)
                 {
-                    engine.ApplyDamage(enemy, _def.BaseValue, Models.AttackType.Melee, 0);
-                    enemy.Statuses.Add(new ActiveStatus("Freeze", engine._state.CurrentTick + _def.StatusDuration, _def.PushForce));
+                    engine.ApplyDamage(enemy, (int)_def.BaseValue, Models.AttackType.Melee, 0);
+                    // Tier 8 units only get frozen for a second
+                    if (enemy.Tier == 8)
+                    {
+                        enemy.Statuses.Add(new ActiveStatus("Freeze", engine._state.CurrentTick + 30, _def.PushForce));
+                    }
+                    else
+                    {
+                        enemy.Statuses.Add(new ActiveStatus("Freeze", engine._state.CurrentTick + _def.StatusDuration, _def.PushForce));
+                    }
                     engine.AddGadgetXp(side, "freeze", 10);
                 }
             });

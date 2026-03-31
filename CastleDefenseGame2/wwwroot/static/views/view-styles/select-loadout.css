@@ -53,6 +53,9 @@ h5 {
     image-rendering: crisp-edges;
 }
 
+.d-none {
+    display: none;
+}
 .f-2 {
     flex: 2;
 }

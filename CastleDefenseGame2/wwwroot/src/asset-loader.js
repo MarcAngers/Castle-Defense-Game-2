@@ -272,7 +272,10 @@ class AssetLoader {
 
     // New Accessor! Use this to get stats for menus
     getUnitStats(unitId) {
-        return this.assets.unitData[unitId];
+        if (this.assets.unitData[unitId])
+            return this.assets.unitData[unitId];
+        else
+            return { 'team': 'white' };
     }
 
     getTeam(colour) {

@@ -121,26 +121,47 @@ export default async function initSelectLoadout() {
     }
 
     // Select previously selected loadout, or nuke/heal by default
-    let initialOSelect = connection.selectedLoadout[0] || 'nuke';
-    let initialDSelect = connection.selectedLoadout[1] || 'heal';
+    let initialOSelect = (connection.selectedLoadout[0] || 'nuke').split("_")[0];
+    let initialDSelect = (connection.selectedLoadout[1] || 'heal').split("_")[0];
     document.getElementById(initialOSelect).click();
     document.getElementById(initialDSelect).click();
 
-    const btnBack = document.getElementById('btnBack');
-    const btnCreate = document.getElementById('btnCreate');
-    const btnJoin = document.getElementById('btnJoin');
+    if (connection.gameMode == 'sp') {
+        const btnBack = document.getElementById('btnBack');
+        const btnLevel = document.getElementById('btnLevel');
 
-    btnBack.onclick = () => {
-        showScreen('select-team');
-    };
-    btnCreate.onclick = async () => {
-        // Set gadget loadout here
-        connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
-        await connection.createGame(connection.selectedTeam, connection.selectedLoadout);
-        showScreen('lobby');
-    };
-    btnJoin.onclick = () => {
-        connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
-        showScreen('game-browser');
-    };
+        btnBack.onclick = () => {
+            connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
+            showScreen('select-team');
+        };
+        btnLevel.onclick = () => {
+            connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
+            showScreen('select-level');
+        };
+
+        document.getElementById('nav-bar-sp').classList.remove('d-none');
+    }
+
+    if (connection.gameMode == 'mp') {
+        const btnBack = document.getElementById('btnBack');
+        const btnCreate = document.getElementById('btnCreate');
+        const btnJoin = document.getElementById('btnJoin');
+
+        btnBack.onclick = () => {
+            connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
+            showScreen('select-team');
+        };
+        btnCreate.onclick = async () => {
+            // Set gadget loadout here
+            connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
+            await connection.createGame(connection.selectedTeam, connection.selectedLoadout);
+            showScreen('lobby');
+        };
+        btnJoin.onclick = () => {
+            connection.selectedLoadout = [selectedOGadget, selectedDGadget, signatureGadgetMap[connection.selectedTeam]];
+            showScreen('game-browser');
+        };
+
+        document.getElementById('nav-bar-mp').classList.remove('d-none');
+    }
 }

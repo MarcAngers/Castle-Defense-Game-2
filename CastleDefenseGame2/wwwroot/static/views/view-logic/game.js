@@ -47,7 +47,7 @@ function updateUI(state) {
     money.innerHTML = Math.floor(pState.money);
     income.innerHTML = pState.income.toFixed(1);
     investment.innerHTML = Math.ceil(pState.investmentPrice);
-    repair.innerHTML = pState.repairPrice;
+    repair.innerHTML = pState.repairPrice.toFixed(0);
 
     // -------- UPDATE SHOP --------
     // --- Update Invest/Repair Affordability ---

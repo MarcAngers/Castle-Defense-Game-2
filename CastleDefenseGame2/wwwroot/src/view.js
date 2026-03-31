@@ -68,6 +68,8 @@ export default class View {
             "Slow": [112, 146, 190, 0.5],       // Blue-Gray
             "Blackhole": [0, 0, 0, 0.5],        // Black
         };
+
+        this.tierColourCache = {};
     }
 
     startPan = (e) => {
@@ -338,7 +340,7 @@ export default class View {
         }
 
         // Health Bar
-        this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield);
+        this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield, unit.tier, loader.getUnitStats(unit.definitionId).team);
         // Draw health text for units? (might prefer 100hp segments similar to)
         // this.drawHealthText(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth);
 
@@ -354,7 +356,7 @@ export default class View {
         }
     }
 
-    drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield) {
+    drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield, tier, colour) {
         let pct = currentHealth/maxHealth;
         let width = (spriteSize + 10) * pct;
 
@@ -372,6 +374,10 @@ export default class View {
         }
 
         this.ctx.fillRect(x, y, width, 5);
+
+        if (tier) {
+            this.drawNumber(x - 8, y + 12, tier, colour);
+        }
 
         // Draw shield
         if (currentShield > 0) {
@@ -417,6 +423,32 @@ export default class View {
             const shieldImage = loader.assets.gadgets['divine'];
             if (x > 1000) x -= 200;
             this.ctx.drawImage(shieldImage, x, y, 200, 200);
+        }
+    }
+
+    drawNumber(x, y, tier, colour) {
+        if (tier) {
+            this.ctx.save();
+            
+            this.ctx.translate(x, y);
+
+            this.ctx.font = '18px "Press Start 2P", cursive'; 
+            
+            // Call the new method using 'this'
+            this.ctx.fillStyle = this.getTierColor(colour, tier);
+            
+            this.ctx.strokeStyle = 'white';  
+            if (colour === 'white' || colour === 'yellow')
+                this.ctx.strokeStyle = 'black';  
+            this.ctx.lineWidth = 4;
+            this.ctx.textAlign = 'center';
+
+            const textString = `${tier}`;
+            
+            this.ctx.strokeText(textString, 0, 0);
+            this.ctx.fillText(textString, 0, 0);
+
+            this.ctx.restore();
         }
     }
 
@@ -496,5 +528,32 @@ export default class View {
             width: this.logicalScreenWidth, 
             height: logicalHeight 
         };
+    }
+
+    // Helper function to get tier number colours
+    getTierColor(baseColor, tier) {
+        // Access the cache using 'this'
+        let rgb = this.tierColourCache[baseColor];
+        
+        if (!rgb) {
+            const offscreenCtx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+            offscreenCtx.fillStyle = baseColor;
+            offscreenCtx.fillRect(0, 0, 1, 1);
+            const data = offscreenCtx.getImageData(0, 0, 1, 1).data;
+            
+            rgb = [data[0], data[1], data[2]];
+            this.tierColourCache[baseColor] = rgb; 
+        }
+
+        const tierDiff = Math.max(0, 8 - tier);
+        let increment = 34 * tierDiff;
+        // White units should start as gray and become more white
+        if (baseColor === 'white') increment *= -1;
+
+        const r = Math.min(255, rgb[0] + increment);
+        const g = Math.min(255, rgb[1] + increment);
+        const b = Math.min(255, rgb[2] + increment);
+
+        return `rgb(${r}, ${g}, ${b})`;
     }
 }

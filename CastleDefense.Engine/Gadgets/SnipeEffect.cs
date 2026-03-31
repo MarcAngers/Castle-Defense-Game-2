@@ -45,7 +45,7 @@ namespace CastleDefense.Engine.Gadgets
             {
                 int preHealth = target.CurrentHealth + Math.Max(0, target.CurrentShield);
 
-                engine.ApplyDamage(target, _def.BaseValue, Models.AttackType.Melee, _def.PushForce);
+                engine.ApplyDamage(target, (int)_def.BaseValue, Models.AttackType.Melee, _def.PushForce);
 
                 int postHealth = target.CurrentHealth + Math.Max(0, target.CurrentShield);
 

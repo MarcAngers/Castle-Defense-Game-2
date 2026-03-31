@@ -23,12 +23,12 @@ export default class BlackholeAnimator {
 
         // Get the server duration in ticks (e.g., 7 seconds = 210 ticks)
         // Fallback to 210 ticks if missing
-        const hazardTicks = gadgetData ? (gadgetData.hazardDuration || gadgetData.HazardDuration || 210) : 210;
-        const activeDurationMs = (hazardTicks / 30) * 1000;
+        const hazardTicks = gadgetData ? (gadgetData.hazardduration || gadgetData.HazardDuration || 210) : 210;
+        const activeDurationMs = (hazardTicks / 20) * 1000;
 
         this.timer = 0;
         // 2s startup + dynamic active duration
-        this.duration = 2000 + activeDurationMs;   
+        this.duration = 2000 + activeDurationMs;
         this.isFinished = false;
 
         this.shakeX = 0;

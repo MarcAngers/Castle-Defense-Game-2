@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Timers;
@@ -166,7 +167,8 @@ namespace CastleDefense.Engine.Data
                         Name = char.ToUpper(teamKey[0]) + teamKey.Substring(1) + " Team",
                         PassiveName = "Team Passive",
                         PassiveDescription = "Loaded from CSV",
-                        Roster = new List<UnitDefinition>()
+                        Roster = new List<UnitDefinition>(),
+                        SignatureGadget = Gadgets.First(g => g.Id == GetSignatureGadgetIdForTeam(teamColor))
                     };
                 }
 
@@ -218,7 +220,7 @@ namespace CastleDefense.Engine.Data
                 int targeted = int.TryParse(GetCol("Targeted"), out var t) ? t : 1;
                 int cost = int.TryParse(GetCol("Cost"), out var c) ? c : 0;
                 int upgradeCost = int.TryParse(GetCol("UpgradeCost"), out var uc) ? uc : 1000;
-                int baseValue = int.TryParse(GetCol("BaseValue"), out var bv) ? bv : 0;
+                float baseValue = float.TryParse(GetCol("BaseValue"), out var bv) ? bv : 0f;
                 int radius = int.TryParse(GetCol("Radius"), out var r) ? r : 0;
                 int delay = int.TryParse(GetCol("Delay"), out var d) ? d : 0;
                 int pushForce = int.TryParse(GetCol("PushForce"), out var pf) ? pf : 0;
@@ -330,7 +332,7 @@ namespace CastleDefense.Engine.Data
                 Cost = 0,
                 CooldownMs = 0,
                 MaxCharges = 1,
-                MaxHealth = 400 * healthMultiplier * HEALTH_MULTIPLIER,
+                MaxHealth = 4000 * healthMultiplier * HEALTH_MULTIPLIER,
                 MaxShield = 0,
                 Damage = 0,
                 MoveSpeed = 0,
@@ -347,6 +349,42 @@ namespace CastleDefense.Engine.Data
                 PushForce = 0,
                 EffectiveWeight = float.MaxValue
             };
+        }
+
+        public static TeamColour GetRandomTeam()
+        {
+            Array values = Enum.GetValues(typeof(TeamColour));
+
+            return (TeamColour)values.GetValue(Random.Shared.Next(values.Length));
+        }
+
+        public static string GetRandomOGadgetId()
+        {
+            List<GadgetDefinition> OGadgets = Gadgets.Where(g => g.Slot == GadgetSlot.Offense && !g.Id.Contains('_')).ToList();
+
+            return OGadgets.ElementAt(Random.Shared.Next(OGadgets.Count)).Id;
+        }
+        public static string GetRandomDGadgetId()
+        {
+            List<GadgetDefinition> DGadgets = Gadgets.Where(g => g.Slot == GadgetSlot.Defense && !g.Id.Contains('_')).ToList();
+
+            return DGadgets.ElementAt(Random.Shared.Next(DGadgets.Count)).Id;
+        }
+        public static string GetSignatureGadgetIdForTeam(TeamColour team)
+        {
+            Dictionary<TeamColour, string> SignatureGadgetMap = new Dictionary<TeamColour, string>
+            {
+                { TeamColour.Black, "blackhole" },
+                { TeamColour.Blue, "wave" },
+                { TeamColour.Green, "goo" },
+                { TeamColour.Orange, "meteor" },
+                { TeamColour.Purple, "poison" },
+                { TeamColour.Red, "rage" },
+                { TeamColour.White, "cash" },
+                { TeamColour.Yellow, "divine" }
+            };
+
+            return SignatureGadgetMap[team];
         }
     }
 }

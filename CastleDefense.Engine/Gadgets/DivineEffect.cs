@@ -29,8 +29,8 @@ namespace CastleDefense.Engine.Gadgets
                 {
                     foreach (var ally in allies)
                     {
-                        ally.CurrentShield = _def.BaseValue;
-                        engine.AddGadgetXp(side, "divine", _def.BaseValue / 10);
+                        ally.CurrentShield = (int)_def.BaseValue;
+                        engine.AddGadgetXp(side, "divine", (int)(_def.BaseValue / 10));
                     }
                 } 
                 else

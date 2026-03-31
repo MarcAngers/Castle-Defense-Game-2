@@ -49,8 +49,8 @@ namespace CastleDefense.Engine.Gadgets
                 }
 
                 // Damage castles:
-                engine.DamageCastle(engine._state.Player1, _def.BaseValue / 2);
-                engine.DamageCastle(engine._state.Player2, _def.BaseValue / 2);
+                engine.DamageCastle(engine._state.Player1, (int)_def.BaseValue / 2);
+                engine.DamageCastle(engine._state.Player2, (int)_def.BaseValue / 2);
             });
         }
     }

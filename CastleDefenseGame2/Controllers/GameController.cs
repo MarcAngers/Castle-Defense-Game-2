@@ -17,13 +17,13 @@ namespace CastleDefense.Api.Controllers
 
         public class CreateGameRequest
         {
-            public TeamColour Team { get; set; }
+            public string GameMode { get; set; }
         }
 
         [HttpPost]
-        public IActionResult CreateGame()
+        public IActionResult CreateGame([FromBody] CreateGameRequest request)
         {
-            string gameId = _gameService.CreateGame();
+            string gameId = _gameService.CreateGame(request?.GameMode ?? "mp");
 
             return Ok(new { gameId = gameId });
         }

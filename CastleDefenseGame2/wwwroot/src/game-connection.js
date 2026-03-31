@@ -9,6 +9,7 @@ class GameConnection {
         this.gadgetUpgradedCallback = null;
         
         this.connection = null;
+        this.gameMode = null;
         this.currentGameId = null;
         this.selectedTeam = "white";
         this.selectedLoadout = [];
@@ -67,7 +68,14 @@ class GameConnection {
     }
 
     createGame = async () => {
-        const response = await fetch(`/api/games`, { method: "POST" });
+        const mode = connection.gameMode || 'mp';
+        const response = await fetch(`/api/games`, { 
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ gameMode: mode })
+        });
         const data = await response.json();
 
         await this.joinGame(data.gameId, this.selectedTeam);

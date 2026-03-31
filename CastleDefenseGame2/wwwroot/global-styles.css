@@ -77,6 +77,7 @@ button:active:not(:disabled) {
 .ui-screen #game-id-list,
 .ui-screen #team-bar,
 .ui-screen .character,
-.ui-screen .gadget {
+.ui-screen .gadget,
+.ui-screen .level {
     pointer-events: auto;
 }

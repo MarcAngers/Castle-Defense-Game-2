@@ -1,4 +1,5 @@
 import { showScreen } from '../../../src/router.js';
+import connection from '../../../src/game-connection.js';
 import View from '../../../src/view.js';
 
 export default async function initMainMenu() {
@@ -9,12 +10,13 @@ export default async function initMainMenu() {
     const btnSP = document.getElementById('btnSingleplayer');
     const btnMP = document.getElementById('btnMultiplayer');
     const btnCollection = document.getElementById('btnCollection');
-    //const btnMP = document.getElementById('btnMultiplayer');
     
     btnSP.onclick = () => {
-        //showScreen('select-team');
+        connection.gameMode = 'sp';
+        showScreen('select-team');
     };
     btnMP.onclick = () => {
+        connection.gameMode = 'mp';
         showScreen('select-team');
     };
     btnCollection.onclick = () => {

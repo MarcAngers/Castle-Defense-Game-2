@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using CastleDefense.Api.Services;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Data;
 
 namespace CastleDefense.Api.Hubs
 {
@@ -56,6 +57,18 @@ namespace CastleDefense.Api.Hubs
 
             // Send initial State
             await Clients.Caller.SendAsync("GameJoined", side, game._state);
+
+            if (game._state.GameMode == "sp")
+            {
+                game._state.Player2.Side = 2;
+                game._state.Player2.ConnectionId = "AI_BOT"; // Mock connection ID
+                game._state.Player2.Team = GameDataManager.GetRandomTeam(); // Random opponent for now...
+
+                // Give the AI a valid loadout so it doesn't crash!
+                game._state.Player2.SetLoadout(new string[] { GameDataManager.GetRandomOGadgetId(), GameDataManager.GetRandomDGadgetId(), GameDataManager.GetSignatureGadgetIdForTeam(game._state.Player2.Team) });
+
+                _gameService.StartGame(gameId);
+            }
         }
 
         public void SpawnUnit(string gameId, string unitId)
