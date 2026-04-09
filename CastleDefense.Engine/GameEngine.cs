@@ -795,9 +795,9 @@ namespace CastleDefense.Engine
             float p2Reward = CalculateReward(2);
             // Incentivize using gadgets to help the AI learn what they do
             if (p1ActionSucceeded && actionP1 > 10)
-                p1Reward += 50 * _currentDenseWeight;
+                p1Reward += 150 * _currentDenseWeight;
             if (p2ActionSucceeded && actionP2 > 10)
-                p2Reward += 50 * _currentDenseWeight;
+                p2Reward += 150 * _currentDenseWeight;
 
             // 5. Flatten the new game state for the AI's neural network
             float[] p1State = _state.GetStateVector(1);
@@ -916,7 +916,7 @@ namespace CastleDefense.Engine
             // Reward them heavily for successfully increasing their income
             if (myPlayer.Income - myPrevIncome > 0)
             {
-                reward += 400f * _currentDenseWeight;
+                reward += 5000f * _currentDenseWeight;
             }
 
             // Reward them for successfully upgrading their base health

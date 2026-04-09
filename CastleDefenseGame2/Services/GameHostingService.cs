@@ -85,14 +85,27 @@ namespace CastleDefense.Api.Services
                     {
                         if (engine._state.GameMode == "sp" || engine._state.GameMode == "vai")
                         {
-                            if (engine._state.CurrentTick % 15 == 0)
+                            if (engine._state.CurrentTick % 3 == 0) // Replace this number with the AI's decision speed
                             {
                                 // Get the board from Player 2's perspective
                                 float[] aiState = engine._state.GetStateVector(2);
                                 int[] aiActionMask = engine._state.GetActionMask(2);
                                 // 1. Check for values > 1.0 (The Python Clipping Bug)
-                                bool outOfBounds = aiState.Any(val => val > 1.01f || val < -0.01f);
-                                if (outOfBounds) Console.WriteLine("[WARNING] The array contains values outside the 0.0 - 1.0 range!");
+                                var outOfBoundsItems = aiState
+                                    .Select((val, index) => new { Index = index, Value = val })
+                                    .Where(x => x.Value > 1.01f || x.Value < -0.01f)
+                                    .ToList();
+
+                                if (outOfBoundsItems.Any())
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Red;
+                                    Console.WriteLine($"\n[WARNING] Found {outOfBoundsItems.Count} value(s) outside the 0.0 - 1.0 range!");
+                                    foreach (var item in outOfBoundsItems)
+                                    {
+                                        Console.WriteLine($"   -> Index [{item.Index}] is out of bounds with value: {item.Value}");
+                                    }
+                                    Console.ResetColor();
+                                }
 
                                 // Ask the neural network for its best move
                                 int aiAction = _aiBrain.GetBestAction(aiState, aiActionMask);

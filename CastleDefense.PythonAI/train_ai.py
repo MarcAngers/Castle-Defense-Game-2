@@ -12,21 +12,43 @@ HOST = '127.0.0.1'
 PORT = 5000
 
 class CastleDefenseEnv(gym.Env):
-    def __init__(self, opponent_model_path=None):
+    # Pass our new dictionary list into the environment
+    def __init__(self, opponent_models=None, base_speed=3):
         super().__init__()
         self.action_space = spaces.Discrete(14)
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(348,), dtype=np.float32)
         
-        # --- NEW: Load the Sparring Partner ---
-        self.opponent = None
-        if opponent_model_path and os.path.exists(opponent_model_path):
-            print(f"Loading Sparring Partner from {opponent_model_path}...")
-            # We load the opponent strictly on the CPU for fast inference
-            self.opponent = MaskablePPO.load(opponent_model_path, device="cpu")
-        else:
-            print("No opponent model found. Player 2 will be a Random Dummy.")
-            
-        self.current_p2_state = None
+        self.base_speed = base_speed # The speed of the NEW AI (framesToSkip = 3)
+        self.opponents = []
+        
+        if opponent_models:
+            for opp in opponent_models:
+                path = opp["path"]
+                if os.path.exists(path):
+                    print(f"Drafting {path} into the League (APM Speed: {opp['speed']})...")
+                    
+                    # Try MaskablePPO first. If it crashes, it's a legacy PPO model!
+                    try:
+                        model = MaskablePPO.load(path, device="cpu")
+                        is_maskable = True
+                    except:
+                        model = PPO.load(path, device="cpu")
+                        is_maskable = False
+                    
+                    # Store everything we need to know about this sparring partner
+                    self.opponents.append({
+                        "name": path.replace(".zip", ""), # Clean name for analytics
+                        "model": model,
+                        "is_maskable": is_maskable,
+                        "speed": opp["speed"]
+                    })
+                else:
+                    print(f"[WARNING] Could not find sparring partner: {path}")
+
+        self.current_opponent = None
+        self.current_opp_state = None
+        self.current_opp_mask = None
+        self.opp_step_counter = 0 # NEW: Tracks Time Dilation
 
         print(f"Connecting to C# Engine at {HOST}:{PORT}...")
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,7 +56,7 @@ class CastleDefenseEnv(gym.Env):
         self.stream = self.sock.makefile('rw', buffering=1)
 
         self.current_step = 0
-        self.total_anneal_steps = 20_000_000 # The training wheels fall off at 20M
+        self.total_anneal_steps = 22_000_000
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -42,60 +64,82 @@ class CastleDefenseEnv(gym.Env):
         message = self.stream.readline()
         result = json.loads(message)
 
-        # --- NEW: Flip the coin for this match! ---
-        self.ai_is_p1 = True #random.choice([True, False])
+        self.ai_is_p1 = True
         
-        # Route the states based on who the AI is playing as this match
+        league_pool = self.opponents + [None]
+        self.current_opponent = random.choice(league_pool)
+        self.opp_step_counter = 0 # Reset the time dilation counter!
+        
         if self.ai_is_p1:
             ai_state = np.array(result["P1State"], dtype=np.float32)
-            self.current_opp_state = np.array(result["P2State"], dtype=np.float32)
             self.current_mask = np.array(result["P1ActionMask"], dtype=np.int8)
+            self.current_opp_state = np.array(result["P2State"], dtype=np.float32)
+            self.current_opp_mask = np.array(result["P2ActionMask"], dtype=np.int8)
         else:
             ai_state = np.array(result["P2State"], dtype=np.float32)
-            self.current_opp_state = np.array(result["P1State"], dtype=np.float32)
             self.current_mask = np.array(result["P2ActionMask"], dtype=np.int8)
+            self.current_opp_state = np.array(result["P1State"], dtype=np.float32)
+            self.current_opp_mask = np.array(result["P1ActionMask"], dtype=np.int8)
             
         return ai_state, {}
 
     def step(self, action):
         ai_action = int(action)
         self.current_step += 1
-
         dense_weight = max(0.0, 1.0 - (self.current_step / self.total_anneal_steps))
         
-        # --- NEW: Opponent Logic (Now side-agnostic!) ---
-        if self.opponent is not None and self.current_opp_state is not None:
-            # deterministic=True makes the opponent play its absolute best
-            opp_action, _ = self.opponent.predict(self.current_opp_state, deterministic=True)
-            opp_action = int(opp_action)
+        # --- NEW: Time Dilation Opponent Logic ---
+        opp_name = "Random Dummy"
+        if self.current_opponent is not None and self.current_opp_state is not None:
+            opp_name = self.current_opponent["name"]
+            
+            # Calculate the ratio (e.g., 15 // 3 = 5). 
+            # The old AI only acts every 5 steps!
+            ratio = max(1, self.current_opponent["speed"] // self.base_speed)
+            
+            if self.opp_step_counter % ratio == 0:
+                # Time for the opponent to think!
+                if self.current_opponent["is_maskable"]:
+                    opp_action, _ = self.current_opponent["model"].predict(
+                        self.current_opp_state, action_masks=self.current_opp_mask, deterministic=True)
+                else:
+                    opp_action, _ = self.current_opponent["model"].predict(
+                        self.current_opp_state, deterministic=True)
+                opp_action = int(opp_action)
+            else:
+                # Opponent is frozen in slow motion. Send a Wait action (0).
+                opp_action = 0 
+                
+            self.opp_step_counter += 1
         else:
             opp_action = random.randint(0, 13)
 
-        # Route the actions based on the coin flip
+        # Notice we are passing the Opponent Name to C# now!
         if self.ai_is_p1:
-            payload = {"P1Action": ai_action, "P2Action": opp_action, "DenseRewardWeight": float(dense_weight)}
+            payload = {"P1Action": ai_action, "P2Action": opp_action, "DenseRewardWeight": float(dense_weight), "OpponentName": opp_name}
         else:
-            payload = {"P1Action": opp_action, "P2Action": ai_action, "DenseRewardWeight": float(dense_weight)}
+            payload = {"P1Action": opp_action, "P2Action": ai_action, "DenseRewardWeight": float(dense_weight), "OpponentName": opp_name}
             
         self.stream.write(json.dumps(payload) + '\n')
 
         message = self.stream.readline()
         result = json.loads(message)
 
-        # Route the resulting states and rewards back to the correct brains
+        # Route the resulting states and rewards... (Unchanged)
         if self.ai_is_p1:
             ai_state = np.array(result["P1State"], dtype=np.float32)
-            self.current_opp_state = np.array(result["P2State"], dtype=np.float32)
             self.current_mask = np.array(result["P1ActionMask"], dtype=np.int8)
             ai_reward = float(result["P1Reward"])
+            self.current_opp_state = np.array(result["P2State"], dtype=np.float32)
+            self.current_opp_mask = np.array(result["P2ActionMask"], dtype=np.int8)
         else:
             ai_state = np.array(result["P2State"], dtype=np.float32)
-            self.current_opp_state = np.array(result["P1State"], dtype=np.float32)
             self.current_mask = np.array(result["P2ActionMask"], dtype=np.int8)
             ai_reward = float(result["P2Reward"])
+            self.current_opp_state = np.array(result["P1State"], dtype=np.float32)
+            self.current_opp_mask = np.array(result["P1ActionMask"], dtype=np.int8)
 
         done = bool(result["IsDone"])
-
         return ai_state, ai_reward, done, False, {}
 
     def action_masks(self):
@@ -104,48 +148,47 @@ class CastleDefenseEnv(gym.Env):
     def close(self):
         self.sock.close()
 
-# --- THE TRAINING LOOP ---
 if __name__ == "__main__":
+    training_model_name = "castle_defense_p1_v8"
     
-    # 1. Define your model names
-    training_model_name = "castle_defense_p1_v5"
-    sparring_model_name = "castle_defense_p1_v4.zip"
+    # Define the models and their native speeds!
+    sparring_models = [
+        {"path": "castle_defense_p1_v1.zip", "speed": 15}, 
+        {"path": "castle_defense_p1_v2.zip", "speed": 15}, 
+        {"path": "castle_defense_p1_v3.zip", "speed": 15},
+        {"path": "castle_defense_p1_v4.zip", "speed": 15},
+        {"path": "castle_defense_p1_v5.zip", "speed": 15},
+        {"path": "castle_defense_p1_v6.zip", "speed": 3},
+        {"path": "castle_defense_p1_v7.zip", "speed": 3}
+    ]
 
-    # 2. Pass the sparring model into the environment
-    env = CastleDefenseEnv(opponent_model_path=sparring_model_name)
+    env = CastleDefenseEnv(opponent_models=sparring_models, base_speed=3)
 
-    # 3. Resume or Create the Training Brain
     model_file = f"{training_model_name}.zip"
     
-    # Bundle our new long-term vision settings into a dictionary
     custom_hyperparams = {
         "n_steps": 8192,
         "batch_size": 1024,
         "n_epochs": 10,
-        "gamma": 0.999,
+        "gamma": 0.9998,
         "learning_rate": 0.0003,
-        "ent_coef": 0.0001,
+        "ent_coef": 0.0002,
         "policy_kwargs": dict(net_arch=[256, 256])
     }
 
     if os.path.exists(model_file):
-        print(f"Resuming training for {model_file} with upgraded hyperparameters...")
-        # We use custom_objects to force the old brain to adopt the new vision/batch settings
+        print(f"\nResuming training for {model_file} with upgraded hyperparameters...")
         model = MaskablePPO.load(training_model_name, env=env, custom_objects=custom_hyperparams, verbose=1)
     else:
-        print("Initializing brand new Neural Network with macro-strategy settings...")
-        # We unpack the dictionary using ** to apply the settings to the new brain
+        print("\nInitializing brand new Neural Network with macro-strategy settings...")
         model = MaskablePPO("MlpPolicy", env, verbose=1, **custom_hyperparams)
 
-    # 4. Train!
-    print("Beginning Training... (Press Ctrl+C to stop early and save)")
+    print("\nBeginning Training... (Press Ctrl+C to stop early and save)")
     
     try:
-        # We put the learn function inside a "try" block
-        model.learn(total_timesteps=50000000, reset_num_timesteps=False)
+        model.learn(total_timesteps=300000000, reset_num_timesteps=False)
     
     except KeyboardInterrupt:
-        # If you hit Ctrl+C, Python catches the interrupt here instead of crashing
         print("\nTraining interrupted by user! Wrapping up and saving brain...")
 
     model.save(training_model_name)

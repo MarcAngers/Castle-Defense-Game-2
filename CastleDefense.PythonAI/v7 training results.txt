@@ -1,0 +1,34 @@
+===========================================================
+               FINAL TRAINING RUN STATISTICS
+===========================================================
+[GLOBAL] Matches: 139984 | Total WR: 70.4% | Baseline: 53.0%
+
+--- BY OPPONENT ---
+[Anti-Spam Bot    ] Matches: 12701 | Total WR:  57.8% | Baseline:  34.0% | Final 100:  81.0%
+[castle_defense_p1_v1] Matches: 9133  | Total WR:  55.7% | Baseline:  29.0% | Final 100:  64.0%
+[castle_defense_p1_v2] Matches: 9044  | Total WR:  59.1% | Baseline:  44.0% | Final 100:  74.0%
+[castle_defense_p1_v3] Matches: 9172  | Total WR:  65.1% | Baseline:  39.0% | Final 100:  78.0%
+[castle_defense_p1_v4] Matches: 9054  | Total WR:  44.7% | Baseline:  20.0% | Final 100:  61.0%
+[castle_defense_p1_v5] Matches: 9064  | Total WR:  58.5% | Baseline:  28.0% | Final 100:  80.0%
+[castle_defense_p1_v6] Matches: 9107  | Total WR:  51.8% | Baseline:  20.0% | Final 100:  67.0%
+[Random Dummy     ] Matches: 21693 | Total WR:  76.5% | Baseline:  67.0% | Final 100:  80.0%
+[Spam Bot T1      ] Matches: 20294 | Total WR:  92.9% | Baseline:  84.0% | Final 100:  96.0%
+[Spam Bot T2      ] Matches: 7112  | Total WR:  97.4% | Baseline:  92.0% | Final 100: 100.0%
+[Spam Bot T3      ] Matches: 3929  | Total WR:  88.1% | Baseline:  78.0% | Final 100:  93.0%
+[Spam Bot T4      ] Matches: 3889  | Total WR:  69.7% | Baseline:  51.0% | Final 100:  71.0%
+[Spam Bot T5      ] Matches: 3993  | Total WR:  62.1% | Baseline:  38.0% | Final 100:  68.0%
+[Spam Bot T6      ] Matches: 3905  | Total WR:  69.2% | Baseline:  52.0% | Final 100:  67.0%
+[Spam Bot T7      ] Matches: 3114  | Total WR:  72.7% | Baseline:  61.0% | Final 100:  74.0%
+[Spam Bot T8      ] Matches: 4780  | Total WR:  98.0% | Baseline:  73.0% | Final 100:  97.0%
+
+--- BY TIME SKIP ---
+[SKIP 0 ] Matches: 53477 | Total WR:  69.0% | Baseline:  50.0% | Final 100:  80.0%
+[SKIP 1 ] Matches: 10868 | Total WR:  67.7% | Baseline:  55.0% | Final 100:  86.0%
+[SKIP 2 ] Matches: 10765 | Total WR:  67.4% | Baseline:  48.0% | Final 100:  87.0%
+[SKIP 3 ] Matches: 10704 | Total WR:  68.0% | Baseline:  46.0% | Final 100:  75.0%
+[SKIP 4 ] Matches: 10835 | Total WR:  71.7% | Baseline:  50.0% | Final 100:  79.0%
+[SKIP 5 ] Matches: 10719 | Total WR:  70.0% | Baseline:  59.0% | Final 100:  81.0%
+[SKIP 6 ] Matches: 10865 | Total WR:  70.1% | Baseline:  59.0% | Final 100:  73.0%
+[SKIP 7 ] Matches: 10912 | Total WR:  75.1% | Baseline:  62.0% | Final 100:  79.0%
+[SKIP 8 ] Matches: 10839 | Total WR:  79.5% | Baseline:  63.0% | Final 100:  77.0%
+===========================================================

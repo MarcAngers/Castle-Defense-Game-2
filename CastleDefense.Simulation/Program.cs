@@ -1,6 +1,7 @@
 ﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
+using Microsoft.Extensions.Options;
 using System;
 using System.IO;
 using System.Net;
@@ -16,6 +17,7 @@ namespace CastleDefense.Simulation
         public int P2Action { get; set; }
 
         public float DenseRewardWeight { get; set; }
+        public string OpponentName { get; set; }
     }
 
     public class StatTracker
@@ -120,6 +122,16 @@ namespace CastleDefense.Simulation
                 int spamTier = Math.Max(Math.Min(timeSkip + rand.Next(-2, 3), 8), 1);
                 SpamBot bot = new SpamBot(spamTier);
 
+                // 1. Identify the opponent
+                string opponentName = "Unknown";
+
+                if (botSelection == 0) opponentName = "Random Dummy";
+                else if (botSelection == 1) opponentName = "Anti-Spam Bot";
+                else if (botSelection >= 2 && botSelection <= 5)
+                {
+                    opponentName = $"Spam Bot T{spamTier}";
+                }
+
                 // 3. The Match Loop
                 try
                 {
@@ -136,7 +148,7 @@ namespace CastleDefense.Simulation
                     };
                     writer.WriteLine(JsonSerializer.Serialize(initialResult));
 
-                    int framesToSkip = 15;
+                    int framesToSkip = 3;
 
                     // 4. The Match Loop
                     while (!state.IsGameOver && state.CurrentTick < maxTicks)
@@ -145,6 +157,11 @@ namespace CastleDefense.Simulation
                         if (string.IsNullOrEmpty(message)) break;
 
                         var actions = JsonSerializer.Deserialize<ActionPayload>(message);
+
+                        if (botSelection > 5 && !string.IsNullOrEmpty(actions.OpponentName))
+                        {
+                            opponentName = actions.OpponentName;
+                        }
 
                         float cumulativeP1Reward = 0f;
                         float cumulativeP2Reward = 0f;
@@ -285,20 +302,10 @@ namespace CastleDefense.Simulation
                     }
                 }
 
-                // --- NEW: CATEGORIZE THE MATCH ---
-                // 1. Identify the opponent
-                string opponentName;
-                if (botSelection == 0) opponentName = "Random Dummy";
-                else if (botSelection == 1) opponentName = "Anti-Spam Bot";
-                else if (botSelection >= 2 && botSelection <= 5)
-                {
-                    opponentName = $"Spam Bot T{spamTier}";
-                }
-                else opponentName = "Python Models";
-
+                // --- CATEGORIZE THE MATCH ---
                 // 2. Ensure the trackers exist in the dictionaries
                 if (!opponentTrackers.ContainsKey(opponentName))
-                    opponentTrackers[opponentName] = new StatTracker();
+                opponentTrackers[opponentName] = new StatTracker();
 
                 if (!timeSkipTrackers.ContainsKey(timeSkip))
                     timeSkipTrackers[timeSkip] = new StatTracker();
