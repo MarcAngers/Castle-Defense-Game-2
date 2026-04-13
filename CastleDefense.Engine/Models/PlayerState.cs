@@ -113,6 +113,9 @@ namespace CastleDefense.Engine.Models
 
                 GadgetXp[baseGadgetId] = 0;
 
+                // Set Gadget cooldown on upgrade
+                GadgetCooldowns[upgradedDef.Id] = upgradedDef.CooldownMs / (1000 / 30);
+
                 OnGadgetUpgraded?.Invoke(this.Side, upgradedDef);
             }
         }

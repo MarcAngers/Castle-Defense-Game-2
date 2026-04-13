@@ -16,8 +16,7 @@ namespace CastleDefense.Engine.Gadgets
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "freeze", baseXp);
+            engine.AddGadgetXp(side, "freeze", 100);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>
@@ -37,7 +36,6 @@ namespace CastleDefense.Engine.Gadgets
                     {
                         enemy.Statuses.Add(new ActiveStatus("Freeze", engine._state.CurrentTick + _def.StatusDuration, _def.PushForce));
                     }
-                    engine.AddGadgetXp(side, "freeze", 10);
                 }
             });
 

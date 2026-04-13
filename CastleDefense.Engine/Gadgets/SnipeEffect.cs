@@ -37,8 +37,7 @@ namespace CastleDefense.Engine.Gadgets
 
             engine.TriggerGadgetAnimation(_def.Id, side, position, target.InstanceId);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "snipe", baseXp);
+            engine.AddGadgetXp(side, "snipe", 100);
 
             // Schedule the gadget effect to happen after the animation
             engine.ScheduleAction(_def.Delay, () =>
@@ -48,13 +47,6 @@ namespace CastleDefense.Engine.Gadgets
                 engine.ApplyDamage(target, (int)_def.BaseValue, Models.AttackType.Melee, _def.PushForce);
 
                 int postHealth = target.CurrentHealth + Math.Max(0, target.CurrentShield);
-
-                engine.AddGadgetXp(side, "snipe", (preHealth - postHealth) / 10);
-
-                if (postHealth <= 0)
-                {
-                    engine.AddGadgetXp(side, "snipe", 50);
-                }
             });
         }
     }

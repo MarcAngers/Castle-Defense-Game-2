@@ -15,14 +15,12 @@ namespace CastleDefense.Engine.Gadgets
         public void Execute(GameEngine engine, int side, int position)
         {
             // Speed gadget works immediately
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "speed", baseXp);
+            engine.AddGadgetXp(side, "speed", 100);
 
             var allies = engine._state.Units.Where(u => u.Side == side).ToList();
 
             foreach (var ally in allies)
             {
-                engine.AddGadgetXp(side, "speed", 10);
                 ally.Statuses.Add(new ActiveStatus(
                     "Speed",
                     engine._state.CurrentTick + _def.StatusDuration,

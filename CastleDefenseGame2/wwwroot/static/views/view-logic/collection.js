@@ -1,17 +1,22 @@
 import { showScreen } from '../../../src/router.js';
-import View from '../../../src/view.js';
+import view from '../../../src/view.js';
 
-export default async function initCollection() {
-    let collectionView = new View('bgCanvas');  
-    collectionView.drawBackground('white');
+export default function initCollection() {
+    view.mapColour = 'purple';
+    view.panTo(1000);
+    view.draw();
 
-    const btnSP = document.getElementById('btnUnits');
-    const btnMP = document.getElementById('btnGadgets');
+    const btnUnitInfo = document.getElementById('btnUnitInfo');
+    const btnGadgetInfo = document.getElementById('btnGadgetInfo');
+    const btnBack = document.getElementById('btnBack');
     
-    btnUnits.onclick = () => {
-        showScreen('units-select-team');
+    btnUnitInfo.onclick = () => {
+        showScreen('select-team');
     };
-    btnGadgets.onclick = () => {
-        showScreen('gadgets');
+    btnGadgetInfo.onclick = () => {
+        showScreen('gadget-categories');
+    };
+    btnBack.onclick = () => {
+        showScreen('main-menu');
     };
 }

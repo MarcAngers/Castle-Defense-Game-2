@@ -17,8 +17,7 @@ namespace CastleDefense.Engine.Gadgets
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "wave", baseXp);
+            engine.AddGadgetXp(side, "wave", 100);
 
             var waveZone = new WaveHazard
             {

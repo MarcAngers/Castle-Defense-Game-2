@@ -57,8 +57,6 @@ namespace CastleDefense.Engine.Models.Hazards
 
                     // Launch the unit
                     enemy.PendingKnockback += (knockbackDist * direction);
-
-                    player.AddGadgetXp("wave", 10);
                 }
             }
 

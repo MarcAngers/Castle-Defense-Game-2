@@ -11,6 +11,7 @@ class AssetLoader {
             gadgetData: {},     // Store the CSV gadget stats for the UI to use
             hazards: {},        // Hazard animation assets
             particles: {},      // Particles for status effects and map ambience
+            tooltips: {},       // Tooltip icons
         };
     }
 
@@ -28,6 +29,7 @@ class AssetLoader {
         await this.loadGadgets();
         await this.loadHazards();
         await this.loadParticles();
+        await this.loadTooltips();
 
         // 4. Load unique assets once
         await this.loadImage('buildings', 'dead-castle', '../assets/buildings/dead-castle.png');
@@ -207,6 +209,18 @@ class AssetLoader {
 
         for (const particleId of particleAssetList) {
             await this.loadImage('particles', particleId, `../assets/particles/${particleId}.png`);
+        }
+    }
+
+    async loadTooltips() {
+        const tooltipAssetList = [
+            'sword',
+            'heart',
+            'boot',
+        ];
+
+        for (const tooltipId of tooltipAssetList) {
+            await this.loadImage('tooltips', tooltipId, `../assets/tooltips/${tooltipId}.png`);
         }
     }
 

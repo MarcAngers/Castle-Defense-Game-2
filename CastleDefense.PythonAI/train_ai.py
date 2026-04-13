@@ -56,7 +56,7 @@ class CastleDefenseEnv(gym.Env):
         self.stream = self.sock.makefile('rw', buffering=1)
 
         self.current_step = 0
-        self.total_anneal_steps = 22_000_000
+        self.total_anneal_steps = 30_000_000
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

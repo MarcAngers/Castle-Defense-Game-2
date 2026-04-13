@@ -225,3 +225,82 @@ button {
         transform: translateY(-80px); 
     }
 }
+/* Ensure the wrapper is still the anchor point */
+.character-icon-wrapper {
+    position: relative; 
+}
+
+/* --- THE UPGRADED TOOLTIP CONTAINER --- */
+.unit-tooltip {
+    position: absolute;
+    bottom: 105%; /* Pushed up slightly higher to make room for the arrow */
+    left: 50%;
+    
+    /* Start slightly lower so it "slides up" when it appears */
+    transform: translateX(-50%) translateY(10px); 
+
+    /* 1. BACKGROUND & BORDER */
+    background-color: white;
+    border: 8px solid black; /* A nice gold trim (change hex to match your UI) */
+    
+    /* Drop shadow for depth + faint glowing box-shadow matching the border */
+    box-shadow: 0px 8px 15px rgba(0, 0, 0, 0.6), 0px 0px 10px rgba(212, 175, 55, 0.2);
+
+    /* 2. TYPOGRAPHY */
+    font-family: 'Press Start 2P', cursive;    
+    color: black;
+    font-size: 18px;
+
+    /* 3. LAYOUT & FUNCTIONALITY (Do not change these) */
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none; /* Keeps the ghost-click bug away */
+    white-space: nowrap;
+    z-index: 100;
+
+    /* 4. ANIMATION */
+    opacity: 0;
+    visibility: hidden;
+    /* Uses a cubic-bezier to give the popup a satisfying little "bounce" or spring effect */
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+}
+
+/* When the JS adds the 'visible' class, fade in and snap to Y: 0 */
+.unit-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* --- THE POINTER ARROW --- */
+/* This draws a little triangle pointing down at the unit */
+.unit-tooltip::after {
+    content: "";
+    position: absolute;
+    top: calc(100% + 8px); /* Placed right at the bottom edge of the tooltip */
+    left: 50%;
+    margin-left: -7px; /* Half of the border-width to center it */
+    border-width: 7px;
+    border-style: solid;
+    /* The first color must match your border color! The rest stay transparent. */
+    border-color: black transparent transparent transparent; 
+}
+
+/* --- THE STAT ROWS --- */
+.unit-tooltip .stat {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    letter-spacing: 0.5px; /* Spaces the numbers out slightly */
+}
+
+.unit-tooltip .stat img {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    -webkit-user-drag: none; /* Ghost-drag prevention */
+    /* Optional: Adds a tiny shadow directly to your heart/sword PNGs to make them pop */
+    filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); 
+}

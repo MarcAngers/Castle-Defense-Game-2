@@ -220,7 +220,7 @@ namespace CastleDefense.Engine
 
             if (player.Money < player.InvestmentPrice) return false;
 
-            if (player.InvestmentCount >= 8) return false;
+            if (player.InvestmentCount > 8) return false;
 
             // 2. Deduct cost
             player.Money -= player.InvestmentPrice;
@@ -231,6 +231,17 @@ namespace CastleDefense.Engine
             player.Income = Math.Pow(Math.E, 0.0109 * Math.Pow(player.InvestmentCount, 3) + 0.0011 * Math.Pow(player.InvestmentCount, 2) + 0.4351 * player.InvestmentCount + 0.5268);
             // Each investment should take twice as long as the last
             player.InvestmentPrice = player.Income * (player.InvestmentCount * 4 + 8);
+
+            if (player.InvestmentCount == 7)
+            {
+                player.Income = 750;
+                player.InvestmentPrice = 25000;
+            }
+            if (player.InvestmentCount == 8)
+            {
+                player.Income = 2500;
+                player.InvestmentPrice = 100000;
+            }
 
             return true;
         }
@@ -353,34 +364,10 @@ namespace CastleDefense.Engine
                 var burns = unit.Statuses.Where(s => s.Name == "Burn" || s.Name == "Poison" || s.Name == "Heal" || s.Name == "Blackhole");
                 foreach (var burn in burns)
                 {
-                    // Add XP for damage/healing done by gadgets
-                    if (burn.Name == "Heal")
-                    {
-                        AddGadgetXp(burn.Side, burn.SourceGadgetId, -1 * (int)burn.Value);
-                    } else
-                    {
-                        AddGadgetXp(burn.Side, burn.SourceGadgetId, (int)burn.Value);
-                    }
-
                     int healthBefore = unit.CurrentHealth;
 
                     // Change to AttackType.Magic later?
                     ApplyDamage(unit, (int)burn.Value, AttackType.Melee, 0);
-
-                    if (burn.Name == "Blackhole")
-                    {
-                        if (healthBefore > 0 && unit.CurrentHealth <= 0)
-                        {
-                            // Verify this status actually has an owner to credit
-                            if (!string.IsNullOrEmpty(burn.SourceGadgetId))
-                            {
-                                var player = burn.Side == 1 ? _state.Player1 : _state.Player2;
-
-                                // Award the Kill XP!
-                                player.AddGadgetXp(burn.SourceGadgetId, 25);
-                            }
-                        }
-                    }  
                 }
             }
 

@@ -15,8 +15,7 @@ namespace CastleDefense.Engine.Gadgets
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);
 
-            var baseXp = _def.Level == 2 ? 1000 : 50;
-            engine.AddGadgetXp(side, "cash", baseXp);
+            engine.AddGadgetXp(side, "cash", 100);
 
             if (_def.Level < 3)
             {
@@ -24,8 +23,6 @@ namespace CastleDefense.Engine.Gadgets
                 {
                     var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
                     player.Money += _def.BaseValue;
-
-                    engine.AddGadgetXp(side, "cash", baseXp);
                 });
             } else
             {
@@ -35,8 +32,6 @@ namespace CastleDefense.Engine.Gadgets
                     {
                         var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
                         player.Money += _def.BaseValue;
-
-                        engine.AddGadgetXp(side, "cash", baseXp);
                     });
                 }
             }

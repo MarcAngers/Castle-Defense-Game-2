@@ -32,8 +32,6 @@ namespace CastleDefense.Engine.Models.Hazards
                                 state.CurrentTick + (30 * 3),
                                 0.5f // Slow them to half speed
                             ));
-
-                            player.AddGadgetXp("goo", 10);
                         }
                     }
                     else

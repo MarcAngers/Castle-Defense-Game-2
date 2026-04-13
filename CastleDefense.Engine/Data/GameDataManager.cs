@@ -319,8 +319,8 @@ namespace CastleDefense.Engine.Data
         public static UnitDefinition WallDefinition(int level)
         {
             var healthMultiplier = 1;
-            if (level == 2) healthMultiplier = 15;
-            if (level == 3) healthMultiplier = 150;
+            if (level == 2) healthMultiplier = 8;
+            if (level == 3) healthMultiplier = 20;
 
             var sizeMultiplier = level == 3 ? 6 : level;
 

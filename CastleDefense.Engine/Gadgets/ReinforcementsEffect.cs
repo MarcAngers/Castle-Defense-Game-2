@@ -13,8 +13,7 @@ namespace CastleDefense.Engine.Gadgets
         }
         public void Execute(GameEngine engine, int side, int position)
         {
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "reinforcements", baseXp);
+            engine.AddGadgetXp(side, "reinforcements", 100);
 
             var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
             var teamDef = GameDataManager.Teams.Find(team => team.Color == player.Team);
@@ -24,7 +23,6 @@ namespace CastleDefense.Engine.Gadgets
             for (int delay = 0; delay < 50; delay += 10) {
                 engine.ScheduleAction(delay, () =>
                 {
-                    engine.AddGadgetXp(side, "reinforcements", 20);
                     engine.SpawnUnit(side, unit.Id, true); // (since we already payed for the gadget, spawn units for free)
                 });
             }

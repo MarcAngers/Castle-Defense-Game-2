@@ -1,10 +1,10 @@
 import { showScreen } from '../../../src/router.js';
-import View from '../../../src/view.js';
+import view from '../../../src/view.js';
 import connection from '../../../src/game-connection.js';
 
 export default function initGameScreen() {
-    const gameOverView = new View('bgCanvas', connection.winnerSide == 1 ? 2000 : 0);
-    gameOverView.drawGameState(connection.latestState);
+    view.cameraX = connection.winnerSide == 1 ? 2000 : 0;
+    view.drawGameState(connection.latestState);
 
     let viewingStats = true;
     let animationFrameId;
@@ -16,6 +16,7 @@ export default function initGameScreen() {
 
     btnMainMenu.onclick = () => {
         viewingStats = false;
+        view.latestState = null;
         showScreen('main-menu');
     };
 
@@ -26,10 +27,10 @@ export default function initGameScreen() {
             return;
         }
         
-        gameOverView.clear();
+        view.clear();
 
         if (connection.latestState) {
-            gameOverView.drawGameState(connection.latestState);
+            view.drawGameState(connection.latestState);
         }
 
         animationFrameId = requestAnimationFrame(backgroundLoop);

@@ -127,7 +127,7 @@ export default async function initSelectLoadout() {
     document.getElementById(initialDSelect).click();
 
     if (connection.gameMode == 'sp') {
-        const btnBack = document.getElementById('btnBack');
+        const btnBack = document.getElementById('btnBackSP');
         const btnLevel = document.getElementById('btnLevel');
 
         btnBack.onclick = () => {
@@ -143,7 +143,7 @@ export default async function initSelectLoadout() {
     }
 
     if (connection.gameMode == 'mp') {
-        const btnBack = document.getElementById('btnBack');
+        const btnBack = document.getElementById('btnBackMP');
         const btnCreate = document.getElementById('btnCreate');
         const btnJoin = document.getElementById('btnJoin');
 

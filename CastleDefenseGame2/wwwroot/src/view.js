@@ -4,13 +4,13 @@ import GadgetManager from './gadget-manager.js';
 import VisualUnit from './visual-unit.js';
 import connection from './game-connection.js';
 
-export default class View {
-    constructor(canvasId, cameraX = 0) {
+class View {
+    constructor() {
         this.visualUnits = {};
         this.currentTime = performance.now();
         this.lastTime = performance.now();
 
-        this.canvas = document.getElementById(canvasId);
+        this.canvas = document.getElementById('bgCanvas');
 
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
@@ -20,7 +20,7 @@ export default class View {
 
         this.MAP_WIDTH = 2000;
         // One-liner to do essentially the same math as movePan() and resize()
-        this.cameraX = Math.max(0, Math.min(cameraX, Math.max(0, this.MAP_WIDTH - window.innerWidth / (window.innerHeight / 500))));;
+        this.cameraX = 0;
 
         // Input State for Panning
         this.isDragging = false;
@@ -38,9 +38,9 @@ export default class View {
         window.addEventListener('touchend', this.endPan);
 
         this.latestState = null;
+        this.mapColour = null;
 
         window.addEventListener('resize', this.resize);
-        this.resize();
 
         this.gadgetManager = new GadgetManager(this);
 
@@ -106,6 +106,11 @@ export default class View {
         this.isDragging = false;
     }
 
+    panTo = (targetLogicalX) => {
+        const maxScroll = Math.max(0, this.MAP_WIDTH - this.logicalScreenWidth);
+        this.cameraX = Math.max(0, Math.min(targetLogicalX, maxScroll));
+    }
+
     // Helper for Mouse vs Touch coordinates
     getX = (e) => {
         if (!e) return 0;
@@ -131,6 +136,12 @@ export default class View {
     draw = () => {
         if (this.latestState) {
             this.drawGameState(this.latestState);
+        } else if (this.mapColour) {
+            this.ctx.save();
+            this.ctx.translate(-this.cameraX / 2, 0);
+            this.drawBackground(this.mapColour);
+            this.ctx.restore();
+            this.drawForeground(this.mapColour);
         } else {
             this.drawBackground('white');
             this.drawForeground('white');
@@ -557,3 +568,6 @@ export default class View {
         return `rgb(${r}, ${g}, ${b})`;
     }
 }
+
+const view = new View();
+export default view;

@@ -1,4 +1,4 @@
-import View from '../../../src/view.js';
+import view from '../../../src/view.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
 
@@ -12,8 +12,9 @@ export default function initGameScreen() {
         myTeam = loader.assets.teamList[connection.latestState.player2.team];
         startingCameraX = 2000;
     }
-    const gameView = new View('gameCanvas', startingCameraX);
-    initShopUI(myTeam, gameView);
+    view.panTo(startingCameraX);
+    
+    initShopUI(myTeam);
 
     let animationFrameId;
 
@@ -24,10 +25,10 @@ export default function initGameScreen() {
             return;
         }
         
-        gameView.clear();
+        view.clear();
 
         if (connection.latestState) {
-            gameView.drawGameState(connection.latestState);
+            view.drawGameState(connection.latestState);
             updateUI(connection.latestState);
         }
 
@@ -108,8 +109,8 @@ function updateUI(state) {
             
             // Failsafe: If they are currently targeting with a gadget they 
             // suddenly can't afford/use, cancel their targeting!
-            if (window.gameView && window.gameView.gadgetManager && window.gameView.gadgetManager.activeGadgetId === gadgetId) {
-                window.gameView.gadgetManager.cancelTargeting();
+            if (window.view && window.view.gadgetManager && window.view.gadgetManager.activeGadgetId === gadgetId) {
+                window.view.gadgetManager.cancelTargeting();
             }
         } else {
             button.disabled = false;
@@ -137,7 +138,7 @@ function updateUI(state) {
     updateGadgetButton('btnGadgetSignature', pState.signatureGadget);
 }
 
-function initShopUI(team, gameView) {
+function initShopUI(team) {
     if (connection.mySide == 1) {
         document.getElementById('hud-top').style.float = 'left';
     }
@@ -169,28 +170,77 @@ function initShopUI(team, gameView) {
         character.innerHTML = '';
 
         if (teamImages[index]) {
-            // Check if your array contains URL strings or Image Objects
             const source = teamImages[index];
-            
             const img = document.createElement('img');
             
-            // Handle both String URLs and Image Objects
             if (typeof source === 'string') {
                 img.src = source;
             } else {
-                img.src = source.src; // If it's already a new Image() object
+                img.src = source.src; 
             }
+            img.draggable = false; 
 
             character.id = loader.assets.unitList[team][index];
             character.appendChild(img);
 
+            // --- 1. BUILD THE TOOLTIP DOM ---
+            const stats = loader.getUnitStats(character.id);
+            const wrapper = character.parentElement; // The .character-icon-wrapper
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'unit-tooltip';
+            tooltip.innerHTML = `
+                <div class="stat"><img src="${loader.assets.tooltips.heart.src}" alt="HP"> ${stats.health}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.sword.src}" alt="DMG"> ${stats.damage}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.boot.src}" alt="SPD"> ${stats.speed}</div>
+            `;
+            wrapper.appendChild(tooltip);
+
+            // --- 2. DESKTOP HOVER LOGIC ---
+            wrapper.addEventListener('mouseenter', () => tooltip.classList.add('visible'));
+            wrapper.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+
+            // --- 3. MOBILE LONG-PRESS LOGIC ---
+            let pressTimer;
+            let isLongPress = false;
+
+            wrapper.addEventListener('touchstart', (e) => {
+                isLongPress = false; // Reset on every new touch
+                pressTimer = setTimeout(() => {
+                    isLongPress = true; // Timer reached 1 second!
+                    tooltip.classList.add('visible');
+                }, 1000);
+            }, { passive: true });
+
+            wrapper.addEventListener('touchend', (e) => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+                
+                // THE LIFESAVER: If they held it long enough to see the tooltip, 
+                // we destroy the synthetic click so they don't buy the unit!
+                if (isLongPress) {
+                    e.preventDefault(); 
+                }
+            });
+
+            // If the user drags their finger away, cancel the timer
+            wrapper.addEventListener('touchmove', () => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+            }, { passive: true });
+            
+            wrapper.addEventListener('touchcancel', () => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+            });
+
+            // --- 4. THE SPAWN LOGIC ---
             character.addEventListener('click', (e) => {
                 if (character.classList.contains('disabled')) return;
-
                 connection.spawnUnit(e.target.parentElement.id);
             });
 
-            priceElements[index].innerHTML = '$' + loader.getUnitStats(character.id).price;
+            priceElements[index].innerHTML = '$' + stats.price; // Re-used the stats object here!
         }
     });
 
@@ -224,15 +274,15 @@ function initShopUI(team, gameView) {
     );
 
     btnGadgetSignature.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
     });
 
     btnGadgetOffense.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[0]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[0]);
     });
 
     btnGadgetDefence.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
     });
 
     connection.onGadgetUpgraded((side, newGadgetDef) => {

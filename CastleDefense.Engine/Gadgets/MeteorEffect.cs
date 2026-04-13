@@ -14,8 +14,7 @@ namespace CastleDefense.Engine.Gadgets
 
         public void Execute(GameEngine engine, int side, int position)
         {
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "meteor", baseXp);
+            engine.AddGadgetXp(side, "meteor", 100);
 
             // 1. Determine shower intensity
             int meteorCount = _def.Level == 3 ? 10 : (_def.Level == 2 ? 3 : 1);
@@ -74,8 +73,6 @@ namespace CastleDefense.Engine.Gadgets
                                 side,
                                 _def.Id
                             ));
-
-                            engine.AddGadgetXp(side, "meteor", 50);
                         }
                     }
                 });

@@ -14,29 +14,28 @@ namespace CastleDefense.Engine.Gadgets
         }
         public void Execute(GameEngine engine, int side, int position)
         {
-            var baseXp = _def.Level == 2 ? 1000 : 100;
+            var yposition = _def.Level == 2 ? 180 : -180;
 
             if (_def.Level == 1)
             {
-                // Can only spawn 1 tier 1 wall
-                if (engine._state.Units.Any(u => u.Side == side && u.DefinitionId == "wall"))
-                {
-                    // Refund cost (probably will need to refund the cooldown as well)
-                    var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
-                    var wallDef = GameDataManager.Gadgets.Find(g => g.Id == "wall");
-                    player.Money += wallDef.Cost;
+                position = (side == 1) ? 600 : 1400;
+                yposition = 240;
+            } 
 
-                    return;
-                }
-
-                engine.AddGadgetXp(side, "wall", baseXp * 2);
-                engine.SpawnUnit(side, "wall", true, (side == 1) ? 600 : 1400, 240);
-            } else
+            // Can only spawn 1 wall
+            if (engine._state.Units.Any(u => u.Side == side && u.DefinitionId.StartsWith("wall")))
             {
-                var yposition = _def.Level == 2 ? 180 : -180;
-                engine.AddGadgetXp(side, "wall", baseXp * 2);
-                engine.SpawnUnit(side, _def.Id, true, position, yposition);
+                // Refund cost (probably will need to refund the cooldown as well)
+                var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
+                var wallDefId = _def.Level == 1 ? "wall" : "wall_" + _def.Level.ToString();
+                var wallDef = GameDataManager.Gadgets.Find(g => g.Id == wallDefId);
+                player.Money += wallDef.Cost;
+
+                return;
             }
+
+            engine.AddGadgetXp(side, "wall", 100);
+            engine.SpawnUnit(side, _def.Id, true, position, yposition);
         }
     }
 }
