@@ -5,6 +5,7 @@ import initSelectLoadout from '../static/views/view-logic/select-loadout.js';
 import initSelectLevel from '../static/views/view-logic/select-level.js';
 import initGameBrowser from '../static/views/view-logic/game-browser.js';
 import initCollection from '../static/views/view-logic/collection.js';
+import initUnitInfo from '../static/views/view-logic/unit-info.js';
 import initLobby from '../static/views/view-logic/lobby.js';
 import initGameScreen from '../static/views/view-logic/game.js';
 import initGameOverScreen from '../static/views/view-logic/game-over.js';
@@ -20,6 +21,7 @@ const routes = {
     'select-level': { path: '../static/views/select-level.html', logic: initSelectLevel },
     'game-browser': { path: '../static/views/game-browser.html', logic: initGameBrowser },
     'collection': { path: '../static/views/collection.html', logic: initCollection },
+    'unit-info': { path: '../static/views/unit-info.html', logic: initUnitInfo },
     //'singleplayer': { path: '../static/views/singleplayer.html', logic: initSingleplayer },
     //'multiplayer': { path: '../static/views/multiplayer.html', logic: initMultiplayer },
     'lobby': { path: '../static/views/lobby.html', logic: initLobby },

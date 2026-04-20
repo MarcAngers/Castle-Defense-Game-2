@@ -3,7 +3,7 @@ import view from '../../../src/view.js';
 
 export default function initCollection() {
     view.mapColour = 'purple';
-    view.panTo(1000);
+    view.panTo(900);
     view.draw();
 
     const btnUnitInfo = document.getElementById('btnUnitInfo');
@@ -11,7 +11,7 @@ export default function initCollection() {
     const btnBack = document.getElementById('btnBack');
     
     btnUnitInfo.onclick = () => {
-        showScreen('select-team');
+        showScreen('unit-info');
     };
     btnGadgetInfo.onclick = () => {
         showScreen('gadget-categories');

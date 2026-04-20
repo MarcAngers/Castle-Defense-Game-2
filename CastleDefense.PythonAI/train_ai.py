@@ -7,18 +7,27 @@ import gymnasium as gym
 from gymnasium import spaces
 from sb3_contrib import MaskablePPO
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
+def make_env(rank, opponent_models, base_speed):
+    def _init():
+        # Each environment gets a unique port: 5000, 5001, 5002, etc.
+        unique_port = 5000 + rank 
+        env = CastleDefenseEnv(opponent_models, base_speed, unique_port)
+        return env
+    return _init
 
 HOST = '127.0.0.1'
 PORT = 5000
 
 class CastleDefenseEnv(gym.Env):
-    # Pass our new dictionary list into the environment
-    def __init__(self, opponent_models=None, base_speed=3):
+    # 1. Add 'port=5000' to the accepted arguments
+    def __init__(self, opponent_models=None, base_speed=3, port=5000):
         super().__init__()
         self.action_space = spaces.Discrete(14)
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(348,), dtype=np.float32)
         
-        self.base_speed = base_speed # The speed of the NEW AI (framesToSkip = 3)
+        self.base_speed = base_speed 
         self.opponents = []
         
         if opponent_models:
@@ -48,11 +57,15 @@ class CastleDefenseEnv(gym.Env):
         self.current_opponent = None
         self.current_opp_state = None
         self.current_opp_mask = None
-        self.opp_step_counter = 0 # NEW: Tracks Time Dilation
+        self.opp_step_counter = 0 
 
-        print(f"Connecting to C# Engine at {HOST}:{PORT}...")
+        # 2. Update the connection logic to use the new 'port' variable instead of the global 'PORT'
+        print(f"Connecting to C# Engine at {HOST}:{port}...")
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((HOST, PORT))
+        
+        # Make sure to change it here too!
+        self.sock.connect((HOST, port))
+        
         self.stream = self.sock.makefile('rw', buffering=1)
 
         self.current_step = 0
@@ -162,7 +175,10 @@ if __name__ == "__main__":
         {"path": "castle_defense_p1_v7.zip", "speed": 3}
     ]
 
-    env = CastleDefenseEnv(opponent_models=sparring_models, base_speed=3)
+    num_cpu = 14 # Set this to how many parallel games you want!
+    
+    # Create the vectorized environment
+    env = SubprocVecEnv([make_env(i, sparring_models, 3) for i in range(num_cpu)])
 
     model_file = f"{training_model_name}.zip"
     
@@ -186,7 +202,7 @@ if __name__ == "__main__":
     print("\nBeginning Training... (Press Ctrl+C to stop early and save)")
     
     try:
-        model.learn(total_timesteps=300000000, reset_num_timesteps=False)
+        model.learn(total_timesteps=100000000, reset_num_timesteps=False)
     
     except KeyboardInterrupt:
         print("\nTraining interrupted by user! Wrapping up and saving brain...")

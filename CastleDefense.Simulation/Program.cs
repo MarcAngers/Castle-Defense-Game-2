@@ -53,8 +53,16 @@ namespace CastleDefense.Simulation
             Console.WriteLine("Initializing ML Environment Server...");
             GameDataManager.Initialize();
 
-            // 1. Start the TCP Server on port 5000
+            // --- NEW: DYNAMIC PORT ASSIGNMENT ---
             int port = 5000;
+            if (args.Length > 0 && int.TryParse(args[0], out int parsedPort))
+            {
+                port = parsedPort;
+            }
+
+            // Set the window title so we don't get confused!
+            Console.Title = $"Castle Defense AI Arena - Port {port}";
+
             TcpListener server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
             server.Start();
             Console.WriteLine($"Listening for Python AI on 127.0.0.1:{port}...");

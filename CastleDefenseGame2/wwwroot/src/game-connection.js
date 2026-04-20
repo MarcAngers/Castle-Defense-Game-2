@@ -42,7 +42,6 @@ class GameConnection {
 
         this.connection.on("PlayGadgetAnimation", (gadgetId, side, position, targetId) => {
             if (this.gadgetAnimationCallback) {
-                console.log("Playing animation for: ", gadgetId);
                 this.gadgetAnimationCallback(gadgetId, side, position, targetId);
             }
         });

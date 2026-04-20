@@ -3,7 +3,7 @@ import view from '../../../src/view.js';
 import connection from '../../../src/game-connection.js';
 
 export default function initGameScreen() {
-    view.cameraX = connection.winnerSide == 1 ? 2000 : 0;
+    view.panTo(connection.winnerSide == 1 ? 2000 : 0);
     view.drawGameState(connection.latestState);
 
     let viewingStats = true;
