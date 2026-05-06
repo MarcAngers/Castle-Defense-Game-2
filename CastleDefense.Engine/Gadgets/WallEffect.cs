@@ -25,11 +25,12 @@ namespace CastleDefense.Engine.Gadgets
             // Can only spawn 1 wall
             if (engine._state.Units.Any(u => u.Side == side && u.DefinitionId.StartsWith("wall")))
             {
-                // Refund cost (probably will need to refund the cooldown as well)
+                // Refund cost and cooldown
                 var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
                 var wallDefId = _def.Level == 1 ? "wall" : "wall_" + _def.Level.ToString();
                 var wallDef = GameDataManager.Gadgets.Find(g => g.Id == wallDefId);
                 player.Money += wallDef.Cost;
+                player.GadgetCooldowns[_def.Id] = 0;
 
                 return;
             }

@@ -7,18 +7,27 @@ import gymnasium as gym
 from gymnasium import spaces
 from sb3_contrib import MaskablePPO
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
+def make_env(rank, opponent_models, base_speed):
+    def _init():
+        # Each environment gets a unique port: 5000, 5001, 5002, etc.
+        unique_port = 5000 + rank 
+        env = CastleDefenseEnv(opponent_models, base_speed, unique_port)
+        return env
+    return _init
 
 HOST = '127.0.0.1'
 PORT = 5000
 
 class CastleDefenseEnv(gym.Env):
-    # Pass our new dictionary list into the environment
-    def __init__(self, opponent_models=None, base_speed=3):
+    # 1. Add 'port=5000' to the accepted arguments
+    def __init__(self, opponent_models=None, base_speed=3, port=5000):
         super().__init__()
         self.action_space = spaces.Discrete(14)
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(348,), dtype=np.float32)
         
-        self.base_speed = base_speed # The speed of the NEW AI (framesToSkip = 3)
+        self.base_speed = base_speed 
         self.opponents = []
         
         if opponent_models:
@@ -48,15 +57,19 @@ class CastleDefenseEnv(gym.Env):
         self.current_opponent = None
         self.current_opp_state = None
         self.current_opp_mask = None
-        self.opp_step_counter = 0 # NEW: Tracks Time Dilation
+        self.opp_step_counter = 0 
 
-        print(f"Connecting to C# Engine at {HOST}:{PORT}...")
+        # 2. Update the connection logic to use the new 'port' variable instead of the global 'PORT'
+        print(f"Connecting to C# Engine at {HOST}:{port}...")
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((HOST, PORT))
+        
+        # Make sure to change it here too!
+        self.sock.connect((HOST, port))
+        
         self.stream = self.sock.makefile('rw', buffering=1)
 
         self.current_step = 0
-        self.total_anneal_steps = 1_000_000
+        self.total_anneal_steps = 25_000_000
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -112,7 +125,7 @@ class CastleDefenseEnv(gym.Env):
                 
             self.opp_step_counter += 1
         else:
-            opp_action = random.choice(np.where(self.current_opp_mask == 1)[0])
+            opp_action = random.randint(0, 13)
 
         # Notice we are passing the Opponent Name to C# now!
         if self.ai_is_p1:
@@ -149,7 +162,7 @@ class CastleDefenseEnv(gym.Env):
         self.sock.close()
 
 if __name__ == "__main__":
-    training_model_name = "castle_defense_p1_v9"
+    training_model_name = "castle_defense_p1_v10"
     
     # Define the models and their native speeds!
     sparring_models = [
@@ -159,10 +172,18 @@ if __name__ == "__main__":
         {"path": "castle_defense_p1_v4.zip", "speed": 15},
         {"path": "castle_defense_p1_v5.zip", "speed": 15},
         {"path": "castle_defense_p1_v6.zip", "speed": 3},
-        {"path": "castle_defense_p1_v7.zip", "speed": 3}
+        {"path": "castle_defense_p1_v7.zip", "speed": 3},
+        # Bart V8 is 3x more likely as an opponent since they will make for a stronger opponent
+        {"path": "castle_defense_p1_v8.zip", "speed": 3},
+        {"path": "castle_defense_p1_v8.zip", "speed": 3},
+        {"path": "castle_defense_p1_v8.zip", "speed": 3},
+        {"path": "castle_defense_p1_v9.zip", "speed": 3},
     ]
 
-    env = CastleDefenseEnv(opponent_models=sparring_models, base_speed=3)
+    num_cpu = 14 # Set this to how many parallel games you want!
+    
+    # Create the vectorized environment
+    env = SubprocVecEnv([make_env(i, sparring_models, 3) for i in range(num_cpu)])
 
     model_file = f"{training_model_name}.zip"
     
@@ -173,7 +194,7 @@ if __name__ == "__main__":
         "gamma": 0.9998,
         "learning_rate": 0.0003,
         "ent_coef": 0.02,
-        "policy_kwargs": dict(net_arch=[256, 256])
+        "policy_kwargs": dict(net_arch=[512, 512])
     }
 
     if os.path.exists(model_file):
@@ -186,7 +207,7 @@ if __name__ == "__main__":
     print("\nBeginning Training... (Press Ctrl+C to stop early and save)")
     
     try:
-        model.learn(total_timesteps=5000000, reset_num_timesteps=False)
+        model.learn(total_timesteps=50000000, reset_num_timesteps=False)
     
     except KeyboardInterrupt:
         print("\nTraining interrupted by user! Wrapping up and saving brain...")

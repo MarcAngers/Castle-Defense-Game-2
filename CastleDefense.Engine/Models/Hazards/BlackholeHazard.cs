@@ -103,7 +103,7 @@
                     // Push them violently AWAY from the center
                     float pushDirection = (unit.Side == 1) ? -1f : 1f;
 
-                    if (unit.Tier == 8)
+                    if (unit.Tier == 8 || unit.DefinitionId.StartsWith("wall"))
                         unit.PendingKnockback += (25 * pushDirection);
                     else
                         unit.PendingKnockback += (500 * pushDirection);

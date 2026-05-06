@@ -357,7 +357,7 @@ class View {
 
         // If the unit has shield health, draw a shield over it
         if (unit.currentShield > 0) {
-            const shieldImage = loader.assets.gadgets['shield'];
+            const shieldImage = loader.assets.gadgets['divine'];
             this.ctx.drawImage(shieldImage, x, y, width, height);
         }
         // If the unit is invulnerable, draw a divine shield over it

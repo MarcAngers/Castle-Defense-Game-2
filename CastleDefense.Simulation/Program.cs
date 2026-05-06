@@ -46,6 +46,8 @@ namespace CastleDefense.Simulation
             : (First100Wins / (double)TotalMatches * 100);
     }
 
+    public record TrackerData(int Matches, int Wins, int First100Wins, int RecentWins, int RecentTotal);
+
     class Program
     {
         static void Main(string[] args)
@@ -105,9 +107,17 @@ namespace CastleDefense.Simulation
                 // Skip a random amount of time at the start of the game
                 string upgradeString = "";
                 Random rand = new Random();
-                int timeSkip = Math.Max(rand.Next(-4, 9), 0);
+                int timeSkip = Math.Max(rand.Next(-8, 9), 0);
                 state.Player1 = new PlayerState(timeSkip);
                 state.Player2 = new PlayerState(timeSkip);
+
+                // Start 20% of games with some savings in the bank (enough to invest)
+                if (rand.Next(5) == 0)
+                {
+                    state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
+                    state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
+                }
+
                 state.CurrentTick = 30 * 30 * timeSkip;
 
                 if (timeSkip > 3)
@@ -243,39 +253,63 @@ namespace CastleDefense.Simulation
                     {
                         Console.WriteLine("\n[NETWORKING] Python disconnected naturally. Shutting down arena.");
 
-                        // --- NEW: THE FINAL REPORT CARD ---
+                        // --- THE FINAL REPORT CARD ---
+                        var log = new System.Text.StringBuilder();
+                        log.AppendLine($"=== Arena Port {port} | Completed: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+
+                        void Log(string line)
+                        {
+                            Console.WriteLine(line);
+                            log.AppendLine(line);
+                        }
+
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("\n===========================================================");
-                        Console.WriteLine("               FINAL TRAINING RUN STATISTICS               ");
-                        Console.WriteLine("===========================================================");
+                        Log("\n===========================================================");
+                        Log("               FINAL TRAINING RUN STATISTICS               ");
+                        Log("===========================================================");
 
                         Console.ForegroundColor = ConsoleColor.Cyan;
-                        Console.WriteLine($"[GLOBAL] Matches: {globalTracker.TotalMatches} | Total WR: {globalTracker.TotalWinrate:0.0}% | Baseline: {globalTracker.BaselineWinrate:0.0}%");
+                        Log($"[GLOBAL] Matches: {globalTracker.TotalMatches} | Total WR: {globalTracker.TotalWinrate:0.0}% | Baseline: {globalTracker.BaselineWinrate:0.0}%");
 
                         // Print Opponents (Alphabetical)
-                        Console.WriteLine("\n--- BY OPPONENT ---");
+                        Log("\n--- BY OPPONENT ---");
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         foreach (var kvp in opponentTrackers.OrderBy(x => x.Key))
                         {
                             var oppName = kvp.Key;
                             var finalOppStats = kvp.Value;
-                            // PadRight and formatting alignments ensure columns line up perfectly in the console
-                            Console.WriteLine($"[{oppName.PadRight(17)}] Matches: {finalOppStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalOppStats.TotalWinrate,5:0.0}% | Baseline: {finalOppStats.BaselineWinrate,5:0.0}% | Final 100: {finalOppStats.RecentWinrate,5:0.0}%");
+                            Log($"[{oppName.PadRight(17)}] Matches: {finalOppStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalOppStats.TotalWinrate,5:0.0}% | Baseline: {finalOppStats.BaselineWinrate,5:0.0}% | Final 100: {finalOppStats.RecentWinrate,5:0.0}%");
                         }
 
                         // Print Time Skips (Numerical Order)
-                        Console.WriteLine("\n--- BY TIME SKIP ---");
+                        Log("\n--- BY TIME SKIP ---");
                         Console.ForegroundColor = ConsoleColor.Magenta;
                         foreach (var kvp in timeSkipTrackers.OrderBy(x => x.Key))
                         {
                             var skip = kvp.Key;
                             var finalTimeStats = kvp.Value;
-                            Console.WriteLine($"[SKIP {skip.ToString().PadRight(2)}] Matches: {finalTimeStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalTimeStats.TotalWinrate,5:0.0}% | Baseline: {finalTimeStats.BaselineWinrate,5:0.0}% | Final 100: {finalTimeStats.RecentWinrate,5:0.0}%");
+                            Log($"[SKIP {skip.ToString().PadRight(2)}] Matches: {finalTimeStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalTimeStats.TotalWinrate,5:0.0}% | Baseline: {finalTimeStats.BaselineWinrate,5:0.0}% | Final 100: {finalTimeStats.RecentWinrate,5:0.0}%");
                         }
 
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("===========================================================\n");
+                        Log("===========================================================\n");
                         Console.ResetColor();
+
+                        System.IO.File.WriteAllText($"training_stats_{port}.txt", log.ToString());
+
+                        TrackerData Snap(StatTracker t) => new TrackerData(
+                            t.TotalMatches, t.TotalWins, t.First100Wins,
+                            t.RecentWins.Count(w => w), t.RecentWins.Count);
+
+                        var jsonData = new
+                        {
+                            port,
+                            global = Snap(globalTracker),
+                            opponents = opponentTrackers.ToDictionary(kvp => kvp.Key, kvp => Snap(kvp.Value)),
+                            timeSkips = timeSkipTrackers.ToDictionary(kvp => kvp.Key.ToString(), kvp => Snap(kvp.Value))
+                        };
+                        System.IO.File.WriteAllText($"training_stats_{port}.json",
+                            JsonSerializer.Serialize(jsonData, new JsonSerializerOptions { WriteIndented = true }));
                         break;
                     }
 

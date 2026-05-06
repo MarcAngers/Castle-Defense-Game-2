@@ -1,40 +1,54 @@
-#unit-info {
+#gadget-info-offensive, #gadget-info-tactical, #gadget-info-signature {
     padding-top: 0;
 }
 
 button {
     font-size: 0.6rem;
-    margin: 2vh;
+    margin: 0;
+    padding: 0.8rem 2rem;
 }
 
 h1 {
-    font-size: 1.1rem;
+    font-size: 1rem;
     margin: 0.5rem 0;
 }
-h2 {
-    font-size: 1rem;
+
+h3 {
+    font-size: 0.7rem;
+    margin: 0 0 0.5rem 0;
 }
 
-#select-team {
-    padding-top: 5vh;
-    color: black;
-}
-
-#team-bar {
+/* Match the team-bar layout */
+#gadget-bar {
     display: flex;
     justify-content: space-evenly;
     padding: 0.5em;
+    margin-top: 5vh;
 }
 
-.team {
-    height: 15vh; width: 15vh;
+/* Gadget icon styling */
+.gadget {
+    height: 15vh; 
+    width: 15vh;
     border: 2vh solid black;
+    background-color: #333;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.selected {
+
+.gadget img {
+    width: 100%;
+    height: 100%;
+    -webkit-user-drag: none;
+}
+
+.gadget.selected {
     border: 2vh solid lightgreen;
 }
 
-/* Layout for the carousel area */
+/* --- CAROUSEL STYLES --- */
 #character-carousel {
     display: flex;
     align-items: center;
@@ -43,7 +57,6 @@ h2 {
     margin: 2vh 0;
 }
 
-/* The Chevron Buttons */
 #previous, #next {
     background: none;
     border: none;
@@ -56,18 +69,17 @@ h2 {
 }
 
 #previous:hover:not(:disabled), #next:hover:not(:disabled) {
-    color: #FFFF00; /* Add a nice gold highlight on hover */
+    color: #FFFF00; 
     transform: scale(1.2);
 }
 
-/* The Grayed-out state at the ends of the array */
 #previous:disabled, #next:disabled {
     color: #555;
     cursor: not-allowed;
     opacity: 0.5;
 }
 
-/* The inner Unit Card styling */
+/* --- CARD STYLES --- */
 .collection-card {
     background-color: #222;
     border: 2px solid #444;
@@ -82,17 +94,21 @@ h2 {
 .collection-image {
     height: 20vh;
     margin: 0 0 2vh 0;
+    -webkit-user-drag: none;
 }
 
 .collection-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 0.5rem;
     text-align: left;
     background: #111;
-    padding: 10px;
+    padding: 0.5rem 1rem;
     border-radius: 6px;
     font-size: 0.6rem;
+}
+.collection-stats img {
+    height: 0.7rem;
 }
 
 .collection-desc {
@@ -102,11 +118,9 @@ h2 {
     line-height: 1.4;
 }
 
-.stat img {
-    width: 0.7rem;
-    height: 0.7rem;
-    margin-right: 8px;
-    -webkit-user-drag: none; /* Ghost-drag prevention */
-    /* Optional: Adds a tiny shadow directly to your heart/sword PNGs to make them pop */
-    filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); 
+#wall img {
+    width: auto;
+}
+#blackhole img {
+    height: auto;
 }

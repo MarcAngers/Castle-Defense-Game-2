@@ -46,6 +46,7 @@ namespace CastleDefense.Engine.Models
             RepairCount = 0;
         }
 
+        // Constructor to give the AI training program a time machine into later game states
         public PlayerState(int timeSkip) : this()
         {
             if (timeSkip == 0) return;

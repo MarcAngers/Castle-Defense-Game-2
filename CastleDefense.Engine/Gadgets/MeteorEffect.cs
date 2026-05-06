@@ -69,7 +69,7 @@ namespace CastleDefense.Engine.Gadgets
                             enemy.Statuses.Add(new ActiveStatus(
                                 "Burn",
                                 engine._state.CurrentTick + _def.StatusDuration,
-                                1f,
+                                12f,
                                 side,
                                 _def.Id
                             ));

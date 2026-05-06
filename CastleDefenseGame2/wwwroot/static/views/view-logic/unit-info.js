@@ -44,9 +44,9 @@ export default async function initUnitInfo() {
                 <img src="${imgSrc}" class="collection-image" draggable="false">
                 <div class="collection-stats">
                     <span><strong>Price:</strong> <span style='color: #FFFF00'>$${unit.price}</span></span>
-                    <span class='stat'><img src="${loader.assets.tooltips.heart.src}" alt="HP"><strong>HP:</strong> ${unit.health}</span>
-                    <span class='stat'><img src="${loader.assets.tooltips.sword.src}" alt="DMG"><strong>DMG:</strong> ${unit.damage}</span>
-                    <span class='stat'><img src="${loader.assets.tooltips.boot.src}" alt="SPD"><strong>SPD:</strong> ${unit.speed}</span>
+                    <span class='stat'><strong>HP:</strong> ${unit.health} <img src="${loader.assets.tooltips.heart.src}" alt="HP"></span>
+                    <span class='stat'><strong>DMG:</strong> ${unit.damage} <img src="${loader.assets.tooltips.sword.src}" alt="DMG"></span>
+                    <span class='stat'>SPD:</strong> ${unit.speed} <img src="${loader.assets.tooltips.boot.src}" alt="SPD"><strong></span>
                     <span><strong>Tier:</strong> ${unit.tier}</span>
                     <span><strong>ATK SPD:</strong> ${Number(unit.attackspeed).toFixed(2)}</span>
                 </div>
