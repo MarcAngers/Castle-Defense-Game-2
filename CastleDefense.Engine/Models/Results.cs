@@ -22,5 +22,7 @@ namespace CastleDefense.Engine.Models
         public float P2Reward { get; set; }
 
         public bool IsDone { get; set; }
+        public int WinnerSide { get; set; }
+        public string OpponentName { get; set; }
     }
 }

@@ -819,7 +819,8 @@ namespace CastleDefense.Engine
                 P2ActionMask = p2Mask,
                 P1Reward = p1Reward,
                 P2Reward = p2Reward,
-                IsDone = _state.IsGameOver
+                IsDone = _state.IsGameOver,
+                WinnerSide = _state.WinnerSide
             };
         }
 
@@ -913,7 +914,8 @@ namespace CastleDefense.Engine
             if (myDamageTaken > 0)
             {
                 float pctMyDamage = (float)myDamageTaken / myPlayer.CastleMaxHealth;
-                reward -= (pctMyDamage * 500f);
+                float dangerMultiplier = Math.Min(3.0f, 5.0f * (1.0f - (float)myPlayer.CastleHealth / myPlayer.CastleMaxHealth));
+                reward -= (pctMyDamage * 500f * dangerMultiplier);
             }
 
             // --- 3. ECONOMY & UPGRADE REWARDS ---
@@ -921,25 +923,31 @@ namespace CastleDefense.Engine
             // Reward them heavily for successfully increasing their income
             if (myPlayer.Income - myPrevIncome > 0)
             {
-                reward += 3000f;
+                reward += 2000f + (11 - myPlayer.InvestmentCount) * 300f;
             }
-            // Negative incentive for spending money when close to investing
-            if (myPrevMoney > myPlayer.InvestmentPrice * 0.9 && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
+            // Negative incentive for spending money when close to investing.
+            // Suspended when HP < 50% so the model can freely defend while under pressure.
+            // Penalty scales from 0 at 60% savings to -1000 at 100% savings (gradient, not cliff).
+            float hpRatio = (float)myPlayer.CastleHealth / myPlayer.CastleMaxHealth;
+            float savingsProgress = (float)(myPrevMoney / myPlayer.InvestmentPrice);
+            if (hpRatio >= 0.5f && savingsProgress > 0.6f && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
             {
-                reward -= 1000;
+                float penaltyScale = (savingsProgress - 0.6f) / 0.4f; // 0 at 60%, 1 at 100%
+                reward -= penaltyScale * 1000f;
             }
             // Reward saving up to invest, if we're at a high investment tier, we don't want to worry about saving any more
-            if (myPlayer.InvestmentCount >= 8)
+            if (myPlayer.InvestmentCount <= 7)
             {
                 float savingsFraction = Math.Min(1.0f, (float)(myPlayer.Money / myPlayer.InvestmentPrice));
-                reward += savingsFraction * 0.5f;
+                float savingsBoost = Math.Max(1.0f, 3.0f - myPlayer.InvestmentCount * 0.5f);
+                reward += savingsFraction * 0.5f * savingsBoost;
             }
 
             // Reward them for successfully upgrading their base health
             float healthDelta = myPlayer.CastleHealth - myPrevHealth; // min: 11,000 (+44)
             if (healthDelta > 0)
             {
-                reward += healthDelta / 250f;
+                reward += healthDelta / 200f;
             }
 
             // --- 4. ENDGAME MULTIPLIERS ---

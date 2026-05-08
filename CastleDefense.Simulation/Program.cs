@@ -1,23 +1,68 @@
 ﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
-using Microsoft.Extensions.Options;
 using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
-// Make sure you include your Data namespace!
 
 namespace CastleDefense.Simulation
 {
-    public class ActionPayload
+    // ── Binary protocol helpers ────────────────────────────────────────────────
+    // Reset  (C#→Py): [1392B P1State][14B P1Mask][1B nameLen][NB name]
+    // Step   (C#→Py): [1392B P1State][14B P1Mask][4B reward][1B done][4B winner]
+    // Action (Py→C#): [1B action][4B denseWeight]
+    static class Proto
     {
-        public int P1Action { get; set; }
-        public int P2Action { get; set; }
+        const int StateFloats = 348;
+        const int StateBytes  = StateFloats * 4;
+        const int MaskBytes   = 14;
 
-        public float DenseRewardWeight { get; set; }
-        public string OpponentName { get; set; }
+        static readonly byte[] _stepBuf = new byte[StateBytes + MaskBytes + 4 + 1 + 4];
+
+        public static void SendReset(NetworkStream s, float[] state, int[] mask, string opponentName)
+        {
+            byte[] nameBytes = Encoding.UTF8.GetBytes(opponentName ?? "");
+            int nameLen = Math.Min(nameBytes.Length, 255);
+            byte[] buf = new byte[StateBytes + MaskBytes + 1 + nameLen];
+            int pos = 0;
+            Buffer.BlockCopy(state, 0, buf, pos, StateBytes); pos += StateBytes;
+            for (int i = 0; i < MaskBytes; i++) buf[pos++] = (byte)mask[i];
+            buf[pos++] = (byte)nameLen;
+            Buffer.BlockCopy(nameBytes, 0, buf, pos, nameLen);
+            s.Write(buf, 0, buf.Length);
+        }
+
+        public static void SendStep(NetworkStream s, float[] state, int[] mask, float reward, bool isDone, int winnerSide)
+        {
+            int pos = 0;
+            Buffer.BlockCopy(state, 0, _stepBuf, pos, StateBytes); pos += StateBytes;
+            for (int i = 0; i < MaskBytes; i++) _stepBuf[pos++] = (byte)mask[i];
+            BitConverter.TryWriteBytes(new Span<byte>(_stepBuf, pos, 4), reward); pos += 4;
+            _stepBuf[pos++] = isDone ? (byte)1 : (byte)0;
+            BitConverter.TryWriteBytes(new Span<byte>(_stepBuf, pos, 4), winnerSide);
+            s.Write(_stepBuf, 0, _stepBuf.Length);
+        }
+
+        static void ReadExact(NetworkStream s, byte[] buf, int count)
+        {
+            int offset = 0;
+            while (offset < count)
+            {
+                int n = s.Read(buf, offset, count - offset);
+                if (n == 0) throw new IOException("Python disconnected");
+                offset += n;
+            }
+        }
+
+        static readonly byte[] _actionBuf = new byte[5];
+        public static (int action, float denseWeight) ReadAction(NetworkStream s)
+        {
+            ReadExact(s, _actionBuf, 5);
+            return (_actionBuf[0], BitConverter.ToSingle(_actionBuf, 1));
+        }
     }
 
     public class StatTracker
@@ -73,10 +118,7 @@ namespace CastleDefense.Simulation
             using TcpClient client = server.AcceptTcpClient();
             Console.WriteLine("Python AI Connected! Building the arena...");
 
-            // Setup the data streams
             using NetworkStream stream = client.GetStream();
-            using StreamReader reader = new StreamReader(stream);
-            using StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
 
             int matchCount = 0;
             int maxTicks = 18000;
@@ -87,6 +129,28 @@ namespace CastleDefense.Simulation
 
             RandomBot randBot = new RandomBot();
             AntiSpamBot antiSpamBot = new AntiSpamBot();
+
+            // Load league model ONNX opponents from league_models/ subdirectory
+            var leagueModels = new List<(string name, AIBrain brain)>();
+            string leagueDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "league_models");
+            if (Directory.Exists(leagueDir))
+            {
+                foreach (var onnxFile in Directory.GetFiles(leagueDir, "*.onnx")
+                                                   .Where(f => !f.EndsWith(".data")))
+                {
+                    string modelName = Path.GetFileNameWithoutExtension(onnxFile);
+                    try
+                    {
+                        leagueModels.Add((modelName, new AIBrain(onnxFile)));
+                        Console.WriteLine($"[League] Loaded opponent: {modelName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[WARNING] Could not load {modelName}: {ex.Message}");
+                    }
+                }
+            }
+            Console.WriteLine($"[League] {leagueModels.Count} opponent model(s) ready.");
 
             // The Global Tracker (replaces your old separate integers)
             StatTracker globalTracker = new StatTracker();
@@ -135,51 +199,37 @@ namespace CastleDefense.Simulation
 
                 var engine = new GameEngine(state);
 
-                // Randomly assign spam bot opponents during training
+                // Randomly assign opponents during training
                 int botSelection = rand.Next(11);
                 int spamTier = Math.Max(Math.Min(timeSkip + rand.Next(-2, 3), 8), 1);
                 SpamBot bot = new SpamBot(spamTier);
 
-                // 1. Identify the opponent
-                string opponentName = "Unknown";
+                // Select opponent — bots 0-5 are hardcoded, 6-10 use a league ONNX model
+                AIBrain selectedLeague = null;
+                string opponentName = "Random Dummy";
 
                 if (botSelection == 0) opponentName = "Random Dummy";
                 else if (botSelection == 1) opponentName = "Anti-Spam Bot";
-                else if (botSelection >= 2 && botSelection <= 5)
+                else if (botSelection >= 2 && botSelection <= 5) opponentName = $"Spam Bot T{spamTier}";
+                else if (leagueModels.Count > 0)
                 {
-                    opponentName = $"Spam Bot T{spamTier}";
+                    var chosen = leagueModels[rand.Next(leagueModels.Count)];
+                    selectedLeague = chosen.brain;
+                    opponentName = chosen.name;
                 }
 
                 // 3. The Match Loop
                 try
                 {
-                    // 2. Send the initial starting state to Python
-                    var initialResult = new StepResult
-                    {
-                        P1State = state.GetStateVector(1),
-                        P2State = state.GetStateVector(2),
-                        P1ActionMask = state.GetActionMask(1),
-                        P2ActionMask = state.GetActionMask(2),
-                        P1Reward = 0,
-                        P2Reward = 0,
-                        IsDone = false
-                    };
-                    writer.WriteLine(JsonSerializer.Serialize(initialResult));
+                    // 2. Send the initial starting state to Python (includes opponent name for tracking)
+                    Proto.SendReset(stream, state.GetStateVector(1), state.GetActionMask(1), opponentName);
 
-                    int framesToSkip = 3;
+                    int framesToSkip = 9;
 
                     // 4. The Match Loop
                     while (!state.IsGameOver && state.CurrentTick < maxTicks)
                     {
-                        string message = reader.ReadLine();
-                        if (string.IsNullOrEmpty(message)) break;
-
-                        var actions = JsonSerializer.Deserialize<ActionPayload>(message);
-
-                        if (botSelection > 5 && !string.IsNullOrEmpty(actions.OpponentName))
-                        {
-                            opponentName = actions.OpponentName;
-                        }
+                        var (p1Action, denseWeight) = Proto.ReadAction(stream);
 
                         float cumulativeP1Reward = 0f;
                         float cumulativeP2Reward = 0f;
@@ -190,27 +240,21 @@ namespace CastleDefense.Simulation
                         {
                             if (state.IsGameOver || state.CurrentTick >= maxTicks) break;
 
-                            // Execute the AI's action ONLY on the first tick. 
-                            // For the next 14 ticks, force them to "Wait"
-                            int currentP1Action = (i == 0) ? actions.P1Action : 0;
-                            int currentP2Action = (i == 0) ? actions.P2Action : 0;
+                            // AI acts on the first tick of each frame skip; waits on the rest
+                            int currentP1Action = (i == 0) ? p1Action : 0;
+                            int currentP2Action = 0;
 
-                            // Playing hardcoded bot opponent
+                            // Bots act every tick; league models act once per frame skip (same cadence as AI)
                             if (botSelection == 0)
-                            {
                                 currentP2Action = randBot.GetAction();
-                            }
                             else if (botSelection == 1)
-                            {
                                 currentP2Action = antiSpamBot.GetAction(state.CurrentTick, state.Player1.Team);
-                            }
                             else if (botSelection >= 2 && botSelection <= 5)
-                            {
                                 currentP2Action = bot.GetAction();
-                            }
-                            // Otherwise, play against python model
+                            else if (selectedLeague != null && i == 0)
+                                currentP2Action = selectedLeague.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
 
-                            StepResult tickResult = engine.Step(currentP1Action, currentP2Action, actions.DenseRewardWeight);
+                            StepResult tickResult = engine.Step(currentP1Action, currentP2Action, denseWeight);
 
                             // Add up the running tally of rewards
                             cumulativeP1Reward += tickResult.P1Reward;
@@ -239,11 +283,9 @@ namespace CastleDefense.Simulation
                             }
                         }
 
-                        // Inject the summed-up rewards into the final result object before sending to Python
-                        finalResult.P1Reward = cumulativeP1Reward;
-                        finalResult.P2Reward = cumulativeP2Reward;
-
-                        writer.WriteLine(JsonSerializer.Serialize(finalResult));
+                        Proto.SendStep(stream,
+                            finalResult.P1State, finalResult.P1ActionMask,
+                            cumulativeP1Reward, finalResult.IsDone, finalResult.WinnerSide);
                     }
                 }
                 catch (Exception ex)
