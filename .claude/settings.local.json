@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -E \"^d|\\\\.cs$\")"
+      "Bash(grep -E \"^d|\\\\.cs$\")",
+      "WebSearch",
+      "WebFetch(domain:stable-baselines3.readthedocs.io)",
+      "Bash(dotnet build *)",
+      "Bash(awk -F',' 'NR>1 {print $0}' \"c:/repos/Castle-Defense-Game-2/CastleDefense.Engine/Data/master_gadgets.csv\")",
+      "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" diff HEAD -- CastleDefense.Engine/Data/master_gadgets.csv)",
+      "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" diff --cached -- CastleDefense.Engine/Data/master_gadgets.csv)",
+      "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" log --oneline -- CastleDefense.Engine/Data/master_gadgets.csv)",
+      "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" show 85ab3c0c:CastleDefense.Engine/Data/master_gadgets.csv)",
+      "Bash(awk -F',' 'NR>1 {print $3, $1}')",
+      "Bash(awk -F',' 'NR>1 {print $3, $1}' \"c:/repos/Castle-Defense-Game-2/CastleDefense.Engine/Data/master_gadgets.csv\")"
     ]
   }
 }

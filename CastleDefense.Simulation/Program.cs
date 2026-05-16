@@ -1,8 +1,10 @@
-﻿using CastleDefense.Engine;
+using CastleDefense.Engine;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -10,65 +12,85 @@ using System.Text.Json;
 
 namespace CastleDefense.Simulation
 {
-    // ── Binary protocol helpers ────────────────────────────────────────────────
-    // Reset  (C#→Py): [1392B P1State][14B P1Mask][1B nameLen][NB name]
-    // Step   (C#→Py): [1392B P1State][14B P1Mask][4B reward][1B done][4B winner]
-    // Action (Py→C#): [1B action][4B denseWeight]
-    static class Proto
+    // ── Self-play batch protocol ────────────────────────────────────────────────
+    // C# collects N_STEPS ticks using its own ONNX model for P1, then ships the
+    // entire experience batch to Python for a GPU PPO update.
+    //
+    // Batch (C#→Py):
+    //   [4B int32:  num_steps]
+    //   [num_steps × 1413B]:
+    //     [1392B obs f32][14B mask i8][1B action u8][4B reward f32][1B ep_start u8][1B winner u8]
+    //   [1407B final state]: [1392B obs f32][14B mask i8][1B done u8]
+    //   [2B uint16: num_episodes]
+    //   per episode: [1B name_len][name bytes][1B winner_side]
+    //
+    // Ack (Py→C#): [1B model_version]  — C# reloads ONNX when version changes
+
+    static class BatchProto
     {
-        const int StateFloats = 348;
-        const int StateBytes  = StateFloats * 4;
-        const int MaskBytes   = 14;
+        public const int STATE_FLOATS = 348;
+        public const int STATE_BYTES  = STATE_FLOATS * 4;   // 1392
+        public const int MASK_BYTES   = 14;
+        public const int STEP_BYTES   = STATE_BYTES + MASK_BYTES + 1 + 4 + 1 + 1; // 1413
+        public const int FINAL_BYTES  = STATE_BYTES + MASK_BYTES + 1;             // 1407
 
-        static readonly byte[] _stepBuf = new byte[StateBytes + MaskBytes + 4 + 1 + 4];
-
-        public static void SendReset(NetworkStream s, float[] state, int[] mask, string opponentName)
+        public static void SendBatch(
+            NetworkStream s, int nSteps,
+            float[][] obs, int[][] mask, int[] action, float[] reward, bool[] epStart, int[] winner,
+            float[] finalObs, int[] finalMask, bool finalDone,
+            List<(string name, int winner)> episodes)
         {
-            byte[] nameBytes = Encoding.UTF8.GetBytes(opponentName ?? "");
-            int nameLen = Math.Min(nameBytes.Length, 255);
-            byte[] buf = new byte[StateBytes + MaskBytes + 1 + nameLen];
-            int pos = 0;
-            Buffer.BlockCopy(state, 0, buf, pos, StateBytes); pos += StateBytes;
-            for (int i = 0; i < MaskBytes; i++) buf[pos++] = (byte)mask[i];
-            buf[pos++] = (byte)nameLen;
-            Buffer.BlockCopy(nameBytes, 0, buf, pos, nameLen);
-            s.Write(buf, 0, buf.Length);
-        }
+            // Pre-calculate episode bytes
+            var epNameBytes = episodes.Select(e => {
+                var b = Encoding.UTF8.GetBytes(e.name ?? "Unknown");
+                return b.Length > 255 ? b[..255] : b;
+            }).ToArray();
 
-        public static void SendStep(NetworkStream s, float[] state, int[] mask, float reward, bool isDone, int winnerSide)
-        {
-            int pos = 0;
-            Buffer.BlockCopy(state, 0, _stepBuf, pos, StateBytes); pos += StateBytes;
-            for (int i = 0; i < MaskBytes; i++) _stepBuf[pos++] = (byte)mask[i];
-            BitConverter.TryWriteBytes(new Span<byte>(_stepBuf, pos, 4), reward); pos += 4;
-            _stepBuf[pos++] = isDone ? (byte)1 : (byte)0;
-            BitConverter.TryWriteBytes(new Span<byte>(_stepBuf, pos, 4), winnerSide);
-            s.Write(_stepBuf, 0, _stepBuf.Length);
-        }
+            int epDataBytes = epNameBytes.Sum(b => 1 + b.Length + 1);
+            int totalSize   = 4 + nSteps * STEP_BYTES + FINAL_BYTES + 2 + epDataBytes;
+            byte[] buf      = new byte[totalSize];
+            int p = 0;
 
-        static void ReadExact(NetworkStream s, byte[] buf, int count)
-        {
-            int offset = 0;
-            while (offset < count)
+            BitConverter.TryWriteBytes(new Span<byte>(buf, p, 4), nSteps); p += 4;
+
+            for (int i = 0; i < nSteps; i++)
             {
-                int n = s.Read(buf, offset, count - offset);
-                if (n == 0) throw new IOException("Python disconnected");
-                offset += n;
+                Buffer.BlockCopy(obs[i], 0, buf, p, STATE_BYTES); p += STATE_BYTES;
+                for (int j = 0; j < MASK_BYTES; j++) buf[p++] = (byte)mask[i][j];
+                buf[p++] = (byte)action[i];
+                BitConverter.TryWriteBytes(new Span<byte>(buf, p, 4), reward[i]); p += 4;
+                buf[p++] = epStart[i] ? (byte)1 : (byte)0;
+                buf[p++] = (byte)winner[i];
             }
+
+            Buffer.BlockCopy(finalObs, 0, buf, p, STATE_BYTES); p += STATE_BYTES;
+            for (int j = 0; j < MASK_BYTES; j++) buf[p++] = (byte)finalMask[j];
+            buf[p++] = finalDone ? (byte)1 : (byte)0;
+
+            BitConverter.TryWriteBytes(new Span<byte>(buf, p, 2), (ushort)episodes.Count); p += 2;
+            for (int i = 0; i < episodes.Count; i++)
+            {
+                buf[p++] = (byte)epNameBytes[i].Length;
+                Buffer.BlockCopy(epNameBytes[i], 0, buf, p, epNameBytes[i].Length);
+                p += epNameBytes[i].Length;
+                buf[p++] = (byte)episodes[i].winner;
+            }
+
+            s.Write(buf, 0, p);
         }
 
-        static readonly byte[] _actionBuf = new byte[5];
-        public static (int action, float denseWeight) ReadAction(NetworkStream s)
+        public static byte ReadAck(NetworkStream s)
         {
-            ReadExact(s, _actionBuf, 5);
-            return (_actionBuf[0], BitConverter.ToSingle(_actionBuf, 1));
+            int b = s.ReadByte();
+            if (b < 0) throw new IOException("Python disconnected");
+            return (byte)b;
         }
     }
 
     public class StatTracker
     {
         public int TotalMatches = 0;
-        public int TotalWins = 0;
+        public int TotalWins    = 0;
         public int First100Wins = 0;
         public Queue<bool> RecentWins = new Queue<bool>();
 
@@ -76,16 +98,13 @@ namespace CastleDefense.Simulation
         {
             TotalMatches++;
             if (aiWon) TotalWins++;
-
-            // Tracks the baseline for the first 100 matches of THIS specific category
             if (TotalMatches <= 100 && aiWon) First100Wins++;
-
             RecentWins.Enqueue(aiWon);
             if (RecentWins.Count > 100) RecentWins.Dequeue();
         }
 
-        public double RecentWinrate => RecentWins.Count == 0 ? 0 : (double)RecentWins.Count(w => w) / RecentWins.Count * 100;
-        public double TotalWinrate => TotalMatches == 0 ? 0 : (double)TotalWins / TotalMatches * 100;
+        public double RecentWinrate  => RecentWins.Count == 0 ? 0 : (double)RecentWins.Count(w => w) / RecentWins.Count * 100;
+        public double TotalWinrate   => TotalMatches == 0 ? 0 : (double)TotalWins / TotalMatches * 100;
         public double BaselineWinrate => TotalMatches == 0 ? 0 : TotalMatches >= 100
             ? (First100Wins / 100.0 * 100)
             : (First100Wins / (double)TotalMatches * 100);
@@ -95,326 +114,288 @@ namespace CastleDefense.Simulation
 
     class Program
     {
+        const int    N_STEPS             = 8192;
+        const int    MAX_TICKS           = 18000;
+        const string TRAINING_MODEL_PATH = "current_model.onnx";
+
+        static readonly Random _rand = new Random();
+
         static void Main(string[] args)
         {
             Console.WriteLine("Initializing ML Environment Server...");
             GameDataManager.Initialize();
 
-            // --- NEW: DYNAMIC PORT ASSIGNMENT ---
             int port = 5000;
-            if (args.Length > 0 && int.TryParse(args[0], out int parsedPort))
-            {
-                port = parsedPort;
-            }
-
-            // Set the window title so we don't get confused!
+            if (args.Length > 0 && int.TryParse(args[0], out int parsedPort)) port = parsedPort;
             Console.Title = $"Castle Defense AI Arena - Port {port}";
 
-            TcpListener server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
-            server.Start();
-            Console.WriteLine($"Listening for Python AI on 127.0.0.1:{port}...");
+            // Training brain for P1 inference (null = random until Python exports first model)
+            AIBrain trainingBrain      = null;
+            byte    loadedModelVersion = 255; // force reload check on first ack
+            TryLoadTrainingBrain(ref trainingBrain);
 
-            // 2. Pause and wait for Python to connect
-            using TcpClient client = server.AcceptTcpClient();
-            Console.WriteLine("Python AI Connected! Building the arena...");
-
-            using NetworkStream stream = client.GetStream();
-
-            int matchCount = 0;
-            int maxTicks = 18000;
-
-            int totalAIWins = 0;
-            int first100AIWins = 0;
-            Queue<bool> recentAIWins = new Queue<bool>();
-
-            RandomBot randBot = new RandomBot();
-            AntiSpamBot antiSpamBot = new AntiSpamBot();
-
-            // Load league model ONNX opponents from league_models/ subdirectory
+            // League opponents for P2
             var leagueModels = new List<(string name, AIBrain brain)>();
             string leagueDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "league_models");
             if (Directory.Exists(leagueDir))
             {
-                foreach (var onnxFile in Directory.GetFiles(leagueDir, "*.onnx")
-                                                   .Where(f => !f.EndsWith(".data")))
+                foreach (var f in Directory.GetFiles(leagueDir, "*.onnx").Where(x => !x.EndsWith(".data")))
                 {
-                    string modelName = Path.GetFileNameWithoutExtension(onnxFile);
                     try
                     {
-                        leagueModels.Add((modelName, new AIBrain(onnxFile)));
-                        Console.WriteLine($"[League] Loaded opponent: {modelName}");
+                        leagueModels.Add((Path.GetFileNameWithoutExtension(f), new AIBrain(f)));
+                        Console.WriteLine($"[League] Loaded: {Path.GetFileNameWithoutExtension(f)}");
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[WARNING] Could not load {modelName}: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[League] Skip: {ex.Message}"); }
                 }
             }
-            Console.WriteLine($"[League] {leagueModels.Count} opponent model(s) ready.");
+            Console.WriteLine($"[League] {leagueModels.Count} opponent(s) ready.");
 
-            // The Global Tracker (replaces your old separate integers)
-            StatTracker globalTracker = new StatTracker();
+            var globalTracker    = new StatTracker();
+            var opponentTrackers = new Dictionary<string, StatTracker>();
+            var timeSkipTrackers = new Dictionary<int, StatTracker>();
 
-            // Categorized Trackers
-            Dictionary<string, StatTracker> opponentTrackers = new Dictionary<string, StatTracker>();
-            Dictionary<int, StatTracker> timeSkipTrackers = new Dictionary<int, StatTracker>();
+            var server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
+            server.Start();
+            Console.WriteLine($"Listening on 127.0.0.1:{port}...");
+            using var client = server.AcceptTcpClient();
+            Console.WriteLine("Python connected! Starting self-play collection...");
+            using var stream = client.GetStream();
 
-            // --- THE INFINITE TRAINING LOOP ---
-            while (true)
+            // Batch buffers (reused each batch)
+            float[][] batchObs    = new float[N_STEPS][];
+            int[][]   batchMask   = new int[N_STEPS][];
+            int[]     batchAction = new int[N_STEPS];
+            float[]   batchRew    = new float[N_STEPS];
+            bool[]    batchEpS    = new bool[N_STEPS];
+            int[]     batchWin    = new int[N_STEPS];
+            var batchEpisodes     = new List<(string name, int winner)>();
+
+            int  batchPos    = 0;
+            bool nextEpStart = true;
+
+            // Current game state (spans multiple episodes, even across batch boundaries)
+            GameState  state       = null;
+            GameEngine engine      = null;
+            string     oppName     = "Random Dummy";
+            int        botSel      = 0;
+            int        timeSkip    = 0;
+            int        spamTier    = 1;
+            SpamBot    spamBot     = null;
+            AIBrain    leagueBrain = null;
+            var        randBot     = new RandomBot();
+            var        antiBot     = new AntiSpamBot();
+
+            while (true) // ── OUTER BATCH LOOP ──
             {
-                matchCount++;
-                Console.WriteLine($"\n--- STARTING MATCH {matchCount} ---");
-
-                // 1. Reset the Board
-                var state = new GameState();
-
-                // Skip a random amount of time at the start of the game
-                string upgradeString = "";
-                Random rand = new Random();
-                int timeSkip = Math.Max(rand.Next(-8, 9), 0);
-                state.Player1 = new PlayerState(timeSkip);
-                state.Player2 = new PlayerState(timeSkip);
-
-                // Start 20% of games with some savings in the bank (enough to invest)
-                if (rand.Next(5) == 0)
+                // Start new episode if needed
+                if (state == null || state.IsGameOver || state.CurrentTick >= MAX_TICKS)
                 {
-                    state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
-                    state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
-                }
-
-                state.CurrentTick = 30 * 30 * timeSkip;
-
-                if (timeSkip > 3)
-                    upgradeString = "_2";
-                if (timeSkip > 5)
-                    upgradeString = "_3";
-
-                state.Player1.Side = 1;
-                state.Player1.Team = GameDataManager.GetRandomTeam();
-                state.Player1.SetLoadout(new string[] { GameDataManager.GetRandomOGadgetId() + upgradeString, GameDataManager.GetRandomDGadgetId() + upgradeString, GameDataManager.GetSignatureGadgetIdForTeam(state.Player1.Team) + upgradeString });
-
-                state.Player2.Side = 2;
-                state.Player2.Team = GameDataManager.GetRandomTeam();
-                state.Player2.SetLoadout(new string[] { GameDataManager.GetRandomOGadgetId() + upgradeString, GameDataManager.GetRandomDGadgetId() + upgradeString, GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) + upgradeString });
-
-                var engine = new GameEngine(state);
-
-                // Randomly assign opponents during training
-                int botSelection = rand.Next(11);
-                int spamTier = Math.Max(Math.Min(timeSkip + rand.Next(-2, 3), 8), 1);
-                SpamBot bot = new SpamBot(spamTier);
-
-                // Select opponent — bots 0-5 are hardcoded, 6-10 use a league ONNX model
-                AIBrain selectedLeague = null;
-                string opponentName = "Random Dummy";
-
-                if (botSelection == 0) opponentName = "Random Dummy";
-                else if (botSelection == 1) opponentName = "Anti-Spam Bot";
-                else if (botSelection >= 2 && botSelection <= 5) opponentName = $"Spam Bot T{spamTier}";
-                else if (leagueModels.Count > 0)
-                {
-                    var chosen = leagueModels[rand.Next(leagueModels.Count)];
-                    selectedLeague = chosen.brain;
-                    opponentName = chosen.name;
-                }
-
-                // 3. The Match Loop
-                try
-                {
-                    // 2. Send the initial starting state to Python (includes opponent name for tracking)
-                    Proto.SendReset(stream, state.GetStateVector(1), state.GetActionMask(1), opponentName);
-
-                    int framesToSkip = 9;
-
-                    // 4. The Match Loop
-                    while (!state.IsGameOver && state.CurrentTick < maxTicks)
+                    if (state != null) // record completed episode
                     {
-                        var (p1Action, denseWeight) = Proto.ReadAction(stream);
+                        int epWinner = state.WinnerSide;
+                        if (epWinner == 0 && state.CurrentTick >= MAX_TICKS)
+                            epWinner = state.Player1.CastleHealth >= state.Player2.CastleHealth ? 1 : 2;
 
-                        float cumulativeP1Reward = 0f;
-                        float cumulativeP2Reward = 0f;
-                        StepResult finalResult = null;
+                        batchEpisodes.Add((oppName, epWinner));
+                        bool aiWon = epWinner == 1;
 
-                        // --- THE FRAME SKIP LOOP ---
-                        for (int i = 0; i < framesToSkip; i++)
-                        {
-                            if (state.IsGameOver || state.CurrentTick >= maxTicks) break;
-
-                            // AI acts on the first tick of each frame skip; waits on the rest
-                            int currentP1Action = (i == 0) ? p1Action : 0;
-                            int currentP2Action = 0;
-
-                            // Bots act every tick; league models act once per frame skip (same cadence as AI)
-                            if (botSelection == 0)
-                                currentP2Action = randBot.GetAction();
-                            else if (botSelection == 1)
-                                currentP2Action = antiSpamBot.GetAction(state.CurrentTick, state.Player1.Team);
-                            else if (botSelection >= 2 && botSelection <= 5)
-                                currentP2Action = bot.GetAction();
-                            else if (selectedLeague != null && i == 0)
-                                currentP2Action = selectedLeague.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
-
-                            StepResult tickResult = engine.Step(currentP1Action, currentP2Action, denseWeight);
-
-                            // Add up the running tally of rewards
-                            cumulativeP1Reward += tickResult.P1Reward;
-                            cumulativeP2Reward += tickResult.P2Reward;
-
-                            // Keep overwriting finalResult so we always have the most recent GameState array
-                            finalResult = tickResult;
-                        }
-
-                        // --- TIE-BREAKER LOGIC ---
-                        if (state.CurrentTick >= maxTicks && !state.IsGameOver)
-                        {
-                            state.IsGameOver = true;
-                            finalResult.IsDone = true;
-
-                            // Who has the most health?
-                            if (state.Player1.CastleHealth > state.Player2.CastleHealth)
-                            {
-                                cumulativeP1Reward += 50f;
-                                cumulativeP2Reward -= 50f;
-                            }
-                            else if (state.Player2.CastleHealth > state.Player1.CastleHealth)
-                            {
-                                cumulativeP1Reward -= 50f;
-                                cumulativeP2Reward += 50f;
-                            }
-                        }
-
-                        Proto.SendStep(stream,
-                            finalResult.P1State, finalResult.P1ActionMask,
-                            cumulativeP1Reward, finalResult.IsDone, finalResult.WinnerSide);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // 1. Did Python actually just close? (Socket exceptions)
-                    if (ex is System.IO.IOException || ex is System.Net.Sockets.SocketException)
-                    {
-                        Console.WriteLine("\n[NETWORKING] Python disconnected naturally. Shutting down arena.");
-
-                        // --- THE FINAL REPORT CARD ---
-                        var log = new System.Text.StringBuilder();
-                        log.AppendLine($"=== Arena Port {port} | Completed: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
-
-                        void Log(string line)
-                        {
-                            Console.WriteLine(line);
-                            log.AppendLine(line);
-                        }
-
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Log("\n===========================================================");
-                        Log("               FINAL TRAINING RUN STATISTICS               ");
-                        Log("===========================================================");
+                        if (!opponentTrackers.ContainsKey(oppName)) opponentTrackers[oppName] = new StatTracker();
+                        if (!timeSkipTrackers.ContainsKey(timeSkip)) timeSkipTrackers[timeSkip] = new StatTracker();
+                        globalTracker.AddResult(aiWon);
+                        opponentTrackers[oppName].AddResult(aiWon);
+                        timeSkipTrackers[timeSkip].AddResult(aiWon);
 
                         Console.ForegroundColor = ConsoleColor.Cyan;
-                        Log($"[GLOBAL] Matches: {globalTracker.TotalMatches} | Total WR: {globalTracker.TotalWinrate:0.0}% | Baseline: {globalTracker.BaselineWinrate:0.0}%");
-
-                        // Print Opponents (Alphabetical)
-                        Log("\n--- BY OPPONENT ---");
+                        Console.Write($"[GLOBAL] {globalTracker.TotalMatches} games | Recent: {globalTracker.RecentWinrate:0.0}% | Total: {globalTracker.TotalWinrate:0.0}%  ");
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        foreach (var kvp in opponentTrackers.OrderBy(x => x.Key))
-                        {
-                            var oppName = kvp.Key;
-                            var finalOppStats = kvp.Value;
-                            Log($"[{oppName.PadRight(17)}] Matches: {finalOppStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalOppStats.TotalWinrate,5:0.0}% | Baseline: {finalOppStats.BaselineWinrate,5:0.0}% | Final 100: {finalOppStats.RecentWinrate,5:0.0}%");
-                        }
-
-                        // Print Time Skips (Numerical Order)
-                        Log("\n--- BY TIME SKIP ---");
-                        Console.ForegroundColor = ConsoleColor.Magenta;
-                        foreach (var kvp in timeSkipTrackers.OrderBy(x => x.Key))
-                        {
-                            var skip = kvp.Key;
-                            var finalTimeStats = kvp.Value;
-                            Log($"[SKIP {skip.ToString().PadRight(2)}] Matches: {finalTimeStats.TotalMatches.ToString().PadRight(5)} | Total WR: {finalTimeStats.TotalWinrate,5:0.0}% | Baseline: {finalTimeStats.BaselineWinrate,5:0.0}% | Final 100: {finalTimeStats.RecentWinrate,5:0.0}%");
-                        }
-
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Log("===========================================================\n");
+                        Console.WriteLine($"[vs {oppName}] {opponentTrackers[oppName].RecentWinrate:0.0}%");
                         Console.ResetColor();
-
-                        System.IO.File.WriteAllText($"training_stats_{port}.txt", log.ToString());
-
-                        TrackerData Snap(StatTracker t) => new TrackerData(
-                            t.TotalMatches, t.TotalWins, t.First100Wins,
-                            t.RecentWins.Count(w => w), t.RecentWins.Count);
-
-                        var jsonData = new
-                        {
-                            port,
-                            global = Snap(globalTracker),
-                            opponents = opponentTrackers.ToDictionary(kvp => kvp.Key, kvp => Snap(kvp.Value)),
-                            timeSkips = timeSkipTrackers.ToDictionary(kvp => kvp.Key.ToString(), kvp => Snap(kvp.Value))
-                        };
-                        System.IO.File.WriteAllText($"training_stats_{port}.json",
-                            JsonSerializer.Serialize(jsonData, new JsonSerializerOptions { WriteIndented = true }));
-                        break;
                     }
 
-                    // 2. NOPE! The Game Engine crashed! 
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"\n[FATAL ENGINE CRASH] {ex.Message}");
-                    Console.WriteLine(ex.StackTrace);
-                    Console.ResetColor();
+                    // Setup new game
+                    state    = new GameState();
+                    timeSkip = Math.Max(_rand.Next(-8, 9), 0);
+                    string upg = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
 
-                    // 3. Save the error to a text file so it survives the crash!
-                    System.IO.File.WriteAllText("engine_crash_log.txt", ex.ToString());
-
-                    break; // Break the infinite loop
-                }
-
-                Console.WriteLine($"Match {matchCount} finished in {state.CurrentTick} ticks.");
-                Console.WriteLine($"P1 HP: {state.Player1.CastleHealth} | P2 HP: {state.Player2.CastleHealth}");
-
-                // The AI is always Player 1 in this training setup
-                bool aiWon = false;
-
-                if (state.WinnerSide == 1)
-                {
-                    aiWon = true; // Clean knockout!
-                }
-                else if (state.WinnerSide == 0 && state.CurrentTick >= maxTicks)
-                {
-                    // Survived to Sudden Death, check the Tie-Breaker
-                    if (state.Player1.CastleHealth > state.Player2.CastleHealth)
+                    state.Player1 = new PlayerState(timeSkip);
+                    state.Player2 = new PlayerState(timeSkip);
+                    if (_rand.Next(5) == 0)
                     {
-                        aiWon = true;
+                        state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
+                        state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
                     }
+                    state.CurrentTick = 30 * 30 * timeSkip;
+                    state.Player1.Side = 1;
+                    state.Player1.Team = GameDataManager.GetRandomTeam();
+                    state.Player1.SetLoadout(new[] {
+                        GameDataManager.GetRandomOGadgetId() + upg,
+                        GameDataManager.GetRandomDGadgetId() + upg,
+                        GameDataManager.GetSignatureGadgetIdForTeam(state.Player1.Team) + upg });
+                    state.Player2.Side = 2;
+                    state.Player2.Team = GameDataManager.GetRandomTeam();
+                    state.Player2.SetLoadout(new[] {
+                        GameDataManager.GetRandomOGadgetId() + upg,
+                        GameDataManager.GetRandomDGadgetId() + upg,
+                        GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) + upg });
+
+                    engine  = new GameEngine(state);
+                    botSel  = _rand.Next(11);
+                    spamTier = Math.Max(Math.Min(timeSkip + _rand.Next(-2, 3), 8), 1);
+                    spamBot  = new SpamBot(spamTier);
+                    leagueBrain = null;
+                    oppName = "Random Dummy";
+
+                    if (botSel == 1) oppName = "Anti-Spam Bot";
+                    else if (botSel >= 2 && botSel <= 5) oppName = $"Spam Bot T{spamTier}";
+                    else if (botSel > 5 && leagueModels.Count > 0)
+                    {
+                        var chosen = leagueModels[_rand.Next(leagueModels.Count)];
+                        leagueBrain = chosen.brain;
+                        oppName     = chosen.name;
+                    }
+
+                    nextEpStart = true;
                 }
 
-                // --- CATEGORIZE THE MATCH ---
-                // 2. Ensure the trackers exist in the dictionaries
-                if (!opponentTrackers.ContainsKey(opponentName))
-                opponentTrackers[opponentName] = new StatTracker();
+                // ── STEP COLLECTION LOOP ──
+                while (batchPos < N_STEPS && !state.IsGameOver && state.CurrentTick < MAX_TICKS)
+                {
+                    float[] p1Obs  = state.GetStateVector(1);
+                    int[]   p1Mask = state.GetActionMask(1);
+                    int p1Action   = trainingBrain != null
+                        ? trainingBrain.GetBestAction(p1Obs, p1Mask)
+                        : GetRandomValidAction(p1Mask);
 
-                if (!timeSkipTrackers.ContainsKey(timeSkip))
-                    timeSkipTrackers[timeSkip] = new StatTracker();
+                    float      cumRew   = 0f;
+                    StepResult lastTick = null;
 
-                // --- NEW: UPDATE ALL TRACKERS ---
-                globalTracker.AddResult(aiWon);
-                opponentTrackers[opponentName].AddResult(aiWon);
-                timeSkipTrackers[timeSkip].AddResult(aiWon);
+                    for (int fi = 0; fi < 9; fi++)
+                    {
+                        if (state.IsGameOver || state.CurrentTick >= MAX_TICKS) break;
 
-                // --- NEW: CALCULATE AND PRINT STATS ---
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine($"[GLOBAL] Recent: {globalTracker.RecentWinrate:0.0}% | Total: {globalTracker.TotalWinrate:0.0}% | Baseline: {globalTracker.BaselineWinrate:0.0}%");
+                        int p2Action = 0;
+                        if      (botSel == 0)                      p2Action = randBot.GetAction();
+                        else if (botSel == 1)                      p2Action = antiBot.GetAction(state.CurrentTick, state.Player1.Team);
+                        else if (botSel >= 2 && botSel <= 5)       p2Action = spamBot.GetAction();
+                        else if (leagueBrain != null && fi == 0)   p2Action = leagueBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
 
-                // Print the specific opponent we just fought
-                var oppStats = opponentTrackers[opponentName];
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"[VS {opponentName.ToUpper()}] Recent: {oppStats.RecentWinrate:0.0}% | Total: {oppStats.TotalWinrate:0.0}%");
+                        var tick = engine.Step(fi == 0 ? p1Action : 0, p2Action, 0f);
+                        cumRew  += tick.P1Reward;
+                        lastTick = tick;
+                    }
 
-                // Print the specific time skip we just used
-                var timeStats = timeSkipTrackers[timeSkip];
-                Console.ForegroundColor = ConsoleColor.Magenta;
-                Console.WriteLine($"[TIME SKIP {timeSkip}] Recent: {timeStats.RecentWinrate:0.0}% | Total: {timeStats.TotalWinrate:0.0}%\n");
+                    // Overtime tie-break
+                    if (state.CurrentTick >= MAX_TICKS && !state.IsGameOver)
+                    {
+                        state.IsGameOver  = true;
+                        lastTick.IsDone   = true;
+                        if      (state.Player1.CastleHealth > state.Player2.CastleHealth) cumRew += 50f;
+                        else if (state.Player2.CastleHealth > state.Player1.CastleHealth) cumRew -= 50f;
+                    }
 
-                Console.ResetColor();
+                    batchObs[batchPos]    = p1Obs;
+                    batchMask[batchPos]   = p1Mask;
+                    batchAction[batchPos] = p1Action;
+                    batchRew[batchPos]    = cumRew;
+                    batchEpS[batchPos]    = nextEpStart;
+                    batchWin[batchPos]    = lastTick.IsDone ? lastTick.WinnerSide : 0;
+                    nextEpStart           = lastTick.IsDone;
+                    batchPos++;
+                }
+
+                // ── SEND BATCH WHEN FULL ──
+                if (batchPos >= N_STEPS)
+                {
+                    float[] finalObs  = state.GetStateVector(1);
+                    int[]   finalMask = state.GetActionMask(1);
+                    bool    finalDone = state.IsGameOver;
+
+                    try
+                    {
+                        BatchProto.SendBatch(stream, N_STEPS,
+                            batchObs, batchMask, batchAction, batchRew, batchEpS, batchWin,
+                            finalObs, finalMask, finalDone, batchEpisodes);
+
+                        byte ackVersion = BatchProto.ReadAck(stream);
+                        if (ackVersion != loadedModelVersion)
+                        {
+                            TryLoadTrainingBrain(ref trainingBrain);
+                            loadedModelVersion = ackVersion;
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is SocketException)
+                    {
+                        Console.WriteLine("\n[NET] Python disconnected. Writing final stats...");
+                        PrintFinalStats(port, globalTracker, opponentTrackers, timeSkipTrackers);
+                        return;
+                    }
+
+                    batchPos = 0;
+                    batchEpisodes.Clear();
+                }
             }
+        }
+
+        static void TryLoadTrainingBrain(ref AIBrain brain)
+        {
+            if (!File.Exists(TRAINING_MODEL_PATH)) return;
+            try
+            {
+                brain?.Dispose();
+                brain = new AIBrain(TRAINING_MODEL_PATH);
+                Console.WriteLine($"[Model] Reloaded {TRAINING_MODEL_PATH}");
+            }
+            catch (Exception ex) { Console.WriteLine($"[Model] Reload failed (will retry): {ex.Message}"); }
+        }
+
+        static int GetRandomValidAction(int[] mask)
+        {
+            var valid = Enumerable.Range(0, mask.Length).Where(i => mask[i] != 0).ToList();
+            return valid.Count > 0 ? valid[_rand.Next(valid.Count)] : 0;
+        }
+
+        static void PrintFinalStats(int port, StatTracker global,
+            Dictionary<string, StatTracker> opp, Dictionary<int, StatTracker> ts)
+        {
+            var log = new StringBuilder();
+            log.AppendLine($"=== Arena Port {port} | Completed: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+            void Log(string line) { Console.WriteLine(line); log.AppendLine(line); }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Log("\n===========================================================");
+            Log("               FINAL TRAINING RUN STATISTICS               ");
+            Log("===========================================================");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Log($"[GLOBAL] Matches: {global.TotalMatches} | Total WR: {global.TotalWinrate:0.0}% | Baseline: {global.BaselineWinrate:0.0}%");
+
+            Log("\n--- BY OPPONENT ---");
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            foreach (var kvp in opp.OrderBy(x => x.Key))
+                Log($"[{kvp.Key.PadRight(17)}] {kvp.Value.TotalMatches,5} games | Total: {kvp.Value.TotalWinrate,5:0.0}% | Final 100: {kvp.Value.RecentWinrate,5:0.0}%");
+
+            Log("\n--- BY TIME SKIP ---");
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            foreach (var kvp in ts.OrderBy(x => x.Key))
+                Log($"[SKIP {kvp.Key,-2}] {kvp.Value.TotalMatches,5} games | Total: {kvp.Value.TotalWinrate,5:0.0}% | Final 100: {kvp.Value.RecentWinrate,5:0.0}%");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Log("===========================================================\n");
+            Console.ResetColor();
+
+            File.WriteAllText($"training_stats_{port}.txt", log.ToString());
+            TrackerData Snap(StatTracker t) => new TrackerData(
+                t.TotalMatches, t.TotalWins, t.First100Wins,
+                t.RecentWins.Count(w => w), t.RecentWins.Count);
+            var json = new
+            {
+                port,
+                global    = Snap(global),
+                opponents = opp.ToDictionary(k => k.Key, k => Snap(k.Value)),
+                timeSkips = ts.ToDictionary(k => k.Key.ToString(), k => Snap(k.Value))
+            };
+            File.WriteAllText($"training_stats_{port}.json",
+                JsonSerializer.Serialize(json, new JsonSerializerOptions { WriteIndented = true }));
         }
     }
 }

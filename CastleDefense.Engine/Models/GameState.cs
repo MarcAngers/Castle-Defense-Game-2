@@ -110,8 +110,9 @@ namespace CastleDefense.Engine.Models
             state.Add((float)Math.Log10(me.Money + 1) / 6.0f);
             state.Add((float)Math.Log10(me.Income + 1) / 4.0f);
 
-            // Scaled against the 35 upgrade cap
-            state.Add(me.InvestmentCount / MAX_UPGRADES);
+            // InvestmentPrice (log10) replaces InvestmentCount — directly actionable for savings decisions.
+            // InvestmentCount is derivable from InvestmentPrice + Income, which are both in the state.
+            state.Add((float)Math.Log10(me.InvestmentPrice + 1) / 4.0f);
             state.Add(me.RepairCount / MAX_UPGRADES);
 
             // --- 2. ENEMY CASTLE ---

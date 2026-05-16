@@ -798,9 +798,9 @@ namespace CastleDefense.Engine
 
             // Incentivize using gadgets to help the AI learn what they do
             if (p1ActionSucceeded && actionP1 > 10)
-                p1Reward += 0.01f * _currentDenseWeight;
+                p1Reward += 0.05f * _currentDenseWeight;
             if (p2ActionSucceeded && actionP2 > 10)
-                p2Reward += 0.01f * _currentDenseWeight;
+                p2Reward += 0.05f * _currentDenseWeight;
             // ---------------------------------------------------------------
 
             // 5. Flatten the new game state for the AI's neural network
@@ -888,19 +888,19 @@ namespace CastleDefense.Engine
             int prevEnemyCount = side == 1 ? _prevP2UnitCount : _prevP1UnitCount;
 
             // --- 1. THE TIME PENALTY ---
-            // A tiny negative incentive every single tick. 
+            // A tiny negative incentive every single tick.
             // At 30 ticks a second, -0.01f is -0.3f points per second, or -90f over 5 minutes.
             // This pushes them to end the game fast without making them want to instantly die.
-            reward -= 0.01f;
+            reward -= 0.1f;
 
             // --- 2. COMBAT REWARDS ---
 
             // + 1 Point per enemy slain
             int enemiesSlain = prevEnemyCount - _state.Units.Where(u => u.Side == enemyPlayer.Side).ToList().Count();
-            reward += (float)Math.Max(enemiesSlain, 0) * 1f;
-            // - 1 Point per ally slain
+            reward += (float)Math.Max(enemiesSlain, 0) * 5f;
+            // - 5 Points per ally slain
             int myUnitsLost = prevAllyCount - _state.Units.Where(u => u.Side == myPlayer.Side).Count();
-            reward -= Math.Max(myUnitsLost, 0) * 1f;
+            reward -= Math.Max(myUnitsLost, 0) * 5f;
 
             // + Points for damaging the enemy castle (Percentage based!)
             int damageDealt = enemyPrevHealth - enemyPlayer.CastleHealth;
@@ -923,17 +923,28 @@ namespace CastleDefense.Engine
             // Reward them heavily for successfully increasing their income
             if (myPlayer.Income - myPrevIncome > 0)
             {
-                reward += 2000f + (11 - myPlayer.InvestmentCount) * 300f;
+                reward += 1800f + (11 - myPlayer.InvestmentCount) * 270f;
             }
-            // Negative incentive for spending money when close to investing.
-            // Suspended when HP < 50% so the model can freely defend while under pressure.
-            // Penalty scales from 0 at 60% savings to -1000 at 100% savings (gradient, not cliff).
+            // Anti-spend: penalises any unit purchase while HP is high and economy isn't maxed.
+            // Fades naturally as the model builds its economy (full penalty at count=0, zero at count=8).
+            // The old savings-progress gate (savingsProgress > 0.6) has been removed — it was trivially
+            // avoided by T1 spam, which kept money too low for the condition to ever fire.
             float hpRatio = (float)myPlayer.CastleHealth / myPlayer.CastleMaxHealth;
-            float savingsProgress = (float)(myPrevMoney / myPlayer.InvestmentPrice);
-            if (hpRatio >= 0.5f && savingsProgress > 0.6f && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
+            float savingsProgress = Math.Min(1.0f, (float)(myPrevMoney / myPlayer.InvestmentPrice));
+            float hpPenaltyFactor = Math.Max(0.0f, Math.Min(1.0f, (hpRatio - 0.5f) / 0.4f));
+            if (hpPenaltyFactor > 0f && myPlayer.InvestmentCount < 8
+                && savingsProgress > 0.6f && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
             {
-                float penaltyScale = (savingsProgress - 0.6f) / 0.4f; // 0 at 60%, 1 at 100%
-                reward -= penaltyScale * 1000f;
+                float penaltyScale = (savingsProgress - 0.6f) / 0.4f;
+                reward -= penaltyScale * 700f * hpPenaltyFactor;
+            }
+            // Survival bonus: reward spending at low HP to encourage fighting back when cornered.
+            // Capped at zero — negative urgency (HP > 90%) was causing action-0 dominance where the
+            // penalty gradient overwhelmed the policy from the first update, freezing greedy inference.
+            if (hpRatio < 0.9f && myPlayer.Money < myPrevMoney)
+            {
+                float urgency = (0.9f - hpRatio) / 0.9f; // 0 at 90% HP, 1 at 0% HP
+                reward += urgency * 100f;
             }
             // Reward saving up to invest, if we're at a high investment tier, we don't want to worry about saving any more
             if (myPlayer.InvestmentCount <= 7)
@@ -955,15 +966,15 @@ namespace CastleDefense.Engine
             {
                 if (_state.WinnerSide == side)
                 {
-                    reward += 10000f; // Glorious victory!
+                    reward += 18000f; // Glorious victory!
                 }
                 else if (_state.WinnerSide != side && _state.WinnerSide != 0)
                 {
-                    reward -= 10000f; // Crushing defeat!
+                    reward -= 18000f; // Crushing defeat!
                 }
             }
 
-            return reward / 100f;
+            return reward / 300f;
         }
     }
 }
