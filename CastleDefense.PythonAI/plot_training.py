@@ -168,25 +168,22 @@ def draw_figure(fig, log_path):
     ax3.legend(facecolor=BG_PANEL, labelcolor="white", framealpha=0.8,
                ncol=2, fontsize=8)
 
-    # ── Per-opponent Episode Reward (bottom-right) ─────────────────────────────
-    for name, step_map in sorted(opp_rew_series.items()):
-        sorted_steps = sorted(step_map)
-        xs_o = to_M(sorted_steps)
-        ys_o = [sum(step_map[s]) / len(step_map[s]) for s in sorted_steps]
-        syo  = smooth(ys_o, window=5)
-        color = COLORS.get(name, "#aaaacc")
-        ax4.plot(xs_o, syo, linewidth=1.8, label=name, color=color)
-        if syo:
-            ax4.annotate(f"{syo[-1]:+.0f}", xy=(xs_o[-1], syo[-1]),
-                         xytext=(5, 0), textcoords="offset points",
-                         color=color, fontsize=8, va="center")
-
-    ax4.axhline(0, color="#555577", linewidth=0.8, linestyle="--")
-    ax4.set_title("Episode Reward by Opponent", fontsize=12)
-    ax4.set_ylabel("Reward")
+    # ── Avg Invests per Game (bottom-right) ───────────────────────────────────
+    has_invests = "avg_invests_per_game" in overall_rows[0]
+    if has_invests:
+        inv  = [float(r["avg_invests_per_game"]) for r in overall_rows]
+        sinv = smooth(inv)
+        ax4.plot(xs, sinv, color="#33ddaa", linewidth=2.5, label="Avg Invests/Game")
+        ax4.fill_between(xs, sinv, alpha=0.12, color="#33ddaa")
+        ax4.axhline(2, color="#555577", linewidth=0.8, linestyle="--")  # reference: ~2 invests = minimal economy
+        if sinv:
+            ax4.annotate(f"{sinv[-1]:.2f}", xy=(xs[-1], sinv[-1]),
+                         xytext=(6, 0), textcoords="offset points",
+                         color="#33ddaa", fontsize=10, va="center")
+    ax4.set_title("Avg Invests per Game", fontsize=12)
+    ax4.set_ylabel("Invests")
     ax4.set_xlabel("Training Steps (Millions)")
-    ax4.legend(facecolor=BG_PANEL, labelcolor="white", framealpha=0.8,
-               ncol=2, fontsize=8)
+    ax4.legend(facecolor=BG_PANEL, labelcolor="white", framealpha=0.8)
 
     total_M = xs[-1] if xs else 0
     fig.suptitle(

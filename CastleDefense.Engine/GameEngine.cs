@@ -798,9 +798,9 @@ namespace CastleDefense.Engine
 
             // Incentivize using gadgets to help the AI learn what they do
             if (p1ActionSucceeded && actionP1 > 10)
-                p1Reward += 0.05f * _currentDenseWeight;
+                p1Reward += 0.02f * _currentDenseWeight;
             if (p2ActionSucceeded && actionP2 > 10)
-                p2Reward += 0.05f * _currentDenseWeight;
+                p2Reward += 0.02f * _currentDenseWeight;
             // ---------------------------------------------------------------
 
             // 5. Flatten the new game state for the AI's neural network
@@ -891,11 +891,11 @@ namespace CastleDefense.Engine
             // A tiny negative incentive every single tick.
             // At 30 ticks a second, -0.01f is -0.3f points per second, or -90f over 5 minutes.
             // This pushes them to end the game fast without making them want to instantly die.
-            reward -= 0.1f;
+            reward -= 0.01f;
 
             // --- 2. COMBAT REWARDS ---
 
-            // + 1 Point per enemy slain
+            // + 5 Point per enemy slain
             int enemiesSlain = prevEnemyCount - _state.Units.Where(u => u.Side == enemyPlayer.Side).ToList().Count();
             reward += (float)Math.Max(enemiesSlain, 0) * 5f;
             // - 5 Points per ally slain
@@ -944,7 +944,7 @@ namespace CastleDefense.Engine
             if (hpRatio < 0.9f && myPlayer.Money < myPrevMoney)
             {
                 float urgency = (0.9f - hpRatio) / 0.9f; // 0 at 90% HP, 1 at 0% HP
-                reward += urgency * 100f;
+                reward += urgency * 75f;
             }
             // Reward saving up to invest, if we're at a high investment tier, we don't want to worry about saving any more
             if (myPlayer.InvestmentCount <= 7)
@@ -958,7 +958,8 @@ namespace CastleDefense.Engine
             float healthDelta = myPlayer.CastleHealth - myPrevHealth; // min: 11,000 (+44)
             if (healthDelta > 0)
             {
-                reward += healthDelta / 200f;
+                //reward += healthDelta / 400f + Math.Max((5 - myPlayer.RepairCount), 0) * 10f;
+                reward += healthDelta / 150f;
             }
 
             // --- 4. ENDGAME MULTIPLIERS ---

@@ -23,8 +23,16 @@ N_ENVS    = 14     # number of C# arenas
 STEP_SIZE = N_OBS * 4 + 14 + 1 + 4 + 1 + 1  # obs_bytes + mask + action + reward + ep_start + winner
 FINAL_SIZE = N_OBS * 4 + 14 + 1              # obs_bytes + mask + done
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v17"
+TRAINING_MODEL_NAME = "castle_defense_p1_v18"  # saves checkpoints here
+TRAINING_BASE_MODEL = "castle_defense_p1_v18"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
 TRAINING_MODEL_ONNX = "current_model.onnx"
+
+# Entropy annealing: decays linearly from start → ENT_FLOOR over the training run.
+# Fresh starts need high early entropy so the invest action survives long enough to be discovered.
+# Warm-starts already have the good strategy encoded; lower entropy preserves it while allowing refinement.
+ENT_FRESH_START = 0.05   # starting ent_coef when no prior knowledge (new model)
+ENT_WARM_START  = 0.02   # starting ent_coef when loading from a base model or resuming
+ENT_FLOOR       = 0.01   # both schedules decay toward this floor
 
 
 # ─── Binary receive helpers ────────────────────────────────────────────────────
@@ -173,9 +181,10 @@ class ProgressTracker:
         self.recent_rewards    = deque(maxlen=2000)
         self.opp_results       = defaultdict(lambda: deque(maxlen=500))
         self.opp_rewards       = defaultdict(lambda: deque(maxlen=500))
+        self.recent_invests    = deque(maxlen=500)  # avg invests-per-game per update
         self._watcher_proc = None
 
-    def record_episodes(self, episodes, batch_reward_sum, batch_n_steps):
+    def record_episodes(self, episodes, batch_reward_sum, batch_n_steps, batch_invest_count=0):
         """Called after each update with the episode summaries from all arenas."""
         self.total_steps += batch_n_steps
         # Per-episode win/loss from episode summaries
@@ -185,12 +194,13 @@ class ProgressTracker:
             self.recent_results.append(is_win)
             self.opp_results[name].append(is_win)
 
-        # Approximate episode reward from batch sum / number of episodes
+        # Approximate episode reward and invest rate from batch totals / number of episodes
         if episodes:
             approx_ep_reward = batch_reward_sum / len(episodes)
             self.recent_rewards.append(approx_ep_reward)
             for name, _ in episodes:
                 self.opp_rewards[name].append(approx_ep_reward)
+            self.recent_invests.append(batch_invest_count / len(episodes))
 
         if self.total_steps - self.last_log_step >= self.log_interval:
             self.last_log_step = self.total_steps
@@ -199,11 +209,13 @@ class ProgressTracker:
     def _checkpoint(self):
         if not self.recent_results:
             return
-        wr          = sum(self.recent_results) / len(self.recent_results)
-        mean_reward = sum(self.recent_rewards) / len(self.recent_rewards) if self.recent_rewards else 0.0
+        wr           = sum(self.recent_results) / len(self.recent_results)
+        mean_reward  = sum(self.recent_rewards) / len(self.recent_rewards) if self.recent_rewards else 0.0
+        avg_invests  = sum(self.recent_invests) / len(self.recent_invests) if self.recent_invests else 0.0
 
         print(f"\n[{self.total_steps:>12,} steps | {self.total_games:,} games]  "
-              f"WR: {wr:.1%}  Avg Reward: {mean_reward:+.1f}  (last {len(self.recent_results)} games)")
+              f"WR: {wr:.1%}  Avg Reward: {mean_reward:+.1f}  Invests/Game: {avg_invests:.2f}"
+              f"  (last {len(self.recent_results)} games)")
 
         opp_data = {}
         for opp, wins in self.opp_results.items():
@@ -218,8 +230,8 @@ class ProgressTracker:
         with open(self.log_path, "a", newline="") as f:
             writer = csv.writer(f)
             if write_header:
-                writer.writerow(["timestep", "overall_winrate", "mean_ep_reward", "sample_count", "total_games"])
-            writer.writerow([self.total_steps, round(wr, 4), round(mean_reward, 2), len(self.recent_results), self.total_games])
+                writer.writerow(["timestep", "overall_winrate", "mean_ep_reward", "avg_invests_per_game", "sample_count", "total_games"])
+            writer.writerow([self.total_steps, round(wr, 4), round(mean_reward, 2), round(avg_invests, 3), len(self.recent_results), self.total_games])
 
         write_header = not os.path.exists(self.opp_log_path)
         with open(self.opp_log_path, "a", newline="") as f:
@@ -344,7 +356,8 @@ def fill_rollout_buffer(model, all_batches):
     model.rollout_buffer.compute_returns_and_advantage(
         last_values=last_values, dones=final_done_arr)
 
-    return last_values, final_done_arr, all_episodes, total_reward
+    invest_count = int(np.sum(action_arr == 9))
+    return last_values, final_done_arr, all_episodes, total_reward, invest_count
 
 
 def make_rollout_buffer(model):
@@ -393,14 +406,24 @@ if __name__ == "__main__":
     init_env = DummyVecEnv([_InitEnv])
 
     model_file = TRAINING_MODEL_NAME + ".zip"
+    base_file  = (TRAINING_BASE_MODEL + ".zip") if TRAINING_BASE_MODEL else None
     if os.path.exists(model_file):
         print(f"\nResuming training: {model_file}")
         model = MaskablePPO.load(TRAINING_MODEL_NAME, env=init_env,
                                   custom_objects=custom_hyperparams,
                                   verbose=1, device="cuda")
+        is_fresh_start = False
+    elif base_file and os.path.exists(base_file):
+        print(f"\nWarm-starting from base model: {base_file}")
+        model = MaskablePPO.load(TRAINING_BASE_MODEL, env=init_env,
+                                  custom_objects=custom_hyperparams,
+                                  verbose=1, device="cuda")
+        model.num_timesteps = 0  # reset so entropy annealing and progress start fresh
+        is_fresh_start = False
     else:
         print("\nInitializing new model...")
         model = MaskablePPO("MlpPolicy", init_env, verbose=1, device="cuda", **custom_hyperparams)
+        is_fresh_start = True
 
     # ── SB3 internal setup (bypasses model.learn()) ──
     model.set_logger(configure(None, ["stdout"]))
@@ -412,6 +435,9 @@ if __name__ == "__main__":
         model._n_updates = 0
 
     model.rollout_buffer = make_rollout_buffer(model)
+
+    ent_label = f"fresh ({ENT_FRESH_START} → {ENT_FLOOR})" if is_fresh_start else f"warm-start ({ENT_WARM_START} → {ENT_FLOOR})"
+    print(f"Entropy schedule: {ent_label}")
 
     # Export initial ONNX so C# arenas have something to load
     print("\nExporting initial model to ONNX...")
@@ -446,7 +472,7 @@ if __name__ == "__main__":
 
             # Re-infer + fill buffer + train
             model.policy.set_training_mode(True)
-            _, _, all_episodes, total_reward = fill_rollout_buffer(model, all_batches)
+            _, _, all_episodes, total_reward, invest_count = fill_rollout_buffer(model, all_batches)
 
             # Guard against NaN/Inf — check all buffer arrays written by fill_rollout_buffer
             buf = model.rollout_buffer
@@ -483,8 +509,8 @@ if __name__ == "__main__":
 
             progress = max(0.0, 1.0 - model.num_timesteps / total_timesteps)
             model._current_progress_remaining = progress
-            # Anneal entropy from 0.02 at the start to 0.01 at the end
-            model.ent_coef = 0.01 + 0.01 * progress
+            ent_start = ENT_FRESH_START if is_fresh_start else ENT_WARM_START
+            model.ent_coef = ENT_FLOOR + (ent_start - ENT_FLOOR) * progress
 
             try:
                 model.train()
@@ -568,7 +594,7 @@ if __name__ == "__main__":
                 version_cond.notify_all()
 
             # Progress tracking
-            tracker.record_episodes(all_episodes, total_reward, N_ENVS * N_STEPS)
+            tracker.record_episodes(all_episodes, total_reward, N_ENVS * N_STEPS, invest_count)
 
             if update_n % 10 == 0:
                 logit_range, action0_rate = check_policy_health(model)
@@ -590,3 +616,6 @@ if __name__ == "__main__":
     model.save(last_path)
     print(f"Final model saved to {last_path}.zip")
     print(f"Last clean checkpoint remains at {TRAINING_MODEL_NAME}.zip")
+    # Force-exit so Windows doesn't hang on arena threads blocked in socket reads.
+    # All data is saved at this point; Python's normal cleanup isn't needed.
+    os._exit(0)
