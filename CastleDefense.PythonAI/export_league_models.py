@@ -50,7 +50,8 @@ def export_model(model_name, output_dir):
         onnx_net, dummy_input, out_path,
         opset_version=17,
         input_names=["observation"],
-        output_names=["action_logits"]
+        output_names=["action_logits"],
+        dynamo=False,
     )
     print(f"[OK] {model_name} → {out_path}")
     return True

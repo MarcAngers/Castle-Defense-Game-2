@@ -23,16 +23,16 @@ N_ENVS    = 14     # number of C# arenas
 STEP_SIZE = N_OBS * 4 + 14 + 1 + 4 + 1 + 1  # obs_bytes + mask + action + reward + ep_start + winner
 FINAL_SIZE = N_OBS * 4 + 14 + 1              # obs_bytes + mask + done
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v18"  # saves checkpoints here
-TRAINING_BASE_MODEL = "castle_defense_p1_v18"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
+TRAINING_MODEL_NAME = "castle_defense_p1_v22"  # saves checkpoints here
+TRAINING_BASE_MODEL = "castle_defense_p1_v16"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
 TRAINING_MODEL_ONNX = "current_model.onnx"
 
 # Entropy annealing: decays linearly from start → ENT_FLOOR over the training run.
 # Fresh starts need high early entropy so the invest action survives long enough to be discovered.
 # Warm-starts already have the good strategy encoded; lower entropy preserves it while allowing refinement.
 ENT_FRESH_START = 0.05   # starting ent_coef when no prior knowledge (new model)
-ENT_WARM_START  = 0.02   # starting ent_coef when loading from a base model or resuming
-ENT_FLOOR       = 0.01   # both schedules decay toward this floor
+ENT_WARM_START  = 0.03   # starting ent_coef when loading from a base model or resuming
+ENT_FLOOR       = 0.02   # both schedules decay toward this floor
 
 
 # ─── Binary receive helpers ────────────────────────────────────────────────────
@@ -163,7 +163,8 @@ def export_current_model(model, path=TRAINING_MODEL_ONNX):
     dummy = th.randn(1, N_OBS)
     tmp = path + ".tmp"
     th.onnx.export(net, dummy, tmp, opset_version=17,
-                   input_names=["observation"], output_names=["action_logits"])
+                   input_names=["observation"], output_names=["action_logits"],
+                   dynamo=False)
     os.replace(tmp, path)
 
 
@@ -428,7 +429,7 @@ if __name__ == "__main__":
     # ── SB3 internal setup (bypasses model.learn()) ──
     model.set_logger(configure(None, ["stdout"]))
     model._current_progress_remaining = 1.0
-    total_timesteps = 1_000_000_000
+    total_timesteps = 10_000_000
     if not hasattr(model, 'num_timesteps') or model.num_timesteps is None:
         model.num_timesteps = 0
     if not hasattr(model, '_n_updates') or model._n_updates is None:
@@ -521,24 +522,15 @@ if __name__ == "__main__":
                 print(f"[CRITICAL] Emergency checkpoint saved to {emergency_path}.zip")
                 raise
 
-            # KL guard: target_kl stops further epochs but can't undo the first mini-batch
-            # that already ran. If KL is catastrophically large, roll back to the last
-            # periodic checkpoint (same path as the NaN guard below).
+            # KL logging only — rollback guard removed.
+            # target_kl already limits damage to one mini-batch per rollout.
+            # The degenerate check below catches actual weight corruption.
+            # A rollback guard that triggers at 1.5× target_kl causes an infinite loop:
+            # the checkpoint is in the same volatile phase, so every subsequent rollout
+            # produces the same spike, and training never makes forward progress.
             approx_kl = float(model.logger.name_to_value.get("train/approx_kl", 0.0))
-            kl_limit   = (model.target_kl or 0.02) * 1.5  # 0.12 with target_kl=0.08
-            if approx_kl > kl_limit and os.path.exists(TRAINING_MODEL_NAME + ".zip"):
-                print(f"[WARN] Update {update_n}: KL={approx_kl:.4f} far exceeds target "
-                      f"({model.target_kl:.3f}) — rolling back to last checkpoint.")
-                model = MaskablePPO.load(TRAINING_MODEL_NAME, device="cuda",
-                                         custom_objects=custom_hyperparams, verbose=1)
-                model.rollout_buffer = make_rollout_buffer(model)
-                model.set_logger(configure(None, ["stdout"]))
-                export_current_model(model)
-                with version_cond:
-                    version_ref[0] = update_n
-                    version_cond.notify_all()
-                update_n += 1
-                continue
+            if approx_kl > (model.target_kl or 0.02):
+                print(f"[INFO] Update {update_n}: KL={approx_kl:.4f} (target_kl early-stopped at {model.target_kl:.3f})")
 
             # Detect silent NaN weights (can appear after a "successful" update and crash the next one)
             nan_params = sum(1 for p in model.policy.parameters()
@@ -606,6 +598,10 @@ if __name__ == "__main__":
                     print(f"[Update {update_n}] Skipping checkpoint — degenerate policy "
                           f"(range={logit_range:.3f}, action0={action0_rate:.0%}), preserving last clean save.")
 
+            if model.num_timesteps >= total_timesteps:
+                print(f"\nReached {total_timesteps:,} timesteps. Training complete.")
+                break
+
     except KeyboardInterrupt:
         print("\nStopping training...")
 
@@ -613,8 +609,9 @@ if __name__ == "__main__":
     # (TRAINING_MODEL_NAME.zip, saved every 10 updates) is never overwritten by
     # a potentially-corrupted end-of-run save. Resume next run from TRAINING_MODEL_NAME.
     last_path = TRAINING_MODEL_NAME + "_last"
+    print(f"Saving final model to {last_path}.zip (this may take a moment)...")
     model.save(last_path)
-    print(f"Final model saved to {last_path}.zip")
+    print(f"Done.")
     print(f"Last clean checkpoint remains at {TRAINING_MODEL_NAME}.zip")
     # Force-exit so Windows doesn't hang on arena threads blocked in socket reads.
     # All data is saved at this point; Python's normal cleanup isn't needed.

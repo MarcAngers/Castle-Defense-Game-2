@@ -211,24 +211,27 @@ def watch_mode(log_path, poll_seconds=5):
 
     print(f"[Live graph] Watching {log_path}  (close window to stop)")
 
-    while plt.fignum_exists(fig.number):
-        try:
-            mtime = os.path.getmtime(log_path) if os.path.exists(log_path) else -1
-        except OSError:
-            mtime = -1
-
-        if mtime != last_mtime:
-            last_mtime = mtime
+    try:
+        while plt.fignum_exists(fig.number):
             try:
-                draw_figure(fig, log_path)
-                # Also save a PNG snapshot alongside the CSV
-                out = log_path.replace(".csv", ".png")
-                fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=BG_DARK)
-                fig.canvas.draw()
-            except Exception as e:
-                print(f"[Live graph] Draw error: {e}")
+                mtime = os.path.getmtime(log_path) if os.path.exists(log_path) else -1
+            except OSError:
+                mtime = -1
 
-        plt.pause(poll_seconds)
+            if mtime != last_mtime:
+                last_mtime = mtime
+                try:
+                    draw_figure(fig, log_path)
+                    # Also save a PNG snapshot alongside the CSV
+                    out = log_path.replace(".csv", ".png")
+                    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=BG_DARK)
+                    fig.canvas.draw()
+                except Exception as e:
+                    print(f"[Live graph] Draw error: {e}")
+
+            plt.pause(poll_seconds)
+    except KeyboardInterrupt:
+        pass
 
     print("[Live graph] Window closed.")
 

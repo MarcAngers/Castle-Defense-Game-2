@@ -290,8 +290,8 @@ namespace CastleDefense.Simulation
                     {
                         state.IsGameOver  = true;
                         lastTick.IsDone   = true;
-                        if      (state.Player1.CastleHealth > state.Player2.CastleHealth) cumRew += 50f;
-                        else if (state.Player2.CastleHealth > state.Player1.CastleHealth) cumRew -= 50f;
+                        if      (state.Player1.CastleHealth > state.Player2.CastleHealth) cumRew += 20f;
+                        else if (state.Player2.CastleHealth > state.Player1.CastleHealth) cumRew -= 24f;
                     }
 
                     batchObs[batchPos]    = p1Obs;

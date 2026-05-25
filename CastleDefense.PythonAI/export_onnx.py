@@ -4,7 +4,7 @@ from sb3_contrib import MaskablePPO
 print("Loading the trained brain...")
 # 1. Load your best model. We force it onto the CPU so the resulting 
 # ONNX file will run on any server, even if it doesn't have a fancy graphics card.
-model = MaskablePPO.load("castle_defense_p1_v18", device="cpu")
+model = MaskablePPO.load("castle_defense_p1_v22", device="cpu")
 
 # 2. Create a clean wrapper that ONLY outputs the action choices
 class CleanActionNetwork(th.nn.Module):
@@ -35,7 +35,8 @@ th.onnx.export(
     "castle_defense_bot.onnx",
     opset_version=17,
     input_names=["observation"],
-    output_names=["action_logits"]
+    output_names=["action_logits"],
+    dynamo=False,
 )
 
 print("Success! Your AI is now packed into 'castle_defense_bot.onnx'!")

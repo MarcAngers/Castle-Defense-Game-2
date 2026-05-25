@@ -22,7 +22,7 @@ namespace CastleDefense.Engine
         private ConcurrentQueue<Action> _actionQueue = new ConcurrentQueue<Action>();
 
         // Optimization: Fast Lookup Cache
-        private Dictionary<string, UnitDefinition> _unitCache;        
+        private Dictionary<string, UnitDefinition> _unitCache;
         private Dictionary<string, GadgetDefinition> _gadgetCache;
 
         // Event for successful gadget use
@@ -582,7 +582,7 @@ namespace CastleDefense.Engine
         {
             // 1. Identify Enemy
             var enemyPlayer = attacker.Side == 1 ? _state.Player2 : _state.Player1;
-            
+
             // 2. Reset Cooldown
             attacker.AttackCooldown = (1000f / def.AttackSpeed);
 
@@ -678,7 +678,7 @@ namespace CastleDefense.Engine
             if (target.AttacksWithoutKnockback >= 50 && target.Tier < 8)
             {
                 knockbackDist = 25f;
-            } 
+            }
             else if (target.AttacksWithoutKnockback >= 250 && target.Tier == 8)
             {
                 knockbackDist = 10f;
@@ -695,7 +695,8 @@ namespace CastleDefense.Engine
 
                 float direction = (target.Side == 1) ? -1f : 1f;
                 target.PendingKnockback += (knockbackDist * direction);
-            } else
+            }
+            else
             {
                 if (amount > 0)
                     target.AttacksWithoutKnockback++;
@@ -761,7 +762,14 @@ namespace CastleDefense.Engine
         private double _prevP2Money;
         private int _prevP2MaxHealth;
         private int _prevP2UnitCount;
+        private int _prevP1OffGadgetLevel;
+        private int _prevP1DefGadgetLevel;
+        private int _prevP1SigGadgetLevel;
+        private int _prevP2OffGadgetLevel;
+        private int _prevP2DefGadgetLevel;
+        private int _prevP2SigGadgetLevel;
         private float _currentDenseWeight = 1.0f;
+        private bool _initialStateRewarded = false;
 
         public StepResult Step(int actionP1, int actionP2, float denseRewardWeight = 1.0f)
         {
@@ -776,6 +784,12 @@ namespace CastleDefense.Engine
             _prevP2Money = _state.Player2.Money;
             _prevP2MaxHealth = _state.Player2.CastleMaxHealth;
             _prevP2UnitCount = _state.Units.Where(u => u.Side == 2).ToList().Count();
+            _prevP1OffGadgetLevel = _state.Player1.OffensiveGadget?.Level ?? 1;
+            _prevP1DefGadgetLevel = _state.Player1.DefensiveGadget?.Level ?? 1;
+            _prevP1SigGadgetLevel = _state.Player1.SignatureGadget?.Level ?? 1;
+            _prevP2OffGadgetLevel = _state.Player2.OffensiveGadget?.Level ?? 1;
+            _prevP2DefGadgetLevel = _state.Player2.DefensiveGadget?.Level ?? 1;
+            _prevP2SigGadgetLevel = _state.Player2.SignatureGadget?.Level ?? 1;
             _currentDenseWeight = denseRewardWeight;
 
             // 2. Decode the AI's chosen action and execute it
@@ -798,9 +812,9 @@ namespace CastleDefense.Engine
 
             // Incentivize using gadgets to help the AI learn what they do
             if (p1ActionSucceeded && actionP1 > 10)
-                p1Reward += 0.02f * _currentDenseWeight;
+                p1Reward += 0.05f * _currentDenseWeight;
             if (p2ActionSucceeded && actionP2 > 10)
-                p2Reward += 0.02f * _currentDenseWeight;
+                p2Reward += 0.05f * _currentDenseWeight;
             // ---------------------------------------------------------------
 
             // 5. Flatten the new game state for the AI's neural network
@@ -887,17 +901,41 @@ namespace CastleDefense.Engine
             int enemyPrevHealth = side == 1 ? _prevP2CastleHealth : _prevP1CastleHealth;
             int prevEnemyCount = side == 1 ? _prevP2UnitCount : _prevP1UnitCount;
 
+            // --- 0. INITIAL STATE REWARD (first tick only) ---
+            // When the time machine drops the AI into a mid-game state, credit it for the
+            // economy/upgrades already in place — the same rewards it would have earned by
+            // reaching that state organically. This teaches the model that progressing through
+            // early-game stages is inherently valuable, not just a means to an end.
+            if (!_initialStateRewarded && side == 1)
+            {
+                _initialStateRewarded = true;
+                for (int i = 0; i < _state.Player1.InvestmentCount; i++)
+                    reward += 3000f + (11 - i) * 800f;
+                for (int i = 0; i < _state.Player2.InvestmentCount; i++)
+                    reward += 3000f + (11 - i) * 800f;
+                reward += ((_state.Player1.OffensiveGadget?.Level ?? 1) - 1) * 1700f;
+                reward += ((_state.Player1.DefensiveGadget?.Level  ?? 1) - 1) * 1700f;
+                reward += ((_state.Player1.SignatureGadget?.Level  ?? 1) - 1) * 1700f;
+                reward += ((_state.Player2.OffensiveGadget?.Level ?? 1) - 1) * 1700f;
+                reward += ((_state.Player2.DefensiveGadget?.Level  ?? 1) - 1) * 1700f;
+                reward += ((_state.Player2.SignatureGadget?.Level  ?? 1) - 1) * 1700f;
+                for (int i = 1; i <= _state.Player1.RepairCount; i++)
+                    reward += Math.Max((5 - i) * 5f, 0f);
+                for (int i = 1; i <= _state.Player2.RepairCount; i++)
+                    reward += Math.Max((5 - i) * 5f, 0f);
+            }
+
             // --- 1. THE TIME PENALTY ---
             // A tiny negative incentive every single tick.
             // At 30 ticks a second, -0.01f is -0.3f points per second, or -90f over 5 minutes.
             // This pushes them to end the game fast without making them want to instantly die.
-            reward -= 0.01f;
+            reward -= 0.011f;
 
             // --- 2. COMBAT REWARDS ---
 
             // + 5 Point per enemy slain
             int enemiesSlain = prevEnemyCount - _state.Units.Where(u => u.Side == enemyPlayer.Side).ToList().Count();
-            reward += (float)Math.Max(enemiesSlain, 0) * 5f;
+            reward += (float)Math.Max(enemiesSlain, 0) * 6f;
             // - 5 Points per ally slain
             int myUnitsLost = prevAllyCount - _state.Units.Where(u => u.Side == myPlayer.Side).Count();
             reward -= Math.Max(myUnitsLost, 0) * 5f;
@@ -907,7 +945,7 @@ namespace CastleDefense.Engine
             if (damageDealt > 0)
             {
                 float pctDamageDealt = (float)damageDealt / enemyPlayer.CastleMaxHealth;
-                reward += (pctDamageDealt * 500f);
+                reward += (float)(Math.Pow(pctDamageDealt, 2f) * 300f);
             }
             // - Points for taking castle damage
             int myDamageTaken = myPrevHealth - myPlayer.CastleHealth;
@@ -915,7 +953,7 @@ namespace CastleDefense.Engine
             {
                 float pctMyDamage = (float)myDamageTaken / myPlayer.CastleMaxHealth;
                 float dangerMultiplier = Math.Min(3.0f, 5.0f * (1.0f - (float)myPlayer.CastleHealth / myPlayer.CastleMaxHealth));
-                reward -= (pctMyDamage * 500f * dangerMultiplier);
+                reward -= (pctMyDamage * 600f * dangerMultiplier);
             }
 
             // --- 3. ECONOMY & UPGRADE REWARDS ---
@@ -923,12 +961,10 @@ namespace CastleDefense.Engine
             // Reward them heavily for successfully increasing their income
             if (myPlayer.Income - myPrevIncome > 0)
             {
-                reward += 1800f + (11 - myPlayer.InvestmentCount) * 270f;
+                reward += 3000f + (11 - myPlayer.InvestmentCount) * 800f;
             }
             // Anti-spend: penalises any unit purchase while HP is high and economy isn't maxed.
             // Fades naturally as the model builds its economy (full penalty at count=0, zero at count=8).
-            // The old savings-progress gate (savingsProgress > 0.6) has been removed — it was trivially
-            // avoided by T1 spam, which kept money too low for the condition to ever fire.
             float hpRatio = (float)myPlayer.CastleHealth / myPlayer.CastleMaxHealth;
             float savingsProgress = Math.Min(1.0f, (float)(myPrevMoney / myPlayer.InvestmentPrice));
             float hpPenaltyFactor = Math.Max(0.0f, Math.Min(1.0f, (hpRatio - 0.5f) / 0.4f));
@@ -941,41 +977,54 @@ namespace CastleDefense.Engine
             // Survival bonus: reward spending at low HP to encourage fighting back when cornered.
             // Capped at zero — negative urgency (HP > 90%) was causing action-0 dominance where the
             // penalty gradient overwhelmed the policy from the first update, freezing greedy inference.
-            if (hpRatio < 0.9f && myPlayer.Money < myPrevMoney)
+            // Doesn't apply to investing.
+            if (hpRatio < 0.9f && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
             {
                 float urgency = (0.9f - hpRatio) / 0.9f; // 0 at 90% HP, 1 at 0% HP
-                reward += urgency * 75f;
+                reward += urgency * 100f;
             }
             // Reward saving up to invest, if we're at a high investment tier, we don't want to worry about saving any more
             if (myPlayer.InvestmentCount <= 7)
             {
-                float savingsFraction = Math.Min(1.0f, (float)(myPlayer.Money / myPlayer.InvestmentPrice));
-                float savingsBoost = Math.Max(1.0f, 3.0f - myPlayer.InvestmentCount * 0.5f);
-                reward += savingsFraction * 0.5f * savingsBoost;
+                // Tent shape: linearly increases 0→1 from 0% to 100% of invest price,
+                // then linearly decreases 1→0 from 100% to 120%, and stays at 0 beyond that.
+                // No discontinuity at the threshold, and no incentive to accumulate excess savings.
+                float savingsFraction = (float)(myPlayer.Money / myPlayer.InvestmentPrice);
+                if (savingsFraction > 1.0f)
+                    savingsFraction = Math.Max(0f, (1.2f - savingsFraction) / 0.2f);
+                float savingsBoost = Math.Max(1.0f, 4.0f - myPlayer.InvestmentCount * 0.5f);
+                reward += savingsFraction * 0.1f * savingsBoost;
             }
 
             // Reward them for successfully upgrading their base health
-            float healthDelta = myPlayer.CastleHealth - myPrevHealth; // min: 11,000 (+44)
+            float healthDelta = myPlayer.CastleHealth - myPrevHealth; // min: 11,000 (+10)
             if (healthDelta > 0)
             {
-                //reward += healthDelta / 400f + Math.Max((5 - myPlayer.RepairCount), 0) * 10f;
-                reward += healthDelta / 150f;
+                reward += healthDelta / 1100f + Math.Max((5 - myPlayer.RepairCount), 0) * 5f;
             }
+
+            // Reward gadget upgrades (reaching the next tier after enough uses)
+            int prevOffLevel = side == 1 ? _prevP1OffGadgetLevel : _prevP2OffGadgetLevel;
+            int prevDefLevel = side == 1 ? _prevP1DefGadgetLevel : _prevP2DefGadgetLevel;
+            int prevSigLevel = side == 1 ? _prevP1SigGadgetLevel : _prevP2SigGadgetLevel;
+            if ((myPlayer.OffensiveGadget?.Level ?? 1) > prevOffLevel) reward += 1700f;
+            if ((myPlayer.DefensiveGadget?.Level ?? 1) > prevDefLevel) reward += 1700f;
+            if ((myPlayer.SignatureGadget?.Level ?? 1) > prevSigLevel) reward += 1700f;
 
             // --- 4. ENDGAME MULTIPLIERS ---
             if (_state.IsGameOver)
             {
                 if (_state.WinnerSide == side)
                 {
-                    reward += 18000f; // Glorious victory!
+                    reward += 54000f; // Glorious victory!
                 }
                 else if (_state.WinnerSide != side && _state.WinnerSide != 0)
                 {
-                    reward -= 18000f; // Crushing defeat!
+                    reward -= 54000f; // Crushing defeat!
                 }
             }
 
-            return reward / 300f;
+            return reward / 900f;
         }
     }
 }
