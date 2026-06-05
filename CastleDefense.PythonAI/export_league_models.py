@@ -58,8 +58,8 @@ def export_model(model_name, output_dir):
 
 
 if __name__ == "__main__":
-    # Export every vN model found in the current directory
     import glob
+    import shutil
     zips = sorted(glob.glob("castle_defense_p1_v*.zip"))
     models = [os.path.splitext(z)[0] for z in zips]
 
@@ -68,5 +68,10 @@ if __name__ == "__main__":
     else:
         print(f"Found {len(models)} model(s): {', '.join(models)}")
         print(f"Output directory: {OUTPUT_DIR}\n")
+
+        if os.path.exists(OUTPUT_DIR):
+            shutil.rmtree(OUTPUT_DIR)
+            print(f"[Cleared] {OUTPUT_DIR}")
+
         success = sum(export_model(m, OUTPUT_DIR) for m in models)
         print(f"\nDone! {success}/{len(models)} exported.")

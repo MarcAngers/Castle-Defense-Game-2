@@ -12,6 +12,7 @@ namespace CastleDefense.Engine.Models
         public TeamColour Map { get; set; }
         public bool ShadowMap { get; set; }
         public bool IsGameOver { get; set; }
+        public bool IsTimeLimit { get; set; } // true when the game ended by tick limit rather than castle destruction
         public int WinnerSide { get; set; } // 0 = Playing, 1 = Player 1 (Left), 2 = Player 2 (Right)
 
         public long CurrentTick { get; set; }

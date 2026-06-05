@@ -1,11 +1,13 @@
 import os
 import sys
 import csv
+import time
 import socket
 import struct
 import subprocess
 import threading
 import queue
+from pathlib import Path
 from collections import deque, defaultdict
 
 import numpy as np
@@ -16,6 +18,10 @@ from sb3_contrib import MaskablePPO
 from sb3_contrib.common.maskable.buffers import MaskableRolloutBuffer
 from stable_baselines3.common.logger import configure
 
+_SCRIPT_DIR = Path(__file__).parent.resolve()
+NET10_DIR   = (_SCRIPT_DIR / ".." / "CastleDefense.Simulation" / "bin" / "Release" / "net10.0").resolve()
+ARENA_EXE   = str(NET10_DIR / "CastleDefense.Simulation.exe")
+
 HOST      = '127.0.0.1'
 N_OBS     = 348    # observation vector size
 N_STEPS   = 8192   # steps collected per arena per update (matches n_steps hyperparameter)
@@ -23,8 +29,8 @@ N_ENVS    = 14     # number of C# arenas
 STEP_SIZE = N_OBS * 4 + 14 + 1 + 4 + 1 + 1  # obs_bytes + mask + action + reward + ep_start + winner
 FINAL_SIZE = N_OBS * 4 + 14 + 1              # obs_bytes + mask + done
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v22"  # saves checkpoints here
-TRAINING_BASE_MODEL = "castle_defense_p1_v16"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
+TRAINING_MODEL_NAME = "castle_defense_p1_v24"  # saves checkpoints here
+TRAINING_BASE_MODEL = "None"#"castle_defense_p1_v16"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
 TRAINING_MODEL_ONNX = "current_model.onnx"
 
 # Entropy annealing: decays linearly from start → ENT_FLOOR over the training run.
@@ -159,13 +165,49 @@ def export_current_model(model, path=TRAINING_MODEL_ONNX):
             latent_pi, _ = self.policy.mlp_extractor(features)
             return self.policy.action_net(latent_pi)
 
-    net = _Net(model.policy).cpu().eval()
-    dummy = th.randn(1, N_OBS)
-    tmp = path + ".tmp"
-    th.onnx.export(net, dummy, tmp, opset_version=17,
-                   input_names=["observation"], output_names=["action_logits"],
-                   dynamo=False)
+    device = model.device
+    model.policy.cpu()
+    try:
+        net = _Net(model.policy).eval()
+        tmp = path + ".tmp"
+        th.onnx.export(net, th.randn(1, N_OBS), tmp, opset_version=17,
+                       input_names=["observation"], output_names=["action_logits"],
+                       dynamo=False)
+    finally:
+        model.policy.to(device)
     os.replace(tmp, path)
+
+
+# ─── Arena management ─────────────────────────────────────────────────────────
+
+def start_arenas():
+    procs = []
+    for i in range(N_ENVS):
+        port = 5000 + i
+        proc = subprocess.Popen(
+            [ARENA_EXE, str(port)],
+            cwd=str(NET10_DIR),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        procs.append(proc)
+        print(f"  [Arena {i}] Started port {port}, PID={proc.pid}")
+    return procs
+
+
+def stop_arenas(procs):
+    print("\nStopping arenas...")
+    for p in procs:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+    for p in procs:
+        try:
+            p.wait(timeout=5)
+        except Exception:
+            pass
+    print("Arenas stopped.")
 
 
 # ─── Progress tracking ─────────────────────────────────────────────────────────
@@ -255,8 +297,19 @@ class ProgressTracker:
 def arena_thread(env_id, port, batch_queues, version_cond, version_ref):
     """One thread per C# arena. Receives batches and sends version ACKs."""
     print(f"[Arena {env_id}] Connecting to port {port}...")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((HOST, port))
+    sock = None
+    for attempt in range(30):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect((HOST, port))
+            break
+        except ConnectionRefusedError:
+            sock.close()
+            if attempt == 29:
+                print(f"[Arena {env_id}] Could not connect to port {port} after 30s.")
+                batch_queues[env_id].put(None)  # sentinel so main loop doesn't hang
+                return
+            time.sleep(1)
     print(f"[Arena {env_id}] Connected.")
 
     last_seen_version = -1
@@ -440,10 +493,16 @@ if __name__ == "__main__":
     ent_label = f"fresh ({ENT_FRESH_START} → {ENT_FLOOR})" if is_fresh_start else f"warm-start ({ENT_WARM_START} → {ENT_FLOOR})"
     print(f"Entropy schedule: {ent_label}")
 
-    # Export initial ONNX so C# arenas have something to load
+    # Export initial ONNX before arenas connect so they have something to load
     print("\nExporting initial model to ONNX...")
     export_current_model(model)
     print(f"Exported to {TRAINING_MODEL_ONNX}")
+
+    print(f"\nStarting {N_ENVS} arenas...")
+    arena_procs = start_arenas()
+    print("Waiting for arenas to load league models...")
+    time.sleep(15)
+    print("Arenas ready.\n")
 
     # ── Start arena threads ──
     batch_queues = [queue.Queue(maxsize=2) for _ in range(N_ENVS)]
@@ -470,6 +529,10 @@ if __name__ == "__main__":
         while True:
             # Collect one batch from each arena (blocks until all 14 are ready)
             all_batches = [batch_queues[i].get() for i in range(N_ENVS)]
+            if any(b is None for b in all_batches):
+                failed = [i for i, b in enumerate(all_batches) if b is None]
+                print(f"[ERROR] Arena thread(s) {failed} failed to connect. Stopping.")
+                break
 
             # Re-infer + fill buffer + train
             model.policy.set_training_mode(True)
@@ -613,6 +676,7 @@ if __name__ == "__main__":
     model.save(last_path)
     print(f"Done.")
     print(f"Last clean checkpoint remains at {TRAINING_MODEL_NAME}.zip")
+    stop_arenas(arena_procs)
     # Force-exit so Windows doesn't hang on arena threads blocked in socket reads.
     # All data is saved at this point; Python's normal cleanup isn't needed.
     os._exit(0)

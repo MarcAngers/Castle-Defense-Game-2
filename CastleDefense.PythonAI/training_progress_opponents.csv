@@ -1,2641 +1,1584 @@
 timestep,opponent,winrate,mean_ep_reward,sample_count
-114688,Anti-Spam Bot,0.4118,80.08,17
-114688,Random Dummy,0.8,80.08,10
-114688,Spam Bot T1,0.875,80.08,24
-114688,Spam Bot T2,0.8889,80.08,9
-114688,Spam Bot T3,1.0,80.08,5
-114688,Spam Bot T4,0.5,80.08,2
-114688,Spam Bot T5,1.0,80.08,2
-114688,Spam Bot T6,1.0,80.08,2
-114688,Spam Bot T7,0.5,80.08,4
-114688,Spam Bot T8,1.0,80.08,3
-114688,castle_defense_p1_v1,1.0,80.08,3
-114688,castle_defense_p1_v10,0.5,80.08,2
-114688,castle_defense_p1_v11,0.7143,80.08,7
-114688,castle_defense_p1_v12,0.7143,80.08,7
-114688,castle_defense_p1_v13,1.0,80.08,2
-114688,castle_defense_p1_v14,0.5,80.08,4
-114688,castle_defense_p1_v15,0.6,80.08,5
-114688,castle_defense_p1_v16,0.2,80.08,5
-114688,castle_defense_p1_v18,0.5,80.08,4
-114688,castle_defense_p1_v19,0.0,80.08,3
-114688,castle_defense_p1_v2,0.75,80.08,4
-114688,castle_defense_p1_v20,1.0,80.08,5
-114688,castle_defense_p1_v21,1.0,80.08,1
-114688,castle_defense_p1_v3,0.0,80.08,2
-114688,castle_defense_p1_v4,0.3333,80.08,3
-114688,castle_defense_p1_v5,0.0,80.08,2
-114688,castle_defense_p1_v6,0.25,80.08,4
-114688,castle_defense_p1_v7,0.0,80.08,3
-114688,castle_defense_p1_v8,1.0,80.08,3
-114688,castle_defense_p1_v9,0.5,80.08,4
-229376,Anti-Spam Bot,0.3226,76.09,31
-229376,Random Dummy,0.7,75.67,20
-229376,Spam Bot T1,0.9123,74.97,57
-229376,Spam Bot T2,0.9333,76.55,15
-229376,Spam Bot T3,0.8889,76.16,9
-229376,Spam Bot T4,0.5,75.67,4
-229376,Spam Bot T5,0.4,74.78,5
-229376,Spam Bot T6,1.0,77.14,3
-229376,Spam Bot T7,0.7,74.78,10
-229376,Spam Bot T8,1.0,75.67,6
-229376,castle_defense_p1_v1,1.0,77.87,4
-229376,castle_defense_p1_v10,0.4286,73.77,7
-229376,castle_defense_p1_v11,0.7692,76.0,13
-229376,castle_defense_p1_v12,0.75,78.98,8
-229376,castle_defense_p1_v13,1.0,77.14,3
-229376,castle_defense_p1_v14,0.6,78.32,5
-229376,castle_defense_p1_v15,0.7143,77.56,7
-229376,castle_defense_p1_v16,0.125,76.77,8
-229376,castle_defense_p1_v18,0.6,78.32,5
-229376,castle_defense_p1_v19,0.1111,74.19,9
-229376,castle_defense_p1_v2,0.5714,76.3,7
-229376,castle_defense_p1_v20,1.0,80.08,5
-229376,castle_defense_p1_v21,0.3333,74.19,3
-229376,castle_defense_p1_v3,0.0,77.14,3
-229376,castle_defense_p1_v4,0.3636,73.66,11
-229376,castle_defense_p1_v5,0.0,80.08,2
-229376,castle_defense_p1_v6,0.5,77.14,6
-229376,castle_defense_p1_v7,0.2857,75.03,7
-229376,castle_defense_p1_v8,1.0,77.87,4
-229376,castle_defense_p1_v9,0.5,75.67,8
-344064,Anti-Spam Bot,0.3182,73.36,44
-344064,Random Dummy,0.7,72.73,30
-344064,Spam Bot T1,0.8876,72.05,89
-344064,Spam Bot T2,0.9524,73.78,21
-344064,Spam Bot T3,0.7692,73.29,13
-344064,Spam Bot T4,0.5714,71.89,7
-344064,Spam Bot T5,0.375,71.81,8
-344064,Spam Bot T6,0.8333,71.99,6
-344064,Spam Bot T7,0.6923,72.95,13
-344064,Spam Bot T8,0.9091,71.66,11
-344064,castle_defense_p1_v1,0.8571,73.15,7
-344064,castle_defense_p1_v10,0.3636,71.25,11
-344064,castle_defense_p1_v11,0.75,74.29,16
-344064,castle_defense_p1_v12,0.8333,74.93,12
-344064,castle_defense_p1_v13,1.0,70.7,8
-344064,castle_defense_p1_v14,0.5,76.4,6
-344064,castle_defense_p1_v15,0.7,74.34,10
-344064,castle_defense_p1_v16,0.0909,74.06,11
-344064,castle_defense_p1_v18,0.5714,75.04,7
-344064,castle_defense_p1_v19,0.2,71.25,15
-344064,castle_defense_p1_v2,0.4286,71.57,14
-344064,castle_defense_p1_v20,0.5,73.46,10
-344064,castle_defense_p1_v21,0.375,69.6,8
-344064,castle_defense_p1_v3,0.2,73.02,5
-344064,castle_defense_p1_v4,0.2857,72.2,14
-344064,castle_defense_p1_v5,0.25,73.46,4
-344064,castle_defense_p1_v6,0.4545,72.46,11
-344064,castle_defense_p1_v7,0.2222,73.21,9
-344064,castle_defense_p1_v8,0.8,75.67,5
-344064,castle_defense_p1_v9,0.5333,71.55,15
-458752,Anti-Spam Bot,0.25,72.64,60
-458752,Random Dummy,0.66,71.9,50
-458752,Spam Bot T1,0.8655,71.7,119
-458752,Spam Bot T2,0.9677,72.77,31
-458752,Spam Bot T3,0.6875,72.8,16
-458752,Spam Bot T4,0.5556,71.61,9
-458752,Spam Bot T5,0.5385,71.37,13
-458752,Spam Bot T6,0.875,71.66,8
-458752,Spam Bot T7,0.6667,72.31,18
-458752,Spam Bot T8,0.8824,71.31,17
-458752,castle_defense_p1_v1,0.875,72.84,8
-458752,castle_defense_p1_v10,0.3846,71.16,13
-458752,castle_defense_p1_v11,0.6364,73.3,22
-458752,castle_defense_p1_v12,0.8667,74.08,15
-458752,castle_defense_p1_v13,1.0,70.7,10
-458752,castle_defense_p1_v14,0.6,74.11,10
-458752,castle_defense_p1_v15,0.75,72.96,16
-458752,castle_defense_p1_v16,0.2778,72.74,18
-458752,castle_defense_p1_v18,0.5833,73.22,12
-458752,castle_defense_p1_v19,0.2273,71.07,22
-458752,castle_defense_p1_v2,0.4211,71.33,19
-458752,castle_defense_p1_v20,0.5,72.66,14
-458752,castle_defense_p1_v21,0.5,69.95,12
-458752,castle_defense_p1_v3,0.3333,72.63,6
-458752,castle_defense_p1_v4,0.2222,71.86,18
-458752,castle_defense_p1_v5,0.25,73.46,4
-458752,castle_defense_p1_v6,0.3889,71.76,18
-458752,castle_defense_p1_v7,0.2,72.96,10
-458752,castle_defense_p1_v8,0.7143,74.24,7
-458752,castle_defense_p1_v9,0.5556,71.4,18
-573440,Anti-Spam Bot,0.2714,73.76,70
-573440,Random Dummy,0.6429,74.35,70
-573440,Spam Bot T1,0.8819,73.22,144
-573440,Spam Bot T2,0.9737,74.19,38
-573440,Spam Bot T3,0.6522,75.14,23
-573440,Spam Bot T4,0.6,72.5,10
-573440,Spam Bot T5,0.5385,71.37,13
-573440,Spam Bot T6,0.9091,74.07,11
-573440,Spam Bot T7,0.6842,72.74,19
-573440,Spam Bot T8,0.8636,73.39,22
-573440,castle_defense_p1_v1,0.9091,74.92,11
-573440,castle_defense_p1_v10,0.4,72.4,15
-573440,castle_defense_p1_v11,0.64,74.16,25
-573440,castle_defense_p1_v12,0.875,74.48,16
-573440,castle_defense_p1_v13,1.0,73.96,15
-573440,castle_defense_p1_v14,0.5833,75.17,12
-573440,castle_defense_p1_v15,0.75,72.96,16
-573440,castle_defense_p1_v16,0.3478,74.42,23
-573440,castle_defense_p1_v18,0.5,75.03,16
-573440,castle_defense_p1_v19,0.28,72.2,25
-573440,castle_defense_p1_v2,0.4,71.79,20
-573440,castle_defense_p1_v20,0.4706,74.04,17
-573440,castle_defense_p1_v21,0.4615,70.76,13
-573440,castle_defense_p1_v3,0.2857,73.75,7
-573440,castle_defense_p1_v4,0.2593,74.73,27
-573440,castle_defense_p1_v5,0.3333,75.8,6
-573440,castle_defense_p1_v6,0.4167,73.94,24
-573440,castle_defense_p1_v7,0.2308,74.69,13
-573440,castle_defense_p1_v8,0.8,76.11,10
-573440,castle_defense_p1_v9,0.5556,71.4,18
-688128,Anti-Spam Bot,0.3,73.51,80
-688128,Random Dummy,0.6543,74.0,81
-688128,Spam Bot T1,0.8689,72.9,183
-688128,Spam Bot T2,0.98,73.6,50
-688128,Spam Bot T3,0.6923,74.74,26
-688128,Spam Bot T4,0.6364,72.43,11
-688128,Spam Bot T5,0.5385,71.37,13
-688128,Spam Bot T6,0.8824,73.24,17
-688128,Spam Bot T7,0.7143,72.65,21
-688128,Spam Bot T8,0.875,73.25,24
-688128,castle_defense_p1_v1,0.8667,74.07,15
-688128,castle_defense_p1_v10,0.4706,72.33,17
-688128,castle_defense_p1_v11,0.6429,73.9,28
-688128,castle_defense_p1_v12,0.8824,74.32,17
-688128,castle_defense_p1_v13,1.0,73.49,19
-688128,castle_defense_p1_v14,0.6,74.48,15
-688128,castle_defense_p1_v15,0.7778,72.83,18
-688128,castle_defense_p1_v16,0.3448,73.87,29
-688128,castle_defense_p1_v18,0.4762,74.25,21
-688128,castle_defense_p1_v19,0.3448,72.13,29
-688128,castle_defense_p1_v2,0.3333,71.78,24
-688128,castle_defense_p1_v20,0.5,73.7,20
-688128,castle_defense_p1_v21,0.5,71.03,18
-688128,castle_defense_p1_v3,0.4545,73.02,11
-688128,castle_defense_p1_v4,0.2414,74.52,29
-688128,castle_defense_p1_v5,0.3077,73.61,13
-688128,castle_defense_p1_v6,0.4643,73.62,28
-688128,castle_defense_p1_v7,0.2667,74.3,15
-688128,castle_defense_p1_v8,0.7857,74.86,14
-688128,castle_defense_p1_v9,0.5556,71.4,18
-802816,Anti-Spam Bot,0.2917,71.87,96
-802816,Random Dummy,0.6809,72.57,94
-802816,Spam Bot T1,0.8651,71.53,215
-802816,Spam Bot T2,0.9831,72.09,59
-802816,Spam Bot T3,0.7037,74.33,27
-802816,Spam Bot T4,0.6429,70.55,14
-802816,Spam Bot T5,0.5,69.92,16
-802816,Spam Bot T6,0.85,71.8,20
-802816,Spam Bot T7,0.7083,71.52,24
-802816,Spam Bot T8,0.8571,71.88,28
-802816,castle_defense_p1_v1,0.8235,72.85,17
-802816,castle_defense_p1_v10,0.45,71.03,20
-802816,castle_defense_p1_v11,0.697,72.35,33
-802816,castle_defense_p1_v12,0.85,72.72,20
-802816,castle_defense_p1_v13,1.0,71.78,23
-802816,castle_defense_p1_v14,0.5882,73.21,17
-802816,castle_defense_p1_v15,0.8,70.26,25
-802816,castle_defense_p1_v16,0.3438,72.91,32
-802816,castle_defense_p1_v18,0.48,72.55,25
-802816,castle_defense_p1_v19,0.3226,71.58,31
-802816,castle_defense_p1_v2,0.3077,71.15,26
-802816,castle_defense_p1_v20,0.44,71.69,25
-802816,castle_defense_p1_v21,0.5455,69.69,22
-802816,castle_defense_p1_v3,0.4286,71.01,14
-802816,castle_defense_p1_v4,0.2812,73.51,32
-802816,castle_defense_p1_v5,0.25,71.75,16
-802816,castle_defense_p1_v6,0.4667,72.96,30
-802816,castle_defense_p1_v7,0.1905,71.26,21
-802816,castle_defense_p1_v8,0.75,73.46,16
-802816,castle_defense_p1_v9,0.5217,69.72,23
-917504,Anti-Spam Bot,0.3,73.01,110
-917504,Random Dummy,0.6827,73.36,104
-917504,Spam Bot T1,0.8653,72.67,245
-917504,Spam Bot T2,0.9851,73.13,67
-917504,Spam Bot T3,0.7097,75.18,31
-917504,Spam Bot T4,0.6667,71.24,15
-917504,Spam Bot T5,0.5,71.14,18
-917504,Spam Bot T6,0.8182,72.63,22
-917504,Spam Bot T7,0.7143,72.86,28
-917504,Spam Bot T8,0.8438,73.01,32
-917504,castle_defense_p1_v1,0.8,74.05,20
-917504,castle_defense_p1_v10,0.4762,71.49,21
-917504,castle_defense_p1_v11,0.6667,73.66,39
-917504,castle_defense_p1_v12,0.7917,74.08,24
-917504,castle_defense_p1_v13,1.0,72.16,24
-917504,castle_defense_p1_v14,0.5,74.36,20
-917504,castle_defense_p1_v15,0.8387,72.31,31
-917504,castle_defense_p1_v16,0.3056,73.79,36
-917504,castle_defense_p1_v18,0.48,72.55,25
-917504,castle_defense_p1_v19,0.3243,73.09,37
-917504,castle_defense_p1_v2,0.3667,72.45,30
-917504,castle_defense_p1_v20,0.4074,72.37,27
-917504,castle_defense_p1_v21,0.5,71.41,26
-917504,castle_defense_p1_v3,0.4375,72.24,16
-917504,castle_defense_p1_v4,0.2683,75.12,41
-917504,castle_defense_p1_v5,0.35,73.57,20
-917504,castle_defense_p1_v6,0.4412,73.89,34
-917504,castle_defense_p1_v7,0.2222,73.39,27
-917504,castle_defense_p1_v8,0.76,76.13,25
-917504,castle_defense_p1_v9,0.5926,71.37,27
-1032192,Anti-Spam Bot,0.3,72.23,130
-1032192,Random Dummy,0.686,72.6,121
-1032192,Spam Bot T1,0.8662,72.25,269
-1032192,Spam Bot T2,0.987,72.46,77
-1032192,Spam Bot T3,0.7353,74.54,34
-1032192,Spam Bot T4,0.6875,71.03,16
-1032192,Spam Bot T5,0.4286,70.68,21
-1032192,Spam Bot T6,0.84,72.07,25
-1032192,Spam Bot T7,0.7143,72.86,28
-1032192,Spam Bot T8,0.8182,72.85,33
-1032192,castle_defense_p1_v1,0.8333,73.03,24
-1032192,castle_defense_p1_v10,0.4783,71.19,23
-1032192,castle_defense_p1_v11,0.6977,73.13,43
-1032192,castle_defense_p1_v12,0.75,73.2,28
-1032192,castle_defense_p1_v13,1.0,71.84,26
-1032192,castle_defense_p1_v14,0.4762,74.05,21
-1032192,castle_defense_p1_v15,0.8611,71.71,36
-1032192,castle_defense_p1_v16,0.3158,73.49,38
-1032192,castle_defense_p1_v18,0.4444,72.21,27
-1032192,castle_defense_p1_v19,0.325,72.7,40
-1032192,castle_defense_p1_v2,0.4062,72.17,32
-1032192,castle_defense_p1_v20,0.4333,71.93,30
-1032192,castle_defense_p1_v21,0.4643,71.16,28
-1032192,castle_defense_p1_v3,0.4286,71.22,21
-1032192,castle_defense_p1_v4,0.2391,74.34,46
-1032192,castle_defense_p1_v5,0.3913,72.84,23
-1032192,castle_defense_p1_v6,0.4103,73.13,39
-1032192,castle_defense_p1_v7,0.1875,72.54,32
-1032192,castle_defense_p1_v8,0.7778,75.52,27
-1032192,castle_defense_p1_v9,0.5714,71.25,28
-1146880,Anti-Spam Bot,0.3014,72.77,146
-1146880,Random Dummy,0.6894,72.98,132
-1146880,Spam Bot T1,0.8729,72.74,299
-1146880,Spam Bot T2,0.9882,72.9,85
-1146880,Spam Bot T3,0.7429,74.61,35
-1146880,Spam Bot T4,0.65,72.26,20
-1146880,Spam Bot T5,0.4583,71.49,24
-1146880,Spam Bot T6,0.8519,72.45,27
-1146880,Spam Bot T7,0.6562,73.4,32
-1146880,Spam Bot T8,0.85,73.61,40
-1146880,castle_defense_p1_v1,0.8462,73.35,26
-1146880,castle_defense_p1_v10,0.4815,72.07,27
-1146880,castle_defense_p1_v11,0.6809,73.47,47
-1146880,castle_defense_p1_v12,0.7812,73.7,32
-1146880,castle_defense_p1_v13,1.0,72.55,30
-1146880,castle_defense_p1_v14,0.4348,74.32,23
-1146880,castle_defense_p1_v15,0.8684,72.0,38
-1146880,castle_defense_p1_v16,0.3333,73.58,39
-1146880,castle_defense_p1_v18,0.4667,72.71,30
-1146880,castle_defense_p1_v19,0.3256,73.02,43
-1146880,castle_defense_p1_v2,0.4412,72.46,34
-1146880,castle_defense_p1_v20,0.4333,71.93,30
-1146880,castle_defense_p1_v21,0.5161,71.75,31
-1146880,castle_defense_p1_v3,0.4,73.01,30
-1146880,castle_defense_p1_v4,0.2245,74.52,49
-1146880,castle_defense_p1_v5,0.3103,73.73,29
-1146880,castle_defense_p1_v6,0.3953,73.51,43
-1146880,castle_defense_p1_v7,0.2222,73.06,36
-1146880,castle_defense_p1_v8,0.7931,75.63,29
-1146880,castle_defense_p1_v9,0.5667,71.64,30
-1261568,Anti-Spam Bot,0.3121,72.13,157
-1261568,Random Dummy,0.6906,72.51,139
-1261568,Spam Bot T1,0.862,71.98,326
-1261568,Spam Bot T2,0.9896,71.83,96
-1261568,Spam Bot T3,0.7632,73.74,38
-1261568,Spam Bot T4,0.6667,70.81,24
-1261568,Spam Bot T5,0.4815,70.61,27
-1261568,Spam Bot T6,0.8333,71.55,30
-1261568,Spam Bot T7,0.7027,72.06,37
-1261568,Spam Bot T8,0.8333,73.13,42
-1261568,castle_defense_p1_v1,0.8788,71.27,33
-1261568,castle_defense_p1_v10,0.4643,71.77,28
-1261568,castle_defense_p1_v11,0.6531,73.07,49
-1261568,castle_defense_p1_v12,0.7941,73.1,34
-1261568,castle_defense_p1_v13,1.0,71.98,32
-1261568,castle_defense_p1_v14,0.4643,72.4,28
-1261568,castle_defense_p1_v15,0.875,71.57,40
-1261568,castle_defense_p1_v16,0.3404,71.87,47
-1261568,castle_defense_p1_v18,0.4375,72.13,32
-1261568,castle_defense_p1_v19,0.3191,72.21,47
-1261568,castle_defense_p1_v2,0.4412,72.46,34
-1261568,castle_defense_p1_v20,0.3939,71.16,33
-1261568,castle_defense_p1_v21,0.4706,71.02,34
-1261568,castle_defense_p1_v3,0.3824,71.89,34
-1261568,castle_defense_p1_v4,0.2308,73.88,52
-1261568,castle_defense_p1_v5,0.303,72.5,33
-1261568,castle_defense_p1_v6,0.413,72.85,46
-1261568,castle_defense_p1_v7,0.2162,72.8,37
-1261568,castle_defense_p1_v8,0.7419,74.85,31
-1261568,castle_defense_p1_v9,0.5455,70.91,33
-1376256,Anti-Spam Bot,0.3006,72.35,163
-1376256,Random Dummy,0.7044,73.21,159
-1376256,Spam Bot T1,0.8624,72.49,356
-1376256,Spam Bot T2,0.9903,72.25,103
-1376256,Spam Bot T3,0.7805,74.06,41
-1376256,Spam Bot T4,0.7143,71.84,28
-1376256,Spam Bot T5,0.5,71.36,30
-1376256,Spam Bot T6,0.8485,72.15,33
-1376256,Spam Bot T7,0.6905,72.78,42
-1376256,Spam Bot T8,0.8261,73.56,46
-1376256,castle_defense_p1_v1,0.8889,71.83,36
-1376256,castle_defense_p1_v10,0.5161,72.38,31
-1376256,castle_defense_p1_v11,0.66,73.17,50
-1376256,castle_defense_p1_v12,0.8,73.85,40
-1376256,castle_defense_p1_v13,1.0,72.81,37
-1376256,castle_defense_p1_v14,0.5,72.77,30
-1376256,castle_defense_p1_v15,0.8864,72.16,44
-1376256,castle_defense_p1_v16,0.34,72.24,50
-1376256,castle_defense_p1_v18,0.4359,73.2,39
-1376256,castle_defense_p1_v19,0.3061,72.45,49
-1376256,castle_defense_p1_v2,0.4146,73.42,41
-1376256,castle_defense_p1_v20,0.4,71.56,35
-1376256,castle_defense_p1_v21,0.4444,71.41,36
-1376256,castle_defense_p1_v3,0.3947,72.54,38
-1376256,castle_defense_p1_v4,0.2407,74.04,54
-1376256,castle_defense_p1_v5,0.3158,73.23,38
-1376256,castle_defense_p1_v6,0.4118,73.37,51
-1376256,castle_defense_p1_v7,0.2308,73.07,39
-1376256,castle_defense_p1_v8,0.7027,75.38,37
-1376256,castle_defense_p1_v9,0.5676,71.68,37
-1490944,Anti-Spam Bot,0.2857,72.25,175
-1490944,Random Dummy,0.7041,73.08,169
-1490944,Spam Bot T1,0.8594,72.38,384
-1490944,Spam Bot T2,0.9912,72.14,113
-1490944,Spam Bot T3,0.8043,73.72,46
-1490944,Spam Bot T4,0.697,71.71,33
-1490944,Spam Bot T5,0.5152,71.32,33
-1490944,Spam Bot T6,0.8684,71.99,38
-1490944,Spam Bot T7,0.6977,72.74,43
-1490944,Spam Bot T8,0.7959,73.4,49
-1490944,castle_defense_p1_v1,0.8919,71.81,37
-1490944,castle_defense_p1_v10,0.5405,72.15,37
-1490944,castle_defense_p1_v11,0.6667,73.0,54
-1490944,castle_defense_p1_v12,0.7907,73.65,43
-1490944,castle_defense_p1_v13,1.0,72.67,40
-1490944,castle_defense_p1_v14,0.5,72.47,36
-1490944,castle_defense_p1_v15,0.8511,72.09,47
-1490944,castle_defense_p1_v16,0.3462,72.19,52
-1490944,castle_defense_p1_v18,0.439,73.09,41
-1490944,castle_defense_p1_v19,0.3396,72.34,53
-1490944,castle_defense_p1_v2,0.4146,73.42,41
-1490944,castle_defense_p1_v20,0.4211,71.51,38
-1490944,castle_defense_p1_v21,0.4615,71.38,39
-1490944,castle_defense_p1_v3,0.3721,72.36,43
-1490944,castle_defense_p1_v4,0.2241,73.83,58
-1490944,castle_defense_p1_v5,0.3077,73.17,39
-1490944,castle_defense_p1_v6,0.3889,73.23,54
-1490944,castle_defense_p1_v7,0.2143,72.92,42
-1490944,castle_defense_p1_v8,0.675,75.05,40
-1490944,castle_defense_p1_v9,0.55,71.63,40
-1605632,Anti-Spam Bot,0.2926,73.02,188
-1605632,Random Dummy,0.7022,73.6,178
-1605632,Spam Bot T1,0.8624,73.0,407
-1605632,Spam Bot T2,0.9919,73.14,124
-1605632,Spam Bot T3,0.8077,74.83,52
-1605632,Spam Bot T4,0.6842,73.25,38
-1605632,Spam Bot T5,0.5128,73.17,39
-1605632,Spam Bot T6,0.8571,73.08,42
-1605632,Spam Bot T7,0.7021,73.64,47
-1605632,Spam Bot T8,0.8214,74.65,56
-1605632,castle_defense_p1_v1,0.8947,72.12,38
-1605632,castle_defense_p1_v10,0.5238,73.49,42
-1605632,castle_defense_p1_v11,0.6786,73.37,56
-1605632,castle_defense_p1_v12,0.8125,74.66,48
-1605632,castle_defense_p1_v13,1.0,73.42,43
-1605632,castle_defense_p1_v14,0.4878,73.8,41
-1605632,castle_defense_p1_v15,0.8571,72.55,49
-1605632,castle_defense_p1_v16,0.3571,72.99,56
-1605632,castle_defense_p1_v18,0.4,74.01,45
-1605632,castle_defense_p1_v19,0.322,73.46,59
-1605632,castle_defense_p1_v2,0.4255,74.69,47
-1605632,castle_defense_p1_v20,0.3913,73.57,46
-1605632,castle_defense_p1_v21,0.4318,72.74,44
-1605632,castle_defense_p1_v3,0.3636,72.61,44
-1605632,castle_defense_p1_v4,0.2333,74.14,60
-1605632,castle_defense_p1_v5,0.3171,73.67,41
-1605632,castle_defense_p1_v6,0.3966,73.93,58
-1605632,castle_defense_p1_v7,0.2,73.62,45
-1605632,castle_defense_p1_v8,0.6364,75.8,44
-1605632,castle_defense_p1_v9,0.5455,72.69,44
-1720320,Anti-Spam Bot,0.2961,72.93,206
-1720320,Random Dummy,0.7,73.49,190
-1720320,Spam Bot T1,0.8676,72.93,438
-1720320,Spam Bot T2,0.9926,73.04,135
-1720320,Spam Bot T3,0.8182,74.68,55
-1720320,Spam Bot T4,0.6923,73.21,39
-1720320,Spam Bot T5,0.5238,73.08,42
-1720320,Spam Bot T6,0.8478,72.98,46
-1720320,Spam Bot T7,0.7115,73.48,52
-1720320,Spam Bot T8,0.8,74.46,60
-1720320,castle_defense_p1_v1,0.9024,72.1,41
-1720320,castle_defense_p1_v10,0.5745,73.32,47
-1720320,castle_defense_p1_v11,0.6721,73.26,61
-1720320,castle_defense_p1_v12,0.8235,74.5,51
-1720320,castle_defense_p1_v13,1.0,73.26,48
-1720320,castle_defense_p1_v14,0.4878,73.8,41
-1720320,castle_defense_p1_v15,0.8462,72.51,52
-1720320,castle_defense_p1_v16,0.3448,72.95,58
-1720320,castle_defense_p1_v18,0.413,73.96,46
-1720320,castle_defense_p1_v19,0.2923,73.32,65
-1720320,castle_defense_p1_v2,0.449,74.58,49
-1720320,castle_defense_p1_v20,0.375,73.51,48
-1720320,castle_defense_p1_v21,0.44,72.64,50
-1720320,castle_defense_p1_v3,0.3673,72.54,49
-1720320,castle_defense_p1_v4,0.2381,74.04,63
-1720320,castle_defense_p1_v5,0.3023,73.59,43
-1720320,castle_defense_p1_v6,0.3966,73.93,58
-1720320,castle_defense_p1_v7,0.2174,73.58,46
-1720320,castle_defense_p1_v8,0.6596,75.55,47
-1720320,castle_defense_p1_v9,0.5652,72.66,46
-1835008,Anti-Spam Bot,0.3045,73.73,220
-1835008,Random Dummy,0.701,74.32,204
-1835008,Spam Bot T1,0.8758,73.72,467
-1835008,Spam Bot T2,0.9861,73.82,144
-1835008,Spam Bot T3,0.7966,75.42,59
-1835008,Spam Bot T4,0.7045,74.62,44
-1835008,Spam Bot T5,0.5227,73.65,44
-1835008,Spam Bot T6,0.8478,72.98,46
-1835008,Spam Bot T7,0.7222,73.93,54
-1835008,Spam Bot T8,0.8065,74.82,62
-1835008,castle_defense_p1_v1,0.9024,72.1,41
-1835008,castle_defense_p1_v10,0.6078,74.29,51
-1835008,castle_defense_p1_v11,0.6825,73.65,63
-1835008,castle_defense_p1_v12,0.8269,74.71,52
-1835008,castle_defense_p1_v13,1.0,73.26,48
-1835008,castle_defense_p1_v14,0.5227,74.61,44
-1835008,castle_defense_p1_v15,0.8571,73.45,56
-1835008,castle_defense_p1_v16,0.35,73.38,60
-1835008,castle_defense_p1_v18,0.4,74.89,50
-1835008,castle_defense_p1_v19,0.2941,73.86,68
-1835008,castle_defense_p1_v2,0.5,75.6,54
-1835008,castle_defense_p1_v20,0.36,73.99,50
-1835008,castle_defense_p1_v21,0.4151,73.38,53
-1835008,castle_defense_p1_v3,0.38,72.8,50
-1835008,castle_defense_p1_v4,0.2273,74.56,66
-1835008,castle_defense_p1_v5,0.2826,74.37,46
-1835008,castle_defense_p1_v6,0.3968,74.86,63
-1835008,castle_defense_p1_v7,0.2292,74.08,48
-1835008,castle_defense_p1_v8,0.6731,76.52,52
-1835008,castle_defense_p1_v9,0.5833,73.2,48
-1949696,Anti-Spam Bot,0.3026,73.62,228
-1949696,Random Dummy,0.7091,74.04,220
-1949696,Spam Bot T1,0.8656,73.56,491
-1949696,Spam Bot T2,0.9871,73.59,155
-1949696,Spam Bot T3,0.7903,75.18,62
-1949696,Spam Bot T4,0.72,74.12,50
-1949696,Spam Bot T5,0.5417,73.39,48
-1949696,Spam Bot T6,0.82,72.78,50
-1949696,Spam Bot T7,0.7321,73.8,56
-1949696,Spam Bot T8,0.806,74.5,67
-1949696,castle_defense_p1_v1,0.9111,71.96,45
-1949696,castle_defense_p1_v10,0.5849,74.14,53
-1949696,castle_defense_p1_v11,0.6667,73.5,66
-1949696,castle_defense_p1_v12,0.8393,74.41,56
-1949696,castle_defense_p1_v13,1.0,73.15,50
-1949696,castle_defense_p1_v14,0.5227,74.61,44
-1949696,castle_defense_p1_v15,0.8621,73.35,58
-1949696,castle_defense_p1_v16,0.3443,73.33,61
-1949696,castle_defense_p1_v18,0.4259,74.57,54
-1949696,castle_defense_p1_v19,0.3151,73.63,73
-1949696,castle_defense_p1_v2,0.5179,75.42,56
-1949696,castle_defense_p1_v20,0.36,73.99,50
-1949696,castle_defense_p1_v21,0.4035,73.18,57
-1949696,castle_defense_p1_v3,0.3962,72.67,53
-1949696,castle_defense_p1_v4,0.2206,74.44,68
-1949696,castle_defense_p1_v5,0.26,74.06,50
-1949696,castle_defense_p1_v6,0.3906,74.79,64
-1949696,castle_defense_p1_v7,0.2157,73.87,51
-1949696,castle_defense_p1_v8,0.6667,75.99,57
-1949696,castle_defense_p1_v9,0.5686,73.04,51
-2064384,Anti-Spam Bot,0.2996,74.02,237
-2064384,Random Dummy,0.7071,74.86,239
-2064384,Spam Bot T1,0.86,73.92,500
-2064384,Spam Bot T2,0.9874,73.86,159
-2064384,Spam Bot T3,0.7794,75.98,68
-2064384,Spam Bot T4,0.72,74.12,50
-2064384,Spam Bot T5,0.5577,74.23,52
-2064384,Spam Bot T6,0.7963,73.63,54
-2064384,Spam Bot T7,0.7377,74.66,61
-2064384,Spam Bot T8,0.8108,75.43,74
-2064384,castle_defense_p1_v1,0.902,73.41,51
-2064384,castle_defense_p1_v10,0.5614,74.85,57
-2064384,castle_defense_p1_v11,0.6765,73.82,68
-2064384,castle_defense_p1_v12,0.8333,75.07,60
-2064384,castle_defense_p1_v13,1.0,73.58,52
-2064384,castle_defense_p1_v14,0.5435,75.03,46
-2064384,castle_defense_p1_v15,0.8525,73.88,61
-2064384,castle_defense_p1_v16,0.3788,74.16,66
-2064384,castle_defense_p1_v18,0.4035,75.08,57
-2064384,castle_defense_p1_v19,0.32,73.91,75
-2064384,castle_defense_p1_v2,0.5172,75.72,58
-2064384,castle_defense_p1_v20,0.3455,74.93,55
-2064384,castle_defense_p1_v21,0.4035,73.18,57
-2064384,castle_defense_p1_v3,0.3929,73.29,56
-2064384,castle_defense_p1_v4,0.2113,74.86,71
-2064384,castle_defense_p1_v5,0.2642,74.64,53
-2064384,castle_defense_p1_v6,0.3824,75.35,68
-2064384,castle_defense_p1_v7,0.2222,74.45,54
-2064384,castle_defense_p1_v8,0.661,76.27,59
-2064384,castle_defense_p1_v9,0.5614,74.23,57
-2179072,Anti-Spam Bot,0.3105,74.38,248
-2179072,Random Dummy,0.7121,75.37,257
-2179072,Spam Bot T1,0.862,74.37,500
-2179072,Spam Bot T2,0.9878,74.11,164
-2179072,Spam Bot T3,0.7857,76.16,70
-2179072,Spam Bot T4,0.7115,74.43,52
-2179072,Spam Bot T5,0.5455,74.66,55
-2179072,Spam Bot T6,0.7857,73.93,56
-2179072,Spam Bot T7,0.7424,75.23,66
-2179072,Spam Bot T8,0.8205,75.77,78
-2179072,castle_defense_p1_v1,0.8868,73.74,53
-2179072,castle_defense_p1_v10,0.5667,75.22,60
-2179072,castle_defense_p1_v11,0.6857,74.06,70
-2179072,castle_defense_p1_v12,0.8254,75.41,63
-2179072,castle_defense_p1_v13,1.0,73.74,53
-2179072,castle_defense_p1_v14,0.5208,75.33,48
-2179072,castle_defense_p1_v15,0.8594,74.27,64
-2179072,castle_defense_p1_v16,0.3731,74.28,67
-2179072,castle_defense_p1_v18,0.4286,75.75,63
-2179072,castle_defense_p1_v19,0.3205,74.23,78
-2179072,castle_defense_p1_v2,0.5556,76.23,63
-2179072,castle_defense_p1_v20,0.3455,74.93,55
-2179072,castle_defense_p1_v21,0.4,73.62,60
-2179072,castle_defense_p1_v3,0.4127,74.28,63
-2179072,castle_defense_p1_v4,0.2368,75.34,76
-2179072,castle_defense_p1_v5,0.2632,75.17,57
-2179072,castle_defense_p1_v6,0.3699,75.82,73
-2179072,castle_defense_p1_v7,0.2182,74.59,55
-2179072,castle_defense_p1_v8,0.6721,76.47,61
-2179072,castle_defense_p1_v9,0.55,74.62,60
-2293760,Anti-Spam Bot,0.3144,74.4,264
-2293760,Random Dummy,0.6934,75.33,274
-2293760,Spam Bot T1,0.856,74.79,500
-2293760,Spam Bot T2,0.9883,74.13,171
-2293760,Spam Bot T3,0.7746,76.14,71
-2293760,Spam Bot T4,0.7222,74.44,54
-2293760,Spam Bot T5,0.5357,74.66,56
-2293760,Spam Bot T6,0.7797,73.97,59
-2293760,Spam Bot T7,0.7424,75.23,66
-2293760,Spam Bot T8,0.8293,75.72,82
-2293760,castle_defense_p1_v1,0.8621,73.82,58
-2293760,castle_defense_p1_v10,0.5846,75.18,65
-2293760,castle_defense_p1_v11,0.6806,74.08,72
-2293760,castle_defense_p1_v12,0.8154,75.38,65
-2293760,castle_defense_p1_v13,1.0,73.76,54
-2293760,castle_defense_p1_v14,0.5208,75.33,48
-2293760,castle_defense_p1_v15,0.8636,74.28,66
-2293760,castle_defense_p1_v16,0.3571,74.3,70
-2293760,castle_defense_p1_v18,0.4308,75.72,65
-2293760,castle_defense_p1_v19,0.3373,74.26,83
-2293760,castle_defense_p1_v2,0.5882,76.12,68
-2293760,castle_defense_p1_v20,0.3833,74.91,60
-2293760,castle_defense_p1_v21,0.4242,73.72,66
-2293760,castle_defense_p1_v3,0.403,74.3,67
-2293760,castle_defense_p1_v4,0.2436,75.32,78
-2293760,castle_defense_p1_v5,0.2759,75.16,58
-2293760,castle_defense_p1_v6,0.3649,75.8,74
-2293760,castle_defense_p1_v7,0.2143,74.59,56
-2293760,castle_defense_p1_v8,0.6615,76.36,65
-2293760,castle_defense_p1_v9,0.5556,74.62,63
-2408448,Anti-Spam Bot,0.3143,75.04,280
-2408448,Random Dummy,0.6923,75.75,286
-2408448,Spam Bot T1,0.856,75.56,500
-2408448,Spam Bot T2,0.989,74.76,181
-2408448,Spam Bot T3,0.7703,76.52,74
-2408448,Spam Bot T4,0.7222,74.44,54
-2408448,Spam Bot T5,0.5667,75.38,60
-2408448,Spam Bot T6,0.7846,75.04,65
-2408448,Spam Bot T7,0.7353,75.53,68
-2408448,Spam Bot T8,0.8372,76.17,86
-2408448,castle_defense_p1_v1,0.873,74.75,63
-2408448,castle_defense_p1_v10,0.6053,76.67,76
-2408448,castle_defense_p1_v11,0.6842,74.68,76
-2408448,castle_defense_p1_v12,0.8235,75.83,68
-2408448,castle_defense_p1_v13,1.0,73.97,55
-2408448,castle_defense_p1_v14,0.5294,75.92,51
-2408448,castle_defense_p1_v15,0.8676,74.61,68
-2408448,castle_defense_p1_v16,0.3571,74.3,70
-2408448,castle_defense_p1_v18,0.4412,76.15,68
-2408448,castle_defense_p1_v19,0.3372,74.65,86
-2408448,castle_defense_p1_v2,0.5833,76.64,72
-2408448,castle_defense_p1_v20,0.3692,75.72,65
-2408448,castle_defense_p1_v21,0.4328,73.89,67
-2408448,castle_defense_p1_v3,0.4058,74.62,69
-2408448,castle_defense_p1_v4,0.2469,75.7,81
-2408448,castle_defense_p1_v5,0.2698,75.98,63
-2408448,castle_defense_p1_v6,0.3553,76.05,76
-2408448,castle_defense_p1_v7,0.2281,74.78,57
-2408448,castle_defense_p1_v8,0.6667,76.89,69
-2408448,castle_defense_p1_v9,0.5625,74.79,64
-2523136,Anti-Spam Bot,0.3174,75.05,293
-2523136,Random Dummy,0.69,75.73,300
-2523136,Spam Bot T1,0.862,75.63,500
-2523136,Spam Bot T2,0.9895,74.79,190
-2523136,Spam Bot T3,0.7733,76.5,75
-2523136,Spam Bot T4,0.7193,74.49,57
-2523136,Spam Bot T5,0.5645,75.38,62
-2523136,Spam Bot T6,0.7606,75.06,71
-2523136,Spam Bot T7,0.726,75.52,73
-2523136,Spam Bot T8,0.8409,76.15,88
-2523136,castle_defense_p1_v1,0.8529,74.79,68
-2523136,castle_defense_p1_v10,0.6,76.6,80
-2523136,castle_defense_p1_v11,0.6842,74.68,76
-2523136,castle_defense_p1_v12,0.8333,75.8,72
-2523136,castle_defense_p1_v13,1.0,74.02,57
-2523136,castle_defense_p1_v14,0.5283,75.9,53
-2523136,castle_defense_p1_v15,0.8714,74.63,70
-2523136,castle_defense_p1_v16,0.3699,74.34,73
-2523136,castle_defense_p1_v18,0.4286,76.13,70
-2523136,castle_defense_p1_v19,0.3409,74.66,88
-2523136,castle_defense_p1_v2,0.5769,76.54,78
-2523136,castle_defense_p1_v20,0.3529,75.7,68
-2523136,castle_defense_p1_v21,0.4366,73.97,71
-2523136,castle_defense_p1_v3,0.3919,74.67,74
-2523136,castle_defense_p1_v4,0.25,75.69,84
-2523136,castle_defense_p1_v5,0.2727,75.95,66
-2523136,castle_defense_p1_v6,0.3506,76.05,77
-2523136,castle_defense_p1_v7,0.2373,74.8,59
-2523136,castle_defense_p1_v8,0.6667,76.89,69
-2523136,castle_defense_p1_v9,0.5652,74.83,69
-2637824,Anti-Spam Bot,0.3194,75.2,310
-2637824,Random Dummy,0.6901,75.82,313
-2637824,Spam Bot T1,0.86,75.62,500
-2637824,Spam Bot T2,0.9897,74.85,194
-2637824,Spam Bot T3,0.7722,76.57,79
-2637824,Spam Bot T4,0.7069,74.55,58
-2637824,Spam Bot T5,0.5672,75.57,67
-2637824,Spam Bot T6,0.76,75.21,75
-2637824,Spam Bot T7,0.7143,75.64,77
-2637824,Spam Bot T8,0.8495,76.25,93
-2637824,castle_defense_p1_v1,0.8529,74.79,68
-2637824,castle_defense_p1_v10,0.6,76.68,85
-2637824,castle_defense_p1_v11,0.6835,74.8,79
-2637824,castle_defense_p1_v12,0.8421,75.91,76
-2637824,castle_defense_p1_v13,0.9833,74.21,60
-2637824,castle_defense_p1_v14,0.5517,76.07,58
-2637824,castle_defense_p1_v15,0.875,74.72,72
-2637824,castle_defense_p1_v16,0.3896,74.52,77
-2637824,castle_defense_p1_v18,0.4167,76.17,72
-2637824,castle_defense_p1_v19,0.337,74.8,92
-2637824,castle_defense_p1_v2,0.5556,76.59,81
-2637824,castle_defense_p1_v20,0.3247,75.96,77
-2637824,castle_defense_p1_v21,0.4557,74.37,79
-2637824,castle_defense_p1_v3,0.3924,74.88,79
-2637824,castle_defense_p1_v4,0.25,75.79,88
-2637824,castle_defense_p1_v5,0.2754,76.03,69
-2637824,castle_defense_p1_v6,0.3544,76.09,79
-2637824,castle_defense_p1_v7,0.2188,75.04,64
-2637824,castle_defense_p1_v8,0.6533,76.97,75
-2637824,castle_defense_p1_v9,0.5676,75.04,74
-2752512,Anti-Spam Bot,0.3148,75.43,324
-2752512,Random Dummy,0.7006,76.11,334
-2752512,Spam Bot T1,0.868,76.13,500
-2752512,Spam Bot T2,0.99,75.05,201
-2752512,Spam Bot T3,0.7791,76.89,86
-2752512,Spam Bot T4,0.6825,75.02,63
-2752512,Spam Bot T5,0.5672,75.57,67
-2752512,Spam Bot T6,0.7564,75.41,78
-2752512,Spam Bot T7,0.6962,75.76,79
-2752512,Spam Bot T8,0.8511,76.29,94
-2752512,castle_defense_p1_v1,0.8611,75.1,72
-2752512,castle_defense_p1_v10,0.5977,76.77,87
-2752512,castle_defense_p1_v11,0.6875,74.87,80
-2752512,castle_defense_p1_v12,0.8481,76.08,79
-2752512,castle_defense_p1_v13,0.9851,74.86,67
-2752512,castle_defense_p1_v14,0.5645,76.36,62
-2752512,castle_defense_p1_v15,0.8667,74.95,75
-2752512,castle_defense_p1_v16,0.3902,74.88,82
-2752512,castle_defense_p1_v18,0.4103,76.5,78
-2752512,castle_defense_p1_v19,0.3438,75.04,96
-2752512,castle_defense_p1_v2,0.5862,76.85,87
-2752512,castle_defense_p1_v20,0.3205,76.02,78
-2752512,castle_defense_p1_v21,0.4512,74.59,82
-2752512,castle_defense_p1_v3,0.3908,75.39,87
-2752512,castle_defense_p1_v4,0.2637,75.94,91
-2752512,castle_defense_p1_v5,0.274,76.28,73
-2752512,castle_defense_p1_v6,0.3614,76.3,83
-2752512,castle_defense_p1_v7,0.2239,75.28,67
-2752512,castle_defense_p1_v8,0.641,77.1,78
-2752512,castle_defense_p1_v9,0.5733,75.11,75
-2867200,Anti-Spam Bot,0.3112,75.49,331
-2867200,Random Dummy,0.7066,76.23,351
-2867200,Spam Bot T1,0.872,76.86,500
-2867200,Spam Bot T2,0.9903,75.14,207
-2867200,Spam Bot T3,0.7753,76.94,89
-2867200,Spam Bot T4,0.6618,75.27,68
-2867200,Spam Bot T5,0.5556,75.77,72
-2867200,Spam Bot T6,0.7654,75.52,81
-2867200,Spam Bot T7,0.6951,75.86,82
-2867200,Spam Bot T8,0.86,76.42,100
-2867200,castle_defense_p1_v1,0.8611,75.1,72
-2867200,castle_defense_p1_v10,0.6196,76.86,92
-2867200,castle_defense_p1_v11,0.679,74.91,81
-2867200,castle_defense_p1_v12,0.8415,76.17,82
-2867200,castle_defense_p1_v13,0.9853,74.92,68
-2867200,castle_defense_p1_v14,0.5625,76.42,64
-2867200,castle_defense_p1_v15,0.8701,75.04,77
-2867200,castle_defense_p1_v16,0.3953,75.05,86
-2867200,castle_defense_p1_v18,0.4125,76.55,80
-2867200,castle_defense_p1_v19,0.33,75.17,100
-2867200,castle_defense_p1_v2,0.5778,76.91,90
-2867200,castle_defense_p1_v20,0.3205,76.02,78
-2867200,castle_defense_p1_v21,0.4353,74.73,85
-2867200,castle_defense_p1_v3,0.3804,75.55,92
-2867200,castle_defense_p1_v4,0.2581,75.99,93
-2867200,castle_defense_p1_v5,0.2667,76.33,75
-2867200,castle_defense_p1_v6,0.3614,76.3,83
-2867200,castle_defense_p1_v7,0.2133,75.62,75
-2867200,castle_defense_p1_v8,0.6375,77.13,80
-2867200,castle_defense_p1_v9,0.5802,75.36,81
-2981888,Anti-Spam Bot,0.3127,75.77,339
-2981888,Random Dummy,0.708,76.58,363
-2981888,Spam Bot T1,0.87,77.55,500
-2981888,Spam Bot T2,0.9907,75.53,214
-2981888,Spam Bot T3,0.7849,77.37,93
-2981888,Spam Bot T4,0.6667,76.36,75
-2981888,Spam Bot T5,0.5395,76.36,76
-2981888,Spam Bot T6,0.7765,76.07,85
-2981888,Spam Bot T7,0.6905,76.13,84
-2981888,Spam Bot T8,0.8636,77.38,110
-2981888,castle_defense_p1_v1,0.8649,75.43,74
-2981888,castle_defense_p1_v10,0.6105,77.18,95
-2981888,castle_defense_p1_v11,0.6744,75.62,86
-2981888,castle_defense_p1_v12,0.8452,76.43,84
-2981888,castle_defense_p1_v13,0.9722,75.59,72
-2981888,castle_defense_p1_v14,0.5915,77.47,71
-2981888,castle_defense_p1_v15,0.8554,75.91,83
-2981888,castle_defense_p1_v16,0.3956,75.71,91
-2981888,castle_defense_p1_v18,0.3976,76.93,83
-2981888,castle_defense_p1_v19,0.3462,75.63,104
-2981888,castle_defense_p1_v2,0.5699,77.23,93
-2981888,castle_defense_p1_v20,0.3293,76.55,82
-2981888,castle_defense_p1_v21,0.4494,75.28,89
-2981888,castle_defense_p1_v3,0.3895,75.92,95
-2981888,castle_defense_p1_v4,0.2553,76.11,94
-2981888,castle_defense_p1_v5,0.2593,77.13,81
-2981888,castle_defense_p1_v6,0.3529,76.55,85
-2981888,castle_defense_p1_v7,0.2152,76.2,79
-2981888,castle_defense_p1_v8,0.6235,77.72,85
-2981888,castle_defense_p1_v9,0.5977,76.16,87
-3096576,Anti-Spam Bot,0.3191,75.9,351
-3096576,Random Dummy,0.7112,76.67,374
-3096576,Spam Bot T1,0.876,77.93,500
-3096576,Spam Bot T2,0.991,75.66,221
-3096576,Spam Bot T3,0.7755,77.48,98
-3096576,Spam Bot T4,0.6667,76.49,78
-3096576,Spam Bot T5,0.5366,76.59,82
-3096576,Spam Bot T6,0.7692,76.3,91
-3096576,Spam Bot T7,0.6977,76.21,86
-3096576,Spam Bot T8,0.8696,77.48,115
-3096576,castle_defense_p1_v1,0.8684,75.53,76
-3096576,castle_defense_p1_v10,0.6224,77.25,98
-3096576,castle_defense_p1_v11,0.6703,75.83,91
-3096576,castle_defense_p1_v12,0.8372,76.5,86
-3096576,castle_defense_p1_v13,0.96,75.75,75
-3096576,castle_defense_p1_v14,0.5811,77.55,74
-3096576,castle_defense_p1_v15,0.8409,76.12,88
-3096576,castle_defense_p1_v16,0.3958,75.91,96
-3096576,castle_defense_p1_v18,0.4023,77.05,87
-3096576,castle_defense_p1_v19,0.367,75.81,109
-3096576,castle_defense_p1_v2,0.5684,77.28,95
-3096576,castle_defense_p1_v20,0.3483,76.79,89
-3096576,castle_defense_p1_v21,0.4457,75.42,92
-3096576,castle_defense_p1_v3,0.3814,75.99,97
-3096576,castle_defense_p1_v4,0.2474,76.22,97
-3096576,castle_defense_p1_v5,0.2471,77.24,85
-3096576,castle_defense_p1_v6,0.3516,76.75,91
-3096576,castle_defense_p1_v7,0.2125,76.24,80
-3096576,castle_defense_p1_v8,0.6333,77.82,90
-3096576,castle_defense_p1_v9,0.5955,76.24,89
-3211264,Anti-Spam Bot,0.314,75.59,363
-3211264,Random Dummy,0.7165,76.14,395
-3211264,Spam Bot T1,0.874,77.49,500
-3211264,Spam Bot T2,0.9915,75.17,234
-3211264,Spam Bot T3,0.7778,77.38,99
-3211264,Spam Bot T4,0.675,76.24,80
-3211264,Spam Bot T5,0.5476,76.36,84
-3211264,Spam Bot T6,0.7717,76.19,92
-3211264,Spam Bot T7,0.7011,76.1,87
-3211264,Spam Bot T8,0.8739,77.12,119
-3211264,castle_defense_p1_v1,0.8642,74.99,81
-3211264,castle_defense_p1_v10,0.61,77.04,100
-3211264,castle_defense_p1_v11,0.6774,75.64,93
-3211264,castle_defense_p1_v12,0.8065,75.77,93
-3211264,castle_defense_p1_v13,0.9487,75.4,78
-3211264,castle_defense_p1_v14,0.5904,76.38,83
-3211264,castle_defense_p1_v15,0.8478,75.71,92
-3211264,castle_defense_p1_v16,0.4,75.54,100
-3211264,castle_defense_p1_v18,0.4,76.71,90
-3211264,castle_defense_p1_v19,0.3727,75.73,110
-3211264,castle_defense_p1_v2,0.5657,76.86,99
-3211264,castle_defense_p1_v20,0.3407,76.57,91
-3211264,castle_defense_p1_v21,0.4409,75.33,93
-3211264,castle_defense_p1_v3,0.38,75.71,100
-3211264,castle_defense_p1_v4,0.2626,76.03,99
-3211264,castle_defense_p1_v5,0.2471,77.24,85
-3211264,castle_defense_p1_v6,0.3438,76.23,96
-3211264,castle_defense_p1_v7,0.2093,75.58,86
-3211264,castle_defense_p1_v8,0.6344,77.46,93
-3211264,castle_defense_p1_v9,0.5895,75.64,95
-3325952,Anti-Spam Bot,0.3132,75.3,380
-3325952,Random Dummy,0.7202,75.87,411
-3325952,Spam Bot T1,0.872,77.54,500
-3325952,Spam Bot T2,0.9917,75.01,240
-3325952,Spam Bot T3,0.7723,77.21,101
-3325952,Spam Bot T4,0.6585,76.07,82
-3325952,Spam Bot T5,0.5412,76.27,85
-3325952,Spam Bot T6,0.7742,76.11,93
-3325952,Spam Bot T7,0.7033,75.79,91
-3325952,Spam Bot T8,0.872,76.73,125
-3325952,castle_defense_p1_v1,0.8642,74.99,81
-3325952,castle_defense_p1_v10,0.6117,76.81,103
-3325952,castle_defense_p1_v11,0.6809,75.57,94
-3325952,castle_defense_p1_v12,0.7917,75.56,96
-3325952,castle_defense_p1_v13,0.9487,75.4,78
-3325952,castle_defense_p1_v14,0.5682,75.96,88
-3325952,castle_defense_p1_v15,0.8511,75.57,94
-3325952,castle_defense_p1_v16,0.3832,75.12,107
-3325952,castle_defense_p1_v18,0.4022,76.54,92
-3325952,castle_defense_p1_v19,0.3805,75.55,113
-3325952,castle_defense_p1_v2,0.5545,76.7,101
-3325952,castle_defense_p1_v20,0.3478,76.49,92
-3325952,castle_defense_p1_v21,0.4388,75.01,98
-3325952,castle_defense_p1_v3,0.381,75.4,105
-3325952,castle_defense_p1_v4,0.2647,75.82,102
-3325952,castle_defense_p1_v5,0.2472,76.87,89
-3325952,castle_defense_p1_v6,0.3366,75.88,101
-3325952,castle_defense_p1_v7,0.2135,75.36,89
-3325952,castle_defense_p1_v8,0.6289,77.11,97
-3325952,castle_defense_p1_v9,0.6061,75.37,99
-3440640,Anti-Spam Bot,0.3116,75.14,398
-3440640,Random Dummy,0.7163,75.75,423
-3440640,Spam Bot T1,0.874,77.43,500
-3440640,Spam Bot T2,0.9918,74.97,243
-3440640,Spam Bot T3,0.7767,77.11,103
-3440640,Spam Bot T4,0.6512,75.87,86
-3440640,Spam Bot T5,0.5506,76.07,89
-3440640,Spam Bot T6,0.7604,75.98,96
-3440640,Spam Bot T7,0.7053,75.62,95
-3440640,Spam Bot T8,0.8676,76.33,136
-3440640,castle_defense_p1_v1,0.869,74.88,84
-3440640,castle_defense_p1_v10,0.6058,76.76,104
-3440640,castle_defense_p1_v11,0.6837,75.42,98
-3440640,castle_defense_p1_v12,0.7921,75.37,101
-3440640,castle_defense_p1_v13,0.9518,75.18,83
-3440640,castle_defense_p1_v14,0.5604,75.83,91
-3440640,castle_defense_p1_v15,0.8367,75.41,98
-3440640,castle_defense_p1_v16,0.3853,75.06,109
-3440640,castle_defense_p1_v18,0.4021,76.3,97
-3440640,castle_defense_p1_v19,0.386,75.52,114
-3440640,castle_defense_p1_v2,0.549,76.65,102
-3440640,castle_defense_p1_v20,0.3511,76.39,94
-3440640,castle_defense_p1_v21,0.4314,74.88,102
-3440640,castle_defense_p1_v3,0.3784,75.2,111
-3440640,castle_defense_p1_v4,0.2752,75.56,109
-3440640,castle_defense_p1_v5,0.2553,76.6,94
-3440640,castle_defense_p1_v6,0.3429,75.72,105
-3440640,castle_defense_p1_v7,0.2128,75.17,94
-3440640,castle_defense_p1_v8,0.6214,76.8,103
-3440640,castle_defense_p1_v9,0.5962,75.2,104
-3555328,Anti-Spam Bot,0.3098,75.37,410
-3555328,Random Dummy,0.7218,75.95,435
-3555328,Spam Bot T1,0.88,78.04,500
-3555328,Spam Bot T2,0.992,75.19,250
-3555328,Spam Bot T3,0.7788,77.16,104
-3555328,Spam Bot T4,0.6264,76.25,91
-3555328,Spam Bot T5,0.5435,76.29,92
-3555328,Spam Bot T6,0.7629,76.05,97
-3555328,Spam Bot T7,0.7041,75.84,98
-3555328,Spam Bot T8,0.8643,76.52,140
-3555328,castle_defense_p1_v1,0.8636,75.24,88
-3555328,castle_defense_p1_v10,0.6204,76.98,108
-3555328,castle_defense_p1_v11,0.6635,75.84,104
-3555328,castle_defense_p1_v12,0.783,75.72,106
-3555328,castle_defense_p1_v13,0.954,75.54,87
-3555328,castle_defense_p1_v14,0.5532,76.05,94
-3555328,castle_defense_p1_v15,0.8218,75.63,101
-3555328,castle_defense_p1_v16,0.4087,75.46,115
-3555328,castle_defense_p1_v18,0.4082,76.36,98
-3555328,castle_defense_p1_v19,0.3697,75.83,119
-3555328,castle_defense_p1_v2,0.5577,76.77,104
-3555328,castle_defense_p1_v20,0.3646,76.52,96
-3555328,castle_defense_p1_v21,0.4393,75.25,107
-3555328,castle_defense_p1_v3,0.3894,75.34,113
-3555328,castle_defense_p1_v4,0.2727,75.63,110
-3555328,castle_defense_p1_v5,0.2727,76.92,99
-3555328,castle_defense_p1_v6,0.3303,75.98,109
-3555328,castle_defense_p1_v7,0.2143,75.48,98
-3555328,castle_defense_p1_v8,0.625,76.86,104
-3555328,castle_defense_p1_v9,0.6091,75.62,110
-3670016,Anti-Spam Bot,0.3176,75.66,425
-3670016,Random Dummy,0.7165,76.17,448
-3670016,Spam Bot T1,0.882,78.22,500
-3670016,Spam Bot T2,0.9922,75.46,258
-3670016,Spam Bot T3,0.787,77.4,108
-3670016,Spam Bot T4,0.6383,76.49,94
-3670016,Spam Bot T5,0.5368,76.53,95
-3670016,Spam Bot T6,0.7677,76.2,99
-3670016,Spam Bot T7,0.7129,76.07,101
-3670016,Spam Bot T8,0.8601,76.67,143
-3670016,castle_defense_p1_v1,0.8696,75.61,92
-3670016,castle_defense_p1_v10,0.6182,77.11,110
-3670016,castle_defense_p1_v11,0.6481,76.13,108
-3670016,castle_defense_p1_v12,0.7748,76.08,111
-3670016,castle_defense_p1_v13,0.956,75.89,91
-3670016,castle_defense_p1_v14,0.55,76.51,100
-3670016,castle_defense_p1_v15,0.8148,76.16,108
-3670016,castle_defense_p1_v16,0.425,75.8,120
-3670016,castle_defense_p1_v18,0.4141,76.44,99
-3670016,castle_defense_p1_v19,0.3636,75.96,121
-3670016,castle_defense_p1_v2,0.5505,77.09,109
-3670016,castle_defense_p1_v20,0.3636,76.74,99
-3670016,castle_defense_p1_v21,0.4455,75.48,110
-3670016,castle_defense_p1_v3,0.3846,75.62,117
-3670016,castle_defense_p1_v4,0.2768,75.77,112
-3670016,castle_defense_p1_v5,0.2952,77.3,105
-3670016,castle_defense_p1_v6,0.3304,76.19,112
-3670016,castle_defense_p1_v7,0.2277,75.73,101
-3670016,castle_defense_p1_v8,0.6355,77.05,107
-3670016,castle_defense_p1_v9,0.614,75.9,114
-3784704,Anti-Spam Bot,0.3114,75.16,440
-3784704,Random Dummy,0.7118,75.61,465
-3784704,Spam Bot T1,0.876,77.51,500
-3784704,Spam Bot T2,0.9924,75.12,264
-3784704,Spam Bot T3,0.7909,77.1,110
-3784704,Spam Bot T4,0.6429,75.85,98
-3784704,Spam Bot T5,0.5347,75.59,101
-3784704,Spam Bot T6,0.7451,75.75,102
-3784704,Spam Bot T7,0.7059,75.92,102
-3784704,Spam Bot T8,0.8571,76.24,147
-3784704,castle_defense_p1_v1,0.8542,74.99,96
-3784704,castle_defense_p1_v10,0.6228,76.54,114
-3784704,castle_defense_p1_v11,0.6518,75.59,112
-3784704,castle_defense_p1_v12,0.7768,75.95,112
-3784704,castle_defense_p1_v13,0.956,75.89,91
-3784704,castle_defense_p1_v14,0.5481,75.91,104
-3784704,castle_defense_p1_v15,0.8198,75.74,111
-3784704,castle_defense_p1_v16,0.4146,75.44,123
-3784704,castle_defense_p1_v18,0.4151,75.41,106
-3784704,castle_defense_p1_v19,0.3659,75.71,123
-3784704,castle_defense_p1_v2,0.5446,76.66,112
-3784704,castle_defense_p1_v20,0.3564,76.42,101
-3784704,castle_defense_p1_v21,0.4414,75.35,111
-3784704,castle_defense_p1_v3,0.3846,75.62,117
-3784704,castle_defense_p1_v4,0.2605,74.9,119
-3784704,castle_defense_p1_v5,0.2963,76.85,108
-3784704,castle_defense_p1_v6,0.3217,75.79,115
-3784704,castle_defense_p1_v7,0.2233,75.44,103
-3784704,castle_defense_p1_v8,0.6306,76.47,111
-3784704,castle_defense_p1_v9,0.6303,75.27,119
-3899392,Anti-Spam Bot,0.3173,75.54,457
-3899392,Random Dummy,0.7134,75.88,478
-3899392,Spam Bot T1,0.868,77.9,500
-3899392,Spam Bot T2,0.9926,75.32,269
-3899392,Spam Bot T3,0.7876,77.32,113
-3899392,Spam Bot T4,0.6471,76.23,102
-3899392,Spam Bot T5,0.5505,76.31,109
-3899392,Spam Bot T6,0.7404,75.94,104
-3899392,Spam Bot T7,0.7087,76.02,103
-3899392,Spam Bot T8,0.8591,76.36,149
-3899392,castle_defense_p1_v1,0.8485,75.31,99
-3899392,castle_defense_p1_v10,0.6207,76.69,116
-3899392,castle_defense_p1_v11,0.646,75.67,113
-3899392,castle_defense_p1_v12,0.7826,76.19,115
-3899392,castle_defense_p1_v13,0.956,75.89,91
-3899392,castle_defense_p1_v14,0.5566,76.08,106
-3899392,castle_defense_p1_v15,0.8103,76.16,116
-3899392,castle_defense_p1_v16,0.4173,75.75,127
-3899392,castle_defense_p1_v18,0.4206,75.5,107
-3899392,castle_defense_p1_v19,0.373,75.94,126
-3899392,castle_defense_p1_v2,0.5431,76.96,116
-3899392,castle_defense_p1_v20,0.3558,76.68,104
-3899392,castle_defense_p1_v21,0.4615,75.87,117
-3899392,castle_defense_p1_v3,0.376,76.25,125
-3899392,castle_defense_p1_v4,0.2661,75.32,124
-3899392,castle_defense_p1_v5,0.3186,77.22,113
-3899392,castle_defense_p1_v6,0.319,75.87,116
-3899392,castle_defense_p1_v7,0.2407,75.9,108
-3899392,castle_defense_p1_v8,0.6283,76.63,113
-3899392,castle_defense_p1_v9,0.6364,75.44,121
-4014080,Anti-Spam Bot,0.3179,74.98,475
-4014080,Random Dummy,0.7122,75.51,490
-4014080,Spam Bot T1,0.872,77.1,500
-4014080,Spam Bot T2,0.9892,74.85,278
-4014080,Spam Bot T3,0.7913,77.04,115
-4014080,Spam Bot T4,0.6442,75.93,104
-4014080,Spam Bot T5,0.5536,75.9,112
-4014080,Spam Bot T6,0.7404,75.94,104
-4014080,Spam Bot T7,0.6887,75.59,106
-4014080,Spam Bot T8,0.8562,75.95,153
-4014080,castle_defense_p1_v1,0.85,75.16,100
-4014080,castle_defense_p1_v10,0.6066,75.91,122
-4014080,castle_defense_p1_v11,0.6552,75.29,116
-4014080,castle_defense_p1_v12,0.7778,75.93,117
-4014080,castle_defense_p1_v13,0.9574,75.41,94
-4014080,castle_defense_p1_v14,0.5505,75.67,109
-4014080,castle_defense_p1_v15,0.8136,75.9,118
-4014080,castle_defense_p1_v16,0.4122,75.3,131
-4014080,castle_defense_p1_v18,0.4234,74.97,111
-4014080,castle_defense_p1_v19,0.375,75.7,128
-4014080,castle_defense_p1_v2,0.5378,76.55,119
-4014080,castle_defense_p1_v20,0.3491,76.38,106
-4014080,castle_defense_p1_v21,0.4661,75.74,118
-4014080,castle_defense_p1_v3,0.373,76.13,126
-4014080,castle_defense_p1_v4,0.2619,75.09,126
-4014080,castle_defense_p1_v5,0.3109,76.4,119
-4014080,castle_defense_p1_v6,0.3162,75.74,117
-4014080,castle_defense_p1_v7,0.2321,75.36,112
-4014080,castle_defense_p1_v8,0.6348,76.35,115
-4014080,castle_defense_p1_v9,0.64,74.97,125
-4128768,Anti-Spam Bot,0.3164,75.11,493
-4128768,Random Dummy,0.72,75.56,500
-4128768,Spam Bot T1,0.868,76.8,500
-4128768,Spam Bot T2,0.9895,74.96,287
-4128768,Spam Bot T3,0.7931,77.05,116
-4128768,Spam Bot T4,0.6364,76.07,110
-4128768,Spam Bot T5,0.5487,75.92,113
-4128768,Spam Bot T6,0.7453,75.99,106
-4128768,Spam Bot T7,0.6909,75.69,110
-4128768,Spam Bot T8,0.8481,76.03,158
-4128768,castle_defense_p1_v1,0.8529,75.23,102
-4128768,castle_defense_p1_v10,0.6142,76.01,127
-4128768,castle_defense_p1_v11,0.6639,75.37,119
-4128768,castle_defense_p1_v12,0.7731,75.97,119
-4128768,castle_defense_p1_v13,0.9583,75.48,96
-4128768,castle_defense_p1_v14,0.5641,75.86,117
-4128768,castle_defense_p1_v15,0.8197,75.98,122
-4128768,castle_defense_p1_v16,0.4091,75.32,132
-4128768,castle_defense_p1_v18,0.4298,75.07,114
-4128768,castle_defense_p1_v19,0.3846,75.75,130
-4128768,castle_defense_p1_v2,0.544,76.64,125
-4128768,castle_defense_p1_v20,0.3578,76.44,109
-4128768,castle_defense_p1_v21,0.4545,75.81,121
-4128768,castle_defense_p1_v3,0.3759,76.25,133
-4128768,castle_defense_p1_v4,0.2556,75.27,133
-4128768,castle_defense_p1_v5,0.3109,76.4,119
-4128768,castle_defense_p1_v6,0.3136,75.77,118
-4128768,castle_defense_p1_v7,0.2288,75.52,118
-4128768,castle_defense_p1_v8,0.6271,76.41,118
-4128768,castle_defense_p1_v9,0.6484,75.05,128
-4243456,Anti-Spam Bot,0.314,75.17,500
-4243456,Random Dummy,0.72,75.59,500
-4243456,Spam Bot T1,0.862,76.69,500
-4243456,Spam Bot T2,0.9897,75.03,291
-4243456,Spam Bot T3,0.7833,77.14,120
-4243456,Spam Bot T4,0.6466,76.27,116
-4243456,Spam Bot T5,0.5526,75.96,114
-4243456,Spam Bot T6,0.7568,76.16,111
-4243456,Spam Bot T7,0.6696,75.88,115
-4243456,Spam Bot T8,0.8528,76.15,163
-4243456,castle_defense_p1_v1,0.8529,75.23,102
-4243456,castle_defense_p1_v10,0.5985,76.16,132
-4243456,castle_defense_p1_v11,0.6694,75.45,121
-4243456,castle_defense_p1_v12,0.7769,76.04,121
-4243456,castle_defense_p1_v13,0.9608,75.74,102
-4243456,castle_defense_p1_v14,0.5667,75.96,120
-4243456,castle_defense_p1_v15,0.8203,76.17,128
-4243456,castle_defense_p1_v16,0.4074,75.42,135
-4243456,castle_defense_p1_v18,0.4322,75.23,118
-4243456,castle_defense_p1_v19,0.3926,75.9,135
-4243456,castle_defense_p1_v2,0.5504,76.74,129
-4243456,castle_defense_p1_v20,0.3514,76.5,111
-4243456,castle_defense_p1_v21,0.44,75.94,125
-4243456,castle_defense_p1_v3,0.3841,76.38,138
-4243456,castle_defense_p1_v4,0.2536,75.44,138
-4243456,castle_defense_p1_v5,0.314,76.46,121
-4243456,castle_defense_p1_v6,0.344,76.0,125
-4243456,castle_defense_p1_v7,0.2269,75.56,119
-4243456,castle_defense_p1_v8,0.6311,76.52,122
-4243456,castle_defense_p1_v9,0.6565,75.16,131
-4358144,Anti-Spam Bot,0.318,74.95,500
-4358144,Random Dummy,0.724,75.51,500
-4358144,Spam Bot T1,0.862,76.3,500
-4358144,Spam Bot T2,0.9901,74.69,303
-4358144,Spam Bot T3,0.7869,76.97,122
-4358144,Spam Bot T4,0.6441,76.1,118
-4358144,Spam Bot T5,0.5556,75.71,117
-4358144,Spam Bot T6,0.7544,75.91,114
-4358144,Spam Bot T7,0.6724,75.79,116
-4358144,Spam Bot T8,0.8545,76.04,165
-4358144,castle_defense_p1_v1,0.8519,74.74,108
-4358144,castle_defense_p1_v10,0.6043,75.67,139
-4358144,castle_defense_p1_v11,0.6746,75.09,126
-4358144,castle_defense_p1_v12,0.7656,75.51,128
-4358144,castle_defense_p1_v13,0.9636,75.06,110
-4358144,castle_defense_p1_v14,0.5702,75.88,121
-4358144,castle_defense_p1_v15,0.8244,75.94,131
-4358144,castle_defense_p1_v16,0.4,75.1,140
-4358144,castle_defense_p1_v18,0.4333,75.08,120
-4358144,castle_defense_p1_v19,0.3913,75.69,138
-4358144,castle_defense_p1_v2,0.553,76.51,132
-4358144,castle_defense_p1_v20,0.354,76.32,113
-4358144,castle_defense_p1_v21,0.4375,75.71,128
-4358144,castle_defense_p1_v3,0.3857,76.24,140
-4358144,castle_defense_p1_v4,0.2571,75.31,140
-4358144,castle_defense_p1_v5,0.312,76.13,125
-4358144,castle_defense_p1_v6,0.3333,75.49,132
-4358144,castle_defense_p1_v7,0.2195,75.26,123
-4358144,castle_defense_p1_v8,0.6429,76.2,126
-4358144,castle_defense_p1_v9,0.6569,74.78,137
-4472832,Anti-Spam Bot,0.316,75.03,500
-4472832,Random Dummy,0.726,75.54,500
-4472832,Spam Bot T1,0.872,75.58,500
-4472832,Spam Bot T2,0.987,74.65,307
-4472832,Spam Bot T3,0.7823,76.88,124
-4472832,Spam Bot T4,0.6471,76.06,119
-4472832,Spam Bot T5,0.552,75.46,125
-4472832,Spam Bot T6,0.7607,75.8,117
-4472832,Spam Bot T7,0.6777,75.63,121
-4472832,Spam Bot T8,0.8512,75.96,168
-4472832,castle_defense_p1_v1,0.8559,74.66,111
-4472832,castle_defense_p1_v10,0.6028,75.61,141
-4472832,castle_defense_p1_v11,0.6822,75.01,129
-4472832,castle_defense_p1_v12,0.7674,75.48,129
-4472832,castle_defense_p1_v13,0.9561,74.94,114
-4472832,castle_defense_p1_v14,0.576,75.75,125
-4472832,castle_defense_p1_v15,0.8209,75.85,134
-4472832,castle_defense_p1_v16,0.3944,75.05,142
-4472832,castle_defense_p1_v18,0.44,74.95,125
-4472832,castle_defense_p1_v19,0.3929,75.64,140
-4472832,castle_defense_p1_v2,0.5441,76.37,136
-4472832,castle_defense_p1_v20,0.3475,76.13,118
-4472832,castle_defense_p1_v21,0.4351,75.62,131
-4472832,castle_defense_p1_v3,0.3767,76.06,146
-4472832,castle_defense_p1_v4,0.2553,75.28,141
-4472832,castle_defense_p1_v5,0.3206,75.94,131
-4472832,castle_defense_p1_v6,0.3383,75.46,133
-4472832,castle_defense_p1_v7,0.2214,75.04,131
-4472832,castle_defense_p1_v8,0.6512,76.1,129
-4472832,castle_defense_p1_v9,0.662,74.67,142
-4587520,Anti-Spam Bot,0.32,75.18,500
-4587520,Random Dummy,0.722,75.62,500
-4587520,Spam Bot T1,0.874,75.47,500
-4587520,Spam Bot T2,0.9871,74.65,310
-4587520,Spam Bot T3,0.7823,76.88,124
-4587520,Spam Bot T4,0.6475,76.02,122
-4587520,Spam Bot T5,0.5591,75.44,127
-4587520,Spam Bot T6,0.7623,75.74,122
-4587520,Spam Bot T7,0.6803,75.62,122
-4587520,Spam Bot T8,0.8555,75.91,173
-4587520,castle_defense_p1_v1,0.8584,74.65,113
-4587520,castle_defense_p1_v10,0.5972,75.58,144
-4587520,castle_defense_p1_v11,0.6718,75.0,131
-4587520,castle_defense_p1_v12,0.7744,75.45,133
-4587520,castle_defense_p1_v13,0.9576,74.92,118
-4587520,castle_defense_p1_v14,0.5794,75.74,126
-4587520,castle_defense_p1_v15,0.8175,75.82,137
-4587520,castle_defense_p1_v16,0.3946,75.03,147
-4587520,castle_defense_p1_v18,0.4496,74.93,129
-4587520,castle_defense_p1_v19,0.4041,75.58,146
-4587520,castle_defense_p1_v2,0.5468,76.33,139
-4587520,castle_defense_p1_v20,0.3417,76.1,120
-4587520,castle_defense_p1_v21,0.4286,75.6,133
-4587520,castle_defense_p1_v3,0.3741,76.04,147
-4587520,castle_defense_p1_v4,0.2466,75.25,146
-4587520,castle_defense_p1_v5,0.3212,75.86,137
-4587520,castle_defense_p1_v6,0.3286,75.4,140
-4587520,castle_defense_p1_v7,0.2148,75.02,135
-4587520,castle_defense_p1_v8,0.6512,76.1,129
-4587520,castle_defense_p1_v9,0.6531,74.66,147
-4702208,Anti-Spam Bot,0.326,75.05,500
-4702208,Random Dummy,0.728,75.35,500
-4702208,Spam Bot T1,0.866,75.03,500
-4702208,Spam Bot T2,0.9875,74.58,320
-4702208,Spam Bot T3,0.7812,76.74,128
-4702208,Spam Bot T4,0.64,75.93,125
-4702208,Spam Bot T5,0.5462,75.37,130
-4702208,Spam Bot T6,0.754,75.63,126
-4702208,Spam Bot T7,0.6855,75.57,124
-4702208,Spam Bot T8,0.8531,75.83,177
-4702208,castle_defense_p1_v1,0.8534,74.59,116
-4702208,castle_defense_p1_v10,0.5946,75.5,148
-4702208,castle_defense_p1_v11,0.6667,74.98,132
-4702208,castle_defense_p1_v12,0.7744,75.45,133
-4702208,castle_defense_p1_v13,0.9587,74.86,121
-4702208,castle_defense_p1_v14,0.5859,75.69,128
-4702208,castle_defense_p1_v15,0.8214,75.74,140
-4702208,castle_defense_p1_v16,0.3867,74.98,150
-4702208,castle_defense_p1_v18,0.447,74.87,132
-4702208,castle_defense_p1_v19,0.4082,75.56,147
-4702208,castle_defense_p1_v2,0.539,76.27,141
-4702208,castle_defense_p1_v20,0.3443,76.04,122
-4702208,castle_defense_p1_v21,0.4453,75.51,137
-4702208,castle_defense_p1_v3,0.3642,75.95,151
-4702208,castle_defense_p1_v4,0.2432,75.21,148
-4702208,castle_defense_p1_v5,0.3214,75.79,140
-4702208,castle_defense_p1_v6,0.331,75.36,142
-4702208,castle_defense_p1_v7,0.219,74.98,137
-4702208,castle_defense_p1_v8,0.6489,76.04,131
-4702208,castle_defense_p1_v9,0.6579,74.59,152
-4816896,Anti-Spam Bot,0.328,75.41,500
-4816896,Random Dummy,0.732,75.52,500
-4816896,Spam Bot T1,0.866,75.19,500
-4816896,Spam Bot T2,0.9878,74.73,327
-4816896,Spam Bot T3,0.7846,76.82,130
-4816896,Spam Bot T4,0.6484,76.07,128
-4816896,Spam Bot T5,0.5441,75.66,136
-4816896,Spam Bot T6,0.7538,75.83,130
-4816896,Spam Bot T7,0.6855,75.57,124
-4816896,Spam Bot T8,0.8579,76.03,183
-4816896,castle_defense_p1_v1,0.8403,74.78,119
-4816896,castle_defense_p1_v10,0.5855,75.67,152
-4816896,castle_defense_p1_v11,0.6618,75.18,136
-4816896,castle_defense_p1_v12,0.7842,75.72,139
-4816896,castle_defense_p1_v13,0.96,75.08,125
-4816896,castle_defense_p1_v14,0.5789,75.92,133
-4816896,castle_defense_p1_v15,0.8264,75.91,144
-4816896,castle_defense_p1_v16,0.3831,75.16,154
-4816896,castle_defense_p1_v18,0.4478,74.98,134
-4816896,castle_defense_p1_v19,0.4027,75.65,149
-4816896,castle_defense_p1_v2,0.5385,76.35,143
-4816896,castle_defense_p1_v20,0.336,76.18,125
-4816896,castle_defense_p1_v21,0.4429,75.65,140
-4816896,castle_defense_p1_v3,0.3595,76.03,153
-4816896,castle_defense_p1_v4,0.2434,75.38,152
-4816896,castle_defense_p1_v5,0.3217,75.92,143
-4816896,castle_defense_p1_v6,0.3333,75.58,147
-4816896,castle_defense_p1_v7,0.2214,75.13,140
-4816896,castle_defense_p1_v8,0.6475,76.38,139
-4816896,castle_defense_p1_v9,0.6538,74.77,156
-4931584,Anti-Spam Bot,0.326,75.5,500
-4931584,Random Dummy,0.732,75.72,500
-4931584,Spam Bot T1,0.866,74.47,500
-4931584,Spam Bot T2,0.9849,74.71,331
-4931584,Spam Bot T3,0.7868,76.67,136
-4931584,Spam Bot T4,0.6434,76.05,129
-4931584,Spam Bot T5,0.55,75.59,140
-4931584,Spam Bot T6,0.7519,75.77,133
-4931584,Spam Bot T7,0.6953,75.49,128
-4931584,Spam Bot T8,0.8602,75.99,186
-4931584,castle_defense_p1_v1,0.8443,74.74,122
-4931584,castle_defense_p1_v10,0.5833,75.61,156
-4931584,castle_defense_p1_v11,0.6642,75.17,137
-4931584,castle_defense_p1_v12,0.7877,75.61,146
-4931584,castle_defense_p1_v13,0.9606,75.06,127
-4931584,castle_defense_p1_v14,0.5821,75.9,134
-4931584,castle_defense_p1_v15,0.82,75.81,150
-4931584,castle_defense_p1_v16,0.3831,75.16,154
-4931584,castle_defense_p1_v18,0.4388,74.92,139
-4931584,castle_defense_p1_v19,0.3947,75.6,152
-4931584,castle_defense_p1_v2,0.5347,76.33,144
-4931584,castle_defense_p1_v20,0.3359,76.05,131
-4931584,castle_defense_p1_v21,0.4497,75.5,149
-4931584,castle_defense_p1_v3,0.359,75.97,156
-4931584,castle_defense_p1_v4,0.2372,75.33,156
-4931584,castle_defense_p1_v5,0.3219,75.86,146
-4931584,castle_defense_p1_v6,0.3245,75.52,151
-4931584,castle_defense_p1_v7,0.2183,75.11,142
-4931584,castle_defense_p1_v8,0.6389,76.27,144
-4931584,castle_defense_p1_v9,0.6541,74.75,159
-5046272,Anti-Spam Bot,0.322,75.36,500
-5046272,Random Dummy,0.732,75.55,500
-5046272,Spam Bot T1,0.862,73.99,500
-5046272,Spam Bot T2,0.9853,74.59,340
-5046272,Spam Bot T3,0.7832,76.33,143
-5046272,Spam Bot T4,0.6493,75.82,134
-5046272,Spam Bot T5,0.5532,75.55,141
-5046272,Spam Bot T6,0.7626,75.51,139
-5046272,Spam Bot T7,0.6953,75.49,128
-5046272,Spam Bot T8,0.8624,75.89,189
-5046272,castle_defense_p1_v1,0.8359,74.51,128
-5046272,castle_defense_p1_v10,0.5849,75.5,159
-5046272,castle_defense_p1_v11,0.6714,75.06,140
-5046272,castle_defense_p1_v12,0.7891,75.57,147
-5046272,castle_defense_p1_v13,0.9612,74.98,129
-5046272,castle_defense_p1_v14,0.5827,75.68,139
-5046272,castle_defense_p1_v15,0.8129,75.62,155
-5046272,castle_defense_p1_v16,0.3789,74.93,161
-5046272,castle_defense_p1_v18,0.4326,74.85,141
-5046272,castle_defense_p1_v19,0.3961,75.53,154
-5046272,castle_defense_p1_v2,0.54,76.07,150
-5046272,castle_defense_p1_v20,0.3308,75.96,133
-5046272,castle_defense_p1_v21,0.4467,75.47,150
-5046272,castle_defense_p1_v3,0.3544,75.9,158
-5046272,castle_defense_p1_v4,0.236,75.16,161
-5046272,castle_defense_p1_v5,0.3203,75.59,153
-5046272,castle_defense_p1_v6,0.3161,75.38,155
-5046272,castle_defense_p1_v7,0.2192,74.96,146
-5046272,castle_defense_p1_v8,0.6345,76.23,145
-5046272,castle_defense_p1_v9,0.6626,74.63,163
-5160960,Anti-Spam Bot,0.32,75.75,500
-5160960,Random Dummy,0.734,75.95,500
-5160960,Spam Bot T1,0.864,74.44,500
-5160960,Spam Bot T2,0.9856,74.75,348
-5160960,Spam Bot T3,0.774,76.45,146
-5160960,Spam Bot T4,0.6423,75.95,137
-5160960,Spam Bot T5,0.5556,75.68,144
-5160960,Spam Bot T6,0.7517,75.77,145
-5160960,Spam Bot T7,0.6899,75.54,129
-5160960,Spam Bot T8,0.8615,76.07,195
-5160960,castle_defense_p1_v1,0.8397,74.68,131
-5160960,castle_defense_p1_v10,0.5864,75.61,162
-5160960,castle_defense_p1_v11,0.6714,75.06,140
-5160960,castle_defense_p1_v12,0.7867,75.69,150
-5160960,castle_defense_p1_v13,0.9624,75.18,133
-5160960,castle_defense_p1_v14,0.5862,75.93,145
-5160960,castle_defense_p1_v15,0.8176,75.77,159
-5160960,castle_defense_p1_v16,0.3827,74.97,162
-5160960,castle_defense_p1_v18,0.4236,74.99,144
-5160960,castle_defense_p1_v19,0.3885,75.65,157
-5160960,castle_defense_p1_v2,0.5513,76.29,156
-5160960,castle_defense_p1_v20,0.3285,76.13,137
-5160960,castle_defense_p1_v21,0.4503,75.51,151
-5160960,castle_defense_p1_v3,0.354,76.01,161
-5160960,castle_defense_p1_v4,0.2317,75.28,164
-5160960,castle_defense_p1_v5,0.3208,75.82,159
-5160960,castle_defense_p1_v6,0.3228,75.5,158
-5160960,castle_defense_p1_v7,0.2318,75.19,151
-5160960,castle_defense_p1_v8,0.6351,76.34,148
-5160960,castle_defense_p1_v9,0.6607,74.84,168
-5275648,Anti-Spam Bot,0.318,75.73,500
-5275648,Random Dummy,0.736,75.96,500
-5275648,Spam Bot T1,0.868,74.83,500
-5275648,Spam Bot T2,0.9861,74.78,360
-5275648,Spam Bot T3,0.7755,76.44,147
-5275648,Spam Bot T4,0.6454,75.94,141
-5275648,Spam Bot T5,0.5616,75.68,146
-5275648,Spam Bot T6,0.7432,75.77,148
-5275648,Spam Bot T7,0.6923,75.54,130
-5275648,Spam Bot T8,0.8636,76.06,198
-5275648,castle_defense_p1_v1,0.8333,74.68,132
-5275648,castle_defense_p1_v10,0.5952,75.61,168
-5275648,castle_defense_p1_v11,0.6759,75.07,145
-5275648,castle_defense_p1_v12,0.7885,75.68,156
-5275648,castle_defense_p1_v13,0.9632,75.19,136
-5275648,castle_defense_p1_v14,0.585,75.93,147
-5275648,castle_defense_p1_v15,0.816,75.77,163
-5275648,castle_defense_p1_v16,0.3865,74.97,163
-5275648,castle_defense_p1_v18,0.42,75.01,150
-5275648,castle_defense_p1_v19,0.3962,75.64,159
-5275648,castle_defense_p1_v2,0.5409,76.27,159
-5275648,castle_defense_p1_v20,0.3214,76.11,140
-5275648,castle_defense_p1_v21,0.4516,75.51,155
-5275648,castle_defense_p1_v3,0.3455,75.99,165
-5275648,castle_defense_p1_v4,0.2398,75.29,171
-5275648,castle_defense_p1_v5,0.3252,75.82,163
-5275648,castle_defense_p1_v6,0.321,75.5,162
-5275648,castle_defense_p1_v7,0.2368,75.19,152
-5275648,castle_defense_p1_v8,0.6267,76.33,150
-5275648,castle_defense_p1_v9,0.6647,74.86,173
-5390336,Anti-Spam Bot,0.316,75.88,500
-5390336,Random Dummy,0.734,76.06,500
-5390336,Spam Bot T1,0.868,75.11,500
-5390336,Spam Bot T2,0.984,74.84,374
-5390336,Spam Bot T3,0.7712,76.44,153
-5390336,Spam Bot T4,0.6483,75.96,145
-5390336,Spam Bot T5,0.5616,75.68,146
-5390336,Spam Bot T6,0.7451,75.79,153
-5390336,Spam Bot T7,0.7015,75.57,134
-5390336,Spam Bot T8,0.8607,76.07,201
-5390336,castle_defense_p1_v1,0.837,74.73,135
-5390336,castle_defense_p1_v10,0.6,75.62,170
-5390336,castle_defense_p1_v11,0.68,75.12,150
-5390336,castle_defense_p1_v12,0.7702,75.71,161
-5390336,castle_defense_p1_v13,0.9638,75.21,138
-5390336,castle_defense_p1_v14,0.5921,75.95,152
-5390336,castle_defense_p1_v15,0.8176,75.8,170
-5390336,castle_defense_p1_v16,0.3818,74.99,165
-5390336,castle_defense_p1_v18,0.4172,75.02,151
-5390336,castle_defense_p1_v19,0.4,75.68,165
-5390336,castle_defense_p1_v2,0.5342,76.28,161
-5390336,castle_defense_p1_v20,0.3239,76.12,142
-5390336,castle_defense_p1_v21,0.4528,75.53,159
-5390336,castle_defense_p1_v3,0.3392,76.01,171
-5390336,castle_defense_p1_v4,0.2343,75.32,175
-5390336,castle_defense_p1_v5,0.3293,75.83,167
-5390336,castle_defense_p1_v6,0.3212,75.52,165
-5390336,castle_defense_p1_v7,0.2418,75.2,153
-5390336,castle_defense_p1_v8,0.6299,76.33,154
-5390336,castle_defense_p1_v9,0.6647,74.86,173
-5505024,Anti-Spam Bot,0.32,75.87,500
-5505024,Random Dummy,0.73,75.91,500
-5505024,Spam Bot T1,0.874,75.0,500
-5505024,Spam Bot T2,0.9843,74.73,382
-5505024,Spam Bot T3,0.7707,76.26,157
-5505024,Spam Bot T4,0.6443,75.78,149
-5505024,Spam Bot T5,0.5638,75.55,149
-5505024,Spam Bot T6,0.7468,75.59,158
-5505024,Spam Bot T7,0.6934,75.44,137
-5505024,Spam Bot T8,0.851,75.85,208
-5505024,castle_defense_p1_v1,0.8382,74.69,136
-5505024,castle_defense_p1_v10,0.5932,75.38,177
-5505024,castle_defense_p1_v11,0.6732,75.01,153
-5505024,castle_defense_p1_v12,0.7636,75.56,165
-5505024,castle_defense_p1_v13,0.964,75.17,139
-5505024,castle_defense_p1_v14,0.5924,75.74,157
-5505024,castle_defense_p1_v15,0.8161,75.65,174
-5505024,castle_defense_p1_v16,0.3832,74.92,167
-5505024,castle_defense_p1_v18,0.4145,74.98,152
-5505024,castle_defense_p1_v19,0.4035,75.46,171
-5505024,castle_defense_p1_v2,0.5329,76.03,167
-5505024,castle_defense_p1_v20,0.3197,75.89,147
-5505024,castle_defense_p1_v21,0.4472,75.46,161
-5505024,castle_defense_p1_v3,0.3409,75.82,176
-5505024,castle_defense_p1_v4,0.2316,75.25,177
-5505024,castle_defense_p1_v5,0.3314,75.76,169
-5505024,castle_defense_p1_v6,0.3193,75.48,166
-5505024,castle_defense_p1_v7,0.2387,75.13,155
-5505024,castle_defense_p1_v8,0.6282,76.24,156
-5505024,castle_defense_p1_v9,0.6592,74.68,179
-5619712,Anti-Spam Bot,0.324,75.7,500
-5619712,Random Dummy,0.734,75.78,500
-5619712,Spam Bot T1,0.87,73.9,500
-5619712,Spam Bot T2,0.9847,74.51,392
-5619712,Spam Bot T3,0.7625,76.07,160
-5619712,Spam Bot T4,0.634,75.52,153
-5619712,Spam Bot T5,0.5658,75.36,152
-5619712,Spam Bot T6,0.7453,75.41,161
-5619712,Spam Bot T7,0.6934,75.44,137
-5619712,Spam Bot T8,0.8443,75.66,212
-5619712,castle_defense_p1_v1,0.8321,74.62,137
-5619712,castle_defense_p1_v10,0.6022,75.17,181
-5619712,castle_defense_p1_v11,0.6667,74.67,159
-5619712,castle_defense_p1_v12,0.7665,75.44,167
-5619712,castle_defense_p1_v13,0.9645,75.03,141
-5619712,castle_defense_p1_v14,0.5839,75.5,161
-5619712,castle_defense_p1_v15,0.8177,75.28,181
-5619712,castle_defense_p1_v16,0.3765,74.77,170
-5619712,castle_defense_p1_v18,0.4241,74.64,158
-5619712,castle_defense_p1_v19,0.407,75.4,172
-5619712,castle_defense_p1_v2,0.5294,75.85,170
-5619712,castle_defense_p1_v20,0.32,75.69,150
-5619712,castle_defense_p1_v21,0.4464,75.06,168
-5619712,castle_defense_p1_v3,0.3408,75.66,179
-5619712,castle_defense_p1_v4,0.2376,75.05,181
-5619712,castle_defense_p1_v5,0.3276,75.48,174
-5619712,castle_defense_p1_v6,0.3136,75.31,169
-5619712,castle_defense_p1_v7,0.2532,74.95,158
-5619712,castle_defense_p1_v8,0.6188,75.99,160
-5619712,castle_defense_p1_v9,0.6611,74.63,180
-5734400,Anti-Spam Bot,0.324,75.61,500
-5734400,Random Dummy,0.734,75.75,500
-5734400,Spam Bot T1,0.868,73.75,500
-5734400,Spam Bot T2,0.9776,74.61,401
-5734400,Spam Bot T3,0.7576,76.17,165
-5734400,Spam Bot T4,0.6369,75.62,157
-5734400,Spam Bot T5,0.5714,75.42,154
-5734400,Spam Bot T6,0.7423,75.46,163
-5734400,Spam Bot T7,0.6972,75.58,142
-5734400,Spam Bot T8,0.8433,75.74,217
-5734400,castle_defense_p1_v1,0.8333,74.85,144
-5734400,castle_defense_p1_v10,0.6022,75.17,181
-5734400,castle_defense_p1_v11,0.6625,74.7,160
-5734400,castle_defense_p1_v12,0.7602,75.54,171
-5734400,castle_defense_p1_v13,0.966,75.21,147
-5734400,castle_defense_p1_v14,0.5828,75.55,163
-5734400,castle_defense_p1_v15,0.8187,75.3,182
-5734400,castle_defense_p1_v16,0.3851,74.87,174
-5734400,castle_defense_p1_v18,0.425,74.7,160
-5734400,castle_defense_p1_v19,0.408,75.45,174
-5734400,castle_defense_p1_v2,0.5322,75.87,171
-5734400,castle_defense_p1_v20,0.3247,75.79,154
-5734400,castle_defense_p1_v21,0.4464,75.06,168
-5734400,castle_defense_p1_v3,0.3352,75.72,182
-5734400,castle_defense_p1_v4,0.2363,75.07,182
-5734400,castle_defense_p1_v5,0.3315,75.56,178
-5734400,castle_defense_p1_v6,0.3099,75.36,171
-5734400,castle_defense_p1_v7,0.25,75.01,160
-5734400,castle_defense_p1_v8,0.6228,76.13,167
-5734400,castle_defense_p1_v9,0.6685,74.73,184
-5849088,Anti-Spam Bot,0.328,75.5,500
-5849088,Random Dummy,0.732,75.57,500
-5849088,Spam Bot T1,0.876,74.05,500
-5849088,Spam Bot T2,0.9778,74.53,406
-5849088,Spam Bot T3,0.7605,76.07,167
-5849088,Spam Bot T4,0.6312,75.47,160
-5849088,Spam Bot T5,0.5669,75.26,157
-5849088,Spam Bot T6,0.7455,75.36,165
-5849088,Spam Bot T7,0.7014,75.46,144
-5849088,Spam Bot T8,0.8319,75.41,226
-5849088,castle_defense_p1_v1,0.8288,74.75,146
-5849088,castle_defense_p1_v10,0.6044,75.12,182
-5849088,castle_defense_p1_v11,0.6585,74.52,164
-5849088,castle_defense_p1_v12,0.76,75.35,175
-5849088,castle_defense_p1_v13,0.9662,75.16,148
-5849088,castle_defense_p1_v14,0.5758,75.45,165
-5849088,castle_defense_p1_v15,0.8182,75.09,187
-5849088,castle_defense_p1_v16,0.3799,74.66,179
-5849088,castle_defense_p1_v18,0.425,74.7,160
-5849088,castle_defense_p1_v19,0.4101,75.27,178
-5849088,castle_defense_p1_v2,0.5257,75.68,175
-5849088,castle_defense_p1_v20,0.3185,75.63,157
-5849088,castle_defense_p1_v21,0.4471,74.97,170
-5849088,castle_defense_p1_v3,0.3316,75.5,187
-5849088,castle_defense_p1_v4,0.2337,74.99,184
-5849088,castle_defense_p1_v5,0.3242,75.38,182
-5849088,castle_defense_p1_v6,0.3086,75.18,175
-5849088,castle_defense_p1_v7,0.2469,74.91,162
-5849088,castle_defense_p1_v8,0.6316,75.92,171
-5849088,castle_defense_p1_v9,0.6667,74.65,186
-5963776,Anti-Spam Bot,0.326,75.72,500
-5963776,Random Dummy,0.732,75.59,500
-5963776,Spam Bot T1,0.88,73.92,500
-5963776,Spam Bot T2,0.9785,74.76,418
-5963776,Spam Bot T3,0.75,76.26,172
-5963776,Spam Bot T4,0.6303,75.69,165
-5963776,Spam Bot T5,0.5696,75.31,158
-5963776,Spam Bot T6,0.7515,75.54,169
-5963776,Spam Bot T7,0.7034,75.51,145
-5963776,Spam Bot T8,0.8253,75.51,229
-5963776,castle_defense_p1_v1,0.8322,74.91,149
-5963776,castle_defense_p1_v10,0.6022,75.29,186
-5963776,castle_defense_p1_v11,0.6607,74.71,168
-5963776,castle_defense_p1_v12,0.7614,75.39,176
-5963776,castle_defense_p1_v13,0.9671,75.36,152
-5963776,castle_defense_p1_v14,0.5774,75.58,168
-5963776,castle_defense_p1_v15,0.8158,75.21,190
-5963776,castle_defense_p1_v16,0.3825,74.84,183
-5963776,castle_defense_p1_v18,0.4268,74.9,164
-5963776,castle_defense_p1_v19,0.4134,75.31,179
-5963776,castle_defense_p1_v2,0.5284,75.72,176
-5963776,castle_defense_p1_v20,0.3312,75.76,160
-5963776,castle_defense_p1_v21,0.4451,75.11,173
-5963776,castle_defense_p1_v3,0.3298,75.65,191
-5963776,castle_defense_p1_v4,0.2251,75.27,191
-5963776,castle_defense_p1_v5,0.3262,75.58,187
-5963776,castle_defense_p1_v6,0.3125,75.22,176
-5963776,castle_defense_p1_v7,0.2439,75.01,164
-5963776,castle_defense_p1_v8,0.6337,75.96,172
-5963776,castle_defense_p1_v9,0.6684,74.82,190
-6078464,Anti-Spam Bot,0.318,75.5,500
-6078464,Random Dummy,0.73,75.56,500
-6078464,Spam Bot T1,0.88,73.9,500
-6078464,Spam Bot T2,0.979,74.67,429
-6078464,Spam Bot T3,0.7557,76.15,176
-6078464,Spam Bot T4,0.6374,75.53,171
-6078464,Spam Bot T5,0.5723,75.28,159
-6078464,Spam Bot T6,0.7543,75.39,175
-6078464,Spam Bot T7,0.6986,75.48,146
-6078464,Spam Bot T8,0.8213,75.4,235
-6078464,castle_defense_p1_v1,0.8344,74.86,151
-6078464,castle_defense_p1_v10,0.5989,75.27,187
-6078464,castle_defense_p1_v11,0.6686,74.63,172
-6078464,castle_defense_p1_v12,0.7627,75.37,177
-6078464,castle_defense_p1_v13,0.9554,75.23,157
-6078464,castle_defense_p1_v14,0.578,75.45,173
-6078464,castle_defense_p1_v15,0.8073,75.17,192
-6078464,castle_defense_p1_v16,0.3871,74.78,186
-6078464,castle_defense_p1_v18,0.4345,74.81,168
-6078464,castle_defense_p1_v19,0.4098,75.22,183
-6078464,castle_defense_p1_v2,0.5251,75.64,179
-6078464,castle_defense_p1_v20,0.3273,75.62,165
-6078464,castle_defense_p1_v21,0.4432,75.04,176
-6078464,castle_defense_p1_v3,0.3298,75.65,191
-6078464,castle_defense_p1_v4,0.232,75.21,194
-6078464,castle_defense_p1_v5,0.3229,75.47,192
-6078464,castle_defense_p1_v6,0.3146,75.17,178
-6078464,castle_defense_p1_v7,0.244,74.92,168
-6078464,castle_defense_p1_v8,0.6286,75.88,175
-6078464,castle_defense_p1_v9,0.6684,74.77,193
-6193152,Anti-Spam Bot,0.318,75.51,500
-6193152,Random Dummy,0.738,75.5,500
-6193152,Spam Bot T1,0.88,74.54,500
-6193152,Spam Bot T2,0.9795,74.85,439
-6193152,Spam Bot T3,0.7584,76.22,178
-6193152,Spam Bot T4,0.64,75.69,175
-6193152,Spam Bot T5,0.5714,75.37,161
-6193152,Spam Bot T6,0.7486,75.54,179
-6193152,Spam Bot T7,0.6959,75.58,148
-6193152,Spam Bot T8,0.8208,75.54,240
-6193152,castle_defense_p1_v1,0.8344,75.15,157
-6193152,castle_defense_p1_v10,0.6,75.38,190
-6193152,castle_defense_p1_v11,0.6686,74.63,172
-6193152,castle_defense_p1_v12,0.7637,75.56,182
-6193152,castle_defense_p1_v13,0.9563,75.36,160
-6193152,castle_defense_p1_v14,0.5819,75.61,177
-6193152,castle_defense_p1_v15,0.8103,75.28,195
-6193152,castle_defense_p1_v16,0.3886,75.06,193
-6193152,castle_defense_p1_v18,0.4419,74.98,172
-6193152,castle_defense_p1_v19,0.4021,75.62,194
-6193152,castle_defense_p1_v2,0.5301,75.79,183
-6193152,castle_defense_p1_v20,0.3333,75.74,168
-6193152,castle_defense_p1_v21,0.4413,75.16,179
-6193152,castle_defense_p1_v3,0.3265,75.82,196
-6193152,castle_defense_p1_v4,0.2335,75.32,197
-6193152,castle_defense_p1_v5,0.3216,75.71,199
-6193152,castle_defense_p1_v6,0.3128,75.21,179
-6193152,castle_defense_p1_v7,0.2428,75.13,173
-6193152,castle_defense_p1_v8,0.6271,75.96,177
-6193152,castle_defense_p1_v9,0.66,75.03,200
-6307840,Anti-Spam Bot,0.312,75.37,500
-6307840,Random Dummy,0.736,75.26,500
-6307840,Spam Bot T1,0.882,74.16,500
-6307840,Spam Bot T2,0.9799,74.82,447
-6307840,Spam Bot T3,0.7584,76.22,178
-6307840,Spam Bot T4,0.6389,75.62,180
-6307840,Spam Bot T5,0.5808,75.3,167
-6307840,Spam Bot T6,0.7514,75.52,181
-6307840,Spam Bot T7,0.702,75.53,151
-6307840,Spam Bot T8,0.8238,75.51,244
-6307840,castle_defense_p1_v1,0.8375,75.12,160
-6307840,castle_defense_p1_v10,0.5979,75.34,194
-6307840,castle_defense_p1_v11,0.6686,74.61,175
-6307840,castle_defense_p1_v12,0.7594,75.5,187
-6307840,castle_defense_p1_v13,0.9461,75.28,167
-6307840,castle_defense_p1_v14,0.5769,75.55,182
-6307840,castle_defense_p1_v15,0.8112,75.27,196
-6307840,castle_defense_p1_v16,0.3897,75.04,195
-6307840,castle_defense_p1_v18,0.4343,74.96,175
-6307840,castle_defense_p1_v19,0.4091,75.58,198
-6307840,castle_defense_p1_v2,0.5238,75.71,189
-6307840,castle_defense_p1_v20,0.3353,75.71,170
-6307840,castle_defense_p1_v21,0.4444,75.15,180
-6307840,castle_defense_p1_v3,0.3333,75.8,198
-6307840,castle_defense_p1_v4,0.2338,75.28,201
-6307840,castle_defense_p1_v5,0.3267,75.67,202
-6307840,castle_defense_p1_v6,0.2979,75.13,188
-6307840,castle_defense_p1_v7,0.2416,75.08,178
-6307840,castle_defense_p1_v8,0.6313,75.93,179
-6307840,castle_defense_p1_v9,0.6584,75.02,202
-6422528,Anti-Spam Bot,0.312,75.27,500
-6422528,Random Dummy,0.742,75.06,500
-6422528,Spam Bot T1,0.886,73.96,500
-6422528,Spam Bot T2,0.9781,74.73,456
-6422528,Spam Bot T3,0.7596,76.06,183
-6422528,Spam Bot T4,0.6359,75.51,184
-6422528,Spam Bot T5,0.5799,75.24,169
-6422528,Spam Bot T6,0.7486,75.47,183
-6422528,Spam Bot T7,0.7059,75.47,153
-6422528,Spam Bot T8,0.8171,75.47,246
-6422528,castle_defense_p1_v1,0.8385,75.09,161
-6422528,castle_defense_p1_v10,0.603,75.22,199
-6422528,castle_defense_p1_v11,0.6648,74.52,179
-6422528,castle_defense_p1_v12,0.7606,75.48,188
-6422528,castle_defense_p1_v13,0.9474,75.17,171
-6422528,castle_defense_p1_v14,0.5769,75.55,182
-6422528,castle_defense_p1_v15,0.815,75.17,200
-6422528,castle_defense_p1_v16,0.3878,75.02,196
-6422528,castle_defense_p1_v18,0.427,74.88,178
-6422528,castle_defense_p1_v19,0.4158,75.48,202
-6422528,castle_defense_p1_v2,0.513,75.61,193
-6422528,castle_defense_p1_v20,0.3314,75.65,172
-6422528,castle_defense_p1_v21,0.4426,75.08,183
-6422528,castle_defense_p1_v3,0.33,75.74,200
-6422528,castle_defense_p1_v4,0.2376,75.26,202
-6422528,castle_defense_p1_v5,0.3268,75.6,205
-6422528,castle_defense_p1_v6,0.3016,75.1,189
-6422528,castle_defense_p1_v7,0.2404,74.96,183
-6422528,castle_defense_p1_v8,0.6339,75.81,183
-6422528,castle_defense_p1_v9,0.6601,74.99,203
-6537216,Anti-Spam Bot,0.316,75.04,500
-6537216,Random Dummy,0.748,75.06,500
-6537216,Spam Bot T1,0.878,74.36,500
-6537216,Spam Bot T2,0.9764,74.77,467
-6537216,Spam Bot T3,0.7514,76.06,185
-6537216,Spam Bot T4,0.6257,75.53,187
-6537216,Spam Bot T5,0.5872,75.26,172
-6537216,Spam Bot T6,0.7459,75.48,185
-6537216,Spam Bot T7,0.7097,75.48,155
-6537216,Spam Bot T8,0.8185,75.47,248
-6537216,castle_defense_p1_v1,0.8405,75.11,163
-6537216,castle_defense_p1_v10,0.607,75.23,201
-6537216,castle_defense_p1_v11,0.6667,74.56,183
-6537216,castle_defense_p1_v12,0.768,75.5,194
-6537216,castle_defense_p1_v13,0.9432,75.2,176
-6537216,castle_defense_p1_v14,0.5792,75.55,183
-6537216,castle_defense_p1_v15,0.8098,75.2,205
-6537216,castle_defense_p1_v16,0.3858,75.02,197
-6537216,castle_defense_p1_v18,0.4302,74.89,179
-6537216,castle_defense_p1_v19,0.4187,75.48,203
-6537216,castle_defense_p1_v2,0.5128,75.61,195
-6537216,castle_defense_p1_v20,0.3371,75.67,175
-6537216,castle_defense_p1_v21,0.4409,75.1,186
-6537216,castle_defense_p1_v3,0.3333,75.75,201
-6537216,castle_defense_p1_v4,0.2353,75.27,204
-6537216,castle_defense_p1_v5,0.3208,75.63,212
-6537216,castle_defense_p1_v6,0.3021,75.12,192
-6537216,castle_defense_p1_v7,0.2391,74.97,184
-6537216,castle_defense_p1_v8,0.6359,75.81,184
-6537216,castle_defense_p1_v9,0.6667,75.04,210
-6651904,Anti-Spam Bot,0.32,74.98,500
-6651904,Random Dummy,0.752,74.96,500
-6651904,Spam Bot T1,0.878,74.48,500
-6651904,Spam Bot T2,0.977,74.79,478
-6651904,Spam Bot T3,0.7566,76.05,189
-6651904,Spam Bot T4,0.6243,75.52,189
-6651904,Spam Bot T5,0.5966,75.27,176
-6651904,Spam Bot T6,0.746,75.47,189
-6651904,Spam Bot T7,0.7051,75.48,156
-6651904,Spam Bot T8,0.8193,75.47,249
-6651904,castle_defense_p1_v1,0.8323,75.11,167
-6651904,castle_defense_p1_v10,0.6154,75.23,208
-6651904,castle_defense_p1_v11,0.6667,74.57,186
-6651904,castle_defense_p1_v12,0.77,75.5,200
-6651904,castle_defense_p1_v13,0.9389,75.2,180
-6651904,castle_defense_p1_v14,0.5838,75.55,185
-6651904,castle_defense_p1_v15,0.8038,75.2,209
-6651904,castle_defense_p1_v16,0.385,75.03,200
-6651904,castle_defense_p1_v18,0.4341,74.9,182
-6651904,castle_defense_p1_v19,0.4135,75.48,208
-6651904,castle_defense_p1_v2,0.5153,75.61,196
-6651904,castle_defense_p1_v20,0.339,75.66,177
-6651904,castle_defense_p1_v21,0.4468,75.1,188
-6651904,castle_defense_p1_v3,0.3366,75.74,202
-6651904,castle_defense_p1_v4,0.2344,75.27,209
-6651904,castle_defense_p1_v5,0.3163,75.62,215
-6651904,castle_defense_p1_v6,0.3041,75.13,194
-6651904,castle_defense_p1_v7,0.2328,74.98,189
-6651904,castle_defense_p1_v8,0.6211,75.8,190
-6651904,castle_defense_p1_v9,0.6635,75.04,211
-6766592,Anti-Spam Bot,0.318,74.73,500
-6766592,Random Dummy,0.75,74.56,500
-6766592,Spam Bot T1,0.866,74.15,500
-6766592,Spam Bot T2,0.9774,74.62,486
-6766592,Spam Bot T3,0.7577,75.75,194
-6766592,Spam Bot T4,0.6186,75.24,194
-6766592,Spam Bot T5,0.5978,75.08,179
-6766592,Spam Bot T6,0.7474,75.41,190
-6766592,Spam Bot T7,0.7025,75.34,158
-6766592,Spam Bot T8,0.8127,75.39,251
-6766592,castle_defense_p1_v1,0.8343,74.98,169
-6766592,castle_defense_p1_v10,0.6143,75.13,210
-6766592,castle_defense_p1_v11,0.672,74.41,189
-6766592,castle_defense_p1_v12,0.7707,75.23,205
-6766592,castle_defense_p1_v13,0.9344,75.03,183
-6766592,castle_defense_p1_v14,0.5851,75.37,188
-6766592,castle_defense_p1_v15,0.8028,75.0,213
-6766592,castle_defense_p1_v16,0.3824,74.82,204
-6766592,castle_defense_p1_v18,0.4402,74.78,184
-6766592,castle_defense_p1_v19,0.419,75.37,210
-6766592,castle_defense_p1_v2,0.5152,75.5,198
-6766592,castle_defense_p1_v20,0.3408,75.54,179
-6766592,castle_defense_p1_v21,0.4485,74.77,194
-6766592,castle_defense_p1_v3,0.3366,75.58,205
-6766592,castle_defense_p1_v4,0.2383,75.02,214
-6766592,castle_defense_p1_v5,0.3211,75.47,218
-6766592,castle_defense_p1_v6,0.3061,75.02,196
-6766592,castle_defense_p1_v7,0.228,74.76,193
-6766592,castle_defense_p1_v8,0.6289,75.56,194
-6766592,castle_defense_p1_v9,0.6651,74.7,218
-6881280,Anti-Spam Bot,0.314,74.57,500
-6881280,Random Dummy,0.758,74.48,500
-6881280,Spam Bot T1,0.874,74.17,500
-6881280,Spam Bot T2,0.9738,74.58,497
-6881280,Spam Bot T3,0.7551,75.72,196
-6881280,Spam Bot T4,0.6193,75.2,197
-6881280,Spam Bot T5,0.6022,75.06,181
-6881280,Spam Bot T6,0.7448,75.39,192
-6881280,Spam Bot T7,0.7063,75.31,160
-6881280,Spam Bot T8,0.8164,75.34,256
-6881280,castle_defense_p1_v1,0.8229,74.92,175
-6881280,castle_defense_p1_v10,0.6143,75.13,210
-6881280,castle_defense_p1_v11,0.6753,74.38,194
-6881280,castle_defense_p1_v12,0.7678,75.17,211
-6881280,castle_defense_p1_v13,0.9263,74.95,190
-6881280,castle_defense_p1_v14,0.5781,75.32,192
-6881280,castle_defense_p1_v15,0.8056,74.97,216
-6881280,castle_defense_p1_v16,0.3816,74.79,207
-6881280,castle_defense_p1_v18,0.4355,74.76,186
-6881280,castle_defense_p1_v19,0.414,75.32,215
-6881280,castle_defense_p1_v2,0.5149,75.45,202
-6881280,castle_defense_p1_v20,0.3425,75.51,181
-6881280,castle_defense_p1_v21,0.4439,74.75,196
-6881280,castle_defense_p1_v3,0.3365,75.54,208
-6881280,castle_defense_p1_v4,0.2339,74.98,218
-6881280,castle_defense_p1_v5,0.3258,75.43,221
-6881280,castle_defense_p1_v6,0.305,74.98,200
-6881280,castle_defense_p1_v7,0.2256,74.74,195
-6881280,castle_defense_p1_v8,0.6313,75.51,198
-6881280,castle_defense_p1_v9,0.6607,74.66,224
-6995968,Anti-Spam Bot,0.32,74.56,500
-6995968,Random Dummy,0.754,74.5,500
-6995968,Spam Bot T1,0.866,74.24,500
-6995968,Spam Bot T2,0.974,74.61,500
-6995968,Spam Bot T3,0.7576,75.76,198
-6995968,Spam Bot T4,0.6162,75.23,198
-6995968,Spam Bot T5,0.6087,75.14,184
-6995968,Spam Bot T6,0.7423,75.43,194
-6995968,Spam Bot T7,0.7099,75.36,162
-6995968,Spam Bot T8,0.8154,75.41,260
-6995968,castle_defense_p1_v1,0.8212,75.02,179
-6995968,castle_defense_p1_v10,0.6103,75.19,213
-6995968,castle_defense_p1_v11,0.6802,74.46,197
-6995968,castle_defense_p1_v12,0.771,75.23,214
-6995968,castle_defense_p1_v13,0.9275,75.03,193
-6995968,castle_defense_p1_v14,0.5808,75.45,198
-6995968,castle_defense_p1_v15,0.7955,75.06,220
-6995968,castle_defense_p1_v16,0.378,74.84,209
-6995968,castle_defense_p1_v18,0.4385,74.79,187
-6995968,castle_defense_p1_v19,0.4182,75.41,220
-6995968,castle_defense_p1_v2,0.5243,75.53,206
-6995968,castle_defense_p1_v20,0.3514,75.6,185
-6995968,castle_defense_p1_v21,0.4394,74.8,198
-6995968,castle_defense_p1_v3,0.3365,75.6,211
-6995968,castle_defense_p1_v4,0.2377,75.08,223
-6995968,castle_defense_p1_v5,0.3319,75.53,226
-6995968,castle_defense_p1_v6,0.3005,75.05,203
-6995968,castle_defense_p1_v7,0.2261,74.84,199
-6995968,castle_defense_p1_v8,0.6287,75.59,202
-6995968,castle_defense_p1_v9,0.6608,74.72,227
-7110656,Anti-Spam Bot,0.33,74.61,500
-7110656,Random Dummy,0.754,74.66,500
-7110656,Spam Bot T1,0.866,74.6,500
-7110656,Spam Bot T2,0.976,74.9,500
-7110656,Spam Bot T3,0.7538,75.81,199
-7110656,Spam Bot T4,0.6162,75.23,198
-7110656,Spam Bot T5,0.6129,75.24,186
-7110656,Spam Bot T6,0.7436,75.48,195
-7110656,Spam Bot T7,0.703,75.54,165
-7110656,Spam Bot T8,0.8106,75.55,264
-7110656,castle_defense_p1_v1,0.828,75.4,186
-7110656,castle_defense_p1_v10,0.6199,75.55,221
-7110656,castle_defense_p1_v11,0.6768,74.51,198
-7110656,castle_defense_p1_v12,0.7763,75.45,219
-7110656,castle_defense_p1_v13,0.9289,75.23,197
-7110656,castle_defense_p1_v14,0.58,75.55,200
-7110656,castle_defense_p1_v15,0.7991,75.23,224
-7110656,castle_defense_p1_v16,0.385,75.03,213
-7110656,castle_defense_p1_v18,0.4398,75.0,191
-7110656,castle_defense_p1_v19,0.4178,75.63,225
-7110656,castle_defense_p1_v2,0.5215,75.67,209
-7110656,castle_defense_p1_v20,0.3511,75.75,188
-7110656,castle_defense_p1_v21,0.4356,75.0,202
-7110656,castle_defense_p1_v3,0.3349,75.64,212
-7110656,castle_defense_p1_v4,0.2379,75.26,227
-7110656,castle_defense_p1_v5,0.3333,75.73,231
-7110656,castle_defense_p1_v6,0.3014,75.33,209
-7110656,castle_defense_p1_v7,0.2239,74.94,201
-7110656,castle_defense_p1_v8,0.6275,75.68,204
-7110656,castle_defense_p1_v9,0.6623,74.77,228
-7225344,Anti-Spam Bot,0.334,74.78,500
-7225344,Random Dummy,0.754,74.72,500
-7225344,Spam Bot T1,0.862,75.1,500
-7225344,Spam Bot T2,0.976,75.13,500
-7225344,Spam Bot T3,0.7537,75.9,203
-7225344,Spam Bot T4,0.615,75.28,200
-7225344,Spam Bot T5,0.6158,75.36,190
-7225344,Spam Bot T6,0.7398,75.51,196
-7225344,Spam Bot T7,0.7066,75.6,167
-7225344,Spam Bot T8,0.809,75.61,267
-7225344,castle_defense_p1_v1,0.8254,75.48,189
-7225344,castle_defense_p1_v10,0.6256,75.68,227
-7225344,castle_defense_p1_v11,0.6832,74.63,202
-7225344,castle_defense_p1_v12,0.7793,75.52,222
-7225344,castle_defense_p1_v13,0.9296,75.28,199
-7225344,castle_defense_p1_v14,0.5792,75.6,202
-7225344,castle_defense_p1_v15,0.7948,75.35,229
-7225344,castle_defense_p1_v16,0.386,75.08,215
-7225344,castle_defense_p1_v18,0.4359,75.12,195
-7225344,castle_defense_p1_v19,0.4185,75.67,227
-7225344,castle_defense_p1_v2,0.5211,75.76,213
-7225344,castle_defense_p1_v20,0.3508,75.83,191
-7225344,castle_defense_p1_v21,0.4272,75.11,206
-7225344,castle_defense_p1_v3,0.3287,75.74,216
-7225344,castle_defense_p1_v4,0.2338,75.35,231
-7225344,castle_defense_p1_v5,0.3391,75.77,233
-7225344,castle_defense_p1_v6,0.3052,75.43,213
-7225344,castle_defense_p1_v7,0.2233,75.08,206
-7225344,castle_defense_p1_v8,0.625,75.78,208
-7225344,castle_defense_p1_v9,0.6695,74.89,233
-7340032,Anti-Spam Bot,0.336,74.33,500
-7340032,Random Dummy,0.758,73.63,500
-7340032,Spam Bot T1,0.86,73.89,500
-7340032,Spam Bot T2,0.976,74.8,500
-7340032,Spam Bot T3,0.7561,75.66,205
-7340032,Spam Bot T4,0.6169,75.16,201
-7340032,Spam Bot T5,0.6166,74.97,193
-7340032,Spam Bot T6,0.7424,75.26,198
-7340032,Spam Bot T7,0.7041,75.31,169
-7340032,Spam Bot T8,0.8111,75.33,270
-7340032,castle_defense_p1_v1,0.822,75.22,191
-7340032,castle_defense_p1_v10,0.6261,75.36,230
-7340032,castle_defense_p1_v11,0.678,74.28,205
-7340032,castle_defense_p1_v12,0.7758,75.41,223
-7340032,castle_defense_p1_v13,0.9314,74.68,204
-7340032,castle_defense_p1_v14,0.5777,75.12,206
-7340032,castle_defense_p1_v15,0.8,74.73,235
-7340032,castle_defense_p1_v16,0.3784,74.31,222
-7340032,castle_defense_p1_v18,0.4422,74.63,199
-7340032,castle_defense_p1_v19,0.4148,75.45,229
-7340032,castle_defense_p1_v2,0.5161,75.3,217
-7340032,castle_defense_p1_v20,0.3418,75.19,196
-7340032,castle_defense_p1_v21,0.4238,74.65,210
-7340032,castle_defense_p1_v3,0.3274,74.63,226
-7340032,castle_defense_p1_v4,0.234,74.93,235
-7340032,castle_defense_p1_v5,0.332,74.94,241
-7340032,castle_defense_p1_v6,0.3148,75.09,216
-7340032,castle_defense_p1_v7,0.2227,74.5,211
-7340032,castle_defense_p1_v8,0.6274,75.31,212
-7340032,castle_defense_p1_v9,0.6765,74.39,238
-7454720,Anti-Spam Bot,0.34,74.54,500
-7454720,Random Dummy,0.752,73.72,500
-7454720,Spam Bot T1,0.85,73.71,500
-7454720,Spam Bot T2,0.976,74.76,500
-7454720,Spam Bot T3,0.7535,75.64,215
-7454720,Spam Bot T4,0.6188,75.16,202
-7454720,Spam Bot T5,0.6205,74.98,195
-7454720,Spam Bot T6,0.7438,75.26,203
-7454720,Spam Bot T7,0.7,75.31,170
-7454720,Spam Bot T8,0.8088,75.33,272
-7454720,castle_defense_p1_v1,0.8256,75.22,195
-7454720,castle_defense_p1_v10,0.6261,75.36,230
-7454720,castle_defense_p1_v11,0.6763,74.29,207
-7454720,castle_defense_p1_v12,0.7768,75.41,224
-7454720,castle_defense_p1_v13,0.9327,74.7,208
-7454720,castle_defense_p1_v14,0.5769,75.12,208
-7454720,castle_defense_p1_v15,0.7992,74.74,239
-7454720,castle_defense_p1_v16,0.3778,74.33,225
-7454720,castle_defense_p1_v18,0.4461,74.65,204
-7454720,castle_defense_p1_v19,0.4077,75.45,233
-7454720,castle_defense_p1_v2,0.518,75.3,222
-7454720,castle_defense_p1_v20,0.3467,75.19,199
-7454720,castle_defense_p1_v21,0.4178,74.66,213
-7454720,castle_defense_p1_v3,0.3276,74.65,232
-7454720,castle_defense_p1_v4,0.2331,74.94,236
-7454720,castle_defense_p1_v5,0.3306,74.94,242
-7454720,castle_defense_p1_v6,0.3148,75.09,216
-7454720,castle_defense_p1_v7,0.2243,74.51,214
-7454720,castle_defense_p1_v8,0.6308,75.31,214
-7454720,castle_defense_p1_v9,0.679,74.41,243
-7569408,Anti-Spam Bot,0.344,74.39,500
-7569408,Random Dummy,0.754,73.79,500
-7569408,Spam Bot T1,0.848,73.41,500
-7569408,Spam Bot T2,0.976,74.74,500
-7569408,Spam Bot T3,0.75,75.62,216
-7569408,Spam Bot T4,0.6214,75.07,206
-7569408,Spam Bot T5,0.6244,74.93,197
-7569408,Spam Bot T6,0.7295,75.17,207
-7569408,Spam Bot T7,0.7,75.31,170
-7569408,Spam Bot T8,0.8073,75.28,275
-7569408,castle_defense_p1_v1,0.8265,75.2,196
-7569408,castle_defense_p1_v10,0.6261,75.36,230
-7569408,castle_defense_p1_v11,0.681,74.24,210
-7569408,castle_defense_p1_v12,0.7797,75.34,227
-7569408,castle_defense_p1_v13,0.9327,74.7,208
-7569408,castle_defense_p1_v14,0.5822,75.01,213
-7569408,castle_defense_p1_v15,0.8008,74.61,246
-7569408,castle_defense_p1_v16,0.3836,74.21,232
-7569408,castle_defense_p1_v18,0.4466,74.61,206
-7569408,castle_defense_p1_v19,0.4135,75.37,237
-7569408,castle_defense_p1_v2,0.5088,75.22,226
-7569408,castle_defense_p1_v20,0.345,75.16,200
-7569408,castle_defense_p1_v21,0.4213,74.6,216
-7569408,castle_defense_p1_v3,0.3263,74.58,236
-7569408,castle_defense_p1_v4,0.2314,74.82,242
-7569408,castle_defense_p1_v5,0.3306,74.89,245
-7569408,castle_defense_p1_v6,0.3165,75.05,218
-7569408,castle_defense_p1_v7,0.2207,74.37,222
-7569408,castle_defense_p1_v8,0.6279,75.28,215
-7569408,castle_defense_p1_v9,0.6774,74.33,248
-7684096,Anti-Spam Bot,0.35,74.47,500
-7684096,Random Dummy,0.754,74.25,500
-7684096,Spam Bot T1,0.838,74.69,500
-7684096,Spam Bot T2,0.976,75.15,500
-7684096,Spam Bot T3,0.7512,75.67,217
-7684096,Spam Bot T4,0.6179,75.43,212
-7684096,Spam Bot T5,0.62,75.13,200
-7684096,Spam Bot T6,0.7225,75.29,209
-7684096,Spam Bot T7,0.6994,75.52,173
-7684096,Spam Bot T8,0.8085,75.59,282
-7684096,castle_defense_p1_v1,0.8283,75.33,198
-7684096,castle_defense_p1_v10,0.6293,75.46,232
-7684096,castle_defense_p1_v11,0.6854,74.43,213
-7684096,castle_defense_p1_v12,0.7807,75.4,228
-7684096,castle_defense_p1_v13,0.934,74.94,212
-7684096,castle_defense_p1_v14,0.5899,75.24,217
-7684096,castle_defense_p1_v15,0.804,74.83,250
-7684096,castle_defense_p1_v16,0.3856,74.44,236
-7684096,castle_defense_p1_v18,0.4455,74.92,211
-7684096,castle_defense_p1_v19,0.4083,75.52,240
-7684096,castle_defense_p1_v2,0.5129,75.54,232
-7684096,castle_defense_p1_v20,0.3529,75.41,204
-7684096,castle_defense_p1_v21,0.4194,74.66,217
-7684096,castle_defense_p1_v3,0.3263,74.58,236
-7684096,castle_defense_p1_v4,0.2267,75.09,247
-7684096,castle_defense_p1_v5,0.328,75.15,250
-7684096,castle_defense_p1_v6,0.3108,75.28,222
-7684096,castle_defense_p1_v7,0.2168,74.61,226
-7684096,castle_defense_p1_v8,0.638,75.63,221
-7684096,castle_defense_p1_v9,0.6773,74.49,251
-7798784,Anti-Spam Bot,0.338,74.28,500
-7798784,Random Dummy,0.756,74.29,500
-7798784,Spam Bot T1,0.836,74.89,500
-7798784,Spam Bot T2,0.976,75.07,500
-7798784,Spam Bot T3,0.75,75.62,220
-7798784,Spam Bot T4,0.6168,75.4,214
-7798784,Spam Bot T5,0.6165,75.03,206
-7798784,Spam Bot T6,0.729,75.21,214
-7798784,Spam Bot T7,0.6994,75.52,173
-7798784,Spam Bot T8,0.8049,75.53,287
-7798784,castle_defense_p1_v1,0.8276,75.25,203
-7798784,castle_defense_p1_v10,0.6271,75.41,236
-7798784,castle_defense_p1_v11,0.6912,74.38,217
-7798784,castle_defense_p1_v12,0.7845,75.34,232
-7798784,castle_defense_p1_v13,0.9358,74.86,218
-7798784,castle_defense_p1_v14,0.5909,75.2,220
-7798784,castle_defense_p1_v15,0.8008,74.82,251
-7798784,castle_defense_p1_v16,0.3882,74.43,237
-7798784,castle_defense_p1_v18,0.4429,74.81,219
-7798784,castle_defense_p1_v19,0.4074,75.48,243
-7798784,castle_defense_p1_v2,0.5083,75.42,240
-7798784,castle_defense_p1_v20,0.3606,75.35,208
-7798784,castle_defense_p1_v21,0.4208,74.61,221
-7798784,castle_defense_p1_v3,0.3264,74.55,239
-7798784,castle_defense_p1_v4,0.2258,75.08,248
-7798784,castle_defense_p1_v5,0.3307,75.1,254
-7798784,castle_defense_p1_v6,0.3125,75.25,224
-7798784,castle_defense_p1_v7,0.2174,74.56,230
-7798784,castle_defense_p1_v8,0.6416,75.55,226
-7798784,castle_defense_p1_v9,0.6759,74.47,253
-7913472,Anti-Spam Bot,0.346,74.25,500
-7913472,Random Dummy,0.758,74.04,500
-7913472,Spam Bot T1,0.83,74.45,500
-7913472,Spam Bot T2,0.976,75.07,500
-7913472,Spam Bot T3,0.7477,75.56,222
-7913472,Spam Bot T4,0.6147,75.26,218
-7913472,Spam Bot T5,0.6172,74.93,209
-7913472,Spam Bot T6,0.729,75.21,214
-7913472,Spam Bot T7,0.7011,75.48,174
-7913472,Spam Bot T8,0.8021,75.5,288
-7913472,castle_defense_p1_v1,0.8261,75.11,207
-7913472,castle_defense_p1_v10,0.6266,75.25,241
-7913472,castle_defense_p1_v11,0.6895,74.33,219
-7913472,castle_defense_p1_v12,0.7821,75.28,234
-7913472,castle_defense_p1_v13,0.9367,74.77,221
-7913472,castle_defense_p1_v14,0.5928,75.17,221
-7913472,castle_defense_p1_v15,0.8024,74.76,253
-7913472,castle_defense_p1_v16,0.3843,74.3,242
-7913472,castle_defense_p1_v18,0.4425,74.61,226
-7913472,castle_defense_p1_v19,0.4049,75.36,247
-7913472,castle_defense_p1_v2,0.5041,75.36,242
-7913472,castle_defense_p1_v20,0.3555,75.24,211
-7913472,castle_defense_p1_v21,0.4185,74.44,227
-7913472,castle_defense_p1_v3,0.3264,74.47,242
-7913472,castle_defense_p1_v4,0.2222,74.96,252
-7913472,castle_defense_p1_v5,0.3308,74.94,260
-7913472,castle_defense_p1_v6,0.3142,75.18,226
-7913472,castle_defense_p1_v7,0.217,74.42,235
-7913472,castle_defense_p1_v8,0.6304,75.42,230
-7913472,castle_defense_p1_v9,0.6783,74.34,258
-8028160,Anti-Spam Bot,0.336,74.13,500
-8028160,Random Dummy,0.76,73.9,500
-8028160,Spam Bot T1,0.826,74.58,500
-8028160,Spam Bot T2,0.976,75.11,500
-8028160,Spam Bot T3,0.75,75.57,224
-8028160,Spam Bot T4,0.6116,75.32,224
-8028160,Spam Bot T5,0.6121,74.99,214
-8028160,Spam Bot T6,0.7285,75.28,221
-8028160,Spam Bot T7,0.7029,75.49,175
-8028160,Spam Bot T8,0.8007,75.52,291
-8028160,castle_defense_p1_v1,0.8238,75.14,210
-8028160,castle_defense_p1_v10,0.624,75.26,242
-8028160,castle_defense_p1_v11,0.6861,74.38,223
-8028160,castle_defense_p1_v12,0.7848,75.3,237
-8028160,castle_defense_p1_v13,0.9383,74.84,227
-8028160,castle_defense_p1_v14,0.5929,75.22,226
-8028160,castle_defense_p1_v15,0.8,74.78,255
-8028160,castle_defense_p1_v16,0.3811,74.33,244
-8028160,castle_defense_p1_v18,0.4498,74.64,229
-8028160,castle_defense_p1_v19,0.4127,75.4,252
-8028160,castle_defense_p1_v2,0.5061,75.4,247
-8028160,castle_defense_p1_v20,0.3551,75.27,214
-8028160,castle_defense_p1_v21,0.4181,74.5,232
-8028160,castle_defense_p1_v3,0.3238,74.49,244
-8028160,castle_defense_p1_v4,0.2213,74.97,253
-8028160,castle_defense_p1_v5,0.3308,74.96,263
-8028160,castle_defense_p1_v6,0.3074,75.23,231
-8028160,castle_defense_p1_v7,0.2143,74.46,238
-8028160,castle_defense_p1_v8,0.6304,75.42,230
-8028160,castle_defense_p1_v9,0.6769,74.37,260
-8142848,Anti-Spam Bot,0.334,74.1,500
-8142848,Random Dummy,0.762,73.59,500
-8142848,Spam Bot T1,0.82,73.76,500
-8142848,Spam Bot T2,0.976,75.06,500
-8142848,Spam Bot T3,0.7489,75.36,227
-8142848,Spam Bot T4,0.6026,74.97,229
-8142848,Spam Bot T5,0.614,74.92,215
-8142848,Spam Bot T6,0.7252,75.21,222
-8142848,Spam Bot T7,0.7039,75.13,179
-8142848,Spam Bot T8,0.802,75.41,293
-8142848,castle_defense_p1_v1,0.8246,75.06,211
-8142848,castle_defense_p1_v10,0.6255,75.2,243
-8142848,castle_defense_p1_v11,0.6858,74.18,226
-8142848,castle_defense_p1_v12,0.7815,75.24,238
-8142848,castle_defense_p1_v13,0.9348,74.64,230
-8142848,castle_defense_p1_v14,0.5921,75.08,228
-8142848,castle_defense_p1_v15,0.7992,74.54,259
-8142848,castle_defense_p1_v16,0.379,74.09,248
-8142848,castle_defense_p1_v18,0.4444,74.32,234
-8142848,castle_defense_p1_v19,0.4102,75.15,256
-8142848,castle_defense_p1_v2,0.5081,75.34,248
-8142848,castle_defense_p1_v20,0.3502,75.05,217
-8142848,castle_defense_p1_v21,0.4202,74.12,238
-8142848,castle_defense_p1_v3,0.324,74.13,250
-8142848,castle_defense_p1_v4,0.2218,74.73,257
-8142848,castle_defense_p1_v5,0.3283,74.85,265
-8142848,castle_defense_p1_v6,0.3034,75.03,234
-8142848,castle_defense_p1_v7,0.2167,74.33,240
-8142848,castle_defense_p1_v8,0.6282,75.14,234
-8142848,castle_defense_p1_v9,0.6806,74.2,263
-8257536,Anti-Spam Bot,0.332,74.26,500
-8257536,Random Dummy,0.768,73.79,500
-8257536,Spam Bot T1,0.82,73.85,500
-8257536,Spam Bot T2,0.976,75.15,500
-8257536,Spam Bot T3,0.7522,75.37,230
-8257536,Spam Bot T4,0.6052,74.99,233
-8257536,Spam Bot T5,0.6073,74.94,219
-8257536,Spam Bot T6,0.7269,75.23,227
-8257536,Spam Bot T7,0.7,75.14,180
-8257536,Spam Bot T8,0.8,75.42,295
-8257536,castle_defense_p1_v1,0.8287,75.09,216
-8257536,castle_defense_p1_v10,0.6286,75.21,245
-8257536,castle_defense_p1_v11,0.6842,74.2,228
-8257536,castle_defense_p1_v12,0.7851,75.26,242
-8257536,castle_defense_p1_v13,0.9313,74.66,233
-8257536,castle_defense_p1_v14,0.5931,75.09,231
-8257536,castle_defense_p1_v15,0.7909,74.57,263
-8257536,castle_defense_p1_v16,0.3775,74.09,249
-8257536,castle_defense_p1_v18,0.4564,74.37,241
-8257536,castle_defense_p1_v19,0.4093,75.16,259
-8257536,castle_defense_p1_v2,0.5118,75.36,254
-8257536,castle_defense_p1_v20,0.3545,75.07,220
-8257536,castle_defense_p1_v21,0.4232,74.15,241
-8257536,castle_defense_p1_v3,0.3241,74.15,253
-8257536,castle_defense_p1_v4,0.2192,74.75,260
-8257536,castle_defense_p1_v5,0.3309,74.87,269
-8257536,castle_defense_p1_v6,0.3071,75.06,241
-8257536,castle_defense_p1_v7,0.2146,74.39,247
-8257536,castle_defense_p1_v8,0.6333,75.17,240
-8257536,castle_defense_p1_v9,0.6818,74.2,264
-8372224,Anti-Spam Bot,0.33,73.89,500
-8372224,Random Dummy,0.772,73.67,500
-8372224,Spam Bot T1,0.814,73.39,500
-8372224,Spam Bot T2,0.974,75.05,500
-8372224,Spam Bot T3,0.75,75.23,236
-8372224,Spam Bot T4,0.6118,74.91,237
-8372224,Spam Bot T5,0.6054,74.85,223
-8372224,Spam Bot T6,0.7273,75.14,231
-8372224,Spam Bot T7,0.6995,75.05,183
-8372224,Spam Bot T8,0.802,75.36,298
-8372224,castle_defense_p1_v1,0.8311,75.02,219
-8372224,castle_defense_p1_v10,0.6316,75.16,247
-8372224,castle_defense_p1_v11,0.6853,74.12,232
-8372224,castle_defense_p1_v12,0.786,75.23,243
-8372224,castle_defense_p1_v13,0.9322,74.59,236
-8372224,castle_defense_p1_v14,0.5948,75.07,232
-8372224,castle_defense_p1_v15,0.7852,74.44,270
-8372224,castle_defense_p1_v16,0.3819,74.01,254
-8372224,castle_defense_p1_v18,0.4531,74.3,245
-8372224,castle_defense_p1_v19,0.4122,75.1,262
-8372224,castle_defense_p1_v2,0.5078,75.32,256
-8372224,castle_defense_p1_v20,0.3543,75.0,223
-8372224,castle_defense_p1_v21,0.4187,74.06,246
-8372224,castle_defense_p1_v3,0.3228,74.14,254
-8372224,castle_defense_p1_v4,0.2197,74.67,264
-8372224,castle_defense_p1_v5,0.3333,74.74,276
-8372224,castle_defense_p1_v6,0.3086,75.02,243
-8372224,castle_defense_p1_v7,0.216,74.33,250
-8372224,castle_defense_p1_v8,0.6296,75.1,243
-8372224,castle_defense_p1_v9,0.6836,74.02,275
-8486912,Anti-Spam Bot,0.326,73.76,500
-8486912,Random Dummy,0.77,73.69,500
-8486912,Spam Bot T1,0.814,73.05,500
-8486912,Spam Bot T2,0.974,74.98,500
-8486912,Spam Bot T3,0.7531,75.12,239
-8486912,Spam Bot T4,0.6167,74.8,240
-8486912,Spam Bot T5,0.5991,74.7,227
-8486912,Spam Bot T6,0.7288,74.95,236
-8486912,Spam Bot T7,0.7011,75.0,184
-8486912,Spam Bot T8,0.8053,75.21,303
-8486912,castle_defense_p1_v1,0.8348,74.83,224
-8486912,castle_defense_p1_v10,0.636,75.06,250
-8486912,castle_defense_p1_v11,0.6851,74.03,235
-8486912,castle_defense_p1_v12,0.7828,75.2,244
-8486912,castle_defense_p1_v13,0.9322,74.59,236
-8486912,castle_defense_p1_v14,0.589,74.93,236
-8486912,castle_defense_p1_v15,0.7868,74.39,272
-8486912,castle_defense_p1_v16,0.3893,73.78,262
-8486912,castle_defense_p1_v18,0.4556,74.2,248
-8486912,castle_defense_p1_v19,0.4144,75.07,263
-8486912,castle_defense_p1_v2,0.5097,75.22,259
-8486912,castle_defense_p1_v20,0.3556,74.92,225
-8486912,castle_defense_p1_v21,0.4127,73.88,252
-8486912,castle_defense_p1_v3,0.3257,73.93,261
-8486912,castle_defense_p1_v4,0.2201,74.55,268
-8486912,castle_defense_p1_v5,0.3286,74.62,280
-8486912,castle_defense_p1_v6,0.3052,74.82,249
-8486912,castle_defense_p1_v7,0.2134,74.24,253
-8486912,castle_defense_p1_v8,0.6301,75.0,246
-8486912,castle_defense_p1_v9,0.681,73.92,279
-8601600,Anti-Spam Bot,0.322,73.99,500
-8601600,Random Dummy,0.77,73.72,500
-8601600,Spam Bot T1,0.816,73.33,500
-8601600,Spam Bot T2,0.972,74.93,500
-8601600,Spam Bot T3,0.7531,75.12,239
-8601600,Spam Bot T4,0.6198,74.84,242
-8601600,Spam Bot T5,0.6034,74.81,232
-8601600,Spam Bot T6,0.728,75.01,239
-8601600,Spam Bot T7,0.7027,75.03,185
-8601600,Spam Bot T8,0.8046,75.27,307
-8601600,castle_defense_p1_v1,0.8363,74.87,226
-8601600,castle_defense_p1_v10,0.6349,75.09,252
-8601600,castle_defense_p1_v11,0.6891,74.1,238
-8601600,castle_defense_p1_v12,0.7782,75.27,248
-8601600,castle_defense_p1_v13,0.9325,74.62,237
-8601600,castle_defense_p1_v14,0.5882,74.97,238
-8601600,castle_defense_p1_v15,0.7826,74.46,276
-8601600,castle_defense_p1_v16,0.3864,73.83,264
-8601600,castle_defense_p1_v18,0.456,74.25,250
-8601600,castle_defense_p1_v19,0.4151,75.1,265
-8601600,castle_defense_p1_v2,0.5057,75.25,261
-8601600,castle_defense_p1_v20,0.354,74.94,226
-8601600,castle_defense_p1_v21,0.4111,73.9,253
-8601600,castle_defense_p1_v3,0.3245,74.02,265
-8601600,castle_defense_p1_v4,0.2251,74.61,271
-8601600,castle_defense_p1_v5,0.3333,74.76,288
-8601600,castle_defense_p1_v6,0.3095,74.87,252
-8601600,castle_defense_p1_v7,0.2134,74.24,253
-8601600,castle_defense_p1_v8,0.628,75.07,250
-8601600,castle_defense_p1_v9,0.6809,73.98,282
-8716288,Anti-Spam Bot,0.324,74.19,500
-8716288,Random Dummy,0.774,74.07,500
-8716288,Spam Bot T1,0.83,73.57,500
-8716288,Spam Bot T2,0.972,75.03,500
-8716288,Spam Bot T3,0.751,75.16,241
-8716288,Spam Bot T4,0.6225,74.99,249
-8716288,Spam Bot T5,0.5975,74.9,236
-8716288,Spam Bot T6,0.7236,75.16,246
-8716288,Spam Bot T7,0.7113,75.26,194
-8716288,Spam Bot T8,0.8032,75.32,310
-8716288,castle_defense_p1_v1,0.8384,74.94,229
-8716288,castle_defense_p1_v10,0.6289,75.17,256
-8716288,castle_defense_p1_v11,0.686,74.2,242
-8716288,castle_defense_p1_v12,0.7717,75.38,254
-8716288,castle_defense_p1_v13,0.9339,74.73,242
-8716288,castle_defense_p1_v14,0.5935,75.13,246
-8716288,castle_defense_p1_v15,0.7826,74.46,276
-8716288,castle_defense_p1_v16,0.3806,73.92,268
-8716288,castle_defense_p1_v18,0.4585,74.32,253
-8716288,castle_defense_p1_v19,0.4133,75.21,271
-8716288,castle_defense_p1_v2,0.5057,75.29,263
-8716288,castle_defense_p1_v20,0.3509,74.99,228
-8716288,castle_defense_p1_v21,0.4094,73.93,254
-8716288,castle_defense_p1_v3,0.3258,74.07,267
-8716288,castle_defense_p1_v4,0.2251,74.61,271
-8716288,castle_defense_p1_v5,0.3322,74.83,292
-8716288,castle_defense_p1_v6,0.3137,74.94,255
-8716288,castle_defense_p1_v7,0.2126,74.26,254
-8716288,castle_defense_p1_v8,0.6339,75.15,254
-8716288,castle_defense_p1_v9,0.6842,74.04,285
-8830976,Anti-Spam Bot,0.32,74.21,500
-8830976,Random Dummy,0.774,74.19,500
-8830976,Spam Bot T1,0.836,73.71,500
-8830976,Spam Bot T2,0.972,75.05,500
-8830976,Spam Bot T3,0.7541,75.16,244
-8830976,Spam Bot T4,0.6225,74.99,249
-8830976,Spam Bot T5,0.6,74.9,240
-8830976,Spam Bot T6,0.72,75.15,250
-8830976,Spam Bot T7,0.7186,75.25,199
-8830976,Spam Bot T8,0.8051,75.32,313
-8830976,castle_defense_p1_v1,0.8362,74.94,232
-8830976,castle_defense_p1_v10,0.6245,75.17,261
-8830976,castle_defense_p1_v11,0.6885,74.2,244
-8830976,castle_defense_p1_v12,0.7739,75.37,261
-8830976,castle_defense_p1_v13,0.9309,74.73,246
-8830976,castle_defense_p1_v14,0.5935,75.13,246
-8830976,castle_defense_p1_v15,0.7814,74.47,279
-8830976,castle_defense_p1_v16,0.3852,73.93,270
-8830976,castle_defense_p1_v18,0.4556,74.33,259
-8830976,castle_defense_p1_v19,0.4133,75.21,271
-8830976,castle_defense_p1_v2,0.5075,75.28,266
-8830976,castle_defense_p1_v20,0.3537,74.99,229
-8830976,castle_defense_p1_v21,0.4062,73.94,256
-8830976,castle_defense_p1_v3,0.3259,74.07,270
-8830976,castle_defense_p1_v4,0.2238,74.62,277
-8830976,castle_defense_p1_v5,0.3345,74.83,293
-8830976,castle_defense_p1_v6,0.3101,74.94,258
-8830976,castle_defense_p1_v7,0.214,74.27,257
-8830976,castle_defense_p1_v8,0.6336,75.15,262
-8830976,castle_defense_p1_v9,0.6875,74.05,288
-8945664,Anti-Spam Bot,0.326,74.07,500
-8945664,Random Dummy,0.778,74.05,500
-8945664,Spam Bot T1,0.846,73.69,500
-8945664,Spam Bot T2,0.974,74.85,500
-8945664,Spam Bot T3,0.7581,75.06,248
-8945664,Spam Bot T4,0.6151,74.92,252
-8945664,Spam Bot T5,0.5976,74.76,246
-8945664,Spam Bot T6,0.7266,75.01,256
-8945664,Spam Bot T7,0.7178,75.16,202
-8945664,Spam Bot T8,0.8044,75.24,317
-8945664,castle_defense_p1_v1,0.8347,74.84,236
-8945664,castle_defense_p1_v10,0.6278,75.05,266
-8945664,castle_defense_p1_v11,0.6898,74.18,245
-8945664,castle_defense_p1_v12,0.7748,75.35,262
-8945664,castle_defense_p1_v13,0.9315,74.69,248
-8945664,castle_defense_p1_v14,0.592,75.03,250
-8945664,castle_defense_p1_v15,0.7801,74.41,282
-8945664,castle_defense_p1_v16,0.3846,73.87,273
-8945664,castle_defense_p1_v18,0.4559,74.29,261
-8945664,castle_defense_p1_v19,0.4161,75.14,274
-8945664,castle_defense_p1_v2,0.5037,75.24,268
-8945664,castle_defense_p1_v20,0.3578,74.91,232
-8945664,castle_defense_p1_v21,0.4093,73.88,259
-8945664,castle_defense_p1_v3,0.3201,73.93,278
-8945664,castle_defense_p1_v4,0.2206,74.54,281
-8945664,castle_defense_p1_v5,0.3367,74.75,297
-8945664,castle_defense_p1_v6,0.3156,74.82,263
-8945664,castle_defense_p1_v7,0.2075,74.11,265
-8945664,castle_defense_p1_v8,0.6264,75.08,265
-8945664,castle_defense_p1_v9,0.6837,73.95,294
-9060352,Anti-Spam Bot,0.322,74.06,500
-9060352,Random Dummy,0.776,73.9,500
-9060352,Spam Bot T1,0.852,73.32,500
-9060352,Spam Bot T2,0.974,74.79,500
-9060352,Spam Bot T3,0.76,75.04,250
-9060352,Spam Bot T4,0.6151,74.92,252
-9060352,Spam Bot T5,0.5976,74.76,246
-9060352,Spam Bot T6,0.7231,74.97,260
-9060352,Spam Bot T7,0.7122,75.12,205
-9060352,Spam Bot T8,0.808,75.18,323
-9060352,castle_defense_p1_v1,0.8354,74.83,237
-9060352,castle_defense_p1_v10,0.636,74.99,272
-9060352,castle_defense_p1_v11,0.6935,74.16,248
-9060352,castle_defense_p1_v12,0.7765,75.32,264
-9060352,castle_defense_p1_v13,0.9323,74.66,251
-9060352,castle_defense_p1_v14,0.5929,75.0,253
-9060352,castle_defense_p1_v15,0.7825,74.39,285
-9060352,castle_defense_p1_v16,0.3863,73.85,277
-9060352,castle_defense_p1_v18,0.4549,74.26,266
-9060352,castle_defense_p1_v19,0.4199,75.08,281
-9060352,castle_defense_p1_v2,0.5,75.22,270
-9060352,castle_defense_p1_v20,0.3532,74.88,235
-9060352,castle_defense_p1_v21,0.4046,73.86,262
-9060352,castle_defense_p1_v3,0.3239,73.9,284
-9060352,castle_defense_p1_v4,0.2218,74.51,284
-9060352,castle_defense_p1_v5,0.3356,74.75,298
-9060352,castle_defense_p1_v6,0.3109,74.79,267
-9060352,castle_defense_p1_v7,0.2105,74.11,266
-9060352,castle_defense_p1_v8,0.6283,75.04,269
-9060352,castle_defense_p1_v9,0.6847,73.94,295
-9175040,Anti-Spam Bot,0.322,73.84,500
-9175040,Random Dummy,0.774,73.8,500
-9175040,Spam Bot T1,0.854,72.52,500
-9175040,Spam Bot T2,0.974,74.65,500
-9175040,Spam Bot T3,0.7647,74.96,255
-9175040,Spam Bot T4,0.6172,74.86,256
-9175040,Spam Bot T5,0.5951,74.74,247
-9175040,Spam Bot T6,0.7241,74.96,261
-9175040,Spam Bot T7,0.7101,75.08,207
-9175040,Spam Bot T8,0.8098,75.15,326
-9175040,castle_defense_p1_v1,0.8361,74.72,244
-9175040,castle_defense_p1_v10,0.6318,74.93,277
-9175040,castle_defense_p1_v11,0.698,74.08,255
-9175040,castle_defense_p1_v12,0.7704,75.23,270
-9175040,castle_defense_p1_v13,0.9339,74.58,257
-9175040,castle_defense_p1_v14,0.5906,74.99,254
-9175040,castle_defense_p1_v15,0.7855,74.34,289
-9175040,castle_defense_p1_v16,0.3852,73.79,283
-9175040,castle_defense_p1_v18,0.4552,74.23,268
-9175040,castle_defense_p1_v19,0.4146,75.0,287
-9175040,castle_defense_p1_v2,0.5054,75.11,277
-9175040,castle_defense_p1_v20,0.3532,74.88,235
-9175040,castle_defense_p1_v21,0.4038,73.83,265
-9175040,castle_defense_p1_v3,0.3264,73.86,288
-9175040,castle_defense_p1_v4,0.2195,74.48,287
-9175040,castle_defense_p1_v5,0.3344,74.73,299
-9175040,castle_defense_p1_v6,0.3066,74.69,274
-9175040,castle_defense_p1_v7,0.209,74.08,268
-9175040,castle_defense_p1_v8,0.6296,75.02,270
-9175040,castle_defense_p1_v9,0.6856,73.91,299
-9289728,Anti-Spam Bot,0.318,73.68,500
-9289728,Random Dummy,0.764,73.69,500
-9289728,Spam Bot T1,0.852,72.39,500
-9289728,Spam Bot T2,0.974,74.49,500
-9289728,Spam Bot T3,0.7665,74.9,257
-9289728,Spam Bot T4,0.6163,74.8,258
-9289728,Spam Bot T5,0.6016,74.62,251
-9289728,Spam Bot T6,0.7208,74.84,265
-9289728,Spam Bot T7,0.7062,74.94,211
-9289728,Spam Bot T8,0.8066,75.03,331
-9289728,castle_defense_p1_v1,0.8374,74.67,246
-9289728,castle_defense_p1_v10,0.6286,74.85,280
-9289728,castle_defense_p1_v11,0.7004,74.03,257
-9289728,castle_defense_p1_v12,0.7647,75.17,272
-9289728,castle_defense_p1_v13,0.9354,74.42,263
-9289728,castle_defense_p1_v14,0.5898,74.93,256
-9289728,castle_defense_p1_v15,0.7862,74.32,290
-9289728,castle_defense_p1_v16,0.3838,73.77,284
-9289728,castle_defense_p1_v18,0.4572,74.21,269
-9289728,castle_defense_p1_v19,0.4192,74.89,291
-9289728,castle_defense_p1_v2,0.4965,74.92,284
-9289728,castle_defense_p1_v20,0.3515,74.76,239
-9289728,castle_defense_p1_v21,0.4038,73.83,265
-9289728,castle_defense_p1_v3,0.3288,73.71,295
-9289728,castle_defense_p1_v4,0.218,74.43,289
-9289728,castle_defense_p1_v5,0.3311,74.66,302
-9289728,castle_defense_p1_v6,0.3105,74.62,277
-9289728,castle_defense_p1_v7,0.2082,74.06,269
-9289728,castle_defense_p1_v8,0.6273,75.0,271
-9289728,castle_defense_p1_v9,0.6867,73.88,300
-9404416,Anti-Spam Bot,0.324,73.6,500
-9404416,Random Dummy,0.768,73.33,500
-9404416,Spam Bot T1,0.856,72.48,500
-9404416,Spam Bot T2,0.974,74.37,500
-9404416,Spam Bot T3,0.7654,74.84,260
-9404416,Spam Bot T4,0.6154,74.76,260
-9404416,Spam Bot T5,0.6024,74.56,254
-9404416,Spam Bot T6,0.7239,74.78,268
-9404416,Spam Bot T7,0.7062,74.94,211
-9404416,Spam Bot T8,0.803,74.96,335
-9404416,castle_defense_p1_v1,0.8387,74.62,248
-9404416,castle_defense_p1_v10,0.6246,74.75,285
-9404416,castle_defense_p1_v11,0.7,73.97,260
-9404416,castle_defense_p1_v12,0.7664,75.13,274
-9404416,castle_defense_p1_v13,0.9358,74.38,265
-9404416,castle_defense_p1_v14,0.5875,74.91,257
-9404416,castle_defense_p1_v15,0.7857,74.25,294
-9404416,castle_defense_p1_v16,0.3819,73.71,288
-9404416,castle_defense_p1_v18,0.4545,74.1,275
-9404416,castle_defense_p1_v19,0.4184,74.83,294
-9404416,castle_defense_p1_v2,0.4983,74.86,287
-9404416,castle_defense_p1_v20,0.3485,74.71,241
-9404416,castle_defense_p1_v21,0.3993,73.78,268
-9404416,castle_defense_p1_v3,0.3344,73.65,299
-9404416,castle_defense_p1_v4,0.2192,74.38,292
-9404416,castle_defense_p1_v5,0.33,74.64,303
-9404416,castle_defense_p1_v6,0.3071,74.56,280
-9404416,castle_defense_p1_v7,0.2111,74.04,270
-9404416,castle_defense_p1_v8,0.6314,74.93,274
-9404416,castle_defense_p1_v9,0.6898,73.84,303
-9519104,Anti-Spam Bot,0.326,73.35,500
-9519104,Random Dummy,0.768,72.91,500
-9519104,Spam Bot T1,0.846,72.04,500
-9519104,Spam Bot T2,0.97,74.03,500
-9519104,Spam Bot T3,0.7654,74.84,260
-9519104,Spam Bot T4,0.6061,74.61,264
-9519104,Spam Bot T5,0.6115,74.34,260
-9519104,Spam Bot T6,0.7222,74.71,270
-9519104,Spam Bot T7,0.7028,74.89,212
-9519104,Spam Bot T8,0.8,74.82,340
-9519104,castle_defense_p1_v1,0.8346,74.4,254
-9519104,castle_defense_p1_v10,0.625,74.65,288
-9519104,castle_defense_p1_v11,0.7045,73.84,264
-9519104,castle_defense_p1_v12,0.7681,75.06,276
-9519104,castle_defense_p1_v13,0.9363,74.31,267
-9519104,castle_defense_p1_v14,0.5853,74.87,258
-9519104,castle_defense_p1_v15,0.786,74.1,299
-9519104,castle_defense_p1_v16,0.3784,73.48,296
-9519104,castle_defense_p1_v18,0.4552,73.97,279
-9519104,castle_defense_p1_v19,0.4181,74.67,299
-9519104,castle_defense_p1_v2,0.5,74.83,288
-9519104,castle_defense_p1_v20,0.3484,74.59,244
-9519104,castle_defense_p1_v21,0.3963,73.72,270
-9519104,castle_defense_p1_v3,0.3366,73.53,303
-9519104,castle_defense_p1_v4,0.223,74.25,296
-9519104,castle_defense_p1_v5,0.3268,74.55,306
-9519104,castle_defense_p1_v6,0.305,74.49,282
-9519104,castle_defense_p1_v7,0.2132,73.98,272
-9519104,castle_defense_p1_v8,0.6304,74.86,276
-9519104,castle_defense_p1_v9,0.6908,73.81,304
-9633792,Anti-Spam Bot,0.326,72.98,500
-9633792,Random Dummy,0.774,72.77,500
-9633792,Spam Bot T1,0.844,71.85,500
-9633792,Spam Bot T2,0.968,73.77,500
-9633792,Spam Bot T3,0.7643,74.74,263
-9633792,Spam Bot T4,0.6075,74.58,265
-9633792,Spam Bot T5,0.6111,74.05,270
-9633792,Spam Bot T6,0.7216,74.62,273
-9633792,Spam Bot T7,0.7023,74.78,215
-9633792,Spam Bot T8,0.7953,74.77,342
-9633792,castle_defense_p1_v1,0.8359,74.33,256
-9633792,castle_defense_p1_v10,0.625,74.65,288
-9633792,castle_defense_p1_v11,0.709,73.73,268
-9633792,castle_defense_p1_v12,0.7687,74.91,281
-9633792,castle_defense_p1_v13,0.937,74.22,270
-9633792,castle_defense_p1_v14,0.5853,74.87,258
-9633792,castle_defense_p1_v15,0.7862,73.97,304
-9633792,castle_defense_p1_v16,0.3754,73.36,301
-9633792,castle_defense_p1_v18,0.4555,73.92,281
-9633792,castle_defense_p1_v19,0.4172,74.59,302
-9633792,castle_defense_p1_v2,0.5,74.72,292
-9633792,castle_defense_p1_v20,0.3468,74.46,248
-9633792,castle_defense_p1_v21,0.3956,73.64,273
-9633792,castle_defense_p1_v3,0.3355,73.44,307
-9633792,castle_defense_p1_v4,0.2215,74.2,298
-9633792,castle_defense_p1_v5,0.3279,74.5,308
-9633792,castle_defense_p1_v6,0.3042,74.38,286
-9633792,castle_defense_p1_v7,0.2117,73.92,274
-9633792,castle_defense_p1_v8,0.6282,74.83,277
-9633792,castle_defense_p1_v9,0.6926,73.69,309
-9748480,Anti-Spam Bot,0.318,73.0,500
-9748480,Random Dummy,0.766,72.93,500
-9748480,Spam Bot T1,0.85,71.18,500
-9748480,Spam Bot T2,0.968,73.75,500
-9748480,Spam Bot T3,0.766,74.75,265
-9748480,Spam Bot T4,0.6067,74.59,267
-9748480,Spam Bot T5,0.6131,74.07,274
-9748480,Spam Bot T6,0.7224,74.64,281
-9748480,Spam Bot T7,0.7023,74.78,215
-9748480,Spam Bot T8,0.7954,74.78,347
-9748480,castle_defense_p1_v1,0.8391,74.36,261
-9748480,castle_defense_p1_v10,0.622,74.65,291
-9748480,castle_defense_p1_v11,0.7127,73.77,275
-9748480,castle_defense_p1_v12,0.766,74.91,282
-9748480,castle_defense_p1_v13,0.9375,74.23,272
-9748480,castle_defense_p1_v14,0.5878,74.88,262
-9748480,castle_defense_p1_v15,0.7843,73.98,306
-9748480,castle_defense_p1_v16,0.375,73.38,304
-9748480,castle_defense_p1_v18,0.465,73.94,286
-9748480,castle_defense_p1_v19,0.4211,74.6,304
-9748480,castle_defense_p1_v2,0.5084,74.73,299
-9748480,castle_defense_p1_v20,0.3465,74.49,254
-9748480,castle_defense_p1_v21,0.3986,73.66,276
-9748480,castle_defense_p1_v3,0.3333,73.48,312
-9748480,castle_defense_p1_v4,0.2211,74.22,303
-9748480,castle_defense_p1_v5,0.3291,74.51,313
-9748480,castle_defense_p1_v6,0.3069,74.39,290
-9748480,castle_defense_p1_v7,0.2101,73.93,276
-9748480,castle_defense_p1_v8,0.6286,74.84,280
-9748480,castle_defense_p1_v9,0.6933,73.71,313
-9863168,Anti-Spam Bot,0.322,73.11,500
-9863168,Random Dummy,0.766,73.04,500
-9863168,Spam Bot T1,0.854,71.07,500
-9863168,Spam Bot T2,0.968,73.71,500
-9863168,Spam Bot T3,0.764,74.73,267
-9863168,Spam Bot T4,0.6015,74.56,271
-9863168,Spam Bot T5,0.6115,74.05,278
-9863168,Spam Bot T6,0.7193,74.61,285
-9863168,Spam Bot T7,0.7064,74.74,218
-9863168,Spam Bot T8,0.7926,74.74,352
-9863168,castle_defense_p1_v1,0.8409,74.33,264
-9863168,castle_defense_p1_v10,0.6224,74.63,294
-9863168,castle_defense_p1_v11,0.7086,73.76,278
-9863168,castle_defense_p1_v12,0.7614,74.88,285
-9863168,castle_defense_p1_v13,0.9377,74.22,273
-9863168,castle_defense_p1_v14,0.5871,74.86,264
-9863168,castle_defense_p1_v15,0.7839,73.96,310
-9863168,castle_defense_p1_v16,0.3851,73.37,309
-9863168,castle_defense_p1_v18,0.4637,73.93,289
-9863168,castle_defense_p1_v19,0.4327,74.54,312
-9863168,castle_defense_p1_v2,0.5083,74.72,301
-9863168,castle_defense_p1_v20,0.345,74.46,258
-9863168,castle_defense_p1_v21,0.3957,73.65,278
-9863168,castle_defense_p1_v3,0.3344,73.46,317
-9863168,castle_defense_p1_v4,0.2215,74.2,307
-9863168,castle_defense_p1_v5,0.328,74.51,314
-9863168,castle_defense_p1_v6,0.3095,74.37,294
-9863168,castle_defense_p1_v7,0.2071,73.91,280
-9863168,castle_defense_p1_v8,0.6259,74.79,286
-9863168,castle_defense_p1_v9,0.694,73.7,317
-9977856,Anti-Spam Bot,0.32,73.01,500
-9977856,Random Dummy,0.774,72.48,500
-9977856,Spam Bot T1,0.86,70.87,500
-9977856,Spam Bot T2,0.968,73.63,500
-9977856,Spam Bot T3,0.7667,74.62,270
-9977856,Spam Bot T4,0.6022,74.45,274
-9977856,Spam Bot T5,0.6107,73.99,280
-9977856,Spam Bot T6,0.7138,74.45,290
-9977856,Spam Bot T7,0.7032,74.7,219
-9977856,Spam Bot T8,0.7921,74.64,356
-9977856,castle_defense_p1_v1,0.8439,74.16,269
-9977856,castle_defense_p1_v10,0.6224,74.63,294
-9977856,castle_defense_p1_v11,0.7071,73.7,280
-9977856,castle_defense_p1_v12,0.7631,74.81,287
-9977856,castle_defense_p1_v13,0.938,74.19,274
-9977856,castle_defense_p1_v14,0.5843,74.75,267
-9977856,castle_defense_p1_v15,0.7859,73.88,313
-9977856,castle_defense_p1_v16,0.3885,73.23,314
-9977856,castle_defense_p1_v18,0.4674,73.87,291
-9977856,castle_defense_p1_v19,0.4353,74.39,317
-9977856,castle_defense_p1_v2,0.5082,74.59,305
-9977856,castle_defense_p1_v20,0.3397,74.31,262
-9977856,castle_defense_p1_v21,0.3993,73.5,283
-9977856,castle_defense_p1_v3,0.3344,73.38,320
-9977856,castle_defense_p1_v4,0.2186,74.08,311
-9977856,castle_defense_p1_v5,0.327,74.39,318
-9977856,castle_defense_p1_v6,0.311,74.21,299
-9977856,castle_defense_p1_v7,0.2118,73.67,288
-9977856,castle_defense_p1_v8,0.6267,74.59,292
-9977856,castle_defense_p1_v9,0.695,73.67,318
-10092544,Anti-Spam Bot,0.318,73.14,500
-10092544,Random Dummy,0.772,72.63,500
-10092544,Spam Bot T1,0.866,71.08,500
-10092544,Spam Bot T2,0.968,73.53,500
-10092544,Spam Bot T3,0.7656,74.67,273
-10092544,Spam Bot T4,0.5971,74.52,278
-10092544,Spam Bot T5,0.6085,74.0,281
-10092544,Spam Bot T6,0.7143,74.51,294
-10092544,Spam Bot T7,0.7059,74.74,221
-10092544,Spam Bot T8,0.7944,74.68,360
-10092544,castle_defense_p1_v1,0.845,74.2,271
-10092544,castle_defense_p1_v10,0.6242,74.69,298
-10092544,castle_defense_p1_v11,0.7077,73.77,284
-10092544,castle_defense_p1_v12,0.7586,74.86,290
-10092544,castle_defense_p1_v13,0.9386,74.24,277
-10092544,castle_defense_p1_v14,0.5839,74.85,274
-10092544,castle_defense_p1_v15,0.7886,73.94,317
-10092544,castle_defense_p1_v16,0.3924,73.27,316
-10092544,castle_defense_p1_v18,0.4712,73.93,295
-10092544,castle_defense_p1_v19,0.4361,74.45,321
-10092544,castle_defense_p1_v2,0.5049,74.62,307
-10092544,castle_defense_p1_v20,0.3409,74.35,264
-10092544,castle_defense_p1_v21,0.3958,73.59,288
-10092544,castle_defense_p1_v3,0.3364,73.45,324
-10092544,castle_defense_p1_v4,0.2173,74.11,313
-10092544,castle_defense_p1_v5,0.3302,74.43,321
-10092544,castle_defense_p1_v6,0.3059,74.29,304
-10092544,castle_defense_p1_v7,0.2131,73.72,291
-10092544,castle_defense_p1_v8,0.6275,74.67,298
-10092544,castle_defense_p1_v9,0.684,73.8,326
+114688,Anti-Spam Bot,0.4,156.94,10
+114688,Random Dummy,0.5455,156.94,11
+114688,Spam Bot T1,0.8333,156.94,24
+114688,Spam Bot T2,1.0,156.94,5
+114688,Spam Bot T4,1.0,156.94,1
+114688,Spam Bot T5,0.25,156.94,4
+114688,Spam Bot T6,0.5,156.94,4
+114688,Spam Bot T7,0.6667,156.94,3
+114688,Spam Bot T8,1.0,156.94,3
+114688,castle_defense_p1_v14,0.7333,156.94,15
+114688,castle_defense_p1_v16,0.3125,156.94,16
+114688,castle_defense_p1_v20,0.2778,156.94,18
+114688,castle_defense_p1_v21,0.4,156.94,10
+114688,castle_defense_p1_v22,0.8333,156.94,24
+114688,castle_defense_p1_v3,0.6,156.94,10
+114688,castle_defense_p1_v4,0.4286,156.94,14
+114688,castle_defense_p1_v7,0.4667,156.94,15
+229376,Anti-Spam Bot,0.4211,136.41,19
+229376,Random Dummy,0.6087,134.33,23
+229376,Spam Bot T1,0.8649,141.71,37
+229376,Spam Bot T2,0.8462,130.27,13
+229376,Spam Bot T3,0.75,113.6,4
+229376,Spam Bot T4,0.8,122.27,5
+229376,Spam Bot T5,0.1429,138.37,7
+229376,Spam Bot T6,0.5714,138.37,7
+229376,Spam Bot T7,0.6667,156.94,3
+229376,Spam Bot T8,1.0,139.6,5
+229376,castle_defense_p1_v14,0.6364,143.15,22
+229376,castle_defense_p1_v16,0.4333,136.72,30
+229376,castle_defense_p1_v20,0.3,133.1,40
+229376,castle_defense_p1_v21,0.36,130.94,25
+229376,castle_defense_p1_v22,0.8108,141.71,37
+229376,castle_defense_p1_v3,0.56,130.94,25
+229376,castle_defense_p1_v4,0.4118,131.45,34
+229376,castle_defense_p1_v7,0.2571,132.18,35
+344064,Anti-Spam Bot,0.3143,126.91,35
+344064,Random Dummy,0.6571,127.92,35
+344064,Spam Bot T1,0.8939,130.25,66
+344064,Spam Bot T2,0.9,125.14,20
+344064,Spam Bot T3,0.8333,114.28,6
+344064,Spam Bot T4,0.6667,121.16,6
+344064,Spam Bot T5,0.125,135.52,8
+344064,Spam Bot T6,0.5714,138.37,7
+344064,Spam Bot T7,0.6667,156.94,3
+344064,Spam Bot T8,1.0,130.61,8
+344064,castle_defense_p1_v14,0.6757,131.99,37
+344064,castle_defense_p1_v16,0.4706,128.03,51
+344064,castle_defense_p1_v20,0.28,129.61,50
+344064,castle_defense_p1_v21,0.3571,124.74,42
+344064,castle_defense_p1_v22,0.84,134.93,50
+344064,castle_defense_p1_v3,0.475,125.19,40
+344064,castle_defense_p1_v4,0.4082,126.6,49
+344064,castle_defense_p1_v7,0.2653,127.45,49
+458752,Anti-Spam Bot,0.2941,120.04,51
+458752,Random Dummy,0.6444,122.83,45
+458752,Spam Bot T1,0.9167,122.37,96
+458752,Spam Bot T2,0.92,121.12,25
+458752,Spam Bot T3,0.8571,112.95,7
+458752,Spam Bot T4,0.6,114.7,10
+458752,Spam Bot T5,0.1,129.42,10
+458752,Spam Bot T6,0.6364,126.24,11
+458752,Spam Bot T7,0.75,143.96,4
+458752,Spam Bot T8,0.9167,122.08,12
+458752,castle_defense_p1_v14,0.6415,123.85,53
+458752,castle_defense_p1_v16,0.4615,123.07,65
+458752,castle_defense_p1_v20,0.2857,124.53,63
+458752,castle_defense_p1_v21,0.3684,119.55,57
+458752,castle_defense_p1_v22,0.8525,129.54,61
+458752,castle_defense_p1_v3,0.4677,118.04,62
+458752,castle_defense_p1_v4,0.3833,122.65,60
+458752,castle_defense_p1_v7,0.2923,121.93,65
+573440,Anti-Spam Bot,0.2985,120.73,67
+573440,Random Dummy,0.6786,122.85,56
+573440,Spam Bot T1,0.9076,122.48,119
+573440,Spam Bot T2,0.9062,121.52,32
+573440,Spam Bot T3,0.7778,115.17,9
+573440,Spam Bot T4,0.5,116.08,12
+573440,Spam Bot T5,0.0833,128.34,12
+573440,Spam Bot T6,0.5833,125.97,12
+573440,Spam Bot T7,0.75,143.96,4
+573440,Spam Bot T8,0.9333,122.25,15
+573440,castle_defense_p1_v14,0.6957,123.64,69
+573440,castle_defense_p1_v16,0.4416,123.05,77
+573440,castle_defense_p1_v20,0.3038,124.21,79
+573440,castle_defense_p1_v21,0.3797,120.49,79
+573440,castle_defense_p1_v22,0.8261,128.77,69
+573440,castle_defense_p1_v3,0.4306,118.72,72
+573440,castle_defense_p1_v4,0.3425,122.7,73
+573440,castle_defense_p1_v7,0.2683,122.14,82
+688128,Anti-Spam Bot,0.3077,118.23,78
+688128,Random Dummy,0.6923,120.1,65
+688128,Spam Bot T1,0.9178,118.87,146
+688128,Spam Bot T2,0.9167,119.46,36
+688128,Spam Bot T3,0.8,113.95,10
+688128,Spam Bot T4,0.4286,114.21,14
+688128,Spam Bot T5,0.0714,124.72,14
+688128,Spam Bot T6,0.6154,124.2,13
+688128,Spam Bot T7,0.8,135.76,5
+688128,Spam Bot T8,0.9474,118.19,19
+688128,castle_defense_p1_v14,0.6585,120.36,82
+688128,castle_defense_p1_v16,0.4222,120.15,90
+688128,castle_defense_p1_v20,0.3085,120.82,94
+688128,castle_defense_p1_v21,0.3736,118.18,91
+688128,castle_defense_p1_v22,0.8077,125.79,78
+688128,castle_defense_p1_v3,0.4,115.57,90
+688128,castle_defense_p1_v4,0.337,118.62,92
+688128,castle_defense_p1_v7,0.2609,120.05,92
+802816,Anti-Spam Bot,0.3218,119.79,87
+802816,Random Dummy,0.7051,122.31,78
+802816,Spam Bot T1,0.9209,121.41,177
+802816,Spam Bot T2,0.9024,121.15,41
+802816,Spam Bot T3,0.7143,119.5,14
+802816,Spam Bot T4,0.4,115.48,15
+802816,Spam Bot T5,0.1176,126.24,17
+802816,Spam Bot T6,0.6429,124.85,14
+802816,Spam Bot T7,0.8,135.76,5
+802816,Spam Bot T8,0.9545,120.26,22
+802816,castle_defense_p1_v14,0.6947,122.14,95
+802816,castle_defense_p1_v16,0.4434,122.15,106
+802816,castle_defense_p1_v20,0.3143,122.14,105
+802816,castle_defense_p1_v21,0.3947,121.25,114
+802816,castle_defense_p1_v22,0.7979,127.08,94
+802816,castle_defense_p1_v3,0.4,118.11,105
+802816,castle_defense_p1_v4,0.3333,120.07,102
+802816,castle_defense_p1_v7,0.2679,122.43,112
+917504,Anti-Spam Bot,0.3191,121.02,94
+917504,Random Dummy,0.7241,123.76,87
+917504,Spam Bot T1,0.9204,123.19,201
+917504,Spam Bot T2,0.9167,123.36,48
+917504,Spam Bot T3,0.7647,122.46,17
+917504,Spam Bot T4,0.4444,118.95,18
+917504,Spam Bot T5,0.1579,127.3,19
+917504,Spam Bot T6,0.6429,124.85,14
+917504,Spam Bot T7,0.7143,135.92,7
+917504,Spam Bot T8,0.9231,122.73,26
+917504,castle_defense_p1_v14,0.6863,123.11,102
+917504,castle_defense_p1_v16,0.4397,123.37,116
+917504,castle_defense_p1_v20,0.3095,124.5,126
+917504,castle_defense_p1_v21,0.4341,123.0,129
+917504,castle_defense_p1_v22,0.789,128.35,109
+917504,castle_defense_p1_v3,0.4094,121.26,127
+917504,castle_defense_p1_v4,0.325,122.5,120
+917504,castle_defense_p1_v7,0.2937,123.97,126
+1032192,Anti-Spam Bot,0.3084,120.81,107
+1032192,Random Dummy,0.7379,123.06,103
+1032192,Spam Bot T1,0.9174,122.69,230
+1032192,Spam Bot T2,0.9123,122.72,57
+1032192,Spam Bot T3,0.8,121.99,20
+1032192,Spam Bot T4,0.4211,118.97,19
+1032192,Spam Bot T5,0.15,126.9,20
+1032192,Spam Bot T6,0.6,124.48,15
+1032192,Spam Bot T7,0.5833,128.98,12
+1032192,Spam Bot T8,0.9355,122.17,31
+1032192,castle_defense_p1_v14,0.7094,122.62,117
+1032192,castle_defense_p1_v16,0.4419,122.95,129
+1032192,castle_defense_p1_v20,0.3037,124.15,135
+1032192,castle_defense_p1_v21,0.4444,122.41,153
+1032192,castle_defense_p1_v22,0.7937,127.13,126
+1032192,castle_defense_p1_v3,0.4088,121.12,137
+1032192,castle_defense_p1_v4,0.3212,122.1,137
+1032192,castle_defense_p1_v7,0.3121,123.47,141
+1146880,Anti-Spam Bot,0.3162,120.46,117
+1146880,Random Dummy,0.7387,122.6,111
+1146880,Spam Bot T1,0.9115,122.0,260
+1146880,Spam Bot T2,0.9219,122.05,64
+1146880,Spam Bot T3,0.7826,121.29,23
+1146880,Spam Bot T4,0.4348,118.57,23
+1146880,Spam Bot T5,0.15,126.9,20
+1146880,Spam Bot T6,0.5263,122.83,19
+1146880,Spam Bot T7,0.5714,127.22,14
+1146880,Spam Bot T8,0.9211,121.16,38
+1146880,castle_defense_p1_v14,0.7063,121.54,143
+1146880,castle_defense_p1_v16,0.4122,122.15,148
+1146880,castle_defense_p1_v20,0.3072,123.27,153
+1146880,castle_defense_p1_v21,0.4497,121.87,169
+1146880,castle_defense_p1_v22,0.7887,125.95,142
+1146880,castle_defense_p1_v3,0.3931,120.87,145
+1146880,castle_defense_p1_v4,0.3067,121.63,150
+1146880,castle_defense_p1_v7,0.2876,122.94,153
+1261568,Anti-Spam Bot,0.3359,120.29,131
+1261568,Random Dummy,0.7395,122.35,119
+1261568,Spam Bot T1,0.9024,121.71,287
+1261568,Spam Bot T2,0.9143,121.78,70
+1261568,Spam Bot T3,0.7917,121.19,24
+1261568,Spam Bot T4,0.4286,118.63,28
+1261568,Spam Bot T5,0.125,125.57,24
+1261568,Spam Bot T6,0.5833,122.01,24
+1261568,Spam Bot T7,0.5882,125.75,17
+1261568,Spam Bot T8,0.9268,120.99,41
+1261568,castle_defense_p1_v14,0.6918,121.27,159
+1261568,castle_defense_p1_v16,0.4049,121.85,163
+1261568,castle_defense_p1_v20,0.3136,122.85,169
+1261568,castle_defense_p1_v21,0.4341,121.66,182
+1261568,castle_defense_p1_v22,0.7925,125.19,159
+1261568,castle_defense_p1_v3,0.3789,120.68,161
+1261568,castle_defense_p1_v4,0.3086,121.43,162
+1261568,castle_defense_p1_v7,0.2909,122.64,165
+1376256,Anti-Spam Bot,0.3165,120.92,139
+1376256,Random Dummy,0.7353,123.45,136
+1376256,Spam Bot T1,0.9016,122.26,305
+1376256,Spam Bot T2,0.9067,122.41,75
+1376256,Spam Bot T3,0.7931,122.91,29
+1376256,Spam Bot T4,0.4333,119.46,30
+1376256,Spam Bot T5,0.2414,126.53,29
+1376256,Spam Bot T6,0.5926,123.03,27
+1376256,Spam Bot T7,0.6316,126.32,19
+1376256,Spam Bot T8,0.9388,122.65,49
+1376256,castle_defense_p1_v14,0.6989,122.23,176
+1376256,castle_defense_p1_v16,0.3989,122.63,178
+1376256,castle_defense_p1_v20,0.3141,123.81,191
+1376256,castle_defense_p1_v21,0.4412,122.68,204
+1376256,castle_defense_p1_v22,0.7861,125.68,173
+1376256,castle_defense_p1_v3,0.3807,121.57,176
+1376256,castle_defense_p1_v4,0.3125,122.2,176
+1376256,castle_defense_p1_v7,0.2841,123.18,176
+1490944,Anti-Spam Bot,0.3333,122.24,150
+1490944,Random Dummy,0.7162,124.7,148
+1490944,Spam Bot T1,0.8985,123.29,325
+1490944,Spam Bot T2,0.9146,123.82,82
+1490944,Spam Bot T3,0.7667,123.44,30
+1490944,Spam Bot T4,0.4545,121.23,33
+1490944,Spam Bot T5,0.2812,127.69,32
+1490944,Spam Bot T6,0.5806,125.08,31
+1490944,Spam Bot T7,0.6818,128.04,22
+1490944,Spam Bot T8,0.9216,123.29,51
+1490944,castle_defense_p1_v14,0.6804,123.78,194
+1490944,castle_defense_p1_v16,0.3938,123.9,193
+1490944,castle_defense_p1_v20,0.3168,124.63,202
+1490944,castle_defense_p1_v21,0.446,123.37,213
+1490944,castle_defense_p1_v22,0.7946,126.54,185
+1490944,castle_defense_p1_v3,0.3859,122.32,184
+1490944,castle_defense_p1_v4,0.3262,123.19,187
+1490944,castle_defense_p1_v7,0.2872,124.18,188
+1605632,Anti-Spam Bot,0.3395,121.97,162
+1605632,Random Dummy,0.7134,124.12,164
+1605632,Spam Bot T1,0.8971,122.96,350
+1605632,Spam Bot T2,0.9205,123.47,88
+1605632,Spam Bot T3,0.7667,123.44,30
+1605632,Spam Bot T4,0.3947,120.9,38
+1605632,Spam Bot T5,0.2857,126.92,35
+1605632,Spam Bot T6,0.6,124.35,35
+1605632,Spam Bot T7,0.7083,127.26,24
+1605632,Spam Bot T8,0.9074,123.03,54
+1605632,castle_defense_p1_v14,0.6986,123.41,209
+1605632,castle_defense_p1_v16,0.3726,123.43,212
+1605632,castle_defense_p1_v20,0.3238,124.41,210
+1605632,castle_defense_p1_v21,0.4589,123.0,231
+1605632,castle_defense_p1_v22,0.7949,126.13,195
+1605632,castle_defense_p1_v3,0.3858,122.08,197
+1605632,castle_defense_p1_v4,0.3317,122.79,205
+1605632,castle_defense_p1_v7,0.2843,123.93,197
+1720320,Anti-Spam Bot,0.3295,122.13,176
+1720320,Random Dummy,0.7135,124.1,178
+1720320,Spam Bot T1,0.8997,122.98,359
+1720320,Spam Bot T2,0.9271,123.5,96
+1720320,Spam Bot T3,0.75,123.47,32
+1720320,Spam Bot T4,0.4146,121.12,41
+1720320,Spam Bot T5,0.2778,126.84,36
+1720320,Spam Bot T6,0.65,124.29,40
+1720320,Spam Bot T7,0.6923,127.0,26
+1720320,Spam Bot T8,0.8947,123.08,57
+1720320,castle_defense_p1_v14,0.6909,123.43,220
+1720320,castle_defense_p1_v16,0.3712,123.47,229
+1720320,castle_defense_p1_v20,0.3139,124.38,223
+1720320,castle_defense_p1_v21,0.4743,123.08,253
+1720320,castle_defense_p1_v22,0.7837,125.99,208
+1720320,castle_defense_p1_v3,0.385,122.22,213
+1720320,castle_defense_p1_v4,0.3211,122.86,218
+1720320,castle_defense_p1_v7,0.2925,123.93,212
+1835008,Anti-Spam Bot,0.328,121.1,189
+1835008,Random Dummy,0.7151,123.38,186
+1835008,Spam Bot T1,0.8995,122.19,378
+1835008,Spam Bot T2,0.9245,121.97,106
+1835008,Spam Bot T3,0.7576,122.98,33
+1835008,Spam Bot T4,0.4565,119.61,46
+1835008,Spam Bot T5,0.2703,126.31,37
+1835008,Spam Bot T6,0.6522,122.07,46
+1835008,Spam Bot T7,0.7037,126.27,27
+1835008,Spam Bot T8,0.9,122.29,60
+1835008,castle_defense_p1_v14,0.6752,122.47,234
+1835008,castle_defense_p1_v16,0.3725,122.28,247
+1835008,castle_defense_p1_v20,0.3099,123.03,242
+1835008,castle_defense_p1_v21,0.4729,121.71,277
+1835008,castle_defense_p1_v22,0.7661,125.13,218
+1835008,castle_defense_p1_v3,0.3843,121.17,229
+1835008,castle_defense_p1_v4,0.3136,121.67,236
+1835008,castle_defense_p1_v7,0.2926,122.69,229
+1949696,Anti-Spam Bot,0.3283,121.17,198
+1949696,Random Dummy,0.7173,123.36,191
+1949696,Spam Bot T1,0.9015,122.23,406
+1949696,Spam Bot T2,0.9211,122.02,114
+1949696,Spam Bot T3,0.7297,122.95,37
+1949696,Spam Bot T4,0.4808,119.96,52
+1949696,Spam Bot T5,0.2564,126.12,39
+1949696,Spam Bot T6,0.6596,122.08,47
+1949696,Spam Bot T7,0.6897,126.02,29
+1949696,Spam Bot T8,0.9048,122.31,63
+1949696,castle_defense_p1_v14,0.6654,122.48,257
+1949696,castle_defense_p1_v16,0.3672,122.3,256
+1949696,castle_defense_p1_v20,0.3268,123.02,254
+1949696,castle_defense_p1_v21,0.4746,121.77,295
+1949696,castle_defense_p1_v22,0.7702,124.96,235
+1949696,castle_defense_p1_v3,0.3862,121.28,246
+1949696,castle_defense_p1_v4,0.3166,121.76,259
+1949696,castle_defense_p1_v7,0.2958,122.69,240
+2064384,Anti-Spam Bot,0.3286,121.63,210
+2064384,Random Dummy,0.6961,123.72,204
+2064384,Spam Bot T1,0.9059,122.53,425
+2064384,Spam Bot T2,0.918,122.48,122
+2064384,Spam Bot T3,0.7368,123.11,38
+2064384,Spam Bot T4,0.5,120.3,54
+2064384,Spam Bot T5,0.25,126.2,40
+2064384,Spam Bot T6,0.6667,122.23,48
+2064384,Spam Bot T7,0.6667,126.12,30
+2064384,Spam Bot T8,0.8939,122.61,66
+2064384,castle_defense_p1_v14,0.6642,122.83,271
+2064384,castle_defense_p1_v16,0.3657,122.6,268
+2064384,castle_defense_p1_v20,0.3333,123.31,267
+2064384,castle_defense_p1_v21,0.4791,122.14,311
+2064384,castle_defense_p1_v22,0.7611,125.16,247
+2064384,castle_defense_p1_v3,0.3902,121.81,264
+2064384,castle_defense_p1_v4,0.3146,121.98,267
+2064384,castle_defense_p1_v7,0.3031,123.04,254
+2179072,Anti-Spam Bot,0.3214,122.15,224
+2179072,Random Dummy,0.6977,124.05,215
+2179072,Spam Bot T1,0.9079,122.87,445
+2179072,Spam Bot T2,0.9219,122.84,128
+2179072,Spam Bot T3,0.725,123.46,40
+2179072,Spam Bot T4,0.5,120.65,56
+2179072,Spam Bot T5,0.2444,126.63,45
+2179072,Spam Bot T6,0.6731,122.83,52
+2179072,Spam Bot T7,0.6452,126.25,31
+2179072,Spam Bot T8,0.9041,123.33,73
+2179072,castle_defense_p1_v14,0.6726,123.08,281
+2179072,castle_defense_p1_v16,0.3763,122.9,279
+2179072,castle_defense_p1_v20,0.3321,123.62,280
+2179072,castle_defense_p1_v21,0.4724,122.51,326
+2179072,castle_defense_p1_v22,0.7529,125.46,263
+2179072,castle_defense_p1_v3,0.3964,122.14,275
+2179072,castle_defense_p1_v4,0.3179,122.35,280
+2179072,castle_defense_p1_v7,0.3097,123.41,268
+2293760,Anti-Spam Bot,0.3306,121.99,242
+2293760,Random Dummy,0.692,123.88,224
+2293760,Spam Bot T1,0.9087,122.71,471
+2293760,Spam Bot T2,0.9185,122.69,135
+2293760,Spam Bot T3,0.7317,123.37,41
+2293760,Spam Bot T4,0.5,120.6,60
+2293760,Spam Bot T5,0.2857,126.08,49
+2293760,Spam Bot T6,0.6852,122.73,54
+2293760,Spam Bot T7,0.6667,125.87,33
+2293760,Spam Bot T8,0.8974,123.11,78
+2293760,castle_defense_p1_v14,0.6667,123.01,288
+2293760,castle_defense_p1_v16,0.3819,122.8,288
+2293760,castle_defense_p1_v20,0.3299,123.45,294
+2293760,castle_defense_p1_v21,0.4721,122.4,341
+2293760,castle_defense_p1_v22,0.7518,125.23,274
+2293760,castle_defense_p1_v3,0.3904,122.01,292
+2293760,castle_defense_p1_v4,0.3041,122.22,296
+2293760,castle_defense_p1_v7,0.3071,123.26,280
+2408448,Anti-Spam Bot,0.3463,122.22,257
+2408448,Random Dummy,0.6942,124.03,242
+2408448,Spam Bot T1,0.9104,122.84,491
+2408448,Spam Bot T2,0.9078,122.82,141
+2408448,Spam Bot T3,0.75,123.54,44
+2408448,Spam Bot T4,0.5,120.6,60
+2408448,Spam Bot T5,0.2885,126.07,52
+2408448,Spam Bot T6,0.6964,122.84,56
+2408448,Spam Bot T7,0.7027,125.87,37
+2408448,Spam Bot T8,0.9024,123.25,82
+2408448,castle_defense_p1_v14,0.66,123.12,300
+2408448,castle_defense_p1_v16,0.375,122.89,296
+2408448,castle_defense_p1_v20,0.3312,123.58,311
+2408448,castle_defense_p1_v21,0.4721,122.56,358
+2408448,castle_defense_p1_v22,0.7596,125.26,287
+2408448,castle_defense_p1_v3,0.3929,122.21,308
+2408448,castle_defense_p1_v4,0.3019,122.36,308
+2408448,castle_defense_p1_v7,0.3069,123.46,303
+2523136,Anti-Spam Bot,0.3459,122.16,266
+2523136,Random Dummy,0.6944,123.9,252
+2523136,Spam Bot T1,0.912,121.78,500
+2523136,Spam Bot T2,0.8926,122.71,149
+2523136,Spam Bot T3,0.75,123.54,44
+2523136,Spam Bot T4,0.5238,120.6,63
+2523136,Spam Bot T5,0.2885,126.07,52
+2523136,Spam Bot T6,0.7143,122.6,63
+2523136,Spam Bot T7,0.7105,125.73,38
+2523136,Spam Bot T8,0.8953,123.13,86
+2523136,castle_defense_p1_v14,0.6614,123.0,316
+2523136,castle_defense_p1_v16,0.371,122.79,310
+2523136,castle_defense_p1_v20,0.3344,123.47,323
+2523136,castle_defense_p1_v21,0.4699,122.52,366
+2523136,castle_defense_p1_v22,0.7567,125.06,300
+2523136,castle_defense_p1_v3,0.3932,122.14,323
+2523136,castle_defense_p1_v4,0.311,122.26,328
+2523136,castle_defense_p1_v7,0.3016,123.35,315
+2637824,Anti-Spam Bot,0.344,121.73,282
+2637824,Random Dummy,0.6938,123.68,258
+2637824,Spam Bot T1,0.916,120.96,500
+2637824,Spam Bot T2,0.891,122.34,156
+2637824,Spam Bot T3,0.74,122.47,50
+2637824,Spam Bot T4,0.5,120.33,66
+2637824,Spam Bot T5,0.3036,125.25,56
+2637824,Spam Bot T6,0.7121,122.23,66
+2637824,Spam Bot T7,0.7179,125.45,39
+2637824,Spam Bot T8,0.8953,123.13,86
+2637824,castle_defense_p1_v14,0.6606,122.64,330
+2637824,castle_defense_p1_v16,0.3789,122.48,322
+2637824,castle_defense_p1_v20,0.3314,123.08,338
+2637824,castle_defense_p1_v21,0.4611,122.11,386
+2637824,castle_defense_p1_v22,0.7611,124.6,314
+2637824,castle_defense_p1_v3,0.3964,121.81,338
+2637824,castle_defense_p1_v4,0.3084,121.84,347
+2637824,castle_defense_p1_v7,0.3063,122.88,333
+2752512,Anti-Spam Bot,0.3547,122.81,296
+2752512,Random Dummy,0.6903,124.46,268
+2752512,Spam Bot T1,0.916,122.23,500
+2752512,Spam Bot T2,0.8862,123.8,167
+2752512,Spam Bot T3,0.7547,123.71,53
+2752512,Spam Bot T4,0.5,122.34,72
+2752512,Spam Bot T5,0.3158,125.59,57
+2752512,Spam Bot T6,0.7059,122.89,68
+2752512,Spam Bot T7,0.7442,127.22,43
+2752512,Spam Bot T8,0.8977,123.61,88
+2752512,castle_defense_p1_v14,0.6696,123.59,345
+2752512,castle_defense_p1_v16,0.3739,123.46,337
+2752512,castle_defense_p1_v20,0.3398,124.33,359
+2752512,castle_defense_p1_v21,0.4658,122.62,395
+2752512,castle_defense_p1_v22,0.7622,125.44,328
+2752512,castle_defense_p1_v3,0.3948,122.39,347
+2752512,castle_defense_p1_v4,0.3003,122.84,363
+2752512,castle_defense_p1_v7,0.3173,124.1,353
+2867200,Anti-Spam Bot,0.3581,123.17,310
+2867200,Random Dummy,0.6836,124.62,275
+2867200,Spam Bot T1,0.916,123.33,500
+2867200,Spam Bot T2,0.8857,124.12,175
+2867200,Spam Bot T3,0.7368,124.21,57
+2867200,Spam Bot T4,0.52,122.68,75
+2867200,Spam Bot T5,0.3103,125.67,58
+2867200,Spam Bot T6,0.6806,123.32,72
+2867200,Spam Bot T7,0.75,127.3,44
+2867200,Spam Bot T8,0.9,123.77,90
+2867200,castle_defense_p1_v14,0.663,123.93,362
+2867200,castle_defense_p1_v16,0.3796,123.79,353
+2867200,castle_defense_p1_v20,0.3431,124.62,376
+2867200,castle_defense_p1_v21,0.4696,122.94,411
+2867200,castle_defense_p1_v22,0.767,125.62,339
+2867200,castle_defense_p1_v3,0.3901,122.78,364
+2867200,castle_defense_p1_v4,0.3013,123.09,375
+2867200,castle_defense_p1_v7,0.3261,124.37,368
+2981888,Anti-Spam Bot,0.3567,122.27,328
+2981888,Random Dummy,0.6842,123.99,285
+2981888,Spam Bot T1,0.916,123.12,500
+2981888,Spam Bot T2,0.8876,123.83,178
+2981888,Spam Bot T3,0.75,123.33,60
+2981888,Spam Bot T4,0.5065,122.26,77
+2981888,Spam Bot T5,0.3103,125.67,58
+2981888,Spam Bot T6,0.6933,122.66,75
+2981888,Spam Bot T7,0.7234,125.99,47
+2981888,Spam Bot T8,0.9022,123.4,92
+2981888,castle_defense_p1_v14,0.6649,123.16,379
+2981888,castle_defense_p1_v16,0.3877,122.83,374
+2981888,castle_defense_p1_v20,0.341,123.98,390
+2981888,castle_defense_p1_v21,0.4637,122.33,427
+2981888,castle_defense_p1_v22,0.7571,125.02,350
+2981888,castle_defense_p1_v3,0.3968,122.19,378
+2981888,castle_defense_p1_v4,0.2931,122.5,389
+2981888,castle_defense_p1_v7,0.3281,123.64,384
+3096576,Anti-Spam Bot,0.3626,122.04,342
+3096576,Random Dummy,0.6803,123.77,294
+3096576,Spam Bot T1,0.914,123.15,500
+3096576,Spam Bot T2,0.8907,123.63,183
+3096576,Spam Bot T3,0.7302,123.02,63
+3096576,Spam Bot T4,0.5125,122.05,80
+3096576,Spam Bot T5,0.3167,125.37,60
+3096576,Spam Bot T6,0.6974,122.58,76
+3096576,Spam Bot T7,0.7143,125.6,49
+3096576,Spam Bot T8,0.9043,123.26,94
+3096576,castle_defense_p1_v14,0.6667,122.83,399
+3096576,castle_defense_p1_v16,0.3836,122.56,391
+3096576,castle_defense_p1_v20,0.335,123.8,400
+3096576,castle_defense_p1_v21,0.4694,122.15,441
+3096576,castle_defense_p1_v22,0.7629,124.64,367
+3096576,castle_defense_p1_v3,0.3969,121.98,393
+3096576,castle_defense_p1_v4,0.2889,122.27,405
+3096576,castle_defense_p1_v7,0.3224,123.41,397
+3211264,Anti-Spam Bot,0.3677,123.04,359
+3211264,Random Dummy,0.6808,124.59,307
+3211264,Spam Bot T1,0.914,124.76,500
+3211264,Spam Bot T2,0.8947,124.35,190
+3211264,Spam Bot T3,0.7424,123.94,66
+3211264,Spam Bot T4,0.506,122.82,83
+3211264,Spam Bot T5,0.3016,126.23,63
+3211264,Spam Bot T6,0.6835,123.37,79
+3211264,Spam Bot T7,0.717,126.94,53
+3211264,Spam Bot T8,0.91,124.46,100
+3211264,castle_defense_p1_v14,0.665,123.47,412
+3211264,castle_defense_p1_v16,0.3837,123.23,404
+3211264,castle_defense_p1_v20,0.3333,124.18,408
+3211264,castle_defense_p1_v21,0.4721,123.28,466
+3211264,castle_defense_p1_v22,0.7584,125.69,389
+3211264,castle_defense_p1_v3,0.3971,122.76,408
+3211264,castle_defense_p1_v4,0.2878,122.88,417
+3211264,castle_defense_p1_v7,0.3164,124.22,414
+3325952,Anti-Spam Bot,0.3686,123.14,369
+3325952,Random Dummy,0.6772,124.65,316
+3325952,Spam Bot T1,0.916,124.43,500
+3325952,Spam Bot T2,0.8934,124.43,197
+3325952,Spam Bot T3,0.7424,123.94,66
+3325952,Spam Bot T4,0.5176,122.91,85
+3325952,Spam Bot T5,0.2879,126.24,66
+3325952,Spam Bot T6,0.679,123.44,81
+3325952,Spam Bot T7,0.6909,126.92,55
+3325952,Spam Bot T8,0.9048,124.56,105
+3325952,castle_defense_p1_v14,0.6729,123.57,425
+3325952,castle_defense_p1_v16,0.3801,123.3,413
+3325952,castle_defense_p1_v20,0.3458,124.29,428
+3325952,castle_defense_p1_v21,0.4585,123.39,482
+3325952,castle_defense_p1_v22,0.7616,125.73,411
+3325952,castle_defense_p1_v3,0.4061,122.92,426
+3325952,castle_defense_p1_v4,0.2837,122.99,430
+3325952,castle_defense_p1_v7,0.3119,124.34,436
+3440640,Anti-Spam Bot,0.3658,123.1,380
+3440640,Random Dummy,0.685,124.55,327
+3440640,Spam Bot T1,0.908,123.87,500
+3440640,Spam Bot T2,0.8932,124.32,206
+3440640,Spam Bot T3,0.7391,123.84,69
+3440640,Spam Bot T4,0.5056,122.86,89
+3440640,Spam Bot T5,0.2941,126.11,68
+3440640,Spam Bot T6,0.6707,123.42,82
+3440640,Spam Bot T7,0.6909,126.92,55
+3440640,Spam Bot T8,0.8919,124.41,111
+3440640,castle_defense_p1_v14,0.6782,123.53,435
+3440640,castle_defense_p1_v16,0.38,123.25,429
+3440640,castle_defense_p1_v20,0.3454,124.2,443
+3440640,castle_defense_p1_v21,0.4553,123.36,492
+3440640,castle_defense_p1_v22,0.764,125.58,428
+3440640,castle_defense_p1_v3,0.4104,122.88,441
+3440640,castle_defense_p1_v4,0.2799,122.95,443
+3440640,castle_defense_p1_v7,0.3121,124.24,455
+3555328,Anti-Spam Bot,0.3571,122.47,392
+3555328,Random Dummy,0.6873,123.78,339
+3555328,Spam Bot T1,0.908,122.87,500
+3555328,Spam Bot T2,0.891,123.8,211
+3555328,Spam Bot T3,0.7183,123.25,71
+3555328,Spam Bot T4,0.5165,122.42,91
+3555328,Spam Bot T5,0.2917,124.81,72
+3555328,Spam Bot T6,0.6786,122.93,84
+3555328,Spam Bot T7,0.6667,124.9,60
+3555328,Spam Bot T8,0.8957,123.65,115
+3555328,castle_defense_p1_v14,0.6808,122.92,448
+3555328,castle_defense_p1_v16,0.3792,122.6,443
+3555328,castle_defense_p1_v20,0.3384,123.5,458
+3555328,castle_defense_p1_v21,0.45,122.16,500
+3555328,castle_defense_p1_v22,0.7685,124.7,445
+3555328,castle_defense_p1_v3,0.4143,122.52,449
+3555328,castle_defense_p1_v4,0.2863,122.16,461
+3555328,castle_defense_p1_v7,0.3075,123.2,478
+3670016,Anti-Spam Bot,0.3556,121.88,405
+3670016,Random Dummy,0.6836,122.94,354
+3670016,Spam Bot T1,0.904,122.35,500
+3670016,Spam Bot T2,0.8879,123.53,214
+3670016,Spam Bot T3,0.7237,121.99,76
+3670016,Spam Bot T4,0.5217,122.22,92
+3670016,Spam Bot T5,0.2973,124.25,74
+3670016,Spam Bot T6,0.6744,122.49,86
+3670016,Spam Bot T7,0.6557,124.56,61
+3670016,Spam Bot T8,0.8974,123.32,117
+3670016,castle_defense_p1_v14,0.6782,122.31,463
+3670016,castle_defense_p1_v16,0.3753,121.87,461
+3670016,castle_defense_p1_v20,0.3376,122.84,474
+3670016,castle_defense_p1_v21,0.448,121.7,500
+3670016,castle_defense_p1_v22,0.7722,123.99,461
+3670016,castle_defense_p1_v3,0.41,122.04,461
+3670016,castle_defense_p1_v4,0.2845,121.78,471
+3670016,castle_defense_p1_v7,0.3069,122.65,492
+3784704,Anti-Spam Bot,0.3501,121.9,417
+3784704,Random Dummy,0.6841,122.93,364
+3784704,Spam Bot T1,0.9,122.68,500
+3784704,Spam Bot T2,0.8894,123.51,217
+3784704,Spam Bot T3,0.7237,121.99,76
+3784704,Spam Bot T4,0.5106,122.22,94
+3784704,Spam Bot T5,0.3165,124.14,79
+3784704,Spam Bot T6,0.6782,122.49,87
+3784704,Spam Bot T7,0.6562,124.46,64
+3784704,Spam Bot T8,0.9,123.3,120
+3784704,castle_defense_p1_v14,0.6771,122.32,480
+3784704,castle_defense_p1_v16,0.3742,121.89,473
+3784704,castle_defense_p1_v20,0.3306,122.83,493
+3784704,castle_defense_p1_v21,0.46,121.91,500
+3784704,castle_defense_p1_v22,0.7713,123.93,481
+3784704,castle_defense_p1_v3,0.4112,122.06,484
+3784704,castle_defense_p1_v4,0.2878,121.79,483
+3784704,castle_defense_p1_v7,0.31,122.38,500
+3899392,Anti-Spam Bot,0.3513,121.93,427
+3899392,Random Dummy,0.6818,122.93,374
+3899392,Spam Bot T1,0.902,122.77,500
+3899392,Spam Bot T2,0.8894,123.49,226
+3899392,Spam Bot T3,0.7215,122.02,79
+3899392,Spam Bot T4,0.5158,122.23,95
+3899392,Spam Bot T5,0.3086,124.11,81
+3899392,Spam Bot T6,0.6813,122.51,91
+3899392,Spam Bot T7,0.6269,124.4,67
+3899392,Spam Bot T8,0.9024,123.29,123
+3899392,castle_defense_p1_v14,0.6721,122.34,494
+3899392,castle_defense_p1_v16,0.3778,121.92,487
+3899392,castle_defense_p1_v20,0.332,122.36,500
+3899392,castle_defense_p1_v21,0.462,122.3,500
+3899392,castle_defense_p1_v22,0.7751,123.89,498
+3899392,castle_defense_p1_v3,0.4125,122.09,497
+3899392,castle_defense_p1_v4,0.2892,121.83,498
+3899392,castle_defense_p1_v7,0.304,121.67,500
+4014080,Anti-Spam Bot,0.3494,122.34,435
+4014080,Random Dummy,0.6873,123.66,387
+4014080,Spam Bot T1,0.902,123.12,500
+4014080,Spam Bot T2,0.8889,124.21,234
+4014080,Spam Bot T3,0.716,122.58,81
+4014080,Spam Bot T4,0.51,123.35,100
+4014080,Spam Bot T5,0.3253,124.6,83
+4014080,Spam Bot T6,0.6848,122.75,92
+4014080,Spam Bot T7,0.6056,125.53,71
+4014080,Spam Bot T8,0.8984,124.12,128
+4014080,castle_defense_p1_v14,0.67,122.41,500
+4014080,castle_defense_p1_v16,0.376,122.46,500
+4014080,castle_defense_p1_v20,0.334,122.11,500
+4014080,castle_defense_p1_v21,0.456,123.11,500
+4014080,castle_defense_p1_v22,0.774,123.65,500
+4014080,castle_defense_p1_v3,0.414,122.22,500
+4014080,castle_defense_p1_v4,0.29,121.7,500
+4014080,castle_defense_p1_v7,0.316,122.72,500
+4128768,Anti-Spam Bot,0.3499,122.3,443
+4128768,Random Dummy,0.6851,123.57,397
+4128768,Spam Bot T1,0.91,122.4,500
+4128768,Spam Bot T2,0.8862,124.01,246
+4128768,Spam Bot T3,0.7108,122.52,83
+4128768,Spam Bot T4,0.5,123.22,104
+4128768,Spam Bot T5,0.3253,124.6,83
+4128768,Spam Bot T6,0.6882,122.72,93
+4128768,Spam Bot T7,0.6056,125.53,71
+4128768,Spam Bot T8,0.8955,123.94,134
+4128768,castle_defense_p1_v14,0.672,122.01,500
+4128768,castle_defense_p1_v16,0.376,121.44,500
+4128768,castle_defense_p1_v20,0.336,122.22,500
+4128768,castle_defense_p1_v21,0.468,123.05,500
+4128768,castle_defense_p1_v22,0.77,122.92,500
+4128768,castle_defense_p1_v3,0.412,122.44,500
+4128768,castle_defense_p1_v4,0.286,121.5,500
+4128768,castle_defense_p1_v7,0.316,122.8,500
+4243456,Anti-Spam Bot,0.354,122.42,452
+4243456,Random Dummy,0.6897,123.67,406
+4243456,Spam Bot T1,0.902,122.79,500
+4243456,Spam Bot T2,0.8814,124.13,253
+4243456,Spam Bot T3,0.7209,122.72,86
+4243456,Spam Bot T4,0.5,123.32,106
+4243456,Spam Bot T5,0.3409,124.81,88
+4243456,Spam Bot T6,0.6842,122.84,95
+4243456,Spam Bot T7,0.6027,125.61,73
+4243456,Spam Bot T8,0.8913,124.07,138
+4243456,castle_defense_p1_v14,0.664,122.64,500
+4243456,castle_defense_p1_v16,0.376,122.13,500
+4243456,castle_defense_p1_v20,0.338,122.6,500
+4243456,castle_defense_p1_v21,0.466,123.6,500
+4243456,castle_defense_p1_v22,0.766,123.43,500
+4243456,castle_defense_p1_v3,0.414,122.99,500
+4243456,castle_defense_p1_v4,0.282,122.18,500
+4243456,castle_defense_p1_v7,0.304,123.61,500
+4358144,Anti-Spam Bot,0.3521,122.34,463
+4358144,Random Dummy,0.6835,123.55,417
+4358144,Spam Bot T1,0.902,123.11,500
+4358144,Spam Bot T2,0.8837,124.03,258
+4358144,Spam Bot T3,0.7283,122.48,92
+4358144,Spam Bot T4,0.4907,123.24,108
+4358144,Spam Bot T5,0.3407,124.62,91
+4358144,Spam Bot T6,0.697,122.69,99
+4358144,Spam Bot T7,0.6081,125.52,74
+4358144,Spam Bot T8,0.8936,123.96,141
+4358144,castle_defense_p1_v14,0.668,122.83,500
+4358144,castle_defense_p1_v16,0.376,122.44,500
+4358144,castle_defense_p1_v20,0.338,122.97,500
+4358144,castle_defense_p1_v21,0.472,123.16,500
+4358144,castle_defense_p1_v22,0.768,123.72,500
+4358144,castle_defense_p1_v3,0.414,123.37,500
+4358144,castle_defense_p1_v4,0.286,122.4,500
+4358144,castle_defense_p1_v7,0.31,123.58,500
+4472832,Anti-Spam Bot,0.3502,122.59,474
+4472832,Random Dummy,0.6869,123.8,428
+4472832,Spam Bot T1,0.896,123.47,500
+4472832,Spam Bot T2,0.8859,124.21,263
+4472832,Spam Bot T3,0.7216,123.04,97
+4472832,Spam Bot T4,0.4955,123.51,111
+4472832,Spam Bot T5,0.3438,125.07,96
+4472832,Spam Bot T6,0.7,122.79,100
+4472832,Spam Bot T7,0.625,126.1,80
+4472832,Spam Bot T8,0.8951,124.09,143
+4472832,castle_defense_p1_v14,0.666,123.11,500
+4472832,castle_defense_p1_v16,0.382,123.15,500
+4472832,castle_defense_p1_v20,0.336,123.12,500
+4472832,castle_defense_p1_v21,0.464,123.07,500
+4472832,castle_defense_p1_v22,0.77,124.43,500
+4472832,castle_defense_p1_v3,0.422,124.22,500
+4472832,castle_defense_p1_v4,0.29,122.83,500
+4472832,castle_defense_p1_v7,0.312,124.07,500
+4587520,Anti-Spam Bot,0.3516,121.98,492
+4587520,Random Dummy,0.6879,123.35,439
+4587520,Spam Bot T1,0.892,122.14,500
+4587520,Spam Bot T2,0.8909,123.41,275
+4587520,Spam Bot T3,0.7143,122.86,98
+4587520,Spam Bot T4,0.5086,122.75,116
+4587520,Spam Bot T5,0.3469,124.68,98
+4587520,Spam Bot T6,0.7059,122.46,102
+4587520,Spam Bot T7,0.6296,125.85,81
+4587520,Spam Bot T8,0.8844,123.59,147
+4587520,castle_defense_p1_v14,0.664,122.79,500
+4587520,castle_defense_p1_v16,0.382,123.05,500
+4587520,castle_defense_p1_v20,0.342,122.99,500
+4587520,castle_defense_p1_v21,0.46,122.73,500
+4587520,castle_defense_p1_v22,0.776,123.88,500
+4587520,castle_defense_p1_v3,0.426,123.72,500
+4587520,castle_defense_p1_v4,0.282,122.69,500
+4587520,castle_defense_p1_v7,0.312,123.65,500
+4702208,Anti-Spam Bot,0.354,121.82,500
+4702208,Random Dummy,0.6882,123.2,449
+4702208,Spam Bot T1,0.886,121.91,500
+4702208,Spam Bot T2,0.8925,123.31,279
+4702208,Spam Bot T3,0.7184,122.56,103
+4702208,Spam Bot T4,0.5042,122.6,119
+4702208,Spam Bot T5,0.3564,124.44,101
+4702208,Spam Bot T6,0.7115,122.35,104
+4702208,Spam Bot T7,0.6145,125.63,83
+4702208,Spam Bot T8,0.8851,123.55,148
+4702208,castle_defense_p1_v14,0.66,122.28,500
+4702208,castle_defense_p1_v16,0.376,122.54,500
+4702208,castle_defense_p1_v20,0.338,122.78,500
+4702208,castle_defense_p1_v21,0.46,122.68,500
+4702208,castle_defense_p1_v22,0.776,123.29,500
+4702208,castle_defense_p1_v3,0.426,123.43,500
+4702208,castle_defense_p1_v4,0.286,122.18,500
+4702208,castle_defense_p1_v7,0.312,123.21,500
+4816896,Anti-Spam Bot,0.35,121.38,500
+4816896,Random Dummy,0.6856,123.32,458
+4816896,Spam Bot T1,0.882,122.16,500
+4816896,Spam Bot T2,0.8927,123.51,289
+4816896,Spam Bot T3,0.717,122.75,106
+4816896,Spam Bot T4,0.5122,122.81,123
+4816896,Spam Bot T5,0.3592,124.53,103
+4816896,Spam Bot T6,0.717,122.48,106
+4816896,Spam Bot T7,0.6207,125.79,87
+4816896,Spam Bot T8,0.8808,123.66,151
+4816896,castle_defense_p1_v14,0.658,122.69,500
+4816896,castle_defense_p1_v16,0.374,122.67,500
+4816896,castle_defense_p1_v20,0.336,122.58,500
+4816896,castle_defense_p1_v21,0.456,123.04,500
+4816896,castle_defense_p1_v22,0.778,123.37,500
+4816896,castle_defense_p1_v3,0.432,123.2,500
+4816896,castle_defense_p1_v4,0.284,122.11,500
+4816896,castle_defense_p1_v7,0.312,123.06,500
+4931584,Anti-Spam Bot,0.348,121.35,500
+4931584,Random Dummy,0.6905,123.0,475
+4931584,Spam Bot T1,0.882,121.85,500
+4931584,Spam Bot T2,0.8855,123.27,297
+4931584,Spam Bot T3,0.7232,122.31,112
+4931584,Spam Bot T4,0.5159,122.61,126
+4931584,Spam Bot T5,0.3611,124.07,108
+4931584,Spam Bot T6,0.7222,122.33,108
+4931584,Spam Bot T7,0.6136,125.66,88
+4931584,Spam Bot T8,0.8774,123.42,155
+4931584,castle_defense_p1_v14,0.652,122.62,500
+4931584,castle_defense_p1_v16,0.382,122.63,500
+4931584,castle_defense_p1_v20,0.34,122.15,500
+4931584,castle_defense_p1_v21,0.454,122.92,500
+4931584,castle_defense_p1_v22,0.778,123.25,500
+4931584,castle_defense_p1_v3,0.432,122.95,500
+4931584,castle_defense_p1_v4,0.28,122.04,500
+4931584,castle_defense_p1_v7,0.306,122.92,500
+5046272,Anti-Spam Bot,0.354,121.95,500
+5046272,Random Dummy,0.6929,123.07,482
+5046272,Spam Bot T1,0.882,122.41,500
+5046272,Spam Bot T2,0.8824,123.4,306
+5046272,Spam Bot T3,0.7304,122.45,115
+5046272,Spam Bot T4,0.5154,122.77,130
+5046272,Spam Bot T5,0.3628,124.24,113
+5046272,Spam Bot T6,0.7222,122.33,108
+5046272,Spam Bot T7,0.6154,125.73,91
+5046272,Spam Bot T8,0.8782,123.45,156
+5046272,castle_defense_p1_v14,0.652,122.93,500
+5046272,castle_defense_p1_v16,0.384,122.93,500
+5046272,castle_defense_p1_v20,0.344,122.43,500
+5046272,castle_defense_p1_v21,0.454,122.82,500
+5046272,castle_defense_p1_v22,0.776,123.6,500
+5046272,castle_defense_p1_v3,0.442,123.26,500
+5046272,castle_defense_p1_v4,0.278,122.52,500
+5046272,castle_defense_p1_v7,0.308,123.05,500
+5160960,Anti-Spam Bot,0.354,122.19,500
+5160960,Random Dummy,0.6915,123.33,496
+5160960,Spam Bot T1,0.882,121.92,500
+5160960,Spam Bot T2,0.8829,123.68,316
+5160960,Spam Bot T3,0.7395,122.78,119
+5160960,Spam Bot T4,0.5149,123.05,134
+5160960,Spam Bot T5,0.3707,124.44,116
+5160960,Spam Bot T6,0.7182,122.51,110
+5160960,Spam Bot T7,0.6105,126.01,95
+5160960,Spam Bot T8,0.8797,123.56,158
+5160960,castle_defense_p1_v14,0.642,122.89,500
+5160960,castle_defense_p1_v16,0.382,123.15,500
+5160960,castle_defense_p1_v20,0.346,122.77,500
+5160960,castle_defense_p1_v21,0.45,122.75,500
+5160960,castle_defense_p1_v22,0.776,123.77,500
+5160960,castle_defense_p1_v3,0.446,123.28,500
+5160960,castle_defense_p1_v4,0.268,122.7,500
+5160960,castle_defense_p1_v7,0.314,123.45,500
+5275648,Anti-Spam Bot,0.35,121.85,500
+5275648,Random Dummy,0.696,122.73,500
+5275648,Spam Bot T1,0.874,120.83,500
+5275648,Spam Bot T2,0.8789,123.4,322
+5275648,Spam Bot T3,0.7438,122.54,121
+5275648,Spam Bot T4,0.5036,122.73,137
+5275648,Spam Bot T5,0.3782,124.04,119
+5275648,Spam Bot T6,0.7207,122.38,111
+5275648,Spam Bot T7,0.6082,125.65,97
+5275648,Spam Bot T8,0.8765,123.19,162
+5275648,castle_defense_p1_v14,0.642,122.04,500
+5275648,castle_defense_p1_v16,0.382,122.31,500
+5275648,castle_defense_p1_v20,0.352,122.12,500
+5275648,castle_defense_p1_v21,0.446,122.17,500
+5275648,castle_defense_p1_v22,0.774,122.9,500
+5275648,castle_defense_p1_v3,0.444,122.64,500
+5275648,castle_defense_p1_v4,0.268,121.84,500
+5275648,castle_defense_p1_v7,0.322,122.5,500
+5390336,Anti-Spam Bot,0.35,122.17,500
+5390336,Random Dummy,0.704,122.56,500
+5390336,Spam Bot T1,0.874,121.78,500
+5390336,Spam Bot T2,0.8773,123.48,326
+5390336,Spam Bot T3,0.7317,122.66,123
+5390336,Spam Bot T4,0.5105,123.03,143
+5390336,Spam Bot T5,0.3968,124.36,126
+5390336,Spam Bot T6,0.7143,122.45,112
+5390336,Spam Bot T7,0.602,125.69,98
+5390336,Spam Bot T8,0.878,123.27,164
+5390336,castle_defense_p1_v14,0.638,122.31,500
+5390336,castle_defense_p1_v16,0.39,122.25,500
+5390336,castle_defense_p1_v20,0.346,122.06,500
+5390336,castle_defense_p1_v21,0.442,122.36,500
+5390336,castle_defense_p1_v22,0.772,122.96,500
+5390336,castle_defense_p1_v3,0.452,122.88,500
+5390336,castle_defense_p1_v4,0.264,122.08,500
+5390336,castle_defense_p1_v7,0.312,122.76,500
+5505024,Anti-Spam Bot,0.344,122.19,500
+5505024,Random Dummy,0.696,122.86,500
+5505024,Spam Bot T1,0.874,122.1,500
+5505024,Spam Bot T2,0.878,123.53,336
+5505024,Spam Bot T3,0.7381,122.73,126
+5505024,Spam Bot T4,0.5034,123.09,147
+5505024,Spam Bot T5,0.3923,124.39,130
+5505024,Spam Bot T6,0.7155,122.55,116
+5505024,Spam Bot T7,0.602,125.69,98
+5505024,Spam Bot T8,0.8765,123.34,170
+5505024,castle_defense_p1_v14,0.646,122.52,500
+5505024,castle_defense_p1_v16,0.4,122.43,500
+5505024,castle_defense_p1_v20,0.34,121.87,500
+5505024,castle_defense_p1_v21,0.434,122.85,500
+5505024,castle_defense_p1_v22,0.776,123.04,500
+5505024,castle_defense_p1_v3,0.452,123.07,500
+5505024,castle_defense_p1_v4,0.266,122.45,500
+5505024,castle_defense_p1_v7,0.312,123.21,500
+5619712,Anti-Spam Bot,0.344,122.11,500
+5619712,Random Dummy,0.696,123.24,500
+5619712,Spam Bot T1,0.874,121.26,500
+5619712,Spam Bot T2,0.8815,123.58,346
+5619712,Spam Bot T3,0.7364,122.78,129
+5619712,Spam Bot T4,0.5067,123.13,150
+5619712,Spam Bot T5,0.3835,124.41,133
+5619712,Spam Bot T6,0.7034,122.59,118
+5619712,Spam Bot T7,0.5882,125.66,102
+5619712,Spam Bot T8,0.8736,123.38,174
+5619712,castle_defense_p1_v14,0.65,122.85,500
+5619712,castle_defense_p1_v16,0.398,122.46,500
+5619712,castle_defense_p1_v20,0.34,121.92,500
+5619712,castle_defense_p1_v21,0.442,123.26,500
+5619712,castle_defense_p1_v22,0.79,123.41,500
+5619712,castle_defense_p1_v3,0.448,123.46,500
+5619712,castle_defense_p1_v4,0.268,122.87,500
+5619712,castle_defense_p1_v7,0.308,123.43,500
+5734400,Anti-Spam Bot,0.346,122.25,500
+5734400,Random Dummy,0.69,123.51,500
+5734400,Spam Bot T1,0.87,121.64,500
+5734400,Spam Bot T2,0.8845,123.82,355
+5734400,Spam Bot T3,0.7388,123.17,134
+5734400,Spam Bot T4,0.5032,123.45,155
+5734400,Spam Bot T5,0.3852,124.54,135
+5734400,Spam Bot T6,0.7059,122.68,119
+5734400,Spam Bot T7,0.5794,126.01,107
+5734400,Spam Bot T8,0.8686,123.44,175
+5734400,castle_defense_p1_v14,0.656,123.14,500
+5734400,castle_defense_p1_v16,0.402,123.08,500
+5734400,castle_defense_p1_v20,0.344,122.53,500
+5734400,castle_defense_p1_v21,0.44,123.57,500
+5734400,castle_defense_p1_v22,0.786,123.66,500
+5734400,castle_defense_p1_v3,0.454,123.78,500
+5734400,castle_defense_p1_v4,0.268,123.2,500
+5734400,castle_defense_p1_v7,0.302,123.62,500
+5849088,Anti-Spam Bot,0.35,121.76,500
+5849088,Random Dummy,0.686,123.02,500
+5849088,Spam Bot T1,0.878,120.41,500
+5849088,Spam Bot T2,0.8877,122.91,365
+5849088,Spam Bot T3,0.7407,122.92,135
+5849088,Spam Bot T4,0.5032,123.45,155
+5849088,Spam Bot T5,0.3796,124.04,137
+5849088,Spam Bot T6,0.7025,122.15,121
+5849088,Spam Bot T7,0.5833,125.68,108
+5849088,Spam Bot T8,0.8701,123.07,177
+5849088,castle_defense_p1_v14,0.658,121.84,500
+5849088,castle_defense_p1_v16,0.402,122.43,500
+5849088,castle_defense_p1_v20,0.338,121.93,500
+5849088,castle_defense_p1_v21,0.442,122.79,500
+5849088,castle_defense_p1_v22,0.792,122.59,500
+5849088,castle_defense_p1_v3,0.454,122.57,500
+5849088,castle_defense_p1_v4,0.264,121.98,500
+5849088,castle_defense_p1_v7,0.306,122.2,500
+5963776,Anti-Spam Bot,0.342,122.2,500
+5963776,Random Dummy,0.684,123.26,500
+5963776,Spam Bot T1,0.88,121.72,500
+5963776,Spam Bot T2,0.8865,123.01,370
+5963776,Spam Bot T3,0.7372,123.03,137
+5963776,Spam Bot T4,0.5064,123.5,156
+5963776,Spam Bot T5,0.383,124.22,141
+5963776,Spam Bot T6,0.7049,122.22,122
+5963776,Spam Bot T7,0.5909,125.77,110
+5963776,Spam Bot T8,0.875,123.35,184
+5963776,castle_defense_p1_v14,0.65,122.01,500
+5963776,castle_defense_p1_v16,0.398,122.51,500
+5963776,castle_defense_p1_v20,0.338,122.06,500
+5963776,castle_defense_p1_v21,0.442,122.81,500
+5963776,castle_defense_p1_v22,0.794,122.67,500
+5963776,castle_defense_p1_v3,0.45,122.58,500
+5963776,castle_defense_p1_v4,0.276,122.26,500
+5963776,castle_defense_p1_v7,0.31,122.35,500
+6078464,Anti-Spam Bot,0.346,122.17,500
+6078464,Random Dummy,0.682,123.2,500
+6078464,Spam Bot T1,0.884,122.3,500
+6078464,Spam Bot T2,0.8783,123.19,378
+6078464,Spam Bot T3,0.7483,123.39,143
+6078464,Spam Bot T4,0.5031,123.65,159
+6078464,Spam Bot T5,0.3873,124.27,142
+6078464,Spam Bot T6,0.6953,122.65,128
+6078464,Spam Bot T7,0.5804,125.87,112
+6078464,Spam Bot T8,0.8723,123.52,188
+6078464,castle_defense_p1_v14,0.656,122.16,500
+6078464,castle_defense_p1_v16,0.406,122.83,500
+6078464,castle_defense_p1_v20,0.344,122.11,500
+6078464,castle_defense_p1_v21,0.434,123.03,500
+6078464,castle_defense_p1_v22,0.796,122.98,500
+6078464,castle_defense_p1_v3,0.456,122.94,500
+6078464,castle_defense_p1_v4,0.284,122.46,500
+6078464,castle_defense_p1_v7,0.306,122.75,500
+6193152,Anti-Spam Bot,0.342,121.85,500
+6193152,Random Dummy,0.682,123.04,500
+6193152,Spam Bot T1,0.894,122.22,500
+6193152,Spam Bot T2,0.8796,123.16,382
+6193152,Spam Bot T3,0.7448,123.35,145
+6193152,Spam Bot T4,0.5093,123.61,161
+6193152,Spam Bot T5,0.3889,124.22,144
+6193152,Spam Bot T6,0.6846,122.62,130
+6193152,Spam Bot T7,0.5804,125.87,112
+6193152,Spam Bot T8,0.873,123.51,189
+6193152,castle_defense_p1_v14,0.658,122.18,500
+6193152,castle_defense_p1_v16,0.404,122.82,500
+6193152,castle_defense_p1_v20,0.348,121.97,500
+6193152,castle_defense_p1_v21,0.436,122.86,500
+6193152,castle_defense_p1_v22,0.802,122.96,500
+6193152,castle_defense_p1_v3,0.456,122.84,500
+6193152,castle_defense_p1_v4,0.278,122.46,500
+6193152,castle_defense_p1_v7,0.308,122.8,500
+6307840,Anti-Spam Bot,0.34,121.94,500
+6307840,Random Dummy,0.674,123.18,500
+6307840,Spam Bot T1,0.896,122.09,500
+6307840,Spam Bot T2,0.8779,123.16,393
+6307840,Spam Bot T3,0.7466,123.35,146
+6307840,Spam Bot T4,0.5091,123.6,165
+6307840,Spam Bot T5,0.396,124.18,149
+6307840,Spam Bot T6,0.6815,122.64,135
+6307840,Spam Bot T7,0.5913,125.8,115
+6307840,Spam Bot T8,0.8743,123.5,191
+6307840,castle_defense_p1_v14,0.66,122.22,500
+6307840,castle_defense_p1_v16,0.41,122.92,500
+6307840,castle_defense_p1_v20,0.348,121.95,500
+6307840,castle_defense_p1_v21,0.44,122.98,500
+6307840,castle_defense_p1_v22,0.802,123.14,500
+6307840,castle_defense_p1_v3,0.456,122.82,500
+6307840,castle_defense_p1_v4,0.272,122.58,500
+6307840,castle_defense_p1_v7,0.298,122.25,500
+6422528,Anti-Spam Bot,0.346,122.09,500
+6422528,Random Dummy,0.676,123.4,500
+6422528,Spam Bot T1,0.896,122.08,500
+6422528,Spam Bot T2,0.879,123.39,405
+6422528,Spam Bot T3,0.75,123.45,148
+6422528,Spam Bot T4,0.5091,123.6,165
+6422528,Spam Bot T5,0.3933,124.23,150
+6422528,Spam Bot T6,0.6831,123.05,142
+6422528,Spam Bot T7,0.605,125.97,119
+6422528,Spam Bot T8,0.8731,123.73,197
+6422528,castle_defense_p1_v14,0.662,121.93,500
+6422528,castle_defense_p1_v16,0.408,122.94,500
+6422528,castle_defense_p1_v20,0.352,122.27,500
+6422528,castle_defense_p1_v21,0.432,123.36,500
+6422528,castle_defense_p1_v22,0.8,122.86,500
+6422528,castle_defense_p1_v3,0.462,123.12,500
+6422528,castle_defense_p1_v4,0.276,122.9,500
+6422528,castle_defense_p1_v7,0.298,122.14,500
+6537216,Anti-Spam Bot,0.34,122.52,500
+6537216,Random Dummy,0.674,123.23,500
+6537216,Spam Bot T1,0.896,122.19,500
+6537216,Spam Bot T2,0.8786,123.39,412
+6537216,Spam Bot T3,0.7434,123.46,152
+6537216,Spam Bot T4,0.5176,123.6,170
+6537216,Spam Bot T5,0.3922,124.21,153
+6537216,Spam Bot T6,0.6918,123.06,146
+6537216,Spam Bot T7,0.605,125.97,119
+6537216,Spam Bot T8,0.875,123.73,200
+6537216,castle_defense_p1_v14,0.67,121.86,500
+6537216,castle_defense_p1_v16,0.408,122.53,500
+6537216,castle_defense_p1_v20,0.358,122.5,500
+6537216,castle_defense_p1_v21,0.436,123.12,500
+6537216,castle_defense_p1_v22,0.798,122.81,500
+6537216,castle_defense_p1_v3,0.468,123.16,500
+6537216,castle_defense_p1_v4,0.274,122.43,500
+6537216,castle_defense_p1_v7,0.292,122.31,500
+6651904,Anti-Spam Bot,0.336,121.7,500
+6651904,Random Dummy,0.676,122.09,500
+6651904,Spam Bot T1,0.904,120.84,500
+6651904,Spam Bot T2,0.8798,123.15,416
+6651904,Spam Bot T3,0.7468,123.13,154
+6651904,Spam Bot T4,0.5176,123.6,170
+6651904,Spam Bot T5,0.3896,124.04,154
+6651904,Spam Bot T6,0.7,122.4,150
+6651904,Spam Bot T7,0.5968,124.85,124
+6651904,Spam Bot T8,0.8762,123.48,202
+6651904,castle_defense_p1_v14,0.668,121.66,500
+6651904,castle_defense_p1_v16,0.4,122.2,500
+6651904,castle_defense_p1_v20,0.356,121.32,500
+6651904,castle_defense_p1_v21,0.422,122.34,500
+6651904,castle_defense_p1_v22,0.8,122.37,500
+6651904,castle_defense_p1_v3,0.464,121.81,500
+6651904,castle_defense_p1_v4,0.27,121.36,500
+6651904,castle_defense_p1_v7,0.292,121.88,500
+6766592,Anti-Spam Bot,0.336,121.44,500
+6766592,Random Dummy,0.686,122.07,500
+6766592,Spam Bot T1,0.902,120.92,500
+6766592,Spam Bot T2,0.8812,123.12,421
+6766592,Spam Bot T3,0.7452,123.08,157
+6766592,Spam Bot T4,0.5176,123.6,170
+6766592,Spam Bot T5,0.3822,123.98,157
+6766592,Spam Bot T6,0.6863,122.37,153
+6766592,Spam Bot T7,0.5984,124.76,127
+6766592,Spam Bot T8,0.8738,123.42,206
+6766592,castle_defense_p1_v14,0.668,121.78,500
+6766592,castle_defense_p1_v16,0.406,122.54,500
+6766592,castle_defense_p1_v20,0.348,120.67,500
+6766592,castle_defense_p1_v21,0.422,122.8,500
+6766592,castle_defense_p1_v22,0.796,122.45,500
+6766592,castle_defense_p1_v3,0.464,122.02,500
+6766592,castle_defense_p1_v4,0.274,121.74,500
+6766592,castle_defense_p1_v7,0.298,121.56,500
+6881280,Anti-Spam Bot,0.334,121.06,500
+6881280,Random Dummy,0.684,121.93,500
+6881280,Spam Bot T1,0.902,120.09,500
+6881280,Spam Bot T2,0.8821,123.01,424
+6881280,Spam Bot T3,0.7438,122.8,160
+6881280,Spam Bot T4,0.5205,123.51,171
+6881280,Spam Bot T5,0.3797,123.88,158
+6881280,Spam Bot T6,0.6815,122.0,157
+6881280,Spam Bot T7,0.5954,124.25,131
+6881280,Spam Bot T8,0.8756,123.2,209
+6881280,castle_defense_p1_v14,0.658,121.22,500
+6881280,castle_defense_p1_v16,0.408,121.66,500
+6881280,castle_defense_p1_v20,0.34,120.44,500
+6881280,castle_defense_p1_v21,0.424,122.4,500
+6881280,castle_defense_p1_v22,0.796,121.39,500
+6881280,castle_defense_p1_v3,0.464,121.87,500
+6881280,castle_defense_p1_v4,0.28,121.5,500
+6881280,castle_defense_p1_v7,0.312,120.26,500
+6995968,Anti-Spam Bot,0.328,120.93,500
+6995968,Random Dummy,0.688,121.73,500
+6995968,Spam Bot T1,0.904,120.18,500
+6995968,Spam Bot T2,0.8825,122.81,434
+6995968,Spam Bot T3,0.7485,122.64,163
+6995968,Spam Bot T4,0.5284,123.24,176
+6995968,Spam Bot T5,0.3913,123.7,161
+6995968,Spam Bot T6,0.6855,121.9,159
+6995968,Spam Bot T7,0.594,124.1,133
+6995968,Spam Bot T8,0.8762,123.16,210
+6995968,castle_defense_p1_v14,0.656,120.54,500
+6995968,castle_defense_p1_v16,0.418,121.29,500
+6995968,castle_defense_p1_v20,0.338,120.43,500
+6995968,castle_defense_p1_v21,0.414,121.59,500
+6995968,castle_defense_p1_v22,0.796,120.74,500
+6995968,castle_defense_p1_v3,0.462,121.38,500
+6995968,castle_defense_p1_v4,0.282,120.86,500
+6995968,castle_defense_p1_v7,0.32,119.96,500
+7110656,Anti-Spam Bot,0.316,121.01,500
+7110656,Random Dummy,0.682,122.1,500
+7110656,Spam Bot T1,0.902,120.8,500
+7110656,Spam Bot T2,0.8838,122.88,439
+7110656,Spam Bot T3,0.7439,122.68,164
+7110656,Spam Bot T4,0.5278,123.37,180
+7110656,Spam Bot T5,0.3913,123.7,161
+7110656,Spam Bot T6,0.6829,122.12,164
+7110656,Spam Bot T7,0.5912,124.24,137
+7110656,Spam Bot T8,0.8774,123.21,212
+7110656,castle_defense_p1_v14,0.65,120.85,500
+7110656,castle_defense_p1_v16,0.42,121.7,500
+7110656,castle_defense_p1_v20,0.344,120.3,500
+7110656,castle_defense_p1_v21,0.42,121.45,500
+7110656,castle_defense_p1_v22,0.79,120.84,500
+7110656,castle_defense_p1_v3,0.454,121.21,500
+7110656,castle_defense_p1_v4,0.286,120.88,500
+7110656,castle_defense_p1_v7,0.322,120.8,500
+7225344,Anti-Spam Bot,0.318,120.65,500
+7225344,Random Dummy,0.698,121.57,500
+7225344,Spam Bot T1,0.908,119.73,500
+7225344,Spam Bot T2,0.8851,122.7,444
+7225344,Spam Bot T3,0.7485,122.4,167
+7225344,Spam Bot T4,0.522,123.19,182
+7225344,Spam Bot T5,0.3865,123.49,163
+7225344,Spam Bot T6,0.6807,121.94,166
+7225344,Spam Bot T7,0.5944,123.52,143
+7225344,Spam Bot T8,0.8796,122.91,216
+7225344,castle_defense_p1_v14,0.64,121.0,500
+7225344,castle_defense_p1_v16,0.426,121.8,500
+7225344,castle_defense_p1_v20,0.338,119.6,500
+7225344,castle_defense_p1_v21,0.424,121.11,500
+7225344,castle_defense_p1_v22,0.788,120.5,500
+7225344,castle_defense_p1_v3,0.448,120.83,500
+7225344,castle_defense_p1_v4,0.284,120.43,500
+7225344,castle_defense_p1_v7,0.326,120.91,500
+7340032,Anti-Spam Bot,0.324,120.62,500
+7340032,Random Dummy,0.696,121.32,500
+7340032,Spam Bot T1,0.908,119.71,500
+7340032,Spam Bot T2,0.8857,122.68,446
+7340032,Spam Bot T3,0.75,122.26,172
+7340032,Spam Bot T4,0.5243,123.1,185
+7340032,Spam Bot T5,0.3855,123.39,166
+7340032,Spam Bot T6,0.6725,121.81,171
+7340032,Spam Bot T7,0.5903,123.48,144
+7340032,Spam Bot T8,0.8818,122.82,220
+7340032,castle_defense_p1_v14,0.646,121.08,500
+7340032,castle_defense_p1_v16,0.428,122.13,500
+7340032,castle_defense_p1_v20,0.334,119.6,500
+7340032,castle_defense_p1_v21,0.428,121.77,500
+7340032,castle_defense_p1_v22,0.784,120.87,500
+7340032,castle_defense_p1_v3,0.446,120.7,500
+7340032,castle_defense_p1_v4,0.28,120.88,500
+7340032,castle_defense_p1_v7,0.32,120.75,500
+7454720,Anti-Spam Bot,0.318,120.18,500
+7454720,Random Dummy,0.704,121.44,500
+7454720,Spam Bot T1,0.912,119.68,500
+7454720,Spam Bot T2,0.885,122.73,452
+7454720,Spam Bot T3,0.7529,122.31,174
+7454720,Spam Bot T4,0.5241,123.14,187
+7454720,Spam Bot T5,0.3892,123.41,167
+7454720,Spam Bot T6,0.6686,121.84,172
+7454720,Spam Bot T7,0.5862,123.5,145
+7454720,Spam Bot T8,0.8829,122.85,222
+7454720,castle_defense_p1_v14,0.642,121.14,500
+7454720,castle_defense_p1_v16,0.426,122.42,500
+7454720,castle_defense_p1_v20,0.344,120.07,500
+7454720,castle_defense_p1_v21,0.426,122.03,500
+7454720,castle_defense_p1_v22,0.784,121.45,500
+7454720,castle_defense_p1_v3,0.45,121.53,500
+7454720,castle_defense_p1_v4,0.278,121.51,500
+7454720,castle_defense_p1_v7,0.316,120.39,500
+7569408,Anti-Spam Bot,0.324,120.28,500
+7569408,Random Dummy,0.698,121.54,500
+7569408,Spam Bot T1,0.908,119.64,500
+7569408,Spam Bot T2,0.8865,122.82,458
+7569408,Spam Bot T3,0.75,122.39,176
+7569408,Spam Bot T4,0.5288,123.27,191
+7569408,Spam Bot T5,0.3824,123.51,170
+7569408,Spam Bot T6,0.6667,121.93,174
+7569408,Spam Bot T7,0.5867,123.69,150
+7569408,Spam Bot T8,0.885,122.97,226
+7569408,castle_defense_p1_v14,0.644,121.34,500
+7569408,castle_defense_p1_v16,0.426,122.54,500
+7569408,castle_defense_p1_v20,0.352,120.74,500
+7569408,castle_defense_p1_v21,0.418,122.26,500
+7569408,castle_defense_p1_v22,0.788,121.63,500
+7569408,castle_defense_p1_v3,0.448,121.73,500
+7569408,castle_defense_p1_v4,0.276,121.68,500
+7569408,castle_defense_p1_v7,0.322,120.39,500
+7684096,Anti-Spam Bot,0.322,120.22,500
+7684096,Random Dummy,0.694,121.11,500
+7684096,Spam Bot T1,0.908,119.06,500
+7684096,Spam Bot T2,0.886,122.53,465
+7684096,Spam Bot T3,0.75,121.97,180
+7684096,Spam Bot T4,0.526,123.16,192
+7684096,Spam Bot T5,0.3829,122.94,175
+7684096,Spam Bot T6,0.6629,121.82,175
+7684096,Spam Bot T7,0.5894,123.56,151
+7684096,Spam Bot T8,0.8831,122.55,231
+7684096,castle_defense_p1_v14,0.646,120.09,500
+7684096,castle_defense_p1_v16,0.426,121.64,500
+7684096,castle_defense_p1_v20,0.352,120.31,500
+7684096,castle_defense_p1_v21,0.412,121.29,500
+7684096,castle_defense_p1_v22,0.782,120.52,500
+7684096,castle_defense_p1_v3,0.442,121.2,500
+7684096,castle_defense_p1_v4,0.278,120.62,500
+7684096,castle_defense_p1_v7,0.324,119.72,500
+7798784,Anti-Spam Bot,0.324,120.77,500
+7798784,Random Dummy,0.694,121.2,500
+7798784,Spam Bot T1,0.912,119.83,500
+7798784,Spam Bot T2,0.8865,122.59,467
+7798784,Spam Bot T3,0.7581,122.5,186
+7798784,Spam Bot T4,0.5303,123.62,198
+7798784,Spam Bot T5,0.3842,123.11,177
+7798784,Spam Bot T6,0.6704,122.19,179
+7798784,Spam Bot T7,0.5921,123.66,152
+7798784,Spam Bot T8,0.8846,122.75,234
+7798784,castle_defense_p1_v14,0.64,120.66,500
+7798784,castle_defense_p1_v16,0.43,122.04,500
+7798784,castle_defense_p1_v20,0.36,120.78,500
+7798784,castle_defense_p1_v21,0.404,121.68,500
+7798784,castle_defense_p1_v22,0.778,120.46,500
+7798784,castle_defense_p1_v3,0.438,121.62,500
+7798784,castle_defense_p1_v4,0.276,121.06,500
+7798784,castle_defense_p1_v7,0.324,120.19,500
+7913472,Anti-Spam Bot,0.32,120.57,500
+7913472,Random Dummy,0.692,120.85,500
+7913472,Spam Bot T1,0.914,118.88,500
+7913472,Spam Bot T2,0.8866,122.35,476
+7913472,Spam Bot T3,0.7594,122.43,187
+7913472,Spam Bot T4,0.53,123.49,200
+7913472,Spam Bot T5,0.3842,123.11,177
+7913472,Spam Bot T6,0.6703,121.99,182
+7913472,Spam Bot T7,0.5909,123.48,154
+7913472,Spam Bot T8,0.8824,122.53,238
+7913472,castle_defense_p1_v14,0.648,120.22,500
+7913472,castle_defense_p1_v16,0.424,121.61,500
+7913472,castle_defense_p1_v20,0.364,120.39,500
+7913472,castle_defense_p1_v21,0.41,121.35,500
+7913472,castle_defense_p1_v22,0.782,120.25,500
+7913472,castle_defense_p1_v3,0.432,120.79,500
+7913472,castle_defense_p1_v4,0.274,120.63,500
+7913472,castle_defense_p1_v7,0.318,119.75,500
+8028160,Anti-Spam Bot,0.32,120.16,500
+8028160,Random Dummy,0.702,121.23,500
+8028160,Spam Bot T1,0.918,118.76,500
+8028160,Spam Bot T2,0.888,122.36,482
+8028160,Spam Bot T3,0.7579,122.44,190
+8028160,Spam Bot T4,0.5297,123.48,202
+8028160,Spam Bot T5,0.3757,123.1,181
+8028160,Spam Bot T6,0.6739,121.99,184
+8028160,Spam Bot T7,0.5935,123.47,155
+8028160,Spam Bot T8,0.8838,122.53,241
+8028160,castle_defense_p1_v14,0.644,120.3,500
+8028160,castle_defense_p1_v16,0.422,121.45,500
+8028160,castle_defense_p1_v20,0.364,120.13,500
+8028160,castle_defense_p1_v21,0.404,121.22,500
+8028160,castle_defense_p1_v22,0.77,120.17,500
+8028160,castle_defense_p1_v3,0.438,120.76,500
+8028160,castle_defense_p1_v4,0.274,120.54,500
+8028160,castle_defense_p1_v7,0.32,119.95,500
+8142848,Anti-Spam Bot,0.318,120.51,500
+8142848,Random Dummy,0.702,121.3,500
+8142848,Spam Bot T1,0.918,119.49,500
+8142848,Spam Bot T2,0.8841,122.79,492
+8142848,Spam Bot T3,0.7604,122.66,192
+8142848,Spam Bot T4,0.5291,123.87,206
+8142848,Spam Bot T5,0.377,123.33,183
+8142848,Spam Bot T6,0.6774,122.23,186
+8142848,Spam Bot T7,0.5962,123.6,156
+8142848,Spam Bot T8,0.8852,122.79,244
+8142848,castle_defense_p1_v14,0.648,120.88,500
+8142848,castle_defense_p1_v16,0.42,122.27,500
+8142848,castle_defense_p1_v20,0.364,120.62,500
+8142848,castle_defense_p1_v21,0.402,121.96,500
+8142848,castle_defense_p1_v22,0.77,120.78,500
+8142848,castle_defense_p1_v3,0.44,121.53,500
+8142848,castle_defense_p1_v4,0.272,121.05,500
+8142848,castle_defense_p1_v7,0.32,120.43,500
+8257536,Anti-Spam Bot,0.318,120.76,500
+8257536,Random Dummy,0.706,121.24,500
+8257536,Spam Bot T1,0.918,119.32,500
+8257536,Spam Bot T2,0.8835,122.86,498
+8257536,Spam Bot T3,0.7641,122.75,195
+8257536,Spam Bot T4,0.5314,123.89,207
+8257536,Spam Bot T5,0.3797,123.44,187
+8257536,Spam Bot T6,0.6789,122.36,190
+8257536,Spam Bot T7,0.5962,123.6,156
+8257536,Spam Bot T8,0.8866,122.86,247
+8257536,castle_defense_p1_v14,0.65,121.2,500
+8257536,castle_defense_p1_v16,0.42,122.1,500
+8257536,castle_defense_p1_v20,0.366,120.79,500
+8257536,castle_defense_p1_v21,0.396,121.84,500
+8257536,castle_defense_p1_v22,0.77,120.78,500
+8257536,castle_defense_p1_v3,0.442,121.76,500
+8257536,castle_defense_p1_v4,0.27,121.12,500
+8257536,castle_defense_p1_v7,0.316,120.82,500
+8372224,Anti-Spam Bot,0.324,121.14,500
+8372224,Random Dummy,0.702,121.36,500
+8372224,Spam Bot T1,0.924,120.61,500
+8372224,Spam Bot T2,0.882,122.66,500
+8372224,Spam Bot T3,0.7614,122.76,197
+8372224,Spam Bot T4,0.5308,123.89,211
+8372224,Spam Bot T5,0.381,123.44,189
+8372224,Spam Bot T6,0.6753,122.39,194
+8372224,Spam Bot T7,0.5962,123.6,156
+8372224,Spam Bot T8,0.8871,122.87,248
+8372224,castle_defense_p1_v14,0.654,121.54,500
+8372224,castle_defense_p1_v16,0.422,122.38,500
+8372224,castle_defense_p1_v20,0.368,120.83,500
+8372224,castle_defense_p1_v21,0.394,122.33,500
+8372224,castle_defense_p1_v22,0.762,120.89,500
+8372224,castle_defense_p1_v3,0.448,121.51,500
+8372224,castle_defense_p1_v4,0.268,121.29,500
+8372224,castle_defense_p1_v7,0.316,120.79,500
+8486912,Anti-Spam Bot,0.322,121.53,500
+8486912,Random Dummy,0.698,121.87,500
+8486912,Spam Bot T1,0.924,120.89,500
+8486912,Spam Bot T2,0.882,122.64,500
+8486912,Spam Bot T3,0.7638,122.81,199
+8486912,Spam Bot T4,0.5305,123.93,213
+8486912,Spam Bot T5,0.3906,123.52,192
+8486912,Spam Bot T6,0.6753,122.39,194
+8486912,Spam Bot T7,0.5949,123.66,158
+8486912,Spam Bot T8,0.8798,123.08,258
+8486912,castle_defense_p1_v14,0.652,121.79,500
+8486912,castle_defense_p1_v16,0.42,122.91,500
+8486912,castle_defense_p1_v20,0.37,121.55,500
+8486912,castle_defense_p1_v21,0.39,122.46,500
+8486912,castle_defense_p1_v22,0.758,121.42,500
+8486912,castle_defense_p1_v3,0.446,122.17,500
+8486912,castle_defense_p1_v4,0.27,121.73,500
+8486912,castle_defense_p1_v7,0.31,120.66,500
+8601600,Anti-Spam Bot,0.324,121.33,500
+8601600,Random Dummy,0.704,121.94,500
+8601600,Spam Bot T1,0.918,119.88,500
+8601600,Spam Bot T2,0.886,122.56,500
+8601600,Spam Bot T3,0.765,122.73,200
+8601600,Spam Bot T4,0.5231,123.7,216
+8601600,Spam Bot T5,0.3939,123.03,198
+8601600,Spam Bot T6,0.6768,122.09,198
+8601600,Spam Bot T7,0.5938,123.46,160
+8601600,Spam Bot T8,0.8774,122.9,261
+8601600,castle_defense_p1_v14,0.64,121.03,500
+8601600,castle_defense_p1_v16,0.43,122.3,500
+8601600,castle_defense_p1_v20,0.372,121.32,500
+8601600,castle_defense_p1_v21,0.4,121.94,500
+8601600,castle_defense_p1_v22,0.766,121.01,500
+8601600,castle_defense_p1_v3,0.438,121.51,500
+8601600,castle_defense_p1_v4,0.266,121.55,500
+8601600,castle_defense_p1_v7,0.308,120.48,500
+8716288,Anti-Spam Bot,0.328,121.14,500
+8716288,Random Dummy,0.702,122.01,500
+8716288,Spam Bot T1,0.918,119.53,500
+8716288,Spam Bot T2,0.886,122.62,500
+8716288,Spam Bot T3,0.7647,122.59,204
+8716288,Spam Bot T4,0.5157,123.45,223
+8716288,Spam Bot T5,0.392,122.99,199
+8716288,Spam Bot T6,0.6798,121.92,203
+8716288,Spam Bot T7,0.5963,123.41,161
+8716288,Spam Bot T8,0.8797,122.76,266
+8716288,castle_defense_p1_v14,0.644,120.76,500
+8716288,castle_defense_p1_v16,0.426,122.16,500
+8716288,castle_defense_p1_v20,0.374,120.94,500
+8716288,castle_defense_p1_v21,0.406,121.58,500
+8716288,castle_defense_p1_v22,0.756,120.92,500
+8716288,castle_defense_p1_v3,0.442,121.42,500
+8716288,castle_defense_p1_v4,0.264,121.33,500
+8716288,castle_defense_p1_v7,0.308,120.13,500
+8830976,Anti-Spam Bot,0.33,120.85,500
+8830976,Random Dummy,0.706,122.06,500
+8830976,Spam Bot T1,0.916,119.56,500
+8830976,Spam Bot T2,0.886,122.72,500
+8830976,Spam Bot T3,0.761,122.6,205
+8830976,Spam Bot T4,0.5179,123.45,224
+8830976,Spam Bot T5,0.3861,123.02,202
+8830976,Spam Bot T6,0.6732,121.95,205
+8830976,Spam Bot T7,0.6037,123.44,164
+8830976,Spam Bot T8,0.881,122.78,269
+8830976,castle_defense_p1_v14,0.648,120.59,500
+8830976,castle_defense_p1_v16,0.422,122.14,500
+8830976,castle_defense_p1_v20,0.376,121.17,500
+8830976,castle_defense_p1_v21,0.406,121.52,500
+8830976,castle_defense_p1_v22,0.754,121.09,500
+8830976,castle_defense_p1_v3,0.44,121.51,500
+8830976,castle_defense_p1_v4,0.268,121.42,500
+8830976,castle_defense_p1_v7,0.312,120.1,500
+8945664,Anti-Spam Bot,0.328,120.97,500
+8945664,Random Dummy,0.706,121.91,500
+8945664,Spam Bot T1,0.92,119.58,500
+8945664,Spam Bot T2,0.884,122.92,500
+8945664,Spam Bot T3,0.7573,122.64,206
+8945664,Spam Bot T4,0.5177,123.5,226
+8945664,Spam Bot T5,0.3883,123.14,206
+8945664,Spam Bot T6,0.6748,121.99,206
+8945664,Spam Bot T7,0.6,123.47,165
+8945664,Spam Bot T8,0.8828,122.88,273
+8945664,castle_defense_p1_v14,0.654,120.53,500
+8945664,castle_defense_p1_v16,0.426,122.16,500
+8945664,castle_defense_p1_v20,0.374,121.18,500
+8945664,castle_defense_p1_v21,0.414,121.81,500
+8945664,castle_defense_p1_v22,0.76,121.1,500
+8945664,castle_defense_p1_v3,0.438,121.54,500
+8945664,castle_defense_p1_v4,0.276,121.46,500
+8945664,castle_defense_p1_v7,0.306,120.2,500
+9060352,Anti-Spam Bot,0.332,121.53,500
+9060352,Random Dummy,0.708,122.14,500
+9060352,Spam Bot T1,0.918,120.27,500
+9060352,Spam Bot T2,0.884,122.97,500
+9060352,Spam Bot T3,0.7585,122.73,207
+9060352,Spam Bot T4,0.5174,123.82,230
+9060352,Spam Bot T5,0.3883,123.14,206
+9060352,Spam Bot T6,0.6777,122.46,211
+9060352,Spam Bot T7,0.6012,123.8,168
+9060352,Spam Bot T8,0.8754,123.42,281
+9060352,castle_defense_p1_v14,0.658,121.3,500
+9060352,castle_defense_p1_v16,0.426,122.96,500
+9060352,castle_defense_p1_v20,0.374,121.8,500
+9060352,castle_defense_p1_v21,0.416,122.88,500
+9060352,castle_defense_p1_v22,0.762,121.75,500
+9060352,castle_defense_p1_v3,0.442,122.07,500
+9060352,castle_defense_p1_v4,0.274,122.41,500
+9060352,castle_defense_p1_v7,0.302,120.7,500
+9175040,Anti-Spam Bot,0.334,121.3,500
+9175040,Random Dummy,0.704,122.02,500
+9175040,Spam Bot T1,0.91,120.81,500
+9175040,Spam Bot T2,0.884,122.72,500
+9175040,Spam Bot T3,0.7642,122.49,212
+9175040,Spam Bot T4,0.5172,123.73,232
+9175040,Spam Bot T5,0.3942,123.04,208
+9175040,Spam Bot T6,0.6776,122.32,214
+9175040,Spam Bot T7,0.6,123.67,170
+9175040,Spam Bot T8,0.8728,123.34,283
+9175040,castle_defense_p1_v14,0.66,121.04,500
+9175040,castle_defense_p1_v16,0.416,122.64,500
+9175040,castle_defense_p1_v20,0.364,121.75,500
+9175040,castle_defense_p1_v21,0.418,122.36,500
+9175040,castle_defense_p1_v22,0.76,121.38,500
+9175040,castle_defense_p1_v3,0.44,122.06,500
+9175040,castle_defense_p1_v4,0.272,122.24,500
+9175040,castle_defense_p1_v7,0.302,121.03,500
+9289728,Anti-Spam Bot,0.326,121.13,500
+9289728,Random Dummy,0.7,121.44,500
+9289728,Spam Bot T1,0.91,119.98,500
+9289728,Spam Bot T2,0.884,122.6,500
+9289728,Spam Bot T3,0.7617,122.28,214
+9289728,Spam Bot T4,0.5128,123.53,234
+9289728,Spam Bot T5,0.3905,122.82,210
+9289728,Spam Bot T6,0.6728,122.02,217
+9289728,Spam Bot T7,0.6023,123.53,171
+9289728,Spam Bot T8,0.8732,123.26,284
+9289728,castle_defense_p1_v14,0.662,120.31,500
+9289728,castle_defense_p1_v16,0.414,121.74,500
+9289728,castle_defense_p1_v20,0.368,121.06,500
+9289728,castle_defense_p1_v21,0.412,121.81,500
+9289728,castle_defense_p1_v22,0.764,120.78,500
+9289728,castle_defense_p1_v3,0.436,121.2,500
+9289728,castle_defense_p1_v4,0.272,121.2,500
+9289728,castle_defense_p1_v7,0.304,120.67,500
+9404416,Anti-Spam Bot,0.326,120.78,500
+9404416,Random Dummy,0.702,121.08,500
+9404416,Spam Bot T1,0.906,120.13,500
+9404416,Spam Bot T2,0.882,122.52,500
+9404416,Spam Bot T3,0.7628,122.24,215
+9404416,Spam Bot T4,0.5148,123.39,237
+9404416,Spam Bot T5,0.3905,122.82,210
+9404416,Spam Bot T6,0.6773,121.89,220
+9404416,Spam Bot T7,0.6092,123.35,174
+9404416,Spam Bot T8,0.875,123.12,288
+9404416,castle_defense_p1_v14,0.658,119.71,500
+9404416,castle_defense_p1_v16,0.41,121.34,500
+9404416,castle_defense_p1_v20,0.364,120.88,500
+9404416,castle_defense_p1_v21,0.41,121.69,500
+9404416,castle_defense_p1_v22,0.756,120.33,500
+9404416,castle_defense_p1_v3,0.436,120.78,500
+9404416,castle_defense_p1_v4,0.266,120.93,500
+9404416,castle_defense_p1_v7,0.302,120.13,500
+9519104,Anti-Spam Bot,0.328,121.03,500
+9519104,Random Dummy,0.708,121.43,500
+9519104,Spam Bot T1,0.912,120.41,500
+9519104,Spam Bot T2,0.884,122.57,500
+9519104,Spam Bot T3,0.7639,122.25,216
+9519104,Spam Bot T4,0.5167,123.41,240
+9519104,Spam Bot T5,0.3925,122.86,214
+9519104,Spam Bot T6,0.6802,121.92,222
+9519104,Spam Bot T7,0.6023,123.37,176
+9519104,Spam Bot T8,0.8729,123.13,291
+9519104,castle_defense_p1_v14,0.656,119.58,500
+9519104,castle_defense_p1_v16,0.406,121.31,500
+9519104,castle_defense_p1_v20,0.37,120.87,500
+9519104,castle_defense_p1_v21,0.414,121.69,500
+9519104,castle_defense_p1_v22,0.752,120.62,500
+9519104,castle_defense_p1_v3,0.436,120.53,500
+9519104,castle_defense_p1_v4,0.266,120.92,500
+9519104,castle_defense_p1_v7,0.302,119.98,500
+9633792,Anti-Spam Bot,0.334,120.91,500
+9633792,Random Dummy,0.704,121.11,500
+9633792,Spam Bot T1,0.912,119.97,500
+9633792,Spam Bot T2,0.886,122.06,500
+9633792,Spam Bot T3,0.7602,121.98,221
+9633792,Spam Bot T4,0.5167,123.41,240
+9633792,Spam Bot T5,0.3899,122.63,218
+9633792,Spam Bot T6,0.6726,121.71,226
+9633792,Spam Bot T7,0.6045,123.29,177
+9633792,Spam Bot T8,0.8741,123.0,294
+9633792,castle_defense_p1_v14,0.66,120.01,500
+9633792,castle_defense_p1_v16,0.412,121.71,500
+9633792,castle_defense_p1_v20,0.366,120.45,500
+9633792,castle_defense_p1_v21,0.412,121.2,500
+9633792,castle_defense_p1_v22,0.754,120.74,500
+9633792,castle_defense_p1_v3,0.436,121.12,500
+9633792,castle_defense_p1_v4,0.262,120.32,500
+9633792,castle_defense_p1_v7,0.306,119.44,500
+9748480,Anti-Spam Bot,0.326,120.31,500
+9748480,Random Dummy,0.708,120.79,500
+9748480,Spam Bot T1,0.912,119.89,500
+9748480,Spam Bot T2,0.886,121.84,500
+9748480,Spam Bot T3,0.7623,121.83,223
+9748480,Spam Bot T4,0.5144,123.18,243
+9748480,Spam Bot T5,0.3955,122.47,220
+9748480,Spam Bot T6,0.674,121.64,227
+9748480,Spam Bot T7,0.6056,122.99,180
+9748480,Spam Bot T8,0.8716,122.88,296
+9748480,castle_defense_p1_v14,0.672,119.58,500
+9748480,castle_defense_p1_v16,0.408,120.79,500
+9748480,castle_defense_p1_v20,0.37,120.3,500
+9748480,castle_defense_p1_v21,0.404,120.85,500
+9748480,castle_defense_p1_v22,0.756,120.03,500
+9748480,castle_defense_p1_v3,0.432,120.44,500
+9748480,castle_defense_p1_v4,0.262,120.19,500
+9748480,castle_defense_p1_v7,0.298,118.46,500
+9863168,Anti-Spam Bot,0.328,120.54,500
+9863168,Random Dummy,0.706,121.03,500
+9863168,Spam Bot T1,0.906,120.27,500
+9863168,Spam Bot T2,0.884,121.91,500
+9863168,Spam Bot T3,0.7634,121.85,224
+9863168,Spam Bot T4,0.5102,123.21,245
+9863168,Spam Bot T5,0.4036,122.53,223
+9863168,Spam Bot T6,0.6739,121.71,230
+9863168,Spam Bot T7,0.6056,122.99,180
+9863168,Spam Bot T8,0.8667,122.94,300
+9863168,castle_defense_p1_v14,0.672,119.47,500
+9863168,castle_defense_p1_v16,0.404,120.62,500
+9863168,castle_defense_p1_v20,0.366,120.6,500
+9863168,castle_defense_p1_v21,0.4,121.13,500
+9863168,castle_defense_p1_v22,0.752,119.88,500
+9863168,castle_defense_p1_v3,0.432,120.3,500
+9863168,castle_defense_p1_v4,0.266,120.85,500
+9863168,castle_defense_p1_v7,0.298,119.08,500
+9977856,Anti-Spam Bot,0.332,120.59,500
+9977856,Random Dummy,0.706,120.83,500
+9977856,Spam Bot T1,0.908,120.32,500
+9977856,Spam Bot T2,0.882,121.97,500
+9977856,Spam Bot T3,0.7665,121.87,227
+9977856,Spam Bot T4,0.5142,123.22,247
+9977856,Spam Bot T5,0.4097,122.54,227
+9977856,Spam Bot T6,0.6753,121.72,231
+9977856,Spam Bot T7,0.6066,123.0,183
+9977856,Spam Bot T8,0.8675,122.94,302
+9977856,castle_defense_p1_v14,0.674,119.41,500
+9977856,castle_defense_p1_v16,0.398,120.57,500
+9977856,castle_defense_p1_v20,0.364,120.34,500
+9977856,castle_defense_p1_v21,0.408,120.89,500
+9977856,castle_defense_p1_v22,0.752,119.87,500
+9977856,castle_defense_p1_v3,0.436,120.37,500
+9977856,castle_defense_p1_v4,0.262,120.6,500
+9977856,castle_defense_p1_v7,0.292,119.42,500
+10092544,Anti-Spam Bot,0.336,120.83,500
+10092544,Random Dummy,0.706,121.18,500
+10092544,Spam Bot T1,0.908,120.45,500
+10092544,Spam Bot T2,0.88,122.27,500
+10092544,Spam Bot T3,0.7662,122.06,231
+10092544,Spam Bot T4,0.5141,123.29,249
+10092544,Spam Bot T5,0.4052,122.76,232
+10092544,Spam Bot T6,0.6795,121.86,234
+10092544,Spam Bot T7,0.6066,123.0,183
+10092544,Spam Bot T8,0.8647,122.97,303
+10092544,castle_defense_p1_v14,0.672,119.86,500
+10092544,castle_defense_p1_v16,0.398,120.77,500
+10092544,castle_defense_p1_v20,0.364,120.95,500
+10092544,castle_defense_p1_v21,0.414,121.42,500
+10092544,castle_defense_p1_v22,0.748,120.26,500
+10092544,castle_defense_p1_v3,0.43,120.46,500
+10092544,castle_defense_p1_v4,0.26,120.64,500
+10092544,castle_defense_p1_v7,0.284,119.83,500

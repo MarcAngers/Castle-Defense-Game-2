@@ -41,8 +41,13 @@ COLORS = {
     "Spam Bot T1":   "#ffaa33",
     "Spam Bot T4":   "#ff6600",
     "Spam Bot T8":   "#994400",
-    "League Models": "slategray",
 }
+
+_LEAGUE_PALETTE = [
+    "#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24",
+    "#4ade80", "#f87171", "#38bdf8", "#fb923c", "#e879f9",
+]
+_league_color_cache: dict = {}
 
 # ─── Data helpers ──────────────────────────────────────────────────────────────
 
@@ -63,7 +68,15 @@ def to_M(steps):
     return [int(s) / 1_000_000 for s in steps]
 
 def display_name(opp):
-    return "League Models" if "castle_defense" in opp.lower() else opp
+    return opp
+
+def _opponent_color(name):
+    if name in COLORS:
+        return COLORS[name]
+    if name not in _league_color_cache:
+        idx = len(_league_color_cache) % len(_LEAGUE_PALETTE)
+        _league_color_cache[name] = _LEAGUE_PALETTE[idx]
+    return _league_color_cache[name]
 
 # ─── Drawing ──────────────────────────────────────────────────────────────────
 
@@ -155,7 +168,7 @@ def draw_figure(fig, log_path):
         xs_o = to_M(sorted_steps)
         ys_o = [sum(step_map[s]) / len(step_map[s]) * 100 for s in sorted_steps]
         syo  = smooth(ys_o, window=5)
-        color = COLORS.get(name, "#aaaacc")
+        color = _opponent_color(name)
         ax3.plot(xs_o, syo, linewidth=1.8, label=name, color=color)
         if syo:
             ax3.annotate(f"{syo[-1]:.0f}%", xy=(xs_o[-1], syo[-1]),

@@ -114,9 +114,7 @@ namespace CastleDefense.Simulation
 
     class Program
     {
-        const int    N_STEPS             = 8192;
-        const int    MAX_TICKS           = 18000;
-        const string TRAINING_MODEL_PATH = "current_model.onnx";
+        const int N_STEPS = 8192;
 
         static readonly Random _rand = new Random();
 
@@ -129,12 +127,9 @@ namespace CastleDefense.Simulation
             if (args.Length > 0 && int.TryParse(args[0], out int parsedPort)) port = parsedPort;
             Console.Title = $"Castle Defense AI Arena - Port {port}";
 
-            // Training brain for P1 inference (null = random until Python exports first model)
-            AIBrain trainingBrain      = null;
-            byte    loadedModelVersion = 255; // force reload check on first ack
-            TryLoadTrainingBrain(ref trainingBrain);
+            string modelPath = args.Length > 1 ? args[1] : "current_model.onnx";
 
-            // League opponents for P2
+            // League opponents — loaded once and kept in memory across all connections
             var leagueModels = new List<(string name, AIBrain brain)>();
             string leagueDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "league_models");
             if (Directory.Exists(leagueDir))
@@ -151,200 +146,209 @@ namespace CastleDefense.Simulation
             }
             Console.WriteLine($"[League] {leagueModels.Count} opponent(s) ready.");
 
-            var globalTracker    = new StatTracker();
-            var opponentTrackers = new Dictionary<string, StatTracker>();
-            var timeSkipTrackers = new Dictionary<int, StatTracker>();
-
-            var server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
-            server.Start();
-            Console.WriteLine($"Listening on 127.0.0.1:{port}...");
-            using var client = server.AcceptTcpClient();
-            Console.WriteLine("Python connected! Starting self-play collection...");
-            using var stream = client.GetStream();
-
-            // Batch buffers (reused each batch)
+            // Batch buffers — allocated once and reused across all connections
             float[][] batchObs    = new float[N_STEPS][];
             int[][]   batchMask   = new int[N_STEPS][];
             int[]     batchAction = new int[N_STEPS];
             float[]   batchRew    = new float[N_STEPS];
             bool[]    batchEpS    = new bool[N_STEPS];
             int[]     batchWin    = new int[N_STEPS];
-            var batchEpisodes     = new List<(string name, int winner)>();
 
-            int  batchPos    = 0;
-            bool nextEpStart = true;
+            var server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
+            server.Start();
 
-            // Current game state (spans multiple episodes, even across batch boundaries)
-            GameState  state       = null;
-            GameEngine engine      = null;
-            string     oppName     = "Random Dummy";
-            int        botSel      = 0;
-            int        timeSkip    = 0;
-            int        spamTier    = 1;
-            SpamBot    spamBot     = null;
-            AIBrain    leagueBrain = null;
-            var        randBot     = new RandomBot();
-            var        antiBot     = new AntiSpamBot();
-
-            while (true) // ── OUTER BATCH LOOP ──
+            while (true) // ── OUTER CONNECTION LOOP — arenas persist across Python sessions ──
             {
-                // Start new episode if needed
-                if (state == null || state.IsGameOver || state.CurrentTick >= MAX_TICKS)
+                Console.WriteLine($"\nListening on 127.0.0.1:{port}...");
+                using var client = server.AcceptTcpClient();
+                Console.WriteLine("Python connected! Starting self-play collection...");
+                using var stream = client.GetStream();
+
+                // Reload reward params fresh for each connection (GA writes these before connecting)
+                var rewardParams = RewardParams.LoadFromJson($"reward_params_{port}.json");
+                Console.WriteLine($"[Reward] WIN={rewardParams.WinReward} INVEST={rewardParams.InvestReward} DECAY={rewardParams.InvestDecay} COMBAT={rewardParams.CombatScale} ANTI_SPEND={rewardParams.AntiSpend} SAVINGS={rewardParams.SavingsWeight} GADGET_UP={rewardParams.GadgetUpgrade} GADGET_USE={rewardParams.GadgetUse}");
+
+                // Reset training brain for this session
+                AIBrain trainingBrain      = null;
+                byte    loadedModelVersion = 255; // force reload on first ack
+                TryLoadTrainingBrain(ref trainingBrain, modelPath);
+
+                // Reset per-session stats and batch state
+                var globalTracker    = new StatTracker();
+                var opponentTrackers = new Dictionary<string, StatTracker>();
+                var timeSkipTrackers = new Dictionary<int, StatTracker>();
+                var batchEpisodes    = new List<(string name, int winner)>();
+
+                int  batchPos    = 0;
+                bool nextEpStart = true;
+
+                GameState  state       = null;
+                GameEngine engine      = null;
+                string     oppName     = "Random Dummy";
+                int        botSel      = 0;
+                int        timeSkip    = 0;
+                int        spamTier    = 1;
+                SpamBot    spamBot     = null;
+                AIBrain    leagueBrain = null;
+                var        randBot     = new RandomBot();
+                var        antiBot     = new AntiSpamBot();
+
+                bool disconnected = false;
+
+                while (!disconnected) // ── BATCH LOOP ──
                 {
-                    if (state != null) // record completed episode
+                    // Start new episode if needed
+                    if (state == null || state.IsGameOver)
                     {
-                        int epWinner = state.WinnerSide;
-                        if (epWinner == 0 && state.CurrentTick >= MAX_TICKS)
-                            epWinner = state.Player1.CastleHealth >= state.Player2.CastleHealth ? 1 : 2;
-
-                        batchEpisodes.Add((oppName, epWinner));
-                        bool aiWon = epWinner == 1;
-
-                        if (!opponentTrackers.ContainsKey(oppName)) opponentTrackers[oppName] = new StatTracker();
-                        if (!timeSkipTrackers.ContainsKey(timeSkip)) timeSkipTrackers[timeSkip] = new StatTracker();
-                        globalTracker.AddResult(aiWon);
-                        opponentTrackers[oppName].AddResult(aiWon);
-                        timeSkipTrackers[timeSkip].AddResult(aiWon);
-
-                        Console.ForegroundColor = ConsoleColor.Cyan;
-                        Console.Write($"[GLOBAL] {globalTracker.TotalMatches} games | Recent: {globalTracker.RecentWinrate:0.0}% | Total: {globalTracker.TotalWinrate:0.0}%  ");
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine($"[vs {oppName}] {opponentTrackers[oppName].RecentWinrate:0.0}%");
-                        Console.ResetColor();
-                    }
-
-                    // Setup new game
-                    state    = new GameState();
-                    timeSkip = Math.Max(_rand.Next(-8, 9), 0);
-                    string upg = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
-
-                    state.Player1 = new PlayerState(timeSkip);
-                    state.Player2 = new PlayerState(timeSkip);
-                    if (_rand.Next(5) == 0)
-                    {
-                        state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
-                        state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
-                    }
-                    state.CurrentTick = 30 * 30 * timeSkip;
-                    state.Player1.Side = 1;
-                    state.Player1.Team = GameDataManager.GetRandomTeam();
-                    state.Player1.SetLoadout(new[] {
-                        GameDataManager.GetRandomOGadgetId() + upg,
-                        GameDataManager.GetRandomDGadgetId() + upg,
-                        GameDataManager.GetSignatureGadgetIdForTeam(state.Player1.Team) + upg });
-                    state.Player2.Side = 2;
-                    state.Player2.Team = GameDataManager.GetRandomTeam();
-                    state.Player2.SetLoadout(new[] {
-                        GameDataManager.GetRandomOGadgetId() + upg,
-                        GameDataManager.GetRandomDGadgetId() + upg,
-                        GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) + upg });
-
-                    engine  = new GameEngine(state);
-                    botSel  = _rand.Next(11);
-                    spamTier = Math.Max(Math.Min(timeSkip + _rand.Next(-2, 3), 8), 1);
-                    spamBot  = new SpamBot(spamTier);
-                    leagueBrain = null;
-                    oppName = "Random Dummy";
-
-                    if (botSel == 1) oppName = "Anti-Spam Bot";
-                    else if (botSel >= 2 && botSel <= 5) oppName = $"Spam Bot T{spamTier}";
-                    else if (botSel > 5 && leagueModels.Count > 0)
-                    {
-                        var chosen = leagueModels[_rand.Next(leagueModels.Count)];
-                        leagueBrain = chosen.brain;
-                        oppName     = chosen.name;
-                    }
-
-                    nextEpStart = true;
-                }
-
-                // ── STEP COLLECTION LOOP ──
-                while (batchPos < N_STEPS && !state.IsGameOver && state.CurrentTick < MAX_TICKS)
-                {
-                    float[] p1Obs  = state.GetStateVector(1);
-                    int[]   p1Mask = state.GetActionMask(1);
-                    int p1Action   = trainingBrain != null
-                        ? trainingBrain.GetBestAction(p1Obs, p1Mask)
-                        : GetRandomValidAction(p1Mask);
-
-                    float      cumRew   = 0f;
-                    StepResult lastTick = null;
-
-                    for (int fi = 0; fi < 9; fi++)
-                    {
-                        if (state.IsGameOver || state.CurrentTick >= MAX_TICKS) break;
-
-                        int p2Action = 0;
-                        if      (botSel == 0)                      p2Action = randBot.GetAction();
-                        else if (botSel == 1)                      p2Action = antiBot.GetAction(state.CurrentTick, state.Player1.Team);
-                        else if (botSel >= 2 && botSel <= 5)       p2Action = spamBot.GetAction();
-                        else if (leagueBrain != null && fi == 0)   p2Action = leagueBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
-
-                        var tick = engine.Step(fi == 0 ? p1Action : 0, p2Action, 0f);
-                        cumRew  += tick.P1Reward;
-                        lastTick = tick;
-                    }
-
-                    // Overtime tie-break
-                    if (state.CurrentTick >= MAX_TICKS && !state.IsGameOver)
-                    {
-                        state.IsGameOver  = true;
-                        lastTick.IsDone   = true;
-                        if      (state.Player1.CastleHealth > state.Player2.CastleHealth) cumRew += 20f;
-                        else if (state.Player2.CastleHealth > state.Player1.CastleHealth) cumRew -= 24f;
-                    }
-
-                    batchObs[batchPos]    = p1Obs;
-                    batchMask[batchPos]   = p1Mask;
-                    batchAction[batchPos] = p1Action;
-                    batchRew[batchPos]    = cumRew;
-                    batchEpS[batchPos]    = nextEpStart;
-                    batchWin[batchPos]    = lastTick.IsDone ? lastTick.WinnerSide : 0;
-                    nextEpStart           = lastTick.IsDone;
-                    batchPos++;
-                }
-
-                // ── SEND BATCH WHEN FULL ──
-                if (batchPos >= N_STEPS)
-                {
-                    float[] finalObs  = state.GetStateVector(1);
-                    int[]   finalMask = state.GetActionMask(1);
-                    bool    finalDone = state.IsGameOver;
-
-                    try
-                    {
-                        BatchProto.SendBatch(stream, N_STEPS,
-                            batchObs, batchMask, batchAction, batchRew, batchEpS, batchWin,
-                            finalObs, finalMask, finalDone, batchEpisodes);
-
-                        byte ackVersion = BatchProto.ReadAck(stream);
-                        if (ackVersion != loadedModelVersion)
+                        if (state != null) // record completed episode
                         {
-                            TryLoadTrainingBrain(ref trainingBrain);
-                            loadedModelVersion = ackVersion;
+                            int epWinner = state.WinnerSide;
+                            if (epWinner == 0 && state.IsTimeLimit)
+                                epWinner = state.Player1.CastleHealth >= state.Player2.CastleHealth ? 1 : 2;
+
+                            batchEpisodes.Add((oppName, epWinner));
+                            bool aiWon = epWinner == 1;
+
+                            if (!opponentTrackers.ContainsKey(oppName)) opponentTrackers[oppName] = new StatTracker();
+                            if (!timeSkipTrackers.ContainsKey(timeSkip)) timeSkipTrackers[timeSkip] = new StatTracker();
+                            globalTracker.AddResult(aiWon);
+                            opponentTrackers[oppName].AddResult(aiWon);
+                            timeSkipTrackers[timeSkip].AddResult(aiWon);
+
+                            Console.ForegroundColor = ConsoleColor.Cyan;
+                            Console.Write($"[GLOBAL] {globalTracker.TotalMatches} games | Recent: {globalTracker.RecentWinrate:0.0}% | Total: {globalTracker.TotalWinrate:0.0}%  ");
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine($"[vs {oppName}] {opponentTrackers[oppName].RecentWinrate:0.0}%");
+                            Console.ResetColor();
                         }
-                    }
-                    catch (Exception ex) when (ex is IOException || ex is SocketException)
-                    {
-                        Console.WriteLine("\n[NET] Python disconnected. Writing final stats...");
-                        PrintFinalStats(port, globalTracker, opponentTrackers, timeSkipTrackers);
-                        return;
+
+                        // Setup new game
+                        state    = new GameState();
+                        timeSkip = Math.Max(_rand.Next(-8, 9), 0);
+                        string upg = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
+
+                        state.Player1 = new PlayerState(timeSkip);
+                        state.Player2 = new PlayerState(timeSkip);
+                        if (_rand.Next(5) == 0)
+                        {
+                            state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
+                            state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
+                        }
+                        state.CurrentTick = 30 * 30 * timeSkip;
+                        state.Player1.Side = 1;
+                        state.Player1.Team = GameDataManager.GetRandomTeam();
+                        state.Player1.SetLoadout(new[] {
+                            GameDataManager.GetRandomOGadgetId() + upg,
+                            GameDataManager.GetRandomDGadgetId() + upg,
+                            GameDataManager.GetSignatureGadgetIdForTeam(state.Player1.Team) + upg });
+                        state.Player2.Side = 2;
+                        state.Player2.Team = GameDataManager.GetRandomTeam();
+                        state.Player2.SetLoadout(new[] {
+                            GameDataManager.GetRandomOGadgetId() + upg,
+                            GameDataManager.GetRandomDGadgetId() + upg,
+                            GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) + upg });
+
+                        engine  = new GameEngine(state, rewardParams);
+                        botSel  = _rand.Next(16);
+                        spamTier = Math.Max(Math.Min(timeSkip + _rand.Next(-2, 3), 8), 1);
+                        spamBot  = new SpamBot(spamTier);
+                        leagueBrain = null;
+                        oppName = "Random Dummy";
+
+                        if (botSel == 1) oppName = "Anti-Spam Bot";
+                        else if (botSel >= 2 && botSel <= 5) oppName = $"Spam Bot T{spamTier}";
+                        else if (botSel > 5 && leagueModels.Count > 0)
+                        {
+                            var chosen = leagueModels[_rand.Next(leagueModels.Count)];
+                            leagueBrain = chosen.brain;
+                            oppName     = chosen.name;
+                        }
+
+                        nextEpStart = true;
                     }
 
-                    batchPos = 0;
-                    batchEpisodes.Clear();
+                    // ── STEP COLLECTION LOOP ──
+                    while (batchPos < N_STEPS && !state.IsGameOver)
+                    {
+                        float[] p1Obs  = state.GetStateVector(1);
+                        int[]   p1Mask = state.GetActionMask(1);
+                        int p1Action   = trainingBrain != null
+                            ? trainingBrain.GetBestAction(p1Obs, p1Mask)
+                            : GetRandomValidAction(p1Mask);
+
+                        float      cumRew   = 0f;
+                        StepResult lastTick = null;
+
+                        for (int fi = 0; fi < 9; fi++)
+                        {
+                            if (state.IsGameOver) break;
+
+                            int p2Action = 0;
+                            if      (botSel == 0)                      p2Action = randBot.GetAction();
+                            else if (botSel == 1)                      p2Action = antiBot.GetAction(state.CurrentTick, state.Player1.Team);
+                            else if (botSel >= 2 && botSel <= 5)       p2Action = spamBot.GetAction();
+                            else if (leagueBrain != null && fi == 0)   p2Action = leagueBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+
+                            var tick = engine.Step(fi == 0 ? p1Action : 0, p2Action, 0f);
+                            cumRew  += tick.P1Reward;
+                            lastTick = tick;
+                        }
+
+                        batchObs[batchPos]    = p1Obs;
+                        batchMask[batchPos]   = p1Mask;
+                        batchAction[batchPos] = p1Action;
+                        batchRew[batchPos]    = cumRew;
+                        batchEpS[batchPos]    = nextEpStart;
+                        batchWin[batchPos]    = lastTick.IsDone ? lastTick.WinnerSide : 0;
+                        nextEpStart           = lastTick.IsDone;
+                        batchPos++;
+                    }
+
+                    // ── SEND BATCH WHEN FULL ──
+                    if (batchPos >= N_STEPS)
+                    {
+                        float[] finalObs  = state.GetStateVector(1);
+                        int[]   finalMask = state.GetActionMask(1);
+                        bool    finalDone = state.IsGameOver;
+
+                        try
+                        {
+                            BatchProto.SendBatch(stream, N_STEPS,
+                                batchObs, batchMask, batchAction, batchRew, batchEpS, batchWin,
+                                finalObs, finalMask, finalDone, batchEpisodes);
+
+                            byte ackVersion = BatchProto.ReadAck(stream);
+                            if (ackVersion != loadedModelVersion)
+                            {
+                                TryLoadTrainingBrain(ref trainingBrain, modelPath);
+                                loadedModelVersion = ackVersion;
+                            }
+                        }
+                        catch (Exception ex) when (ex is IOException || ex is SocketException)
+                        {
+                            Console.WriteLine("\n[NET] Python disconnected. Writing final stats...");
+                            disconnected = true;
+                        }
+
+                        batchPos = 0;
+                        batchEpisodes.Clear();
+                    }
                 }
+
+                PrintFinalStats(port, globalTracker, opponentTrackers, timeSkipTrackers);
+                trainingBrain?.Dispose();
+                Console.WriteLine("[NET] Ready for next connection.");
             }
         }
 
-        static void TryLoadTrainingBrain(ref AIBrain brain)
+        static void TryLoadTrainingBrain(ref AIBrain brain, string modelPath)
         {
-            if (!File.Exists(TRAINING_MODEL_PATH)) return;
+            if (!File.Exists(modelPath)) return;
             try
             {
                 brain?.Dispose();
-                brain = new AIBrain(TRAINING_MODEL_PATH);
-                Console.WriteLine($"[Model] Reloaded {TRAINING_MODEL_PATH}");
+                brain = new AIBrain(modelPath);
+                Console.WriteLine($"[Model] Reloaded {modelPath}");
             }
             catch (Exception ex) { Console.WriteLine($"[Model] Reload failed (will retry): {ex.Message}"); }
         }

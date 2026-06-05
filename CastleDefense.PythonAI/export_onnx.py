@@ -1,10 +1,20 @@
+import os
+import shutil
+from pathlib import Path
 import torch as th
 from sb3_contrib import MaskablePPO
+from stable_baselines3 import PPO
+
+_SCRIPT_DIR = Path(__file__).parent.resolve()
+OUTPUT_PATH  = _SCRIPT_DIR / ".." / "CastleDefenseGame2" / "AI_Models" / "castle_defense_bot.onnx"
 
 print("Loading the trained brain...")
-# 1. Load your best model. We force it onto the CPU so the resulting 
+# 1. Load your best model. We force it onto the CPU so the resulting
 # ONNX file will run on any server, even if it doesn't have a fancy graphics card.
-model = MaskablePPO.load("castle_defense_p1_v22", device="cpu")
+try:
+    model = MaskablePPO.load("castle_defense_p1_v24", device="cpu")
+except Exception:
+    model = PPO.load("castle_defense_p1_v24", device="cpu")
 
 # 2. Create a clean wrapper that ONLY outputs the action choices
 class CleanActionNetwork(th.nn.Module):
@@ -28,15 +38,16 @@ onnx_policy = CleanActionNetwork(model.policy)
 dummy_input = th.randn(1, 348)
 
 print("Exporting to ONNX...")
-# 4. Export the clean network!
+tmp = str(OUTPUT_PATH) + ".tmp"
 th.onnx.export(
     onnx_policy,
     dummy_input,
-    "castle_defense_bot.onnx",
+    tmp,
     opset_version=17,
     input_names=["observation"],
     output_names=["action_logits"],
     dynamo=False,
 )
+os.replace(tmp, str(OUTPUT_PATH))
 
-print("Success! Your AI is now packed into 'castle_defense_bot.onnx'!")
+print(f"Success! Model exported to {OUTPUT_PATH.resolve()}")

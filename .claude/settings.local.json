@@ -11,7 +11,12 @@
       "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" log --oneline -- CastleDefense.Engine/Data/master_gadgets.csv)",
       "Bash(git -C \"c:/repos/Castle-Defense-Game-2\" show 85ab3c0c:CastleDefense.Engine/Data/master_gadgets.csv)",
       "Bash(awk -F',' 'NR>1 {print $3, $1}')",
-      "Bash(awk -F',' 'NR>1 {print $3, $1}' \"c:/repos/Castle-Defense-Game-2/CastleDefense.Engine/Data/master_gadgets.csv\")"
+      "Bash(awk -F',' 'NR>1 {print $3, $1}' \"c:/repos/Castle-Defense-Game-2/CastleDefense.Engine/Data/master_gadgets.csv\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(ai_env/Scripts/python -c \"import ast; ast.parse\\(open\\('plot_ga.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(ai_env/Scripts/python -c \"import ast; ast.parse\\(open\\('ga_train_model.py'\\).read\\(\\)\\); ast.parse\\(open\\('ga_runner.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(ai_env/Scripts/python -c ' *)",
+      "Bash(ai_env/Scripts/python -c \"import ast; ast.parse\\(open\\('ga_runner.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }
