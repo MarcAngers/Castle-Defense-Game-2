@@ -8,8 +8,9 @@ export default async function initMainMenu() {
 
     const btnSP = document.getElementById('btnSingleplayer');
     const btnMP = document.getElementById('btnMultiplayer');
+    const btnLeague = document.getElementById('btnTrainingLeague');
     const btnCollection = document.getElementById('btnCollection');
-    
+
     btnSP.onclick = () => {
         connection.gameMode = 'sp';
         showScreen('select-team');
@@ -18,6 +19,11 @@ export default async function initMainMenu() {
         connection.gameMode = 'mp';
         showScreen('select-team');
     };
+    btnLeague.onclick = async () => {
+        connection.gameMode = 'league';
+        await connection.createGame();
+    };
+
     btnCollection.onclick = () => {
         showScreen('collection');
     };

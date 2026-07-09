@@ -12,9 +12,9 @@ print("Loading the trained brain...")
 # 1. Load your best model. We force it onto the CPU so the resulting
 # ONNX file will run on any server, even if it doesn't have a fancy graphics card.
 try:
-    model = MaskablePPO.load("castle_defense_p1_v24", device="cpu")
+    model = MaskablePPO.load("castle_defense_p1_v26", device="cpu")
 except Exception:
-    model = PPO.load("castle_defense_p1_v24", device="cpu")
+    model = PPO.load("castle_defense_p1_v26", device="cpu")
 
 # 2. Create a clean wrapper that ONLY outputs the action choices
 class CleanActionNetwork(th.nn.Module):

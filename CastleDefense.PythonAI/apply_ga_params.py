@@ -11,6 +11,7 @@ Run this before starting the training cluster, or between cluster connections.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,28 @@ NET10_DIR   = (_SCRIPT_DIR / ".." / "CastleDefense.Simulation" / "bin" / "Releas
 PORTS       = list(range(5000, 5014))
 
 DEFAULTS_FILE = _SCRIPT_DIR / "reward_defaults.json"
+
+
+TRAIN_SCRIPT = _SCRIPT_DIR / "train_ai_cluster.py"
+
+
+def patch_shaping_constants(params: dict):
+    """Update BOARD_SHAPING_START and BOARD_SHAPING_END in train_ai_cluster.py."""
+    # Fall back to reward_defaults.json values if the params file predates these fields
+    defaults = {}
+    if DEFAULTS_FILE.exists():
+        with open(DEFAULTS_FILE) as f:
+            defaults = json.load(f)
+    start = params.get("BoardShaperStart", defaults.get("BoardShaperStart", 100.0))
+    end   = params.get("BoardShaperEnd",   defaults.get("BoardShaperEnd",    10.0))
+    if not TRAIN_SCRIPT.exists():
+        print(f"  [warn] {TRAIN_SCRIPT} not found — skipping constant patch.")
+        return
+    content = TRAIN_SCRIPT.read_text(encoding="utf-8")
+    content = re.sub(r'(BOARD_SHAPING_START\s*=\s*)[\d.]+', rf'\g<1>{start}',  content)
+    content = re.sub(r'(BOARD_SHAPING_END\s*=\s*)[\d.]+',   rf'\g<1>{end}',    content)
+    TRAIN_SCRIPT.write_text(content, encoding="utf-8")
+    print(f"  train_ai_cluster.py: BOARD_SHAPING_START={start}  BOARD_SHAPING_END={end}")
 
 
 def apply(params: dict, label: str):
@@ -31,6 +54,7 @@ def apply(params: dict, label: str):
           f"InvestDecay={params.get('InvestDecay')}  CombatScale={params.get('CombatScale')}")
     print(f"  AntiSpend={params.get('AntiSpend')}  SavingsWeight={params.get('SavingsWeight')}  "
           f"GadgetUpgrade={params.get('GadgetUpgrade')}  GadgetUse={params.get('GadgetUse')}")
+    patch_shaping_constants(params)
 
 
 def main():

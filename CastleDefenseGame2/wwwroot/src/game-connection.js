@@ -29,6 +29,20 @@ class GameConnection {
         this.connection.on("GameJoined", (side, state) => {
             this.mySide = side;
             this.latestState = state;
+            // League mode skips loadout selection, so read the server-assigned gadgets from state
+            if (this.gameMode === 'league') {
+                const p = side === 1 ? state.player1 : state.player2;
+                const og = p.offensiveGadget;
+                const dg = p.defensiveGadget;
+                const sg = p.signatureGadget;
+                this.selectedLoadout = [
+                    og?.id ?? og?.Id,
+                    dg?.id ?? dg?.Id,
+                    sg?.id ?? sg?.Id,
+                ];
+                const rawTeam = p.team ?? p.Team;
+                this.selectedTeam = typeof rawTeam === 'string' ? rawTeam.toLowerCase() : 'white';
+            }
         });
 
         this.connection.on("GameStateUpdate", (state) => {

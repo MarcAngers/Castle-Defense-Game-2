@@ -34,8 +34,11 @@ TOTAL_STEPS          = 2_000_000
 FITNESS_WINDOW       = 300   # last N episodes used for fitness score
 ONNX_EXPORT_INTERVAL = 5     # export ONNX every N updates (reduces C# reload overhead)
 
-STEP_SIZE  = N_OBS * 4 + 14 + 1 + 4 + 1 + 1
+STEP_SIZE  = N_OBS * 4 + 14 + 1 + 4 + 4 + 1 + 1  # obs + mask + action + reward + board_eval + ep_start + winner
 FINAL_SIZE = N_OBS * 4 + 14 + 1
+
+BOARD_SHAPING_ANNEAL    = 3_000_000   # anneal window (steps), matches train_ai_cluster.py
+BOARD_SHAPING_LOOKAHEAD = 11          # AI-steps ≈ 99 game ticks ≈ 3.3 s
 
 ENT_START = 0.05
 ENT_FLOOR = 0.02
@@ -62,13 +65,14 @@ def recv_batch(sock):
     steps   = []
     for i in range(n_steps):
         off      = i * STEP_SIZE
-        obs      = np.frombuffer(raw, dtype=np.float32, count=N_OBS, offset=off).copy()
-        mask     = np.frombuffer(raw, dtype=np.int8,    count=14,    offset=off + _OBS_BYTES).copy()
-        action   = raw[off + _OBS_BYTES + 14]
-        reward   = struct.unpack_from('<f', raw, off + _OBS_BYTES + 15)[0]
-        ep_start = raw[off + _OBS_BYTES + 19]
-        winner   = raw[off + _OBS_BYTES + 20]
-        steps.append((obs, mask, action, reward, ep_start, winner))
+        obs        = np.frombuffer(raw, dtype=np.float32, count=N_OBS, offset=off).copy()
+        mask       = np.frombuffer(raw, dtype=np.int8,    count=14,    offset=off + _OBS_BYTES).copy()
+        action     = raw[off + _OBS_BYTES + 14]
+        reward     = struct.unpack_from('<f', raw, off + _OBS_BYTES + 15)[0]
+        board_eval = struct.unpack_from('<f', raw, off + _OBS_BYTES + 19)[0]
+        ep_start   = raw[off + _OBS_BYTES + 23]
+        winner     = raw[off + _OBS_BYTES + 24]
+        steps.append((obs, mask, action, reward, board_eval, ep_start, winner))
     fin        = _recv_exact(sock, FINAL_SIZE)
     final_obs  = np.frombuffer(fin, dtype=np.float32, count=N_OBS, offset=0).copy()
     final_mask = np.frombuffer(fin, dtype=np.int8,    count=14,    offset=_OBS_BYTES).copy()
@@ -148,9 +152,30 @@ def make_rollout_buffer(model, n_envs):
     )
 
 
-def fill_rollout_buffer(model, all_batches):
+def compute_nstep_shaping(board_evals, ep_starts, lookahead):
+    """N-step board eval return: shaping[t] = eval[t+N] - eval[t], respecting episode boundaries."""
+    n = len(board_evals)
+    shaping = np.zeros(n, dtype=np.float32)
+    for t in range(n):
+        target = t
+        for k in range(1, lookahead + 1):
+            future = t + k
+            if future >= n or ep_starts[future]:
+                break
+            target = future
+        if target > t:
+            shaping[t] = board_evals[target] - board_evals[t]
+    return shaping
+
+
+def fill_rollout_buffer(model, all_batches, shaping_start, shaping_end):
+    """Step tuple layout: (obs, mask, action, reward, board_eval, ep_start, winner)"""
     n_envs  = len(all_batches)
     n_steps = len(all_batches[0][0])
+
+    progress       = min(1.0, model.num_timesteps / BOARD_SHAPING_ANNEAL)
+    shaping_weight = shaping_start + (shaping_end - shaping_start) * progress
+
     obs_arr     = np.empty((n_envs, n_steps, N_OBS), dtype=np.float32)
     mask_arr    = np.empty((n_envs, n_steps, 14),   dtype=np.float32)
     action_arr  = np.empty((n_envs, n_steps),        dtype=np.int64)
@@ -162,12 +187,17 @@ def fill_rollout_buffer(model, all_batches):
 
     for e, batch_data in enumerate(all_batches):
         steps, final_obs, final_done, episodes = batch_data[0], batch_data[1], batch_data[3], batch_data[4]
+
+        board_evals = np.array([step[4] for step in steps], dtype=np.float32)
+        ep_starts   = np.array([step[5] for step in steps], dtype=np.float32)
+        nstep       = compute_nstep_shaping(board_evals, ep_starts, BOARD_SHAPING_LOOKAHEAD)
+
         for t, step in enumerate(steps):
             obs_arr[e, t]     = step[0]
             mask_arr[e, t]    = step[1].astype(np.float32)
             action_arr[e, t]  = step[2]
-            reward_arr[e, t]  = step[3]
-            epstart_arr[e, t] = float(step[4])
+            reward_arr[e, t]  = step[3] + shaping_weight * nstep[t]  # base + N-step shaping
+            epstart_arr[e, t] = float(step[5])
         final_obs_arr[e]  = final_obs
         final_done_arr[e] = final_done
         all_episodes.extend(episodes)
@@ -217,6 +247,15 @@ def main():
     onnx_path   = sys.argv[3]
     output_file = sys.argv[4]
     n_envs      = len(ports)
+
+    # Board shaping weights — passed by ga_runner.py; default to same values as train_ai_cluster.py
+    shaping_start = 100.0
+    shaping_end   =  10.0
+    for i, arg in enumerate(sys.argv[5:], 5):
+        if arg == "--shaping-start" and i + 1 < len(sys.argv): shaping_start = float(sys.argv[i + 1])
+        if arg == "--shaping-end"   and i + 1 < len(sys.argv): shaping_end   = float(sys.argv[i + 1])
+
+    print(f"[GA Model {model_idx}] Board shaping: {shaping_start} -> {shaping_end} over {BOARD_SHAPING_ANNEAL:,} steps")
 
     print(f"[GA Model {model_idx}] {n_envs} arenas | ONNX: {onnx_path}")
 
@@ -271,7 +310,7 @@ def main():
         all_batches = [batch_queues[i].get() for i in range(n_envs)]
 
         model.policy.set_training_mode(True)
-        all_episodes = fill_rollout_buffer(model, all_batches)
+        all_episodes = fill_rollout_buffer(model, all_batches, shaping_start, shaping_end)
 
         buf = model.rollout_buffer
         if not (np.all(np.isfinite(buf.rewards)) and np.all(np.isfinite(buf.observations))):

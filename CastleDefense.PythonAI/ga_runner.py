@@ -37,6 +37,7 @@ N_ARENAS        = 14
 BASE_PORT       = 5000
 SIGMA           = 0.3    # lognormal mutation std — watch success_rate in ga_progress.csv
 N_PARENTS       = 3      # top N survive each generation
+TIME_MACHINE    = False   # set False when fine-tuning from a BC pre-trained base model
 
 ALL_PORTS = list(range(BASE_PORT, BASE_PORT + N_ARENAS))
 
@@ -48,7 +49,8 @@ ONNX_PATH        = str(NET10_DIR / "current_model.onnx")
 BEST_MODEL_ONNX  = str(_SCRIPT_DIR / "ga_best_model.onnx")
 
 PARAM_NAMES   = ["WinReward", "InvestReward", "InvestDecay", "AntiSpend",
-                 "SavingsWeight", "CombatScale", "GadgetUpgrade", "GadgetUse"]
+                 "SavingsWeight", "CombatScale", "GadgetUpgrade", "GadgetUse",
+                 "BoardShaperStart", "BoardShaperEnd"]
 GA_LOG        = str(_SCRIPT_DIR / "ga_progress.csv")
 DEFAULTS_FILE = str(_SCRIPT_DIR / "reward_defaults.json")
 
@@ -85,9 +87,10 @@ def write_reward_json(params, path):
 def start_all_arenas():
     """Launch all 14 C# arenas. Called once at the start of the run."""
     procs = []
+    extra = [] if TIME_MACHINE else ["--no-time-machine"]
     for port in ALL_PORTS:
         proc = subprocess.Popen(
-            [ARENA_EXE, str(port)],
+            [ARENA_EXE, str(port)] + extra,
             cwd=str(NET10_DIR),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -125,7 +128,9 @@ def train_model(model_idx, params):
     out_file  = str(_SCRIPT_DIR / f"ga_fitness_{model_idx}.json")
 
     cmd = [sys.executable, str(_SCRIPT_DIR / "ga_train_model.py"),
-           str(model_idx), ports_csv, ONNX_PATH, out_file]
+           str(model_idx), ports_csv, ONNX_PATH, out_file,
+           "--shaping-start", str(params["BoardShaperStart"]),
+           "--shaping-end",   str(params["BoardShaperEnd"])]
 
     print(f"  [Model {model_idx}] Training (all {N_ARENAS} arenas)...")
     subprocess.run(cmd, timeout=7200)
@@ -322,9 +327,10 @@ def load_last_generation():
     last_gen  = max(int(r["generation"]) for r in rows)
     last_rows = [r for r in rows if int(r["generation"]) == last_gen]
 
+    defaults = load_defaults()
     results = [{
         "model_idx":      int(r["model_idx"]),
-        "params":         {k: float(r[k]) for k in PARAM_NAMES},
+        "params":         {k: float(r[k]) if k in r else defaults[k] for k in PARAM_NAMES},
         "parent_id":      r["parent_id"] or None,   # csv writes None as ""
         "parent_fitness": float(r["fitness"]),
         "fitness":        float(r["fitness"]),

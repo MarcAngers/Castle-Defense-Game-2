@@ -31,12 +31,12 @@ namespace CastleDefense.Simulation
         public const int STATE_FLOATS = 348;
         public const int STATE_BYTES  = STATE_FLOATS * 4;   // 1392
         public const int MASK_BYTES   = 14;
-        public const int STEP_BYTES   = STATE_BYTES + MASK_BYTES + 1 + 4 + 1 + 1; // 1413
-        public const int FINAL_BYTES  = STATE_BYTES + MASK_BYTES + 1;             // 1407
+        public const int STEP_BYTES   = STATE_BYTES + MASK_BYTES + 1 + 4 + 4 + 1 + 1; // 1417 (added eval_delta float)
+        public const int FINAL_BYTES  = STATE_BYTES + MASK_BYTES + 1;                // 1407
 
         public static void SendBatch(
             NetworkStream s, int nSteps,
-            float[][] obs, int[][] mask, int[] action, float[] reward, bool[] epStart, int[] winner,
+            float[][] obs, int[][] mask, int[] action, float[] reward, float[] boardEval, bool[] epStart, int[] winner,
             float[] finalObs, int[] finalMask, bool finalDone,
             List<(string name, int winner)> episodes)
         {
@@ -58,7 +58,8 @@ namespace CastleDefense.Simulation
                 Buffer.BlockCopy(obs[i], 0, buf, p, STATE_BYTES); p += STATE_BYTES;
                 for (int j = 0; j < MASK_BYTES; j++) buf[p++] = (byte)mask[i][j];
                 buf[p++] = (byte)action[i];
-                BitConverter.TryWriteBytes(new Span<byte>(buf, p, 4), reward[i]); p += 4;
+                BitConverter.TryWriteBytes(new Span<byte>(buf, p, 4), reward[i]);    p += 4;
+                BitConverter.TryWriteBytes(new Span<byte>(buf, p, 4), boardEval[i]); p += 4;
                 buf[p++] = epStart[i] ? (byte)1 : (byte)0;
                 buf[p++] = (byte)winner[i];
             }
@@ -123,11 +124,43 @@ namespace CastleDefense.Simulation
             Console.WriteLine("Initializing ML Environment Server...");
             GameDataManager.Initialize();
 
+            if (args.Length >= 3 && args[0] == "--export-bc")
+            {
+                bool p1Only     = args.Contains("--p1-only");
+                bool p1WinsOnly = args.Contains("--p1-wins-only");
+                ExportBcData(args[1], args[2], p1Only, p1WinsOnly);
+                return;
+            }
+
+            if (args.Length >= 3 && args[0] == "--export-eval")
+            {
+                ExportEvalData(args[1], args[2]);
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--analyze-invest")
+            {
+                AnalyzeInvestBehavior(args[1]);
+                return;
+            }
+
+            if (args.Length >= 4 && args[0] == "--collect-calibration")
+            {
+                int  nGames    = int.Parse(args[1]);
+                string onnxPath  = args[2];
+                string outCsv    = args[3];
+                CollectCalibrationData(nGames, onnxPath, outCsv);
+                return;
+            }
+
+            bool timeMachine = !args.Contains("--no-time-machine");
+
             int port = 5000;
             if (args.Length > 0 && int.TryParse(args[0], out int parsedPort)) port = parsedPort;
             Console.Title = $"Castle Defense AI Arena - Port {port}";
 
             string modelPath = args.Length > 1 ? args[1] : "current_model.onnx";
+            Console.WriteLine($"[Config] Time machine: {(timeMachine ? "ON" : "OFF")}");
 
             // League opponents — loaded once and kept in memory across all connections
             var leagueModels = new List<(string name, AIBrain brain)>();
@@ -147,12 +180,13 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"[League] {leagueModels.Count} opponent(s) ready.");
 
             // Batch buffers — allocated once and reused across all connections
-            float[][] batchObs    = new float[N_STEPS][];
-            int[][]   batchMask   = new int[N_STEPS][];
-            int[]     batchAction = new int[N_STEPS];
-            float[]   batchRew    = new float[N_STEPS];
-            bool[]    batchEpS    = new bool[N_STEPS];
-            int[]     batchWin    = new int[N_STEPS];
+            float[][] batchObs       = new float[N_STEPS][];
+            int[][]   batchMask      = new int[N_STEPS][];
+            int[]     batchAction    = new int[N_STEPS];
+            float[]   batchRew       = new float[N_STEPS];
+            float[]   batchEval      = new float[N_STEPS];
+            bool[]    batchEpS       = new bool[N_STEPS];
+            int[]     batchWin       = new int[N_STEPS];
 
             var server = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
             server.Start();
@@ -224,8 +258,8 @@ namespace CastleDefense.Simulation
 
                         // Setup new game
                         state    = new GameState();
-                        timeSkip = Math.Max(_rand.Next(-8, 9), 0);
-                        string upg = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
+                        timeSkip = timeMachine ? Math.Max(_rand.Next(-8, 9), 0) : 0;
+                        string upg = timeMachine ? (timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "") : "";
 
                         state.Player1 = new PlayerState(timeSkip);
                         state.Player2 = new PlayerState(timeSkip);
@@ -276,8 +310,17 @@ namespace CastleDefense.Simulation
                             ? trainingBrain.GetBestAction(p1Obs, p1Mask)
                             : GetRandomValidAction(p1Mask);
 
-                        float      cumRew   = 0f;
-                        StepResult lastTick = null;
+                        // Invest exploration: if the model has stopped investing, it never sees
+                        // invest data and can't rediscover the behaviour no matter how large
+                        // the reward signal is. Force action 9 ~5 % of the time when it's valid
+                        // to inject invest experience and break the data-starvation loop.
+                        const float INVEST_EXPLORE = 0.90f;
+                        if (p1Mask[9] == 1 && p1Action != 9 && _rand.NextDouble() < INVEST_EXPLORE)
+                            p1Action = 9;
+
+                        float      cumRew    = 0f;
+                        float      evalBefore = state.EvaluateBoard();
+                        StepResult lastTick  = null;
 
                         for (int fi = 0; fi < 9; fi++)
                         {
@@ -294,11 +337,15 @@ namespace CastleDefense.Simulation
                             lastTick = tick;
                         }
 
+                        // Board eval at observation time — Python computes an N-step forward
+                        // return (eval[t+N] - eval[t]) for reward shaping, which correctly
+                        // credits actions whose payoff is delayed (invests, unit spawns, etc.).
                         batchObs[batchPos]    = p1Obs;
                         batchMask[batchPos]   = p1Mask;
                         batchAction[batchPos] = p1Action;
                         batchRew[batchPos]    = cumRew;
-                        batchEpS[batchPos]    = nextEpStart;
+                        batchEval[batchPos]   = evalBefore;
+                        batchEpS[batchPos]       = nextEpStart;
                         batchWin[batchPos]    = lastTick.IsDone ? lastTick.WinnerSide : 0;
                         nextEpStart           = lastTick.IsDone;
                         batchPos++;
@@ -314,7 +361,7 @@ namespace CastleDefense.Simulation
                         try
                         {
                             BatchProto.SendBatch(stream, N_STEPS,
-                                batchObs, batchMask, batchAction, batchRew, batchEpS, batchWin,
+                                batchObs, batchMask, batchAction, batchRew, batchEval, batchEpS, batchWin,
                                 finalObs, finalMask, finalDone, batchEpisodes);
 
                             byte ackVersion = BatchProto.ReadAck(stream);
@@ -357,6 +404,633 @@ namespace CastleDefense.Simulation
         {
             var valid = Enumerable.Range(0, mask.Length).Where(i => mask[i] != 0).ToList();
             return valid.Count > 0 ? valid[_rand.Next(valid.Count)] : 0;
+        }
+
+        // ── BC EXPORT ──────────────────────────────────────────────────────────────
+
+        static string ReadStr(BinaryReader r)
+        {
+            int len = r.ReadByte();
+            return len > 0 ? Encoding.UTF8.GetString(r.ReadBytes(len)) : "";
+        }
+
+        // Infer the time-machine starting state for a v1 replay by scoring candidate
+        // (timeSkip, bonusMoney) pairs against the first N recorded action pairs.
+        // The gadget suffix narrows candidates; we pick the pair where the most recorded
+        // actions are valid in the re-simulated mask.
+        static (int timeSkip, bool bonusMoney) InferV1TimeMachineState(
+            string p1Team, string[] l1, string p2Team, string[] l2,
+            byte[] actionBytes, int kTicks)
+        {
+            // Narrow candidates from gadget suffix (all three gadgets carry the same suffix)
+            string suffix = l1.Length > 0 ? (l1[0].EndsWith("_3") ? "_3" : l1[0].EndsWith("_2") ? "_2" : "") : "";
+            int[] candidates = suffix == "_3" ? new[] { 6, 7, 8 }
+                             : suffix == "_2" ? new[] { 4, 5 }
+                             : new[] { 0, 1, 2, 3 };
+
+            int  bestTs    = candidates[0];
+            bool bestBonus = false;
+            int  bestScore = -1;
+
+            foreach (int ts in candidates)
+            {
+                foreach (bool bonus in new[] { false, true })
+                {
+                    var p1 = new PlayerState(ts);
+                    var p2 = new PlayerState(ts);
+                    if (bonus)
+                    {
+                        p1.Money = p1.InvestmentPrice + p1.Income;
+                        p2.Money = p2.InvestmentPrice + p2.Income;
+                    }
+                    p1.Side = 1; p1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+                    p2.Side = 2; p2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+                    if (l1.Length == 3) p1.SetLoadout(l1);
+                    if (l2.Length == 3) p2.SetLoadout(l2);
+
+                    var gs = new GameState();
+                    gs.Player1 = p1; gs.Player2 = p2;
+                    gs.CurrentTick = 30L * 30 * ts;
+                    var eng = new GameEngine(gs);
+
+                    int valid = 0;
+                    for (int i = 0; i < kTicks && i * 2 + 1 < actionBytes.Length && !gs.IsGameOver; i++)
+                    {
+                        byte p1a = actionBytes[i * 2];
+                        byte p2a = actionBytes[i * 2 + 1];
+                        if (p1a > 0 && gs.GetActionMask(1)[p1a] == 1) valid++;
+                        if (p2a > 0 && gs.GetActionMask(2)[p2a] == 1) valid++;
+                        eng.ApplyAction(1, p1a);
+                        eng.ApplyAction(2, p2a);
+                        eng.Tick();
+                    }
+
+                    // Strictly greater: on tie, first candidate (lowest ts, no bonus) wins
+                    if (valid > bestScore) { bestScore = valid; bestTs = ts; bestBonus = bonus; }
+                }
+            }
+
+            return (bestTs, bestBonus);
+        }
+
+        // p1Only:     record only P1's perspective (skip P2 actions)
+        // p1WinsOnly: skip replays where P1 did not win (winner byte != 1)
+        static void ProcessReplay(string path,
+            List<float[]> obs, List<int[]> masks, List<int> actions,
+            bool p1Only = false, bool p1WinsOnly = false)
+        {
+            using var stream = File.OpenRead(path);
+            using var r = new BinaryReader(stream, Encoding.UTF8);
+
+            var magic = r.ReadBytes(4);
+            if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                throw new InvalidDataException("Not a CDRP replay file");
+
+            byte   version = r.ReadByte();
+            string gameId  = Encoding.ASCII.GetString(r.ReadBytes(6));
+            r.ReadInt64();  // timestamp
+            ReadStr(r);     // game_version (discard)
+
+            string p1Team = ReadStr(r);
+            string p1Off  = ReadStr(r), p1Def = ReadStr(r), p1Sig = ReadStr(r);
+            string p2Team = ReadStr(r);
+            string p2Off  = ReadStr(r), p2Def = ReadStr(r), p2Sig = ReadStr(r);
+            byte   winner = r.ReadByte();
+
+            long   startingTick = 0;
+            double p1StartMoney = 0, p2StartMoney = 0;
+            if (version >= 2)
+            {
+                startingTick = r.ReadInt64();
+                p1StartMoney = r.ReadDouble();
+                p2StartMoney = r.ReadDouble();
+            }
+
+            uint tickCount = r.ReadUInt32();
+
+            if (p1WinsOnly && winner != 1)
+            {
+                Console.WriteLine($"[BC] {gameId}: skipped (P{winner} won, need P1 win)");
+                return;
+            }
+
+            var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+            // v1 singleplayer replays used the time machine but didn't store the starting state.
+            // Probe the first N ticks to infer which timeSkip was used, so re-simulation starts
+            // from the correct economy and all recorded actions appear valid in the mask.
+            // Multiplayer v1 replays never used the time machine so we skip inference for them.
+            if (version == 1 && p1Only && tickCount > 0)
+            {
+                long   actionStart = stream.Position;
+                const  int PROBE   = 100;
+                byte[] probe       = r.ReadBytes(Math.Min((int)tickCount, PROBE) * 2);
+                stream.Seek(actionStart, SeekOrigin.Begin);
+
+                var (ts, bonus) = InferV1TimeMachineState(p1Team, l1, p2Team, l2, probe, PROBE);
+                startingTick    = 30L * 30 * ts;
+                var proto       = new PlayerState(ts);
+                double amt      = bonus ? proto.InvestmentPrice + proto.Income : proto.Money;
+                p1StartMoney    = amt;
+                p2StartMoney    = amt;
+                if (ts > 0) Console.WriteLine($"[BC] {gameId}: v1 inferred timeSkip={ts} bonus={bonus}");
+            }
+
+            int timeSkip = (int)(startingTick / (30 * 30));
+            var state    = new GameState();
+            state.Player1 = new PlayerState(timeSkip);
+            state.Player2 = new PlayerState(timeSkip);
+            state.Player1.Side = 1; state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+            state.Player2.Side = 2; state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+            state.Player1.Money = p1StartMoney;
+            state.Player2.Money = p2StartMoney;
+            state.CurrentTick   = startingTick;
+            if (l1.Length == 3) state.Player1.SetLoadout(l1);
+            if (l2.Length == 3) state.Player2.SetLoadout(l2);
+
+            var engine   = new GameEngine(state);
+            int startObs = obs.Count;
+
+            for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+            {
+                byte p1Action = r.ReadByte();
+                byte p2Action = r.ReadByte();
+
+                // Always record P1 perspective for any non-wait action
+                if (p1Action != 0)
+                {
+                    obs.Add(state.GetStateVector(1));
+                    masks.Add(state.GetActionMask(1));
+                    actions.Add(p1Action);
+                }
+
+                // Record P2 perspective only for human-vs-human games
+                if (!p1Only && p2Action != 0)
+                {
+                    obs.Add(state.GetStateVector(2));
+                    masks.Add(state.GetActionMask(2));
+                    actions.Add(p2Action);
+                }
+
+                engine.ApplyAction(1, p1Action);
+                engine.ApplyAction(2, p2Action);
+                engine.Tick();
+            }
+
+            string tag = timeSkip > 0 ? $" [skip={timeSkip}]" : "";
+            Console.WriteLine($"[BC] {gameId} (P{winner} won){tag}: {tickCount} ticks → {obs.Count - startObs} examples");
+        }
+
+        static void ExportBcData(string replayDir, string outputPath,
+            bool p1Only = false, bool p1WinsOnly = false)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[BC] ERROR: replay directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var replayFiles = Directory.GetFiles(replayDir, "*.replay");
+            Console.WriteLine($"[BC] Found {replayFiles.Length} replay file(s) in {replayDir}" +
+                              (p1Only ? " [P1 perspective only]" : "") +
+                              (p1WinsOnly ? " [P1 wins only]" : ""));
+
+            var obs     = new List<float[]>();
+            var masks   = new List<int[]>();
+            var actions = new List<int>();
+
+            foreach (var f in replayFiles)
+            {
+                try   { ProcessReplay(f, obs, masks, actions, p1Only, p1WinsOnly); }
+                catch (Exception ex) { Console.Error.WriteLine($"[BC] Skip {Path.GetFileName(f)}: {ex.Message}"); }
+            }
+
+            if (obs.Count == 0)
+            {
+                Console.Error.WriteLine("[BC] No training examples generated — aborting.");
+                Environment.Exit(1);
+            }
+
+            Console.WriteLine($"[BC] Writing {obs.Count} training examples to {outputPath}...");
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+
+            using var stream = new FileStream(outputPath, FileMode.Create);
+            using var w = new BinaryWriter(stream);
+
+            w.Write(new byte[] { (byte)'B', (byte)'C', (byte)'T', (byte)'R' });
+            w.Write(obs.Count);
+            for (int i = 0; i < obs.Count; i++)
+            {
+                foreach (var f in obs[i])   w.Write(f);
+                foreach (var m in masks[i]) w.Write((byte)m);
+                w.Write((byte)actions[i]);
+            }
+
+            long kb = stream.Length / 1024;
+            Console.WriteLine($"[BC] Done — {obs.Count} examples, {kb} KB");
+        }
+
+        // ── INVEST BEHAVIOUR ANALYSIS ──────────────────────────────────────────────
+        // For each replay, reconstructs the game tick-by-tick and checks whether invest
+        // (action 9) was available but not taken.  Reports per-game and aggregate stats
+        // for P1 and P2 separately so AI vs human behaviour can be compared.
+
+        static void AnalyzeInvestBehavior(string replayDir)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[Invest] Directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var files = Directory.GetFiles(replayDir, "*.replay");
+            if (files.Length == 0)
+            {
+                Console.Error.WriteLine($"[Invest] No .replay files in {replayDir}");
+                Environment.Exit(1);
+            }
+            Console.WriteLine($"[Invest] Analysing {files.Length} replay(s) in {replayDir}\n");
+
+            long totalP1Avail = 0, totalP1Missed = 0;
+            long totalP2Avail = 0, totalP2Missed = 0;
+
+            foreach (var path in files.OrderBy(x => x))
+            {
+                try
+                {
+                    using var stream = File.OpenRead(path);
+                    using var r = new BinaryReader(stream, Encoding.UTF8);
+
+                    var magic = r.ReadBytes(4);
+                    if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                        throw new InvalidDataException("Not a CDRP file");
+
+                    byte   version   = r.ReadByte();
+                    string gameId    = Encoding.ASCII.GetString(r.ReadBytes(6));
+                    r.ReadInt64();
+                    ReadStr(r);  // game_version
+                    string p1Team    = ReadStr(r);
+                    string p1Off     = ReadStr(r); string p1Def = ReadStr(r); string p1Sig = ReadStr(r);
+                    string p2Team    = ReadStr(r);
+                    string p2Off     = ReadStr(r); string p2Def = ReadStr(r); string p2Sig = ReadStr(r);
+                    byte   winner    = r.ReadByte();
+
+                    long   startingTick = 0;
+                    double p1StartMoney = 0, p2StartMoney = 0;
+                    if (version >= 2)
+                    {
+                        startingTick = r.ReadInt64();
+                        p1StartMoney = r.ReadDouble();
+                        p2StartMoney = r.ReadDouble();
+                    }
+
+                    uint tickCount = r.ReadUInt32();
+
+                    var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+                    var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+                    if (version == 1 && tickCount > 0)
+                    {
+                        long   ap    = stream.Position;
+                        byte[] probe = r.ReadBytes(Math.Min((int)tickCount, 100) * 2);
+                        stream.Seek(ap, SeekOrigin.Begin);
+                        var (ts, bonus) = InferV1TimeMachineState(p1Team, l1, p2Team, l2, probe, 100);
+                        startingTick    = 30L * 30 * ts;
+                        var proto       = new PlayerState(ts);
+                        double amt      = bonus ? proto.InvestmentPrice + proto.Income : proto.Money;
+                        p1StartMoney    = amt; p2StartMoney = amt;
+                    }
+
+                    int timeSkip = (int)(startingTick / (30 * 30));
+                    var state = new GameState();
+                    state.Player1 = new PlayerState(timeSkip); state.Player2 = new PlayerState(timeSkip);
+                    state.Player1.Side = 1; state.Player2.Side = 2;
+                    state.Player1.Money = p1StartMoney; state.Player2.Money = p2StartMoney;
+                    state.CurrentTick = startingTick;
+                    state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+                    state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+                    if (l1.Length == 3) state.Player1.SetLoadout(l1);
+                    if (l2.Length == 3) state.Player2.SetLoadout(l2);
+                    var engine = new GameEngine(state);
+
+                    // Count ticks where a non-wait action was taken while invest was available.
+                    // "Other" = chose something other than invest (action != 9) in that situation.
+                    long p1Active = 0, p1Other = 0, p2Active = 0, p2Other = 0;
+
+                    for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+                    {
+                        byte p1Action = r.ReadByte();
+                        byte p2Action = r.ReadByte();
+
+                        int[] p1Mask = state.GetActionMask(1);
+                        int[] p2Mask = state.GetActionMask(2);
+
+                        if (p1Mask[9] == 1 && p1Action != 0)
+                        {
+                            p1Active++;
+                            if (p1Action != 9) p1Other++;
+                        }
+                        if (p2Mask[9] == 1 && p2Action != 0)
+                        {
+                            p2Active++;
+                            if (p2Action != 9) p2Other++;
+                        }
+
+                        engine.ApplyAction(1, p1Action);
+                        engine.ApplyAction(2, p2Action);
+                        engine.Tick();
+                    }
+
+                    double p1Pct = p1Active > 0 ? p1Other * 100.0 / p1Active : 0;
+                    double p2Pct = p2Active > 0 ? p2Other * 100.0 / p2Active : 0;
+                    Console.WriteLine($"  {gameId} (P{winner} won)  " +
+                                      $"P1: {p1Other}/{p1Active} chose other ({p1Pct:F1}%)  " +
+                                      $"P2: {p2Other}/{p2Active} chose other ({p2Pct:F1}%)");
+
+                    totalP1Avail += p1Active; totalP1Missed += p1Other;
+                    totalP2Avail += p2Active; totalP2Missed += p2Other;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  [skip] {Path.GetFileName(path)}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("─── AGGREGATE ───────────────────────────────────────────────────");
+            if (totalP1Avail > 0)
+                Console.WriteLine($"  P1  active decisions w/ invest available: {totalP1Avail,6}  " +
+                                  $"chose other: {totalP1Missed,6} ({totalP1Missed * 100.0 / totalP1Avail:F2}%)");
+            if (totalP2Avail > 0)
+                Console.WriteLine($"  P2  active decisions w/ invest available: {totalP2Avail,6}  " +
+                                  $"chose other: {totalP2Missed,6} ({totalP2Missed * 100.0 / totalP2Avail:F2}%)");
+        }
+
+        // ── CALIBRATION DATA COLLECTION ────────────────────────────────────────────
+        // Runs N games at full speed (no networking), sampling the 6 board-eval
+        // component scores every 30 ticks, then labels each sample with the winner.
+        // Output is a lightweight CSV — no .replay files are written.
+
+        static void CollectCalibrationData(int nGames, string onnxPath, string outCsv)
+        {
+            const int SAMPLE_EVERY   = 30;
+            const int BRAIN_FREQ     = 9;
+            const int LOG_EVERY      = 500;
+            const int MAX_TICKS_GAME = GameEngine.MAX_TICKS;
+
+            // Build a diverse pool: AI brains (league + base model) + simple bots.
+            // P1 and P2 are drawn independently each game, so any matchup is possible.
+            // Using a Func<GameState, int, int> delegate means bots and brains are interchangeable.
+            var aiBrains = new List<(string name, AIBrain brain)>();
+
+            if (File.Exists(onnxPath))
+            {
+                try
+                {
+                    aiBrains.Add((Path.GetFileNameWithoutExtension(onnxPath), new AIBrain(onnxPath)));
+                    Console.WriteLine($"[Calib] Base model : {Path.GetFileNameWithoutExtension(onnxPath)}");
+                }
+                catch { Console.WriteLine($"[Calib] Could not load {onnxPath}"); }
+            }
+
+            string leagueDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "league_models");
+            if (Directory.Exists(leagueDir))
+            {
+                foreach (var f in Directory.GetFiles(leagueDir, "*.onnx").Where(x => !x.EndsWith(".data")))
+                {
+                    try
+                    {
+                        aiBrains.Add((Path.GetFileNameWithoutExtension(f), new AIBrain(f)));
+                        Console.WriteLine($"[Calib] League model: {Path.GetFileNameWithoutExtension(f)}");
+                    }
+                    catch (Exception ex) { Console.WriteLine($"[Calib] Skip {Path.GetFileName(f)}: {ex.Message}"); }
+                }
+            }
+
+            // Build the unified pool: (name, action-selector delegate)
+            // Delegate signature: (GameState state, int side) -> int action
+            var pool = new List<(string name, Func<GameState, int, int> pick)>();
+
+            foreach (var (name, brain) in aiBrains)
+            {
+                var b = brain;  // capture for lambda
+                pool.Add((name, (state, side) =>
+                    b.GetBestAction(state.GetStateVector(side), state.GetActionMask(side))));
+            }
+
+            // Simple bots — included so calibration covers weaker opponents and diverse play styles
+            var randBot  = new RandomBot();
+            var antiBot  = new AntiSpamBot();
+            pool.Add(("RandomBot",  (state, side) => GetRandomValidAction(state.GetActionMask(side))));
+            pool.Add(("AntiSpamBot",(state, side) => antiBot.GetAction(state.CurrentTick,
+                                                        side == 1 ? state.Player2.Team : state.Player1.Team)));
+            foreach (int tier in new[] { 1, 2, 4, 6, 8 })
+            {
+                var sb = new SpamBot(tier);
+                pool.Add(($"SpamBotT{tier}", (state, side) => sb.GetAction()));
+            }
+
+            Console.WriteLine($"[Calib] Pool: {pool.Count} players ({aiBrains.Count} AI + {pool.Count - aiBrains.Count} bots). " +
+                              $"P1 and P2 drawn independently per game.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outCsv))!);
+
+            int p1Wins = 0, p2Wins = 0;
+            bool writeHeader = !File.Exists(outCsv);
+
+            using var sw = new StreamWriter(outCsv, append: true);
+            if (writeHeader)
+                sw.WriteLine("hp_score,income_score,money_score,army_score,gadget_score,repair_score,winner");
+
+            for (int g = 0; g < nGames; g++)
+            {
+                var p1Player = pool[_rand.Next(pool.Count)];
+                var p2Player = pool[_rand.Next(pool.Count)];
+
+                var state  = new GameState();
+                state.Player1 = new PlayerState();
+                state.Player2 = new PlayerState();
+                state.Player1.Side = 1; state.Player2.Side = 2;
+                state.Player1.Team = GameDataManager.GetRandomTeam();
+                state.Player2.Team = GameDataManager.GetRandomTeam();
+                state.Player1.SetLoadout(new[] {
+                    GameDataManager.GetRandomOGadgetId(),
+                    GameDataManager.GetRandomDGadgetId(),
+                    GameDataManager.GetSignatureGadgetIdForTeam(state.Player1.Team) });
+                state.Player2.SetLoadout(new[] {
+                    GameDataManager.GetRandomOGadgetId(),
+                    GameDataManager.GetRandomDGadgetId(),
+                    GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) });
+
+                var engine  = new GameEngine(state);
+                var samples = new List<(float hp, float income, float money, float army, float gadget, float repair)>();
+
+                int p1Action = 0;
+                int p2Action = 0;
+
+                while (!state.IsGameOver && state.CurrentTick < MAX_TICKS_GAME)
+                {
+                    if (state.CurrentTick % SAMPLE_EVERY == 0)
+                        samples.Add(state.GetEvalComponents());
+
+                    if (state.CurrentTick % BRAIN_FREQ == 0)
+                    {
+                        p1Action = p1Player.pick(state, 1);
+                        p2Action = p2Player.pick(state, 2);
+                    }
+
+                    engine.ApplyAction(1, p1Action);
+                    engine.ApplyAction(2, p2Action);
+                    engine.Tick();
+                }
+
+                int winner = state.WinnerSide;
+                if (winner == 0)
+                    winner = state.Player1.CastleHealth >= state.Player2.CastleHealth ? 1 : 2;
+
+                if (winner == 1) p1Wins++; else p2Wins++;
+
+                foreach (var (hp, income, money, army, gadget, repair) in samples)
+                    sw.WriteLine($"{hp:F4},{income:F4},{money:F4},{army:F4},{gadget:F4},{repair:F4},{winner}");
+
+                if ((g + 1) % LOG_EVERY == 0 || g == nGames - 1)
+                {
+                    int done = g + 1;
+                    Console.WriteLine($"[Calib] {done}/{nGames} games | P1: {p1Wins}  P2: {p2Wins} " +
+                                      $"| P1 win rate: {(double)p1Wins/done*100:F0}%");
+                }
+            }
+
+            foreach (var (_, b) in aiBrains) b?.Dispose();
+            Console.WriteLine($"[Calib] Written to {outCsv}");
+        }
+
+        // ── EVAL EXPORT ────────────────────────────────────────────────────────────
+
+        static void ExportEvalForReplay(string path, StreamWriter sw)
+        {
+            using var stream = File.OpenRead(path);
+            using var r = new BinaryReader(stream, Encoding.UTF8);
+
+            var magic = r.ReadBytes(4);
+            if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                throw new InvalidDataException("Not a CDRP replay file");
+
+            byte   version   = r.ReadByte();
+            string gameId    = Encoding.ASCII.GetString(r.ReadBytes(6));
+            r.ReadInt64();  // timestamp
+            ReadStr(r);     // game_version
+            string p1Team    = ReadStr(r);
+            string p1Off     = ReadStr(r);
+            string p1Def     = ReadStr(r);
+            string p1Sig     = ReadStr(r);
+            string p2Team    = ReadStr(r);
+            string p2Off     = ReadStr(r);
+            string p2Def     = ReadStr(r);
+            string p2Sig     = ReadStr(r);
+            byte   winner    = r.ReadByte();
+
+            long   startingTick = 0;
+            double p1StartMoney = 0, p2StartMoney = 0;
+            if (version >= 2)
+            {
+                startingTick = r.ReadInt64();
+                p1StartMoney = r.ReadDouble();
+                p2StartMoney = r.ReadDouble();
+            }
+
+            uint tickCount = r.ReadUInt32();
+
+            var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+            if (version == 1 && tickCount > 0)
+            {
+                long   ap    = stream.Position;
+                byte[] probe = r.ReadBytes(Math.Min((int)tickCount, 100) * 2);
+                stream.Seek(ap, SeekOrigin.Begin);
+                var (ts, bonus) = InferV1TimeMachineState(p1Team, l1, p2Team, l2, probe, 100);
+                startingTick    = 30L * 30 * ts;
+                var proto       = new PlayerState(ts);
+                double amt      = bonus ? proto.InvestmentPrice + proto.Income : proto.Money;
+                p1StartMoney    = amt; p2StartMoney = amt;
+            }
+
+            int timeSkip = (int)(startingTick / (30 * 30));
+            var state = new GameState();
+            state.Player1 = new PlayerState(timeSkip);
+            state.Player2 = new PlayerState(timeSkip);
+            state.Player1.Side = 1;
+            state.Player2.Side = 2;
+            state.Player1.Money = p1StartMoney;
+            state.Player2.Money = p2StartMoney;
+            state.CurrentTick = startingTick;
+            state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+            state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+            if (l1.Length == 3) state.Player1.SetLoadout(l1);
+            if (l2.Length == 3) state.Player2.SetLoadout(l2);
+
+            var engine   = new GameEngine(state);
+            const float TICKS_PER_SEC = 30f;
+            int  rows    = 0;
+
+            void WriteRow(long tick, float timeSec)
+            {
+                var (hp, income, money, army, gadget, repair) = state.GetEvalComponents();
+                float eval = state.EvaluateBoard();
+                sw.WriteLine($"{gameId},{tick},{timeSec:F2},{eval:F4},{winner},{hp:F4},{income:F4},{money:F4},{army:F4},{gadget:F4},{repair:F4}");
+            }
+
+            // Write initial state before any action
+            WriteRow(startingTick, startingTick / TICKS_PER_SEC);
+            rows++;
+
+            for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+            {
+                byte p1Action = r.ReadByte();
+                byte p2Action = r.ReadByte();
+
+                engine.ApplyAction(1, p1Action);
+                engine.ApplyAction(2, p2Action);
+                engine.Tick();
+
+                float timeSec = state.CurrentTick / TICKS_PER_SEC;
+                WriteRow(state.CurrentTick, timeSec);
+                rows++;
+            }
+
+            Console.WriteLine($"[Eval] {gameId} ({p1Team} vs {p2Team}): {tickCount} ticks, winner=P{winner}, {rows} rows");
+        }
+
+        static void ExportEvalData(string replayDir, string outputPath)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[Eval] ERROR: replay directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var replayFiles = Directory.GetFiles(replayDir, "*.replay");
+            if (replayFiles.Length == 0)
+            {
+                Console.Error.WriteLine($"[Eval] ERROR: no .replay files in {replayDir}");
+                Environment.Exit(1);
+            }
+
+            Console.WriteLine($"[Eval] Found {replayFiles.Length} replay file(s) in {replayDir}");
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+
+            using var sw = new StreamWriter(outputPath);
+            sw.WriteLine("game_id,tick,time_seconds,board_eval,winner,hp_score,income_score,money_score,army_score,gadget_score,repair_score");
+
+            foreach (var f in replayFiles)
+            {
+                try   { ExportEvalForReplay(f, sw); }
+                catch (Exception ex) { Console.Error.WriteLine($"[Eval] Skip {Path.GetFileName(f)}: {ex.Message}"); }
+            }
+
+            Console.WriteLine($"[Eval] Written to {outputPath}");
         }
 
         static void PrintFinalStats(int port, StatTracker global,

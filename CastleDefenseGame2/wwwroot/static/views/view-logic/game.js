@@ -248,28 +248,38 @@ function initShopUI(team) {
     const btnGadgetOffense = document.getElementById('btnGadgetOffense');
     const btnGadgetDefence = document.getElementById('btnGadgetDefence');
 
-    // Set image and price for offensive gadget button
+    // Set image and price for gadget buttons.
+    // Gadget IDs may be versioned (e.g. "nuke_2") when starting from a time-machine state,
+    // so use the base ID for asset lookups but the full ID for level calculation.
+    const getBaseId = (id) => id ? id.split('_')[0].toLowerCase() : '';
+
     const loadout0 = connection.selectedLoadout[0];
+    const base0 = getBaseId(loadout0);
+    const data0 = loader.assets.gadgetData[loadout0] || loader.assets.gadgetData[base0];
     buildGadgetDOM(
-        btnGadgetOffense, 
-        loader.assets.gadgetData[loadout0].cost || loader.assets.gadgetData[loadout0].Cost, 
-        loader.assets.gadgets[loadout0],
+        btnGadgetOffense,
+        data0?.cost || data0?.Cost,
+        loader.assets.gadgets[loadout0] || loader.assets.gadgets[base0],
         getGadgetLevel(loadout0)
     );
 
     const loadout1 = connection.selectedLoadout[1];
+    const base1 = getBaseId(loadout1);
+    const data1 = loader.assets.gadgetData[loadout1] || loader.assets.gadgetData[base1];
     buildGadgetDOM(
-        btnGadgetDefence, 
-        loader.assets.gadgetData[loadout1].cost || loader.assets.gadgetData[loadout1].Cost, 
-        loader.assets.gadgets[loadout1],
+        btnGadgetDefence,
+        data1?.cost || data1?.Cost,
+        loader.assets.gadgets[loadout1] || loader.assets.gadgets[base1],
         getGadgetLevel(loadout1)
     );
 
     const loadout2 = connection.selectedLoadout[2];
+    const base2 = getBaseId(loadout2);
+    const data2 = loader.assets.gadgetData[loadout2] || loader.assets.gadgetData[base2];
     buildGadgetDOM(
-        btnGadgetSignature, 
-        loader.assets.gadgetData[loadout2].cost || loader.assets.gadgetData[loadout2].Cost, 
-        loader.assets.gadgets[loadout2],
+        btnGadgetSignature,
+        data2?.cost || data2?.Cost,
+        loader.assets.gadgets[loadout2] || loader.assets.gadgets[base2],
         getGadgetLevel(loadout2)
     );
 

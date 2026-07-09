@@ -1,13 +1,13 @@
 ID,Name,Slot,NextTierId,Targeted,Cost,UpgradeCost,BaseValue,BaseLabel,Radius,Delay,PushForce,HazardDuration,StatusName,StatusDuration,CooldownMs,Description
 nuke,Bomb,Offense,nuke_2,1,20,500,200,DMG,300,48,50000,0,,0,7500,Big area damage. Hurts both Castles.
 nuke_2,Missile,Offense,nuke_3,1,300,700,3000,DMG,600,48,750000,0,,0,10000,Huge area damage. Hurts both Castles.
-nuke_3,Nuke,Offense,,1,5000,,24000,DMG,600,48,1500000,0,,0,15000,Massive area damage. Hurts both Castles.
+nuke_3,Nuke,Offense,,1,4000,,24000,DMG,600,48,1500000,0,,0,18000,Massive area damage. Hurts both Castles.
 snipe,Water Gun,Offense,snipe_2,1,30,400,1500,DMG,0,70,500000,0,,0,10000,Snipes a single target for big damage and knockback.
 snipe_2,Rifle,Offense,snipe_3,1,450,900,22500,DMG,0,70,7500000,0,,0,10000,Snipes a single target for huge damage and knockback.
 snipe_3,Sniper Rifle,Offense,,1,7500,,55000,DMG,0,70,30000000,0,,0,10000,Perfectly headshots a single target for massive damage and knockback.
-firebomb,Fire Bomb,Offense,firebomb_2,1,20,900,12,DPS,150,48,0,120,BURN,90,5000,Sets the ground on fire burning units and damaging over time.
-firebomb_2,Mega Fire Bomb,Offense,firebomb_3,1,300,1400,80,DPS,150,48,0,120,BURN,90,5000,Sets the ground on fire. Super hot blue flames deal extra damage over time.
-firebomb_3,Inferno Wall,Offense,,1,5000,,450,DPS,150,48,0,180,BURN,150,8000,Sets the ground on fire. The hottest white flames deal massive damage over time.
+firebomb,Fire Bomb,Offense,firebomb_2,1,18,900,10,DPS,150,48,0,120,BURN,90,5000,Sets the ground on fire burning units and damaging over time.
+firebomb_2,Mega Fire Bomb,Offense,firebomb_3,1,270,1400,70,DPS,150,48,0,120,BURN,90,8000,Sets the ground on fire. Super hot blue flames deal extra damage over time.
+firebomb_3,Inferno Wall,Offense,,1,4000,,400,DPS,150,48,0,180,BURN,150,12000,Sets the ground on fire. The hottest white flames deal massive damage over time.
 freeze,Freeze Ray,Offense,freeze_2,0,15,700,10,DMG,0,48,0,0,FREEZE,90,12000,Freezes all enemy units for a short time.
 freeze_2,Turbo Freeze Ray,Offense,freeze_3,0,225,1500,150,DMG,0,48,0,0,FREEZE,150,18500,Freezes all enemy units.
 freeze_3,Arctic Blast,Offense,,0,1800,,1200,DMG,0,48,0,0,FREEZE,180,20000,Deep freezes all enemy units. Turbo freeze is so cold that units remain slowed even after they thaw.
@@ -39,8 +39,8 @@ divine,Shield,Signature,divine_2,0,50,400,100,SHIELD,0,48,0,0,,150,10000,Provide
 divine_2,Big Shield,Signature,divine_3,0,750,1100,2500,SHIELD,0,48,0,0,,300,10000,Provides a large shield to all allied units. Absorbing damage and preventing knockback.
 divine_3,Divine Shield,Signature,,0,6000,,0,SHIELD,0,48,0,0,,300,30000,Calls to the gods for divine intervention. Blessing your castle and all allied units with complete invulnerability!
 meteor,Meteor Strike,Signature,meteor_2,1,50,400,500,DMG,750,70,100000,0,BURN,90,10000,"Calls down a meteor from the sky, dealing damage to enemy units and setting them on fire."
-meteor_2,Mega Meteor Strike,Signature,meteor_3,1,500,700,2500,DMG,750,70,1500000,0,BURN,90,10000,"Calls down multiple huge meteors, dealing big damage to enemy units and setting them on fire."
-meteor_3,Meteor Shower,Signature,,1,9000,,2500,DMG,750,70,1500000,0,BURN,90,12000,Brings forth a deadly meteor shower to pummel the enemy forces!
+meteor_2,Mega Meteor Strike,Signature,meteor_3,1,500,700,2500,DMG,750,70,1500000,0,BURN,90,12000,"Calls down multiple huge meteors, dealing big damage to enemy units and setting them on fire."
+meteor_3,Meteor Shower,Signature,,1,9000,,2500,DMG,750,70,1500000,0,BURN,90,15000,Brings forth a deadly meteor shower to pummel the enemy forces!
 wave,Wave,Signature,wave_2,0,40,500,500,KNOCKBACK,100,0,0,150,,0,15000,"Sends a wave across the map to the opposing castle, pushing all enemies back."
 wave_2,Tidal Wave,Signature,wave_3,0,600,900,1000,KNOCKBACK,200,0,0,210,,0,15000,"Sends a huge wave across the map to the opposing castle, pushing all enemies back even farther."
 wave_3,Tsunami,Signature,,0,4800,,3000,KNOCKBACK,400,0,0,300,,0,30000,"A massive tsunami crashes towards the enemy castle, sending all but the most powerful units flying backwards!"

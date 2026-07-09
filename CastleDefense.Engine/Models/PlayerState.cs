@@ -106,6 +106,7 @@ namespace CastleDefense.Engine.Models
             {
                 // Use your global GameDataManager to grab the upgraded definition
                 var upgradedDef = GameDataManager.Gadgets.Find(g => g.Id == currentDef.NextTierId);
+                if (upgradedDef == null) return; // NextTierId not found — data configuration error
 
                 // Swap the loadout!
                 if (OffensiveGadget == currentDef) OffensiveGadget = upgradedDef;

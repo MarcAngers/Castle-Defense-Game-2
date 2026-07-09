@@ -1,3 +1,4 @@
+using CastleDefense.Api.Data;
 using CastleDefense.Api.Hubs;
 using CastleDefense.Api.Services;
 using CastleDefense.Engine.Data;
@@ -13,6 +14,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<GameHostingService
 
 string modelPath = Path.Combine(AppContext.BaseDirectory, "AI_Models", "castle_defense_bot.onnx");
 builder.Services.AddSingleton<AIBrain>(new AIBrain(modelPath));
+
+string dbPath = Path.Combine(AppContext.BaseDirectory, "recordings", "game_records.db");
+builder.Services.AddSingleton(new GameDatabase(dbPath));
 
 // Add CORS (Crucial for WebGL/Web clients)
 builder.Services.AddCors(options =>

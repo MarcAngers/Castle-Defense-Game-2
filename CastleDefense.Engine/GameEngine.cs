@@ -39,12 +39,20 @@ namespace CastleDefense.Engine
         }
         private List<ScheduledEvent> _scheduledEvents = new List<ScheduledEvent>();
 
-        public GameEngine(GameState state, RewardParams? rewardParams = null)
+        public GameEngine(GameState state, RewardParams rewardParams = null)
         {
             _state = state;
             _rewardParams = rewardParams ?? RewardParams.Default;
             BuildCache();
 
+            _state.Player1.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
+            _state.Player2.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
+        }
+
+        // Re-subscribe to OnGadgetUpgraded after PlayerState objects are replaced
+        // (e.g., when the league JoinGame branch swaps in new PlayerState instances).
+        public void RewirePlayerEvents()
+        {
             _state.Player1.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
             _state.Player2.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
         }
@@ -163,6 +171,13 @@ namespace CastleDefense.Engine
 
                 // 3. Deduct Cost
                 player.Money -= def.Cost;
+
+                // Track action ID for recording (tier maps directly to action ID 1-8)
+                if (def.Tier >= 1 && def.Tier <= 8)
+                {
+                    if (side == 1) LastActionP1 = def.Tier;
+                    else LastActionP2 = def.Tier;
+                }
             }
 
             Random random = new Random();
@@ -232,6 +247,8 @@ namespace CastleDefense.Engine
 
             if (player.Money < player.InvestmentPrice) return false;
 
+            if (side == 1) LastActionP1 = 9; else LastActionP2 = 9;
+
             if (player.InvestmentCount > 8) return false;
 
             // 2. Deduct cost
@@ -264,6 +281,8 @@ namespace CastleDefense.Engine
             var player = side == 1 ? _state.Player1 : _state.Player2;
 
             if (player.Money < player.RepairPrice) return false;
+
+            if (side == 1) LastActionP1 = 10; else LastActionP2 = 10;
 
             // 2. Deduct cost
             player.Money -= player.RepairPrice;
@@ -326,8 +345,8 @@ namespace CastleDefense.Engine
                 }
                 else
                 {
-                    // Fallback: If no enemies exist, drop it in the dead center
-                    position = MAP_WIDTH / 2;
+                    // Fallback: If no enemies exist, drop it at the enemy castle
+                    position = side == 1 ? MAP_WIDTH : 0;
                 }
 
                 // Clamp the final target to stay at least 100 units away from the castles
@@ -336,6 +355,11 @@ namespace CastleDefense.Engine
 
             // 2. Deduct Cost
             player.Money -= def.Cost;
+
+            // Track action ID for recording (11=off, 12=def, 13=sig)
+            int gadgetActionId = gadgetId == player.OffensiveGadget?.Id ? 11 :
+                                 gadgetId == player.DefensiveGadget?.Id  ? 12 : 13;
+            if (side == 1) LastActionP1 = gadgetActionId; else LastActionP2 = gadgetActionId;
 
             // 3. Apply gadget cooldown (converting ms to game ticks)
             player.GadgetCooldowns[gadgetId] = def.CooldownMs / (1000 / TICKS_PER_SECOND);
@@ -762,6 +786,16 @@ namespace CastleDefense.Engine
             }
         }
 
+        // ------------- RECORDING HOOKS ---------------
+        public int LastActionP1 { get; private set; }
+        public int LastActionP2 { get; private set; }
+
+        public void ResetLastActions()
+        {
+            LastActionP1 = 0;
+            LastActionP2 = 0;
+        }
+
         // ------------- AI VIBE CODE ---------------
         // We track previous health to calculate immediate rewards!
         private int _prevP1CastleHealth;
@@ -838,6 +872,9 @@ namespace CastleDefense.Engine
 
         public bool ApplyAction(int side, int actionId)
         {
+            if (side == 1) LastActionP1 = actionId;
+            else LastActionP2 = actionId;
+
             var player = side == 1 ? _state.Player1 : _state.Player2;
             bool actionSucceeded = false;
 
@@ -848,7 +885,8 @@ namespace CastleDefense.Engine
                 int rosterIndex = actionId - 1;
 
                 // Grab the roster for this specific player's team
-                var teamRoster = GameDataManager.Teams.Find(t => t.Color == player.Team).Roster;
+                var teamRoster = GameDataManager.Teams.Find(t => t.Color == player.Team)?.Roster;
+                if (teamRoster == null) return actionSucceeded;
 
                 if (rosterIndex < teamRoster.Count)
                 {
@@ -979,7 +1017,7 @@ namespace CastleDefense.Engine
             if (hpRatio < 0.9f && myPlayer.Money < myPrevMoney && myPrevIncome == myPlayer.Income)
             {
                 float urgency = (0.9f - hpRatio) / 0.9f; // 0 at 90% HP, 1 at 0% HP
-                reward += urgency * 100f;
+                reward += urgency * _rewardParams.AntiSpend;
             }
             // Reward saving up to invest, if we're at a high investment tier, we don't want to worry about saving any more
             if (myPlayer.InvestmentCount <= 7)

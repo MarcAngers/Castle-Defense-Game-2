@@ -183,6 +183,105 @@ namespace CastleDefense.Engine.Models
             return state.ToArray();
         }
 
+        // ── Evaluator weights — calibrated from 10k v23 self-play games ────────────
+        // Weights are normalised internally (sum need not equal 1.0).
+        // Army and Gadget keep a small floor so the evaluator stays sensitive to
+        // battle momentum and gadget state even when their predictive signal is weak.
+        public static float EvalWeightHp     = 0.2853f;
+        public static float EvalWeightIncome = 0.7f;
+        public static float EvalWeightMoney  = 0.2406f;
+        public static float EvalWeightArmy   = 0.0500f;  // floor: calibration gives 0.106 but 0.05 reduces noise
+        public static float EvalWeightGadget = 0.1500f;  // floor: calibration zeros this but gadgets matter
+        public static float EvalWeightRepair = 0.0000f;
+
+        /// <summary>
+        /// Computes the six raw sigmoid component scores that feed into EvaluateBoard().
+        /// All outputs are in [0, 1] where 0.5 = perfectly even on that dimension.
+        /// </summary>
+        public (float Hp, float Income, float Money, float Army, float Gadget, float Repair) GetEvalComponents()
+        {
+            const float MAP_WIDTH = 2000f;
+
+            static float Sig(float x) => 1f / (1f + MathF.Exp(-x));
+
+            float GadgetReadiness(PlayerState ps)
+            {
+                float score = 0f;
+                void Check(GadgetDefinition g)
+                {
+                    if (g == null) return;
+                    bool available = !ps.GadgetCooldowns.ContainsKey(g.Id) || ps.GadgetCooldowns[g.Id] <= 0;
+                    if (available) score += g.Level;
+                }
+                Check(ps.OffensiveGadget);
+                Check(ps.DefensiveGadget);
+                Check(ps.SignatureGadget);
+                return score;
+            }
+
+            var p1 = Player1;
+            var p2 = Player2;
+
+            // ── 1. Castle HP ─────────────────────────────────────────────────
+            float p1HpPct = p1.CastleHealth / MathF.Max(p1.CastleMaxHealth, 1f);
+            float p2HpPct = p2.CastleHealth / MathF.Max(p2.CastleMaxHealth, 1f);
+            float hpScore = Sig(3.0f * (p1HpPct - p2HpPct));
+
+            // ── 2. Economy ───────────────────────────────────────────────────
+            float incomeScore = Sig(2.0f * (MathF.Log((float)p1.Income + 1f) - MathF.Log((float)p2.Income + 1f)));
+            float moneyScore  = Sig(0.5f * (MathF.Log((float)p1.Money  + 1f) - MathF.Log((float)p2.Money  + 1f)));
+
+            // ── 3. Army threat ───────────────────────────────────────────────
+            // Threat = sum of (tier² × proximity² × hpPct) across all units.
+            // Proximity is 0 at own castle, 1 at enemy castle.
+            float p1Pressure = 0f, p2Pressure = 0f;
+            foreach (var u in Units)
+            {
+                float hpPct = u.CurrentHealth / MathF.Max(u.MaxHealth, 1f);
+                float tier2 = u.Tier * u.Tier;
+                if (u.Side == 1)
+                {
+                    float prox  = u.Position / MAP_WIDTH;
+                    p1Pressure += tier2 * prox * prox * hpPct;
+                }
+                else
+                {
+                    float prox  = (MAP_WIDTH - u.Position) / MAP_WIDTH;
+                    p2Pressure += tier2 * prox * prox * hpPct;
+                }
+            }
+            float armyScore = Sig(0.008f * (p1Pressure - p2Pressure));
+
+            // ── 4. Gadget readiness ──────────────────────────────────────────
+            float gadgetScore = Sig(0.3f * (GadgetReadiness(p1) - GadgetReadiness(p2)));
+
+            // ── 5. Repair accessibility ──────────────────────────────────────
+            float p1Repair = MathF.Min(1f, (float)p1.Money / MathF.Max((float)p1.RepairPrice, 1f)) * (1f - p1HpPct);
+            float p2Repair = MathF.Min(1f, (float)p2.Money / MathF.Max((float)p2.RepairPrice, 1f)) * (1f - p2HpPct);
+            float repairScore = Sig(1.5f * (p1Repair - p2Repair));
+
+            return (hpScore, incomeScore, moneyScore, armyScore, gadgetScore, repairScore);
+        }
+
+        /// <summary>
+        /// Heuristic board evaluation from P1's perspective.
+        /// Returns a win-probability estimate in [0, 1] where 0.5 = even game.
+        /// Symmetric inputs produce exactly 0.5 at game start.
+        /// Update the EvalWeight* fields above after running train_evaluator.py.
+        /// </summary>
+        public float EvaluateBoard()
+        {
+            var (hp, income, money, army, gadget, repair) = GetEvalComponents();
+            float total = EvalWeightHp + EvalWeightIncome + EvalWeightMoney
+                        + EvalWeightArmy + EvalWeightGadget + EvalWeightRepair;
+            return (EvalWeightHp     * hp
+                  + EvalWeightIncome * income
+                  + EvalWeightMoney  * money
+                  + EvalWeightArmy   * army
+                  + EvalWeightGadget * gadget
+                  + EvalWeightRepair * repair) / total;
+        }
+
         public int[] GetActionMask(int side)
         {
             int[] mask = new int[14];

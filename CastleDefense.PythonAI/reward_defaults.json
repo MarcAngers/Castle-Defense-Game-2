@@ -1,10 +1,12 @@
 {
-  "WinReward":    54000.0,
-  "InvestReward": 3000.0,
-  "InvestDecay":  800.0,
-  "AntiSpend":    700.0,
-  "SavingsWeight": 0.1,
-  "CombatScale":  1.0,
-  "GadgetUpgrade": 1700.0,
-  "GadgetUse":    45.0
+  "WinReward":       54000.0,
+  "InvestReward":    3000.0,
+  "InvestDecay":     800.0,
+  "AntiSpend":       700.0,
+  "SavingsWeight":   0.1,
+  "CombatScale":     1.0,
+  "GadgetUpgrade":   1700.0,
+  "GadgetUse":       45.0,
+  "BoardShaperStart": 100.0,
+  "BoardShaperEnd":   10.0
 }

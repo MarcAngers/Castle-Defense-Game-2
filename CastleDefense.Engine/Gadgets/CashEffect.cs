@@ -30,6 +30,8 @@ namespace CastleDefense.Engine.Gadgets
                 {
                     engine.ScheduleAction(i, () =>
                     {
+                        engine.TriggerGadgetAnimation(_def.Id, side, position);
+
                         var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
                         player.Money += _def.BaseValue;
                     });
