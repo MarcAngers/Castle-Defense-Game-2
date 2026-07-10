@@ -14,6 +14,11 @@ namespace CastleDefense.Engine.Bot
     {
         private readonly int _side;
 
+        // Debug/test visibility into the last decision -- not used by the bot itself.
+        public bool LastDecisionWasDanger { get; private set; }
+        public int LastUnitsPurchased { get; private set; }
+        public string LastSpendDebug { get; private set; } = "";
+
         // ~6 decisions/sec at 30 TPS. Fast enough to never leave money idle,
         // slow enough that it doesn't look like it's cheating with instant reactions.
         private const int DecisionIntervalTicks = 5;
@@ -77,6 +82,7 @@ namespace CastleDefense.Engine.Bot
             bool anyoneAtTheGate = armyHasMovedOn && enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < 300;
 
             bool inDanger = anyoneAtTheGate || (enemyIsClose && threatScore > defenseScore * 0.9f) || (castleHpPct < 0.4f && enemyUnits.Count > 0);
+            LastDecisionWasDanger = inDanger;
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos);
@@ -84,26 +90,40 @@ namespace CastleDefense.Engine.Bot
             TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct);
 
             // --- MILITARY / ECONOMY ---
-            // A single decision tick can spend far more than one unit's worth of money
-            // (income keeps flowing between ticks), so unit purchases loop instead of
-            // buying once -- otherwise money piles up uselessly between decisions.
+            // Boom strategy: a spam bot (or a human who isn't optimizing) never invests,
+            // so out-scaling its flat income is a far more reliable win condition than
+            // trying to win a cheap-unit production race we might structurally lose on
+            // team cost alone. Only spend on units REACTIVELY to clear whatever's actually
+            // attacking the castle; every other dollar goes to investing (which has no
+            // trough in this economy -- see below) and to repair, which keeps the castle
+            // alive to tank chip damage while poor. Once the economy has clearly outscaled
+            // a non-investing opponent, surplus money starts converting into an offensive
+            // army too, since by then unit purchases no longer meaningfully compete with
+            // investing for the same dollars.
             if (inDanger)
             {
+                // A full defensive buy doesn't matter if the castle dies to chip damage
+                // before it lands -- if we're already critically low, spend on emergency
+                // repair first (it's instant HP, unlike units which still have to walk
+                // into position and fight), then use whatever's left to clear the wave.
+                if (castleHpPct < 0.3f && me.Money >= me.RepairPrice * 1.25)
+                {
+                    engine.Repair(_side);
+                }
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
                 return;
             }
 
-            // Repair first -- unlike investing, it has no downside (it doesn't touch
-            // income), so it's the default sink for money that unit purchases can't
-            // usefully absorb. Crucially, Repair() also permanently raises
-            // CastleMaxHealth (1000 -> 12000 -> 23000 -> ...) even when called at full
-            // health -- multiple enemy units can attack the castle in the very same
-            // tick with no per-tick damage cap, so a bigger HP pool is real insurance
-            // against a burst that a 1000 HP castle just doesn't survive. Repair
-            // opportunistically whenever safe and flush, not only when already hurt.
-            bool needsHealing = castleHpPct < 0.95f && me.Money >= me.RepairPrice * 1.25;
-            bool canAffordGrowthRepair = me.Money >= me.RepairPrice * 3;
-            if (needsHealing || canAffordGrowthRepair)
+            // Repair when hurt -- keeps us alive through the early game while income is
+            // still small. Not gated as tightly as investing below: staying alive comes
+            // first. Repair() also permanently raises CastleMaxHealth (1000 -> 12000 ->
+            // ...) even when called at full health, and multiple enemies can hit the
+            // castle in the same tick with no per-tick damage cap, so extra HP is real
+            // insurance -- but that's a lower priority than compounding income, so only
+            // repair reactively (when actually hurt), not opportunistically at full
+            // health. Threshold is fairly generous (75%) so damage gets addressed before
+            // it compounds into an emergency, rather than always waiting until critical.
+            if (castleHpPct < 0.75f && me.Money >= me.RepairPrice * 1.25)
             {
                 engine.Repair(_side);
             }
@@ -115,15 +135,25 @@ namespace CastleDefense.Engine.Bot
             // bot might run under: if the starting income is ever tuned back up above
             // where the formula naturally would be, the first investment can crater income
             // for a while before recovering -- worth re-checking this assumption if the
-            // starting Income constant in PlayerState() ever changes again.) So treat it
-            // like repair: take it whenever safe and affordable, no elaborate gating.
+            // starting Income constant in PlayerState() ever changes again.) Take it
+            // whenever affordable, and don't also spend the same tick's leftover on units
+            // -- let every dollar possible go toward the next one instead of splitting
+            // between two priorities.
             if (me.Money >= me.InvestmentPrice)
             {
                 engine.Invest(_side);
+                return;
             }
 
-            // Spend whatever's left keeping steady pressure on the enemy castle.
-            SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
+            // Only start converting surplus into an offensive army once income has clearly
+            // pulled away from what a flat, non-investing opponent could ever match --
+            // before that point, every dollar spent on units is a dollar that isn't
+            // compounding, and a spam bot only ever needs a small reactive defense to
+            // ignore entirely.
+            if (me.Income >= 50)
+            {
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
+            }
         }
 
         private static float Power(Unit u)
@@ -144,6 +174,7 @@ namespace CastleDefense.Engine.Bot
 
         private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits)
         {
+            LastUnitsPurchased = 0;
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
 
             // Once the cost-efficient swarm is already at full size and the economy is
@@ -193,34 +224,32 @@ namespace CastleDefense.Engine.Bot
             var tierMatched = RankPool(dominantEnemyTier);
             var anyAffordable = RankPool(0);
 
-            // In a low-income economy, units are cheap enough to always win the "who's
-            // affordable first" race against gadgets and investing -- both are checked
-            // every decision too (see TryUse*Gadget and the invest check above), but never
-            // accumulate the money needed to actually fire if units keep draining the pool
-            // back to near-zero first. A reserve that's just a FRACTION of instantaneous
-            // surplus doesn't fix this: it's recomputed from scratch every decision, so it
-            // never persists long enough across ticks to actually reach a bigger target --
-            // it needs to hold the SAME dollars back release after release until the goal
-            // is hit. Once we have a minimal army out, reserve the full remaining gap
-            // toward whichever comes first: our next investment, or the cheapest gadget
-            // that's off cooldown but not yet affordable.
-            bool haveMinimalArmy = ownUnitCount >= 10;
-            double investGap = me.Money < me.InvestmentPrice ? me.InvestmentPrice - me.Money : double.MaxValue;
-            double gadgetGap = double.MaxValue;
-            foreach (var g in new[] { me.OffensiveGadget, me.DefensiveGadget, me.SignatureGadget })
+            // Investing is now handled as a higher standing priority in Decide() itself
+            // (checked, and returned on, before this is ever reached for non-reactive
+            // spending), so it doesn't need its own reserve here anymore. Gadgets are
+            // still worth protecting a little: units are cheap enough to always win the
+            // "who's affordable first" race against them, which can starve a gadget of the
+            // money needed to ever fire even though it's checked earlier the same decision.
+            // Only bother once a minimal army (10 units) is out, and only during
+            // non-reactive spending -- while actively clearing a wave off the castle
+            // (preferDefense), survival comes first and nothing should be held back.
+            double reserve = 0;
+            if (!preferDefense && ownUnitCount >= 10)
             {
-                if (g == null) continue;
-                bool onCooldown = me.GadgetCooldowns.TryGetValue(g.Id, out var cd) && cd > 0;
-                if (onCooldown) continue;
-                if (g.Cost > me.Money) gadgetGap = Math.Min(gadgetGap, g.Cost - me.Money);
+                double gadgetGap = double.MaxValue;
+                foreach (var g in new[] { me.OffensiveGadget, me.DefensiveGadget, me.SignatureGadget })
+                {
+                    if (g == null) continue;
+                    bool onCooldown = me.GadgetCooldowns.TryGetValue(g.Id, out var cd) && cd > 0;
+                    if (onCooldown) continue;
+                    if (g.Cost > me.Money) gadgetGap = Math.Min(gadgetGap, g.Cost - me.Money);
+                }
+                // Cap at 70% of current money -- replacements still need to keep flowing.
+                if (gadgetGap != double.MaxValue) reserve = Math.Min(gadgetGap, me.Money * 0.7);
             }
-            double smallestGap = Math.Min(investGap, gadgetGap);
-            // Cap at 70% of current money even while actively saving -- replacements for
-            // combat losses still need to keep flowing, or the "10 unit minimum" gate above
-            // becomes a one-time check we immediately fall below as the army trades.
-            double reserve = haveMinimalArmy && smallestGap != double.MaxValue ? Math.Min(smallestGap, me.Money * 0.7) : 0;
 
             int budget = Math.Min(MaxPurchasesPerDecision, cap - ownUnitCount);
+            LastSpendDebug = $"money={me.Money:F1} reserve={reserve:F1} budget={budget} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= me.Money - reserve)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
             for (int i = 0; i < budget; i++)
             {
                 double spendable = me.Money - reserve;
@@ -243,6 +272,7 @@ namespace CastleDefense.Engine.Bot
                 if (pick.def == null) break;
 
                 engine.SpawnUnit(_side, pick.def.Id);
+                LastUnitsPurchased++;
             }
         }
 

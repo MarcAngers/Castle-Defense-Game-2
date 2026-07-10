@@ -243,14 +243,14 @@ if (args.Length > 0 && args[0] == "hunt")
                 var p1hp = 100.0 * huntState.Player1.CastleHealth / huntState.Player1.CastleMaxHealth;
                 var p2hp = 100.0 * huntState.Player2.CastleHealth / huntState.Player2.CastleMaxHealth;
                 var p1comp = string.Join(",", huntState.Units.Where(u => u.Side == 1).GroupBy(u => u.DefinitionId).OrderByDescending(g => g.Count()).Select(g => $"{g.Key}:{g.Count()}"));
-                log.Add($"{huntState.CurrentTick}\t{huntState.CurrentTick / 30}\t{huntState.Player1.Money:F0}\t{huntState.Player1.Income:F1}\t{huntState.Player1.InvestmentCount}\t{p1u}\t{p1hp:F0}\t{huntState.Player2.Money:F0}\t{huntState.Player2.Income:F1}\t{p2u}\t{p2hp:F0}\t{p1comp}");
+                log.Add($"{huntState.CurrentTick}\t{huntState.CurrentTick / 30}\t{huntState.Player1.Money:F0}\t{huntState.Player1.Income:F1}\t{huntState.Player1.InvestmentCount}\t{p1u}\t{p1hp:F0}\t{huntState.Player2.Money:F0}\t{huntState.Player2.Income:F1}\t{p2u}\t{p2hp:F0}\t{huntBot.LastDecisionWasDanger}\t{huntBot.LastUnitsPurchased}\t{huntBot.LastSpendDebug}\t{p1comp}");
             }
         }
 
         if (huntState.WinnerSide != 1)
         {
             Console.WriteLine($"P1 team={huntState.Player1.Team} offense={huntState.Player1.OffensiveGadget?.Id} defense={huntState.Player1.DefensiveGadget?.Id} sig={huntState.Player1.SignatureGadget?.Id}, P2 team={huntState.Player2.Team}");
-            Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1composition");
+            Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1danger\tP1bought\tP1composition");
             foreach (var line in log) Console.WriteLine(line);
             Console.WriteLine($"\nResult: {(huntState.WinnerSide == 0 ? "draw/timeout" : "P" + huntState.WinnerSide + " wins")} at tick {huntState.CurrentTick} (attempt {attempt + 1})");
             return;
@@ -336,4 +336,7 @@ class HeuristicBotAdapter : IArenaOpponent
     private readonly HeuristicBot _bot;
     public HeuristicBotAdapter(int side) => _bot = new HeuristicBot(side);
     public void Update(GameEngine engine) => _bot.Update(engine);
+    public bool LastDecisionWasDanger => _bot.LastDecisionWasDanger;
+    public int LastUnitsPurchased => _bot.LastUnitsPurchased;
+    public string LastSpendDebug => _bot.LastSpendDebug;
 }
