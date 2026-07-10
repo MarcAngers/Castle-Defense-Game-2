@@ -144,6 +144,12 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 2 && args[0] == "--analyze-actions")
+            {
+                AnalyzeActionDistribution(args[1], args.Contains("--mp"));
+                return;
+            }
+
             if (args.Length >= 4 && args[0] == "--collect-calibration")
             {
                 int  nGames    = int.Parse(args[1]);
@@ -765,6 +771,144 @@ namespace CastleDefense.Simulation
             if (totalP2Avail > 0)
                 Console.WriteLine($"  P2  active decisions w/ invest available: {totalP2Avail,6}  " +
                                   $"chose other: {totalP2Missed,6} ({totalP2Missed * 100.0 / totalP2Avail:F2}%)");
+        }
+
+        // ── ACTION DISTRIBUTION ANALYSIS ───────────────────────────────────────────
+        // What fraction of a human's non-idle actions are invest / repair / spawn a
+        // given tier / use each gadget slot? Used as a behavioral baseline to compare
+        // the heuristic bot against (see CastleDefense.BotArena's matching mode) --
+        // rather than chasing win rate against specific opponents, check whether the
+        // bot's own action mix looks like how humans actually play.
+        public static readonly string[] ActionLabels = new[]
+        {
+            "wait", "spawnT1", "spawnT2", "spawnT3", "spawnT4", "spawnT5", "spawnT6", "spawnT7", "spawnT8",
+            "invest", "repair", "offenseGadget", "defenseGadget", "sigGadget"
+        };
+
+        static void AnalyzeActionDistribution(string replayDir, bool bothPlayersHuman)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[Actions] Directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var files = Directory.GetFiles(replayDir, "*.replay");
+            if (files.Length == 0)
+            {
+                Console.Error.WriteLine($"[Actions] No .replay files in {replayDir}");
+                Environment.Exit(1);
+            }
+            Console.WriteLine($"[Actions] Analysing {files.Length} replay(s) in {replayDir} (human side(s): {(bothPlayersHuman ? "P1+P2" : "P1 only")})\n");
+
+            long[] counts = new long[14];
+            long totalNonWait = 0;
+            long investAvail = 0, investOther = 0;
+            int gamesUsed = 0;
+
+            foreach (var path in files.OrderBy(x => x))
+            {
+                try
+                {
+                    using var stream = File.OpenRead(path);
+                    using var r = new BinaryReader(stream, Encoding.UTF8);
+
+                    var magic = r.ReadBytes(4);
+                    if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                        throw new InvalidDataException("Not a CDRP file");
+
+                    byte version = r.ReadByte();
+                    string gameId = Encoding.ASCII.GetString(r.ReadBytes(6));
+                    r.ReadInt64();
+                    ReadStr(r);
+                    string p1Team = ReadStr(r);
+                    string p1Off = ReadStr(r); string p1Def = ReadStr(r); string p1Sig = ReadStr(r);
+                    string p2Team = ReadStr(r);
+                    string p2Off = ReadStr(r); string p2Def = ReadStr(r); string p2Sig = ReadStr(r);
+                    byte winner = r.ReadByte();
+
+                    long startingTick = 0;
+                    double p1StartMoney = 0, p2StartMoney = 0;
+                    if (version >= 2)
+                    {
+                        startingTick = r.ReadInt64();
+                        p1StartMoney = r.ReadDouble();
+                        p2StartMoney = r.ReadDouble();
+                    }
+
+                    uint tickCount = r.ReadUInt32();
+
+                    var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+                    var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+                    if (version == 1 && tickCount > 0)
+                    {
+                        long ap = stream.Position;
+                        byte[] probe = r.ReadBytes(Math.Min((int)tickCount, 100) * 2);
+                        stream.Seek(ap, SeekOrigin.Begin);
+                        var (ts, bonus) = InferV1TimeMachineState(p1Team, l1, p2Team, l2, probe, 100);
+                        startingTick = 30L * 30 * ts;
+                        var proto = new PlayerState(ts);
+                        double amt = bonus ? proto.InvestmentPrice + proto.Income : proto.Money;
+                        p1StartMoney = amt; p2StartMoney = amt;
+                    }
+
+                    int timeSkip = (int)(startingTick / (30 * 30));
+                    var state = new GameState();
+                    state.Player1 = new PlayerState(timeSkip); state.Player2 = new PlayerState(timeSkip);
+                    state.Player1.Side = 1; state.Player2.Side = 2;
+                    state.Player1.Money = p1StartMoney; state.Player2.Money = p2StartMoney;
+                    state.CurrentTick = startingTick;
+                    state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+                    state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+                    if (l1.Length == 3) state.Player1.SetLoadout(l1);
+                    if (l2.Length == 3) state.Player2.SetLoadout(l2);
+                    var engine = new GameEngine(state);
+
+                    for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+                    {
+                        byte p1Action = r.ReadByte();
+                        byte p2Action = r.ReadByte();
+
+                        int[] p1Mask = state.GetActionMask(1);
+                        if (p1Mask[9] == 1 && p1Action != 0)
+                        {
+                            investAvail++;
+                            if (p1Action != 9) investOther++;
+                        }
+                        if (p1Action < counts.Length) counts[p1Action]++;
+                        if (p1Action != 0) totalNonWait++;
+
+                        if (bothPlayersHuman)
+                        {
+                            if (p2Action < counts.Length) counts[p2Action]++;
+                            if (p2Action != 0) totalNonWait++;
+                        }
+
+                        engine.ApplyAction(1, p1Action);
+                        engine.ApplyAction(2, p2Action);
+                        engine.Tick();
+                    }
+
+                    gamesUsed++;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  [skip] {Path.GetFileName(path)}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"[Actions] Used {gamesUsed}/{files.Length} game(s)\n");
+            Console.WriteLine("─── ACTION DISTRIBUTION (% of non-wait actions) ────────────────────");
+            for (int i = 1; i < ActionLabels.Length; i++)
+            {
+                double pct = totalNonWait > 0 ? counts[i] * 100.0 / totalNonWait : 0;
+                Console.WriteLine($"  {ActionLabels[i],-16} {counts[i],8}  ({pct,5:F2}%)");
+            }
+            Console.WriteLine($"  {"[wait]",-16} {counts[0],8}");
+            Console.WriteLine();
+            if (investAvail > 0)
+                Console.WriteLine($"  Invest available, chose other: {investOther}/{investAvail} ({investOther * 100.0 / investAvail:F2}%)");
         }
 
         // ── CALIBRATION DATA COLLECTION ────────────────────────────────────────────

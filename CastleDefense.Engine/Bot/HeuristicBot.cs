@@ -21,6 +21,15 @@ namespace CastleDefense.Engine.Bot
         public float LastThreatScore { get; private set; }
         public float LastDefenseScore { get; private set; }
 
+        // Running per-game tally of every successful action actually taken, indexed by
+        // the same 14-action ID space as GetActionMask/ApplyAction (0=wait unused here,
+        // 1-8=spawn tier, 9=invest, 10=repair, 11-13=gadget slots) -- lets a harness
+        // compare the bot's real action mix against recorded human play. Counted directly
+        // at each call site (not sampled from GameEngine.LastActionP1/P2) because a single
+        // Decide() can call SpawnUnit many times in a row -- sampling LastAction once per
+        // tick would only ever see the last of those and badly undercount.
+        public readonly long[] ActionCounts = new long[14];
+
         // ~6 decisions/sec at 30 TPS. Fast enough to never leave money idle,
         // slow enough that it doesn't look like it's cheating with instant reactions.
         private const int DecisionIntervalTicks = 5;
@@ -110,7 +119,7 @@ namespace CastleDefense.Engine.Bot
                 // into position and fight), then use whatever's left to clear the wave.
                 if (castleHpPct < 0.3f && me.Money >= me.RepairPrice * 1.25)
                 {
-                    engine.Repair(_side);
+                    if (engine.Repair(_side)) ActionCounts[10]++;
                 }
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
                 return;
@@ -127,7 +136,7 @@ namespace CastleDefense.Engine.Bot
             // it compounds into an emergency, rather than always waiting until critical.
             if (castleHpPct < 0.75f && me.Money >= me.RepairPrice * 1.25)
             {
-                engine.Repair(_side);
+                if (engine.Repair(_side)) ActionCounts[10]++;
             }
 
             // Investing has essentially no downside in THIS economy: the hardcoded
@@ -153,7 +162,7 @@ namespace CastleDefense.Engine.Bot
             // proactive -- see [[project_ai_opponent_heuristic]] for the full investigation.
             if (me.Money >= me.InvestmentPrice)
             {
-                engine.Invest(_side);
+                if (engine.Invest(_side)) ActionCounts[9]++;
                 return;
             }
 
@@ -174,15 +183,21 @@ namespace CastleDefense.Engine.Bot
             return u.Damage * aps + u.CurrentHealth * 0.04f + u.CurrentShield * 0.04f;
         }
 
-        // Repeatedly buys the best-value affordable unit until money runs out (or the
-        // roster runs out of affordable options). One decision tick's worth of income
-        // is easily enough to buy several cheap units, so a single purchase per tick
-        // would leave most of the income unspent.
+        // Buys at most ONE unit per decision -- matching the pacing every other agent
+        // (a human clicking buy, or a trained ONNX model getting one action per inference
+        // step) is bound by. This used to loop up to 40 purchases in a single decision,
+        // which measurably diverges from real play: comparing recorded human games against
+        // the bot's own logged actions (see [[project_ai_opponent_heuristic]]) showed the
+        // bot spawning units for ~96% of its actions vs ~80% for humans, with invest/repair/
+        // gadget usage diluted to a fraction of the human rate -- almost entirely explained
+        // by this single loop letting one "decision" batch-buy dozens of units at once,
+        // something no human or model opponent can ever do. With DecisionIntervalTicks=5
+        // (~6 decisions/sec), a single purchase per call still lets money get spent quickly
+        // when needed; it just can't happen all in the same instant anymore.
         // Cap how large our own army is allowed to get: combat is O(units^2) per tick,
         // and a battlefield with hundreds of units per side isn't more effective anyway
         // (they just queue up waiting for a turn to attack).
         private const int MaxOwnUnitsOnField = 120;
-        private const int MaxPurchasesPerDecision = 40;
 
         private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits)
         {
@@ -260,31 +275,31 @@ namespace CastleDefense.Engine.Bot
                 if (gadgetGap != double.MaxValue) reserve = Math.Min(gadgetGap, me.Money * 0.7);
             }
 
-            int budget = Math.Min(MaxPurchasesPerDecision, cap - ownUnitCount);
-            LastSpendDebug = $"money={me.Money:F1} reserve={reserve:F1} budget={budget} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= me.Money - reserve)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
-            for (int i = 0; i < budget; i++)
+            LastSpendDebug = $"money={me.Money:F1} reserve={reserve:F1} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= me.Money - reserve)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
+
+            double spendable = me.Money - reserve;
+            var matchedPick = tierMatched.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+            var outclassPick = outclassing.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+
+            // Only take the tech edge if it's ALSO a competitive value, not just a
+            // higher tier -- a naive "always outclass" rule ends up paying a real
+            // premium (e.g. 33% more per unit) for a WORSE cost-efficiency pick every
+            // single purchase, which starves total army size for no real benefit once
+            // the cost-matched option already fields comfortably (see
+            // SurvivabilityMultiplier). That compounds into a much smaller army over a
+            // whole game, which is exactly what happened testing this against a cheap
+            // tier-1 spam bot: it kept passing up 3-cost units for a 4-cost one that
+            // scored *worse* per dollar, and lost the production race outright.
+            var pick = matchedPick.def != null && outclassPick.def != null && outclassPick.score < matchedPick.score * 0.9
+                ? matchedPick
+                : (outclassPick.def != null ? outclassPick : matchedPick);
+            if (pick.def == null) pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+            if (pick.def == null) return;
+
+            if (engine.SpawnUnit(_side, pick.def.Id))
             {
-                double spendable = me.Money - reserve;
-                var matchedPick = tierMatched.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
-                var outclassPick = outclassing.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
-
-                // Only take the tech edge if it's ALSO a competitive value, not just a
-                // higher tier -- a naive "always outclass" rule ends up paying a real
-                // premium (e.g. 33% more per unit) for a WORSE cost-efficiency pick every
-                // single purchase, which starves total army size for no real benefit once
-                // the cost-matched option already fields comfortably (see
-                // SurvivabilityMultiplier). That compounds into a much smaller army over a
-                // whole game, which is exactly what happened testing this against a cheap
-                // tier-1 spam bot: it kept passing up 3-cost units for a 4-cost one that
-                // scored *worse* per dollar, and lost the production race outright.
-                var pick = matchedPick.def != null && outclassPick.def != null && outclassPick.score < matchedPick.score * 0.9
-                    ? matchedPick
-                    : (outclassPick.def != null ? outclassPick : matchedPick);
-                if (pick.def == null) pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
-                if (pick.def == null) break;
-
-                engine.SpawnUnit(_side, pick.def.Id);
                 LastUnitsPurchased++;
+                if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ActionCounts[pick.def.Tier]++;
             }
         }
 
@@ -355,6 +370,7 @@ namespace CastleDefense.Engine.Bot
 
             string family = def.Id.Split('_')[0].ToLowerInvariant();
             int radius = Math.Max(150, def.Radius);
+            bool used = false;
 
             switch (family)
             {
@@ -364,7 +380,7 @@ namespace CastleDefense.Engine.Bot
                     // our own castle makes it snipe whichever enemy is closest to reaching
                     // it -- directly preventing the exact chip damage that ends games,
                     // rather than chasing whoever hits hardest somewhere else on the field.
-                    engine.UseGadget(_side, def.Id, myCastlePos);
+                    used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "freeze":
@@ -374,7 +390,7 @@ namespace CastleDefense.Engine.Bot
                     // actually breaks a chokepoint stalemate: a small steady trickle of
                     // defenders can otherwise permanently pin a much bigger army just by
                     // always having *something* in contact range.
-                    engine.UseGadget(_side, def.Id, 0);
+                    used = engine.UseGadget(_side, def.Id, 0);
                     break;
 
                 case "nuke":
@@ -385,7 +401,7 @@ namespace CastleDefense.Engine.Bot
                     // units would eat the same blast.
                     int? target = FindBestAoeTarget(enemyUnits, radius);
                     if (target.HasValue && enemyUnits.Count >= 2 && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
-                        engine.UseGadget(_side, def.Id, target.Value);
+                        used = engine.UseGadget(_side, def.Id, target.Value);
                     break;
                 }
 
@@ -404,10 +420,11 @@ namespace CastleDefense.Engine.Bot
                         target = (int)enemyUnits.OrderByDescending(u => Math.Abs(u.Position - myAvgPos)).First().Position;
                     }
                     if (target.HasValue)
-                        engine.UseGadget(_side, def.Id, target.Value);
+                        used = engine.UseGadget(_side, def.Id, target.Value);
                     break;
                 }
             }
+            if (used) ActionCounts[11]++;
         }
 
         // The defense slot can be any of "heal" / "reinforcements" / "speed" / "wall".
@@ -417,6 +434,7 @@ namespace CastleDefense.Engine.Bot
             if (!IsReady(me, def)) return;
 
             string family = def.Id.Split('_')[0].ToLowerInvariant();
+            bool used = false;
 
             switch (family)
             {
@@ -425,19 +443,19 @@ namespace CastleDefense.Engine.Bot
                     if (myUnits.Count == 0) return; // nothing to heal
                     float avgHpPct = myUnits.Average(u => u.MaxHealth > 0 ? (float)u.CurrentHealth / u.MaxHealth : 1f);
                     if (avgHpPct < 0.85f)
-                        engine.UseGadget(_side, def.Id, myCastlePos);
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
                 }
 
                 case "reinforcements":
                     // Spawns free units (bypasses cost entirely) regardless of position --
                     // pure value with no downside, so use it on cooldown.
-                    engine.UseGadget(_side, def.Id, myCastlePos);
+                    used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "speed":
                     if (myUnits.Count > 0)
-                        engine.UseGadget(_side, def.Id, myCastlePos);
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "wall":
@@ -453,10 +471,11 @@ namespace CastleDefense.Engine.Bot
                     // uses it directly for level 2/3, so place it in our own front line
                     // where it can actually tank alongside the rest of the army.
                     int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
-                    engine.UseGadget(_side, def.Id, target);
+                    used = engine.UseGadget(_side, def.Id, target);
                     break;
                 }
             }
+            if (used) ActionCounts[12]++;
         }
 
         private void TryUseSignatureGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits,
@@ -466,33 +485,34 @@ namespace CastleDefense.Engine.Bot
             if (!IsReady(me, def)) return;
 
             string family = def.Id.Split('_')[0].ToLowerInvariant();
+            bool used = false;
 
             switch (family)
             {
                 case "cash":
                     // Pure economy, no downside to the team's own board state -- always take it.
-                    engine.UseGadget(_side, def.Id, myCastlePos);
+                    used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "rage":
                     if (myUnits.Count > 0 && (inDanger || myUnits.Any(u => enemyUnits.Any(e => Math.Abs(e.Position - u.Position) < 250))))
-                        engine.UseGadget(_side, def.Id, myCastlePos);
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "divine":
                     if (castleHpPct < 0.3f || (inDanger && enemyUnits.Count >= 3))
-                        engine.UseGadget(_side, def.Id, myCastlePos);
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "wave":
                     // Always fires from our own edge regardless of target position.
-                    engine.UseGadget(_side, def.Id, myCastlePos);
+                    used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "goo":
                     {
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
-                        engine.UseGadget(_side, def.Id, target);
+                        used = engine.UseGadget(_side, def.Id, target);
                         break;
                     }
 
@@ -502,7 +522,7 @@ namespace CastleDefense.Engine.Bot
                         // Both of these only ever affect enemy units -- no friendly fire risk.
                         int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius));
                         if (target.HasValue)
-                            engine.UseGadget(_side, def.Id, target.Value);
+                            used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
                     }
 
@@ -514,10 +534,11 @@ namespace CastleDefense.Engine.Bot
                         int radius = Math.Max(150, def.Radius);
                         int? target = FindBestAoeTarget(enemyUnits, radius);
                         if (target.HasValue && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
-                            engine.UseGadget(_side, def.Id, target.Value);
+                            used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
                     }
             }
+            if (used) ActionCounts[13]++;
         }
 
         // Finds the enemy unit position with the most enemy "power" clustered within radius.

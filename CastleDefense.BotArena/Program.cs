@@ -350,6 +350,80 @@ if (args.Length > 0 && args[0] == "spam")
     return;
 }
 
+if (args.Length > 0 && args[0] == "actions")
+{
+    // Tallies the bot's own action distribution the same way
+    // CastleDefense.Simulation's --analyze-actions does for real recorded human
+    // games, for a direct behavioral comparison instead of chasing win rate
+    // against any one specific opponent (see [[project_ai_opponent_heuristic]]).
+    bool headStart = args.Contains("headstart");
+    int games = args.Skip(1).Select(a => int.TryParse(a, out var g) ? g : (int?)null).FirstOrDefault(g => g.HasValue) ?? 300;
+
+    var actionLabels = new[]
+    {
+        "wait", "spawnT1", "spawnT2", "spawnT3", "spawnT4", "spawnT5", "spawnT6", "spawnT7", "spawnT8",
+        "invest", "repair", "offenseGadget", "defenseGadget", "sigGadget"
+    };
+    long[] counts = new long[14];
+    long totalNonWait = 0;
+
+    // Diverse opponent pool: spam bots (every tier), scripted baselines, and any
+    // ONNX models found -- roughly mirrors the range of opponents already tested
+    // against, so the bot's action mix isn't tuned against just one matchup type.
+    var pool = new List<Func<int, IArenaOpponent>>();
+    for (int t = 1; t <= 8; t++) { int tt = t; pool.Add(side => new TierSpamBaseline(side, tt)); }
+    pool.Add(side => new RusherBaseline(side));
+    pool.Add(side => new InvestorBaseline(side));
+    pool.Add(side => new BalancedHumanBaseline(side));
+    var modelsDir = FindLeagueModelsDir();
+    if (modelsDir != null)
+    {
+        foreach (var f in Directory.GetFiles(modelsDir, "*.onnx"))
+        {
+            var path = f;
+            pool.Add(side => new AIModelOpponent(side, path));
+        }
+    }
+
+    Console.WriteLine($"[Actions] Running {games} games (bot as P1, mixed opponent pool of {pool.Count} types{(headStart ? ", with head starts" : "")})...\n");
+
+    for (int i = 0; i < games; i++)
+    {
+        var opponentFactory = pool[rng.Next(pool.Count)];
+        var (state, engine) = CreateGame(headStart);
+        var bot = new HeuristicBotAdapter(1);
+        var opponent = opponentFactory(2);
+
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            bot.Update(engine);
+            opponent.Update(engine);
+        }
+        // Accumulated directly at each successful engine.SpawnUnit/Invest/Repair/
+        // UseGadget call inside HeuristicBot -- NOT sampled from LastActionP1 once
+        // per tick, because a single Decide() can call SpawnUnit dozens of times in
+        // a row (see the doc comment on HeuristicBot.ActionCounts) and sampling would
+        // only ever catch the last of those.
+        var gameCounts = bot.ActionCounts;
+        for (int a = 0; a < counts.Length; a++)
+        {
+            counts[a] += gameCounts[a];
+            if (a != 0) totalNonWait += gameCounts[a];
+        }
+        (opponent as IDisposable)?.Dispose();
+    }
+
+    Console.WriteLine("─── BOT ACTION DISTRIBUTION (% of non-wait actions) ────────────────");
+    for (int i = 1; i < actionLabels.Length; i++)
+    {
+        double pct = totalNonWait > 0 ? counts[i] * 100.0 / totalNonWait : 0;
+        Console.WriteLine($"  {actionLabels[i],-16} {counts[i],8}  ({pct,5:F2}%)");
+    }
+    Console.WriteLine($"  (total non-wait actions: {totalNonWait} -- ActionCounts doesn't track waits, only successful actions taken)");
+    return;
+}
+
 Console.WriteLine($"Running {gamesPerMatchup} games per matchup...\n");
 
 RunMatchup("vs DoNothing", side => new DoNothingBaseline());
@@ -367,4 +441,5 @@ class HeuristicBotAdapter : IArenaOpponent
     public string LastSpendDebug => _bot.LastSpendDebug;
     public float LastThreatScore => _bot.LastThreatScore;
     public float LastDefenseScore => _bot.LastDefenseScore;
+    public long[] ActionCounts => _bot.ActionCounts;
 }
