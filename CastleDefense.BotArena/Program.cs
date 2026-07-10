@@ -172,6 +172,25 @@ string? FindLeagueModelsDir()
     return null;
 }
 
+// Resolves a partial model name (e.g. "v4") to whichever league_models file's
+// filename contains it, for trace/hunt-style single-game debugging against a
+// specific ONNX model. Falls back to RusherBaseline if nothing matches.
+Func<int, IArenaOpponent> MakeModelOpponentOrRusher(string nameFragment)
+{
+    var dir = FindLeagueModelsDir();
+    if (dir != null)
+    {
+        var match = Directory.GetFiles(dir, "*.onnx").FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains(nameFragment, StringComparison.OrdinalIgnoreCase));
+        if (match != null)
+        {
+            Console.WriteLine($"(resolved '{nameFragment}' -> {Path.GetFileName(match)})");
+            return side => new AIModelOpponent(side, match);
+        }
+    }
+    Console.WriteLine($"(no model matched '{nameFragment}', falling back to Rusher)");
+    return side => new RusherBaseline(side);
+}
+
 if (args.Length > 0 && args[0] == "models")
 {
     bool headStart = args.Length > 1 && args[1] == "headstart";
@@ -217,17 +236,21 @@ if (args.Length > 0 && args[0] == "loadouts")
 
 if (args.Length > 0 && args[0] == "hunt")
 {
-    // Finds and prints a trace of the first LOSS (or draw) against the given tier-spam
-    // bot using randomized teams, instead of the fixed matchup "trace" uses -- useful
-    // for seeing what an actual bad matchup looks like.
-    int tier = args.Length > 1 && int.TryParse(args[1], out var tt) ? tt : 4;
+    // Finds and prints a trace of the first LOSS (or draw) against the given opponent
+    // (a tier number for TierSpamBaseline, or anything else resolved as a model name
+    // fragment) using randomized teams, instead of the fixed matchup "trace" uses --
+    // useful for seeing what an actual bad matchup looks like.
+    string huntOpponentArg = args.Length > 1 ? args[1] : "4";
     bool headStart = args.Length > 2 && args[2] == "headstart";
+    Func<int, IArenaOpponent> makeHuntFoe = int.TryParse(huntOpponentArg, out var huntTier)
+        ? side => new TierSpamBaseline(side, huntTier)
+        : MakeModelOpponentOrRusher(huntOpponentArg);
 
     for (int attempt = 0; attempt < 200; attempt++)
     {
         var (huntState, huntEngine) = CreateGame(headStart);
         var huntBot = new HeuristicBotAdapter(1);
-        var huntFoe = new TierSpamBaseline(2, tier);
+        var huntFoe = makeHuntFoe(2);
 
         var log = new List<string>();
         while (!huntState.IsGameOver)
@@ -253,8 +276,10 @@ if (args.Length > 0 && args[0] == "hunt")
             Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1danger\tP1bought\tP1composition");
             foreach (var line in log) Console.WriteLine(line);
             Console.WriteLine($"\nResult: {(huntState.WinnerSide == 0 ? "draw/timeout" : "P" + huntState.WinnerSide + " wins")} at tick {huntState.CurrentTick} (attempt {attempt + 1})");
+            (huntFoe as IDisposable)?.Dispose();
             return;
         }
+        (huntFoe as IDisposable)?.Dispose();
     }
     Console.WriteLine("No loss/draw found in 200 attempts.");
     return;
@@ -276,7 +301,8 @@ if (args.Length > 0 && args[0] == "trace")
         "spam6" => side => new TierSpamBaseline(side, 6),
         "spam7" => side => new TierSpamBaseline(side, 7),
         "spam8" => side => new TierSpamBaseline(side, 8),
-        _ => side => new RusherBaseline(side),
+        "rusher" => side => new RusherBaseline(side),
+        _ => MakeModelOpponentOrRusher(opponent),
     };
 
     var (state, engine) = CreateGame(headStart);

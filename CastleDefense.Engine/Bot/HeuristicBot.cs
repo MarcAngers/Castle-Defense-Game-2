@@ -70,18 +70,16 @@ namespace CastleDefense.Engine.Bot
             bool enemyIsClose = enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < 700;
             float castleHpPct = me.CastleMaxHealth > 0 ? (float)me.CastleHealth / me.CastleMaxHealth : 1f;
 
-            // A lone leaker slipping past the main fight and reaching the castle doesn't
-            // move the aggregate threat-vs-defense comparison at all (our army is still
-            // huge and winning on paper), but it's still steady chip damage every time it
-            // happens -- and new spawns land right next to the castle, so reacting to it
-            // directly is cheap. Only counts as a genuine leak if our own army has already
-            // moved on toward the enemy though -- otherwise this just fires constantly
-            // during ordinary early-game combat, which naturally happens close to home
-            // since spawn sits right next to the castle.
-            bool armyHasMovedOn = myUnits.Count == 0 || myUnits.Average(u => Math.Abs(u.Position - myCastlePos)) > 500;
-            bool anyoneAtTheGate = armyHasMovedOn && enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < 300;
-
-            bool inDanger = anyoneAtTheGate || (enemyIsClose && threatScore > defenseScore * 0.9f) || (castleHpPct < 0.4f && enemyUnits.Count > 0);
+            // Under the boom strategy our standing army is intentionally near-zero most of
+            // the game, so a naive "is any enemy near our castle" trigger fires almost
+            // constantly (an approaching unit hasn't necessarily landed a hit yet) --
+            // draining a small amount of money into reactive defense EVERY decision is
+            // exactly what was capping our own income: it never let money accumulate past
+            // ~2 investments while a model opponent's income kept climbing unimpeded past
+            // it. React once the castle has actually confirmed taking damage (a real
+            // threat, not just a unit walking by), or if the incoming mass is overwhelming
+            // enough to be worth preempting before it lands.
+            bool inDanger = (castleHpPct < 0.9f && enemyUnits.Count > 0) || (enemyIsClose && threatScore > defenseScore * 1.5f);
             LastDecisionWasDanger = inDanger;
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
