@@ -18,6 +18,8 @@ namespace CastleDefense.Engine.Bot
         public bool LastDecisionWasDanger { get; private set; }
         public int LastUnitsPurchased { get; private set; }
         public string LastSpendDebug { get; private set; } = "";
+        public float LastThreatScore { get; private set; }
+        public float LastDefenseScore { get; private set; }
 
         // ~6 decisions/sec at 30 TPS. Fast enough to never leave money idle,
         // slow enough that it doesn't look like it's cheating with instant reactions.
@@ -81,6 +83,8 @@ namespace CastleDefense.Engine.Bot
             // enough to be worth preempting before it lands.
             bool inDanger = (castleHpPct < 0.9f && enemyUnits.Count > 0) || (enemyIsClose && threatScore > defenseScore * 1.5f);
             LastDecisionWasDanger = inDanger;
+            LastThreatScore = threatScore;
+            LastDefenseScore = defenseScore;
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos);
@@ -137,6 +141,16 @@ namespace CastleDefense.Engine.Bot
             // whenever affordable, and don't also spend the same tick's leftover on units
             // -- let every dollar possible go toward the next one instead of splitting
             // between two priorities.
+            //
+            // Tried giving the first couple of repairs priority alongside (or ahead of)
+            // investing -- RepairPrice starts about the same as the first InvestmentPrice,
+            // and permanently multiplies CastleMaxHealth 6x for that price -- reasoning
+            // that a bigger HP buffer should help survive early pressure. Measured against
+            // the real trained models it was a net loss every way it was ordered (before
+            // investing, after investing, gated to only the first 1-2 repairs): even
+            // spending idle money that investing wasn't using yet cost more win rate than
+            // the extra HP bought back. Left as purely reactive (above) rather than
+            // proactive -- see [[project_ai_opponent_heuristic]] for the full investigation.
             if (me.Money >= me.InvestmentPrice)
             {
                 engine.Invest(_side);
