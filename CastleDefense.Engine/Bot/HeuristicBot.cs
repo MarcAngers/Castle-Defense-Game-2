@@ -104,7 +104,26 @@ namespace CastleDefense.Engine.Bot
             // require a real cluster (3+) before treating it as worth preempting; a lone
             // unit approaching an empty board should just be left to chip in the (cheap,
             // insured-against-by-the-HP-threshold-above) worst case, not panic-bought.
-            bool inDanger = (castleHpPct < 0.9f && enemyUnits.Count > 0) || (enemyIsClose && enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f);
+            //
+            // The HP clause had a THIRD instance of the same degenerate pattern, and this
+            // one turned out to be the biggest: "enemyUnits.Count > 0" has no proximity
+            // requirement at all, unlike enemyIsClose. Traced a full lost game against
+            // castle_defense_p1_v4 (headstart) and found castleHpPct got chipped to 89% by
+            // tick ~900 (30s) and then sat EXACTLY at 89% for the entire rest of the ~370s
+            // game -- never enough to need repair (75% threshold), never allowed to be
+            // "safe" either, because the model always had at least one unit *somewhere* on
+            // its own half of the map. inDanger was true on effectively every decision for
+            // over 5 minutes straight, so SpendOnUnits(preferDefense: true) -- which has no
+            // investment reserve at all, by design, since reactive defense shouldn't hold
+            // back when actually threatened -- kept consuming money on cheap fodder before
+            // the invest check downstream ever got a real shot at it. Money never
+            // re-accumulated to InvestmentPrice (169.4 at that point) for the rest of the
+            // game while the model's kept compounding unimpeded (investment 3 -> 9). Require
+            // enemyIsClose here too: a stale HP deficit with nothing actually near our
+            // castle isn't an active threat, just a scoreboard number repair will fix on its
+            // own once genuinely worth it (or that's cheap to just tank -- see the
+            // insurance comment above).
+            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || (enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f));
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
