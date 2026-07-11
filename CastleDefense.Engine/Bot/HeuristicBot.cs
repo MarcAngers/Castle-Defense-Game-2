@@ -396,6 +396,23 @@ namespace CastleDefense.Engine.Bot
             return me.Money >= def.Cost;
         }
 
+        // A handful of gadgets (reinforcements, wave, goo) fire unconditionally "on
+        // cooldown" with no real urgency behind the cast -- no danger check, no HP
+        // check, nothing they're reacting to. That's fine on its own, but these are
+        // checked and fired before the repair/invest logic runs each decision, and at
+        // least one (reinforcements: $12 cost, 6s cooldown) accumulates almost exactly
+        // its own cost per cooldown cycle at the starting $2/s income -- a near-perfect
+        // trap that can keep money capped indefinitely below the very first
+        // InvestmentPrice ($18), found via a `hunt v4 headstart` trace where a
+        // reinforcements-loadout bot never invested once in 40+ seconds, income pinned
+        // flat at 2.0 while money oscillated $0-14. Investing compounds and has no
+        // downside in this economy (see the comment on the invest check in Decide()),
+        // so defer these specific low-urgency gadgets while that first foothold is
+        // still being built. Bounded to InvestmentCount < 3 (not unconditional) so this
+        // can't stall these gadgets forever once income has scaled -- by investment 3
+        // the trap can't reproduce (their cost no longer approximates income*cooldown).
+        private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money < me.InvestmentPrice;
+
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
         // the loadout isn't fixed, so all four need real usage logic, not just whichever
         // one happened to be equipped when this was written.
@@ -486,7 +503,10 @@ namespace CastleDefense.Engine.Bot
 
                 case "reinforcements":
                     // Spawns free units (bypasses cost entirely) regardless of position --
-                    // pure value with no downside, so use it on cooldown.
+                    // pure value with no downside to OUR ARMY, but the cast itself has a
+                    // real cost ($12 base) that competes with saving for the first
+                    // InvestmentPrice ($18) -- see DeferForInvestment.
+                    if (DeferForInvestment(me)) break;
                     used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
@@ -542,12 +562,16 @@ namespace CastleDefense.Engine.Bot
                     break;
 
                 case "wave":
-                    // Always fires from our own edge regardless of target position.
+                    // Always fires from our own edge regardless of target position -- but
+                    // like reinforcements, the cast itself has a real cost that can compete
+                    // with saving for the first InvestmentPrice; see DeferForInvestment.
+                    if (DeferForInvestment(me)) break;
                     used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "goo":
                     {
+                        if (DeferForInvestment(me)) break;
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
                         used = engine.UseGadget(_side, def.Id, target);
                         break;
