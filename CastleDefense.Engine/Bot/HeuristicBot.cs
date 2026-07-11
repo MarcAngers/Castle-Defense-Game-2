@@ -90,7 +90,21 @@ namespace CastleDefense.Engine.Bot
             // it. React once the castle has actually confirmed taking damage (a real
             // threat, not just a unit walking by), or if the incoming mass is overwhelming
             // enough to be worth preempting before it lands.
-            bool inDanger = (castleHpPct < 0.9f && enemyUnits.Count > 0) || (enemyIsClose && threatScore > defenseScore * 1.5f);
+            //
+            // The "overwhelming mass" clause had the exact same degenerate failure mode as
+            // the naive trigger above, just one level deeper: defenseScore is 0 for most of
+            // the early game (we have no standing army yet by design), and threatScore from
+            // even a single distant scout is still > 0 (proximityWeight has a 0.15 floor),
+            // so "threatScore > defenseScore * 1.5" collapses to "threatScore > 0" -- true
+            // for almost any nearby enemy, not just a genuine incoming mass. Traced against
+            // Tier3 spam and found this alone can keep the bot permanently reacting to lone
+            // scouts from tick 0, spending every dollar on one-off fodder and never once
+            // reaching the very first InvestmentPrice (18) the whole game (see
+            // [[project_ai_opponent_heuristic]]). "Mass" implies more than one attacker --
+            // require a real cluster (3+) before treating it as worth preempting; a lone
+            // unit approaching an empty board should just be left to chip in the (cheap,
+            // insured-against-by-the-HP-threshold-above) worst case, not panic-bought.
+            bool inDanger = (castleHpPct < 0.9f && enemyUnits.Count > 0) || (enemyIsClose && enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f);
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
@@ -111,32 +125,34 @@ namespace CastleDefense.Engine.Bot
             // a non-investing opponent, surplus money starts converting into an offensive
             // army too, since by then unit purchases no longer meaningfully compete with
             // investing for the same dollars.
-            if (inDanger)
-            {
-                // A full defensive buy doesn't matter if the castle dies to chip damage
-                // before it lands -- if we're already critically low, spend on emergency
-                // repair first (it's instant HP, unlike units which still have to walk
-                // into position and fight), then use whatever's left to clear the wave.
-                if (castleHpPct < 0.3f && me.Money >= me.RepairPrice * 1.25)
-                {
-                    if (engine.Repair(_side)) ActionCounts[10]++;
-                }
-                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
-                return;
-            }
-
+            //
             // Repair when hurt -- keeps us alive through the early game while income is
-            // still small. Not gated as tightly as investing below: staying alive comes
-            // first. Repair() also permanently raises CastleMaxHealth (1000 -> 12000 ->
-            // ...) even when called at full health, and multiple enemies can hit the
+            // still small. Repair() also permanently raises CastleMaxHealth (1000 -> 12000
+            // -> ...) even when called at full health, and multiple enemies can hit the
             // castle in the same tick with no per-tick damage cap, so extra HP is real
-            // insurance -- but that's a lower priority than compounding income, so only
-            // repair reactively (when actually hurt), not opportunistically at full
-            // health. Threshold is fairly generous (75%) so damage gets addressed before
+            // insurance. Threshold is fairly generous (75%) so damage gets addressed before
             // it compounds into an emergency, rather than always waiting until critical.
+            // Deliberately unconditional on inDanger (unlike everything below): this used to
+            // live below an "if (inDanger) { ...; return; }" block, which created a real
+            // death spiral once the castle first dipped under 90% HP (see inDanger's own
+            // comment above) -- danger stayed permanently true from then on for as long as
+            // ANY enemy unit existed anywhere on the map (no proximity requirement in that
+            // clause), which is true almost continuously against any active opponent past
+            // the early game. Repair only fires under 75%, so HP would just sit parked in
+            // the 75-90% band forever: never hurt enough to repair, never healthy enough to
+            // stop being "in danger" and reach the repair/invest checks below at all. Now
+            // repair gets a chance every decision regardless, which is what actually breaks
+            // the loop -- matches Marc's own read that repairing ("the HP upgrade") and
+            // investing are naturally linked, since climbing back over 90% HP is what lets
+            // the rest of this method run again.
             if (castleHpPct < 0.75f && me.Money >= me.RepairPrice * 1.25)
             {
                 if (engine.Repair(_side)) ActionCounts[10]++;
+            }
+
+            if (inDanger)
+            {
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
             }
 
             // Investing has essentially no downside in THIS economy: the hardcoded
@@ -170,8 +186,10 @@ namespace CastleDefense.Engine.Bot
             // pulled away from what a flat, non-investing opponent could ever match --
             // before that point, every dollar spent on units is a dollar that isn't
             // compounding, and a spam bot only ever needs a small reactive defense to
-            // ignore entirely.
-            if (me.Income >= 50)
+            // ignore entirely. Explicitly !inDanger (used to be implicit via the early
+            // return above) -- while actively defending, reactive spending already ran
+            // above and nothing further should be layered on the same decision.
+            if (!inDanger && me.Income >= 50)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
             }

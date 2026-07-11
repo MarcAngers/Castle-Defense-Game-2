@@ -63,7 +63,7 @@ void AssignLoadout(PlayerState player, int side, TeamColour team, string offense
     return (state, engine);
 }
 
-(int winner, long ticks) RunOneGame(Func<int, IArenaOpponent> makeP1, Func<int, IArenaOpponent> makeP2, bool allowHeadStart = false)
+(int winner, long ticks, bool isTimeLimit) RunOneGame(Func<int, IArenaOpponent> makeP1, Func<int, IArenaOpponent> makeP2, bool allowHeadStart = false)
 {
     var (state, engine) = CreateGame(allowHeadStart);
 
@@ -82,33 +82,50 @@ void AssignLoadout(PlayerState player, int side, TeamColour team, string offense
     (p1 as IDisposable)?.Dispose();
     (p2 as IDisposable)?.Dispose();
 
-    return (state.WinnerSide, state.CurrentTick);
+    return (state.WinnerSide, state.CurrentTick, state.IsTimeLimit);
 }
 
+// A win awarded because the 10-minute clock ran out and we merely had more castle HP
+// at that instant is a much weaker signal than actually destroying the enemy castle --
+// Marc's explicit ask is that these NOT get counted as full wins in the headline rate.
+// Track them separately and report a decisive-only rate as the primary number, with the
+// timeout-decided games broken out alongside it so they're visible, not hidden.
 void RunMatchup(string label, Func<int, IArenaOpponent> baselineFactory, bool allowHeadStart = false)
 {
-    int botWins = 0, baselineWins = 0, draws = 0;
+    int botDecisiveWins = 0, baselineDecisiveWins = 0, draws = 0;
+    int botTimeoutWins = 0, baselineTimeoutWins = 0, timeoutDraws = 0;
     long totalTicks = 0;
 
     for (int i = 0; i < gamesPerMatchup; i++)
     {
         // Alternate which side the heuristic bot plays to cancel out any side asymmetry.
         bool botIsP1 = i % 2 == 0;
-        var (winner, ticks) = botIsP1
+        var (winner, ticks, isTimeLimit) = botIsP1
             ? RunOneGame(side => new HeuristicBotAdapter(side), baselineFactory, allowHeadStart)
             : RunOneGame(baselineFactory, side => new HeuristicBotAdapter(side), allowHeadStart);
 
         totalTicks += ticks;
 
         int botSide = botIsP1 ? 1 : 2;
-        if (winner == 0) draws++;
-        else if (winner == botSide) botWins++;
-        else baselineWins++;
+        if (winner == 0)
+        {
+            if (isTimeLimit) timeoutDraws++; else draws++;
+        }
+        else if (winner == botSide)
+        {
+            if (isTimeLimit) botTimeoutWins++; else botDecisiveWins++;
+        }
+        else
+        {
+            if (isTimeLimit) baselineTimeoutWins++; else baselineDecisiveWins++;
+        }
     }
 
-    double winRate = 100.0 * botWins / gamesPerMatchup;
+    int totalTimeoutGames = botTimeoutWins + baselineTimeoutWins + timeoutDraws;
+    double decisiveWinRate = 100.0 * botDecisiveWins / gamesPerMatchup;
     double avgSeconds = totalTicks / (double)gamesPerMatchup / 30.0;
-    Console.WriteLine($"{label,-26} bot wins: {botWins,4}/{gamesPerMatchup} ({winRate,5:F1}%)  baseline wins: {baselineWins,4}  draws: {draws,3}  avg game length: {avgSeconds,6:F1}s");
+    Console.WriteLine($"{label,-26} bot wins: {botDecisiveWins,4}/{gamesPerMatchup} ({decisiveWinRate,5:F1}%)  baseline wins: {baselineDecisiveWins,4}  draws: {draws,3}  avg game length: {avgSeconds,6:F1}s" +
+        (totalTimeoutGames > 0 ? $"  [timeout: bot {botTimeoutWins}, baseline {baselineTimeoutWins}, draw {timeoutDraws}]" : ""));
 }
 
 // Sweeps every offense x defense combination the bot could be given (team stays
@@ -121,6 +138,7 @@ void RunLoadoutSweep(Func<int, IArenaOpponent> opponentFactory, int gamesPerComb
         foreach (var defense in defenseOptions)
         {
             int botWins = 0, oppWins = 0, draws = 0;
+            int botTimeoutWins = 0, oppTimeoutWins = 0, timeoutDraws = 0;
 
             for (int i = 0; i < gamesPerCombo; i++)
             {
@@ -140,13 +158,24 @@ void RunLoadoutSweep(Func<int, IArenaOpponent> opponentFactory, int gamesPerComb
                 }
                 (opponent as IDisposable)?.Dispose();
 
-                if (state.WinnerSide == 0) draws++;
-                else if (state.WinnerSide == 1) botWins++;
-                else oppWins++;
+                if (state.WinnerSide == 0)
+                {
+                    if (state.IsTimeLimit) timeoutDraws++; else draws++;
+                }
+                else if (state.WinnerSide == 1)
+                {
+                    if (state.IsTimeLimit) botTimeoutWins++; else botWins++;
+                }
+                else
+                {
+                    if (state.IsTimeLimit) oppTimeoutWins++; else oppWins++;
+                }
             }
 
+            int totalTimeoutGames = botTimeoutWins + oppTimeoutWins + timeoutDraws;
             double winRate = 100.0 * botWins / gamesPerCombo;
-            Console.WriteLine($"{offense,-15}{defense,-16} bot wins: {botWins,4}/{gamesPerCombo} ({winRate,5:F1}%)  opp wins: {oppWins,4}  draws: {draws,3}");
+            Console.WriteLine($"{offense,-15}{defense,-16} bot wins: {botWins,4}/{gamesPerCombo} ({winRate,5:F1}%)  opp wins: {oppWins,4}  draws: {draws,3}" +
+                (totalTimeoutGames > 0 ? $"  [timeout: bot {botTimeoutWins}, opp {oppTimeoutWins}, draw {timeoutDraws}]" : ""));
         }
     }
 }
@@ -195,6 +224,7 @@ if (args.Length > 0 && args[0] == "models")
 {
     bool headStart = args.Length > 1 && args[1] == "headstart";
     int games = args.Length > 2 && int.TryParse(args[2], out var mg) ? mg : gamesPerMatchup;
+    gamesPerMatchup = games; // RunMatchup loops on gamesPerMatchup, not this local
 
     var dir = FindLeagueModelsDir();
     if (dir == null)
@@ -203,8 +233,14 @@ if (args.Length > 0 && args[0] == "models")
         return;
     }
 
-    var modelFiles = Directory.GetFiles(dir, "*.onnx").OrderBy(f => f).ToList();
-    Console.WriteLine($"Found {modelFiles.Count} model(s) in {dir}");
+    // Optional trailing non-numeric, non-"headstart" arg filters to model filenames
+    // containing it (e.g. "models headstart 300 v23") -- lets a single matchup be
+    // re-tested quickly instead of paying for the full ~10-model sweep every time.
+    string? filter = args.Skip(1).FirstOrDefault(a => a != "headstart" && !int.TryParse(a, out _));
+    var modelFiles = Directory.GetFiles(dir, "*.onnx").OrderBy(f => f)
+        .Where(f => filter == null || Path.GetFileNameWithoutExtension(f).Contains(filter, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    Console.WriteLine($"Found {modelFiles.Count} model(s) in {dir}{(filter != null ? $" matching '{filter}'" : "")}");
     Console.WriteLine($"Running {games} games per model{(headStart ? " (with time-machine head starts)" : " (fresh start)")}...\n");
 
     foreach (var modelFile in modelFiles)
@@ -275,7 +311,10 @@ if (args.Length > 0 && args[0] == "hunt")
             Console.WriteLine($"P1 team={huntState.Player1.Team} offense={huntState.Player1.OffensiveGadget?.Id} defense={huntState.Player1.DefensiveGadget?.Id} sig={huntState.Player1.SignatureGadget?.Id}, P2 team={huntState.Player2.Team}");
             Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1rep\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1danger\tthreat\tdefense\tP1bought\tP1composition");
             foreach (var line in log) Console.WriteLine(line);
-            Console.WriteLine($"\nResult: {(huntState.WinnerSide == 0 ? "draw/timeout" : "P" + huntState.WinnerSide + " wins")} at tick {huntState.CurrentTick} (attempt {attempt + 1})");
+            string huntResult = huntState.WinnerSide == 0 ? "draw (timeout, tied HP)"
+                : huntState.IsTimeLimit ? $"P{huntState.WinnerSide} wins BY TIMEOUT (higher HP, castle never destroyed)"
+                : $"P{huntState.WinnerSide} wins (castle destroyed)";
+            Console.WriteLine($"\nResult: {huntResult} at tick {huntState.CurrentTick} (attempt {attempt + 1})");
             (huntFoe as IDisposable)?.Dispose();
             return;
         }
@@ -329,7 +368,10 @@ if (args.Length > 0 && args[0] == "trace")
             Console.WriteLine($"{state.CurrentTick}\t{state.CurrentTick / 30}\t{state.Player1.Money:F0}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1u}\t{p1hp:F0}\t{state.Player2.Money:F0}\t{state.Player2.Income:F1}\t{state.Player2.InvestmentCount}\t{p2u}\t{p2hp:F0}\t{p1comp}\t{p2comp}");
         }
     }
-    Console.WriteLine($"\nWinner: {(state.WinnerSide == 0 ? "draw/timeout" : "P" + state.WinnerSide)} at tick {state.CurrentTick}");
+    string traceResult = state.WinnerSide == 0 ? "draw (timeout, tied HP)"
+        : state.IsTimeLimit ? $"P{state.WinnerSide} BY TIMEOUT (higher HP, castle never destroyed)"
+        : $"P{state.WinnerSide} (castle destroyed)";
+    Console.WriteLine($"\nWinner: {traceResult} at tick {state.CurrentTick}");
     return;
 }
 
@@ -339,7 +381,9 @@ if (args.Length > 0 && args[0] == "spam")
     // and nothing else, no economy/gadget play at all), optionally with games that
     // start already in progress via the real "time machine" (PlayerState(timeSkip)).
     // A decent human player reportedly beats these >95% of the time.
-    bool headStart = args.Length > 1 && args[1] == "headstart";
+    bool headStart = args.Contains("headstart");
+    int spamGames = args.Skip(1).Select(a => int.TryParse(a, out var g) ? g : (int?)null).FirstOrDefault(g => g.HasValue) ?? gamesPerMatchup;
+    gamesPerMatchup = spamGames;
     Console.WriteLine($"Running {gamesPerMatchup} games per matchup vs tier-spam bots{(headStart ? " (with time-machine head starts)" : " (fresh start)")}...\n");
 
     for (int tier = 1; tier <= 8; tier++)
