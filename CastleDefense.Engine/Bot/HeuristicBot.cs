@@ -35,6 +35,12 @@ namespace CastleDefense.Engine.Bot
         private const int DecisionIntervalTicks = 5;
         private long _nextDecisionTick;
 
+        // Rolling ~1s window of CastleHealth readings, used by inDanger's mass-threat
+        // clause to require actual recent damage instead of pure proximity+headcount.
+        // See the comment on inDanger for why.
+        private const int HpHistoryWindow = 6;
+        private readonly List<int> _recentCastleHealth = new List<int>();
+
         public HeuristicBot(int side)
         {
             _side = side;
@@ -123,7 +129,28 @@ namespace CastleDefense.Engine.Bot
             // castle isn't an active threat, just a scoreboard number repair will fix on its
             // own once genuinely worth it (or that's cheap to just tank -- see the
             // insurance comment above).
-            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || (enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f));
+            // The mass clause still has a subtler version of the exact same "true almost
+            // always" problem, one level deeper than the two already fixed above. Under the
+            // boom strategy defenseScore is deliberately kept near-zero (no standing army),
+            // so "threatScore > defenseScore * 1.5" ends up trivially satisfied by completely
+            // ordinary, ALREADY-BEING-HANDLED enemy production, not just a genuine incoming
+            // alpha strike -- traced `hunt 1` (Tier1 spam, the WEAKEST possible opponent) and
+            // found inDanger true for essentially the entire 600-second game (threatScore
+            // 140-235 vs defenseScore 30-90, comfortably over the 1.5x bar) while
+            // castleHpPct never once moved off 100% -- the "threat" never actually landed a
+            // single hit the whole game, yet permanently blocked non-reactive spending/
+            // investing since reactive spending (checked first, no reserve) kept winning the
+            // race for every dollar. The bot invested ZERO times in that entire game. Require
+            // the mass clause to see actual recent damage (HP now lower than ~1s/6 decisions
+            // ago) before treating a mass as urgent, rather than pure proximity+headcount+
+            // ratio -- a real, currently-landing attack still catches this within 1-2
+            // decisions of its first hit; a sustainable skirmish that isn't actually
+            // breaking through no longer permanently locks out investing.
+            _recentCastleHealth.Add(me.CastleHealth);
+            if (_recentCastleHealth.Count > HpHistoryWindow) _recentCastleHealth.RemoveAt(0);
+            bool recentHpLoss = _recentCastleHealth.Count == HpHistoryWindow && me.CastleHealth < _recentCastleHealth[0];
+
+            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || (enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f && recentHpLoss));
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
