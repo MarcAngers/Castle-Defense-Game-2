@@ -35,10 +35,16 @@ namespace CastleDefense.Engine.Bot
         private const int DecisionIntervalTicks = 5;
         private long _nextDecisionTick;
 
-        // Rolling ~1s window of CastleHealth readings, used by inDanger's mass-threat
+        // Rolling ~1.5s window of CastleHealth readings, used by inDanger's mass-threat
         // clause to require actual recent damage instead of pure proximity+headcount.
-        // See the comment on inDanger for why.
-        private const int HpHistoryWindow = 6;
+        // See the comment on inDanger for why. Tuned empirically (tried 3/6/9 decisions
+        // at full 400-spam/300-model x2-replicate validation): 6 (~1s) was the original,
+        // untuned default; 3 (~0.5s) recovered some of Tier3/Tier4/v4 but introduced new
+        // regressions (v25 -6.35 avg, v7 -5.05 avg); 9 (~1.5s) recovered Tier3/Tier4/v4
+        // MORE than 3 did while keeping v25/v7's regressions much smaller (-1.15/-2.4
+        // avg) -- broad gains across nearly every matchup with no large regression
+        // anywhere. See [[project_ai_opponent_heuristic]] for the full comparison.
+        private const int HpHistoryWindow = 9;
         private readonly List<int> _recentCastleHealth = new List<int>();
 
         public HeuristicBot(int side)
