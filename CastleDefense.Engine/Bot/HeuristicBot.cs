@@ -467,6 +467,12 @@ namespace CastleDefense.Engine.Bot
                     // whichever enemy is farthest from our army instead of skipping the
                     // cast outright -- still a valid burn, and this gadget needs real usage
                     // to ever earn enough XP to upgrade past its weak base tier.
+                    // Base-tier cost ($18) matches the first InvestmentPrice exactly, and
+                    // this fires off a single enemy unit anywhere -- the most permissive
+                    // trigger of any offense gadget. Same trap shape as reinforcements/wave/
+                    // goo (see DeferForInvestment); defer it while that first foothold is
+                    // still being built.
+                    if (DeferForInvestment(me)) break;
                     int? target = FindBestAoeTarget(enemyUnits, radius);
                     if (target.HasValue && myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
                     {
