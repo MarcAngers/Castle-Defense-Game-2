@@ -118,7 +118,23 @@ namespace CastleDefense.Engine.Bot
             float v = rateRecent;
             float a = acceleration;
             float discriminant = v * v + 2f * a * currentHp;
-            if (discriminant < 0f) return EffectivelyInfiniteSeconds; // decelerating enough to never reach 0 under this trend
+            if (discriminant < 0f)
+            {
+                // Math says a decelerating trend would stop us reaching 0 HP at all --
+                // but traced a real Tier3 spam loss (hunt 3) where this branch reported
+                // "inf" (totally safe) repeatedly while castleHpPct was VISIBLY, MONOTONICALLY
+                // dropping every single logged row (100 -> 99 -> 98 -> ... -> 1, no
+                // plateaus). A genuine "wave broken, drain stopping" scenario shows up as
+                // the RECENT rate (v) itself dropping toward zero, not just a large
+                // computed deceleration while v stays elevated -- Tier3's bursty/uneven hit
+                // timing within a short half-window produces noisy acceleration estimates
+                // that swung deceleration hard enough to hit this branch spuriously, over
+                // and over, right when the castle needed a repair/reactive response the
+                // most. Don't let a merely-computed deceleration override a live, still-
+                // significant current rate -- fall back to the honest (always-conservative)
+                // constant-rate estimate whenever v itself hasn't actually eased off yet.
+                return v > 0.5f ? currentHp / v : EffectivelyInfiniteSeconds;
+            }
 
             float sqrtDisc = MathF.Sqrt(discriminant);
             float t1 = (-v + sqrtDisc) / a;
