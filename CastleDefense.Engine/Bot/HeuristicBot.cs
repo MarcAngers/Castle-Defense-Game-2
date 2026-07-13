@@ -20,6 +20,8 @@ namespace CastleDefense.Engine.Bot
         public string LastSpendDebug { get; private set; } = "";
         public float LastThreatScore { get; private set; }
         public float LastDefenseScore { get; private set; }
+        public float LastTimeToDeathSeconds { get; private set; }
+        public float LastTimeToInvestSeconds { get; private set; }
 
         // Running per-game tally of every successful action actually taken, indexed by
         // the same 14-action ID space as GetActionMask/ApplyAction (0=wait unused here,
@@ -135,31 +137,87 @@ namespace CastleDefense.Engine.Bot
             // castle isn't an active threat, just a scoreboard number repair will fix on its
             // own once genuinely worth it (or that's cheap to just tank -- see the
             // insurance comment above).
-            // The mass clause still has a subtler version of the exact same "true almost
-            // always" problem, one level deeper than the two already fixed above. Under the
-            // boom strategy defenseScore is deliberately kept near-zero (no standing army),
-            // so "threatScore > defenseScore * 1.5" ends up trivially satisfied by completely
-            // ordinary, ALREADY-BEING-HANDLED enemy production, not just a genuine incoming
-            // alpha strike -- traced `hunt 1` (Tier1 spam, the WEAKEST possible opponent) and
-            // found inDanger true for essentially the entire 600-second game (threatScore
-            // 140-235 vs defenseScore 30-90, comfortably over the 1.5x bar) while
-            // castleHpPct never once moved off 100% -- the "threat" never actually landed a
-            // single hit the whole game, yet permanently blocked non-reactive spending/
-            // investing since reactive spending (checked first, no reserve) kept winning the
-            // race for every dollar. The bot invested ZERO times in that entire game. Require
-            // the mass clause to see actual recent damage (HP now lower than ~1s/6 decisions
-            // ago) before treating a mass as urgent, rather than pure proximity+headcount+
-            // ratio -- a real, currently-landing attack still catches this within 1-2
-            // decisions of its first hit; a sustainable skirmish that isn't actually
-            // breaking through no longer permanently locks out investing.
+            // The mass clause (enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f)
+            // that used to live here had a subtler version of the exact same "true almost
+            // always" problem as the two clauses above: under the boom strategy defenseScore
+            // is deliberately kept near-zero, so the 1.5x ratio bar was trivially satisfied
+            // by completely ordinary, already-being-handled enemy production, not just a
+            // genuine incoming alpha strike -- traced `hunt 1` (Tier1 spam) and found this
+            // true for essentially an entire 600-second game while castleHpPct never once
+            // moved off 100%. A recency requirement (HP now lower than ~1.5s ago) fixed the
+            // worst of it, but the underlying question a fixed ratio-against-a-near-zero
+            // baseline can never really answer is "how much runway do we actually have" --
+            // which matters because the real decision isn't just "danger yes/no", it's
+            // "can we safely reach the next investment before we'd die, or do we need to buy
+            // more time first" (Marc's framing: HP is a resource you spend to buy time for
+            // the economy to compound -- a repair is a huge, cheap, one-time time purchase,
+            // e.g. the first one takes CastleMaxHealth 2000 -> 12000, a ~6x swing).
+            //
+            // Estimate an actual time-to-death from the observed HP drain rate over the same
+            // rolling window used for the recency check above, and compare it against how
+            // long it will take to save up the next InvestmentPrice at the current income.
+            // If we have comfortably more runway than that, saving straight for the
+            // investment is safe and reactive spending/repair are unnecessary this decision
+            // (mirrors "I monitor my HP and decide if I can get away with an investment
+            // before I need to upgrade my HP"). If not, this decision needs to buy time
+            // instead -- via repair (a big, permanent HP/time purchase, see below) and/or
+            // reactive spending (kill the incoming wave, which lowers the drain rate itself).
             _recentCastleHealth.Add(me.CastleHealth);
             if (_recentCastleHealth.Count > HpHistoryWindow) _recentCastleHealth.RemoveAt(0);
-            bool recentHpLoss = _recentCastleHealth.Count == HpHistoryWindow && me.CastleHealth < _recentCastleHealth[0];
 
-            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || (enemyUnits.Count >= 3 && threatScore > defenseScore * 1.5f && recentHpLoss));
+            const float EffectivelyInfiniteSeconds = 999999f;
+            float windowSeconds = HpHistoryWindow * DecisionIntervalTicks / 30f;
+            float hpDrainPerSecond = 0f;
+            if (_recentCastleHealth.Count == HpHistoryWindow)
+            {
+                int hpLostInWindow = _recentCastleHealth[0] - me.CastleHealth;
+                if (hpLostInWindow > 0) hpDrainPerSecond = hpLostInWindow / windowSeconds;
+            }
+            // A trickle of chip damage (a handful of HP/sec against a multi-thousand HP
+            // pool) technically yields a huge but not-actually-meaningful time-to-death;
+            // floor the drain rate so those don't get treated identically to "totally safe".
+            float timeToDeathSeconds = hpDrainPerSecond > 0.5f ? me.CastleHealth / hpDrainPerSecond : EffectivelyInfiniteSeconds;
+
+            double moneyStillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
+            float timeToInvestSeconds = me.Income > 0.01 ? (float)(moneyStillNeeded / me.Income) : EffectivelyInfiniteSeconds;
+
+            // Require real headroom, not just "barely more time than needed" -- decisions
+            // only run ~6/sec and an enemy's incoming mass can keep growing, so the drain
+            // rate measured this instant is a floor on how bad it gets, not a guarantee.
+            const float SafetyMarginMultiplier = 1.4f;
+            const float SafetyBufferSeconds = 2f;
+            bool investmentRunwayIsSafe = timeToDeathSeconds >= timeToInvestSeconds * SafetyMarginMultiplier + SafetyBufferSeconds;
+
+            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || !investmentRunwayIsSafe);
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
+            LastTimeToDeathSeconds = timeToDeathSeconds;
+            LastTimeToInvestSeconds = timeToInvestSeconds;
+
+            // Claim a safely-affordable investment before ANYTHING else this decision gets
+            // a chance to spend the money, rather than checking it last (as below) and
+            // hoping nothing else got to it first. Found via trace (hunt v4 headstart) that
+            // this race is real and not just theoretical: money visibly reached $32.32
+            // against a $31.20 InvestmentPrice while inDanger was false, yet InvestmentCount
+            // never moved -- because unlike the first investment ($18, landed on exactly by
+            // clean $2 increments from zero), later thresholds aren't round numbers the
+            // income accrual lands on exactly, so money can jump straight PAST the price in
+            // a single decision. DeferForInvestment's <= boundary guard (see its own
+            // comment) only protects gadgets up to the exact crossover value -- once money
+            // overshoots it in one step, that guard is already inactive the very same
+            // decision a gadget or reactive spend could also fire and steal the dollar
+            // investing needed. Checking investment first eliminates that whole class of
+            // race at the root instead of patching each specific competing spend. Gated on
+            // investmentRunwayIsSafe (not just affordability) so a genuine emergency still
+            // gets first claim on the money via the normal repair/reactive-spend path below
+            // -- this is Marc's framing directly: "if you can get away with an investment
+            // before you need to upgrade your HP, take it."
+            if (investmentRunwayIsSafe && me.Money >= me.InvestmentPrice)
+            {
+                if (engine.Invest(_side)) ActionCounts[9]++;
+                return;
+            }
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos);
@@ -197,7 +255,16 @@ namespace CastleDefense.Engine.Bot
             // the loop -- matches Marc's own read that repairing ("the HP upgrade") and
             // investing are naturally linked, since climbing back over 90% HP is what lets
             // the rest of this method run again.
-            if (castleHpPct < 0.75f && me.Money >= me.RepairPrice * 1.25)
+            //
+            // Also repair proactively whenever the time-to-death model says we don't have
+            // enough runway to safely reach the next investment (`inDanger`), even if HP%
+            // hasn't dropped all the way to 75% yet -- a fast burst can make time-to-death
+            // short well before the cumulative damage does. This is the "trade HP for time"
+            // move: the first repair alone takes CastleMaxHealth 2000 -> 12000, a ~6x swing
+            // that can turn a losing race against the clock into a comfortable one for the
+            // price of a single, cheap, permanent purchase.
+            bool repairWouldHelp = castleHpPct < 0.75f || inDanger;
+            if (repairWouldHelp && me.Money >= me.RepairPrice * 1.25)
             {
                 if (engine.Repair(_side)) ActionCounts[10]++;
             }
@@ -207,6 +274,13 @@ namespace CastleDefense.Engine.Bot
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
             }
 
+            // Fallback investment check: the primary one now happens at the very top of
+            // this method (see its comment) whenever investmentRunwayIsSafe, before
+            // anything else can touch the money. This one exists for the danger case that
+            // skipped that early check -- repair/reactive spend above may not have needed
+            // all the money even while genuinely in danger, so still grab an investment
+            // with whatever's left rather than let it sit idle till next decision.
+            //
             // Investing has essentially no downside in THIS economy: the hardcoded
             // starting Income (2) is already below the investment formula's very first
             // step (~2.65), so every investment -- starting with the very first one -- is
@@ -214,10 +288,7 @@ namespace CastleDefense.Engine.Bot
             // bot might run under: if the starting income is ever tuned back up above
             // where the formula naturally would be, the first investment can crater income
             // for a while before recovering -- worth re-checking this assumption if the
-            // starting Income constant in PlayerState() ever changes again.) Take it
-            // whenever affordable, and don't also spend the same tick's leftover on units
-            // -- let every dollar possible go toward the next one instead of splitting
-            // between two priorities.
+            // starting Income constant in PlayerState() ever changes again.)
             //
             // Tried giving the first couple of repairs priority alongside (or ahead of)
             // investing -- RepairPrice starts about the same as the first InvestmentPrice,

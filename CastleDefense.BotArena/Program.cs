@@ -302,14 +302,16 @@ if (args.Length > 0 && args[0] == "hunt")
                 var p1hp = 100.0 * huntState.Player1.CastleHealth / huntState.Player1.CastleMaxHealth;
                 var p2hp = 100.0 * huntState.Player2.CastleHealth / huntState.Player2.CastleMaxHealth;
                 var p1comp = string.Join(",", huntState.Units.Where(u => u.Side == 1).GroupBy(u => u.DefinitionId).OrderByDescending(g => g.Count()).Select(g => $"{g.Key}:{g.Count()}"));
-                log.Add($"{huntState.CurrentTick}\t{huntState.CurrentTick / 30}\t{huntState.Player1.Money:F2}\t{huntState.Player1.Income:F1}\t{huntState.Player1.InvestmentCount}\t{huntState.Player1.RepairCount}\t{p1u}\t{p1hp:F0}\t{huntState.Player2.Money:F0}\t{huntState.Player2.Income:F1}\t{p2u}\t{p2hp:F0}\t{huntBot.LastDecisionWasDanger}\t{huntBot.LastThreatScore:F1}\t{huntBot.LastDefenseScore:F1}\t{huntBot.LastUnitsPurchased}\t{huntBot.LastSpendDebug}\t{p1comp}");
+                string ttd = huntBot.LastTimeToDeathSeconds >= 999999f ? "inf" : huntBot.LastTimeToDeathSeconds.ToString("F1");
+                string tti = huntBot.LastTimeToInvestSeconds >= 999999f ? "inf" : huntBot.LastTimeToInvestSeconds.ToString("F1");
+                log.Add($"{huntState.CurrentTick}\t{huntState.CurrentTick / 30}\t{huntState.Player1.Money:F2}\t{huntState.Player1.Income:F1}\t{huntState.Player1.InvestmentCount}\t{huntState.Player1.RepairCount}\t{p1u}\t{p1hp:F0}\t{huntState.Player2.Money:F0}\t{huntState.Player2.Income:F1}\t{p2u}\t{p2hp:F0}\t{huntBot.LastDecisionWasDanger}\t{ttd}\t{tti}\t{huntBot.LastThreatScore:F1}\t{huntBot.LastDefenseScore:F1}\t{huntBot.LastUnitsPurchased}\t{huntBot.LastSpendDebug}\t{p1comp}");
             }
         }
 
         if (huntState.WinnerSide != 1)
         {
             Console.WriteLine($"P1 team={huntState.Player1.Team} offense={huntState.Player1.OffensiveGadget?.Id} defense={huntState.Player1.DefensiveGadget?.Id} sig={huntState.Player1.SignatureGadget?.Id}, P2 team={huntState.Player2.Team}");
-            Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1rep\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1danger\tthreat\tdefense\tP1bought\tP1composition");
+            Console.WriteLine("tick\tsec\tP1$\tP1inc\tP1inv\tP1rep\tP1units\tP1hp%\tP2$\tP2inc\tP2units\tP2hp%\tP1danger\tTTD\tTTI\tthreat\tdefense\tP1bought\tP1composition");
             foreach (var line in log) Console.WriteLine(line);
             string huntResult = huntState.WinnerSide == 0 ? "draw (timeout, tied HP)"
                 : huntState.IsTimeLimit ? $"P{huntState.WinnerSide} wins BY TIMEOUT (higher HP, castle never destroyed)"
@@ -485,5 +487,7 @@ class HeuristicBotAdapter : IArenaOpponent
     public string LastSpendDebug => _bot.LastSpendDebug;
     public float LastThreatScore => _bot.LastThreatScore;
     public float LastDefenseScore => _bot.LastDefenseScore;
+    public float LastTimeToDeathSeconds => _bot.LastTimeToDeathSeconds;
+    public float LastTimeToInvestSeconds => _bot.LastTimeToInvestSeconds;
     public long[] ActionCounts => _bot.ActionCounts;
 }
