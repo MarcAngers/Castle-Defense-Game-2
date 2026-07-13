@@ -37,21 +37,96 @@ namespace CastleDefense.Engine.Bot
         private const int DecisionIntervalTicks = 5;
         private long _nextDecisionTick;
 
-        // Rolling ~1.5s window of CastleHealth readings, used by inDanger's mass-threat
-        // clause to require actual recent damage instead of pure proximity+headcount.
-        // See the comment on inDanger for why. Tuned empirically (tried 3/6/9 decisions
-        // at full 400-spam/300-model x2-replicate validation): 6 (~1s) was the original,
-        // untuned default; 3 (~0.5s) recovered some of Tier3/Tier4/v4 but introduced new
-        // regressions (v25 -6.35 avg, v7 -5.05 avg); 9 (~1.5s) recovered Tier3/Tier4/v4
-        // MORE than 3 did while keeping v25/v7's regressions much smaller (-1.15/-2.4
-        // avg) -- broad gains across nearly every matchup with no large regression
-        // anywhere. See [[project_ai_opponent_heuristic]] for the full comparison.
-        private const int HpHistoryWindow = 9;
+        // Rolling window of CastleHealth readings, feeding EstimateTimeToDeathSeconds
+        // below (drain rate AND its rate of change). Tuned empirically at full
+        // 400-spam/300-model x2-replicate validation across several stages:
+        // - 6/3/9 decisions (~1/0.5/1.5s) were compared back when this window only fed a
+        //   simple "has HP dropped at all in this window" recency check (a first-derivative
+        //   proxy) -- 9 won clearly then. See [[project_ai_opponent_heuristic]] for that
+        //   comparison.
+        // - Once the window started feeding an actual SECOND derivative (acceleration --
+        //   see EstimateTimeToDeathSeconds), 9 decisions proved too short: differencing two
+        //   already-noisy rate estimates (each covering only ~0.67s) amplified that noise,
+        //   measurably hurting steadier opponents (Tier3 spam -8.75 avg, Tier5 spam -8.5
+        //   avg) even while it helped the two hardest matchups (v4 +5.15, v7 +2.8 avg).
+        //   Widening to 18 decisions (~3s, ~1.5s per half) stabilized the acceleration
+        //   estimate: kept v4's gain (+2.8 avg) while shrinking Tier3/Tier5's regressions to
+        //   -7.1/-2.35 avg and recovering Tier4/v3/v22/v23/v25/v21 to roughly flat. A damped
+        //   (0.5x) acceleration term was also tried at this window size and made things
+        //   worse, not better (new small regressions on v3/v22/v23/v25 with no compensating
+        //   gain) -- reverted. Tier3's regression was not fully resolved within this
+        //   session's time budget; flagged as still-open in memory.
+        private const int HpHistoryWindow = 18;
         private readonly List<int> _recentCastleHealth = new List<int>();
+
+        private const float EffectivelyInfiniteSeconds = 999999f;
 
         public HeuristicBot(int side)
         {
             _side = side;
+        }
+
+        // Projects seconds-until-castle-death from the rolling HP window, modeling BOTH
+        // the current drain rate (first derivative) and how that rate is itself changing
+        // (second derivative / acceleration) -- against a spam-style opponent, HP drain
+        // doesn't stay constant: more units pile into melee range of the castle each
+        // second (no per-tick damage cap), so a naive constant-rate projection
+        // underestimates how bad things are about to get. Symmetrically, once a wave
+        // gets broken (by reactive spend or a gadget), the rate eases back off and a
+        // constant-rate projection would overstate the remaining danger for a beat.
+        //
+        // Splits the window into an early half and a recent half, estimates the average
+        // drain rate within each, and treats the difference between them as a constant
+        // acceleration applied going forward from the recent-half rate -- then solves the
+        // standard kinematic "distance covered under constant acceleration" equation
+        // (hpRemaining = v*t + 0.5*a*t^2) for the smallest positive t, instead of the
+        // simpler hpRemaining / v.
+        private float EstimateTimeToDeathSeconds(int currentHp)
+        {
+            int n = _recentCastleHealth.Count;
+            if (n < HpHistoryWindow) return EffectivelyInfiniteSeconds; // window not full yet
+
+            float decisionSeconds = DecisionIntervalTicks / 30f;
+            int mid = n / 2;
+            if (mid <= 0 || mid >= n - 1) return EffectivelyInfiniteSeconds; // window too small to split
+
+            int hpAtStart = _recentCastleHealth[0];
+            int hpAtMid = _recentCastleHealth[mid];
+            // currentHp (not _recentCastleHealth[n-1]) is used for the end of the recent
+            // half -- they're the same value, but currentHp is what the caller is
+            // actually asking "how long until THIS reaches zero", so use it directly.
+
+            float earlySeconds = mid * decisionSeconds;
+            float recentSeconds = (n - 1 - mid) * decisionSeconds;
+
+            float rateEarly = (hpAtStart - hpAtMid) / earlySeconds;   // HP/sec, positive = draining
+            float rateRecent = (hpAtMid - currentHp) / recentSeconds; // HP/sec, positive = draining
+
+            // A trickle of chip damage with no real acceleration isn't a meaningful
+            // threat -- don't let noise around zero register as "draining".
+            if (rateRecent <= 0.5f && rateEarly <= 0.5f) return EffectivelyInfiniteSeconds;
+
+            float timeBetweenRateSamples = (earlySeconds + recentSeconds) / 2f;
+            float acceleration = (rateRecent - rateEarly) / timeBetweenRateSamples; // HP/sec^2
+
+            // Constant-rate fallback when acceleration is negligible -- avoids dividing by
+            // a near-zero acceleration in the quadratic solve below.
+            if (Math.Abs(acceleration) < 0.1f)
+                return rateRecent > 0.5f ? currentHp / rateRecent : EffectivelyInfiniteSeconds;
+
+            // Solve currentHp = v*t + 0.5*a*t^2 for the smallest positive t.
+            float v = rateRecent;
+            float a = acceleration;
+            float discriminant = v * v + 2f * a * currentHp;
+            if (discriminant < 0f) return EffectivelyInfiniteSeconds; // decelerating enough to never reach 0 under this trend
+
+            float sqrtDisc = MathF.Sqrt(discriminant);
+            float t1 = (-v + sqrtDisc) / a;
+            float t2 = (-v - sqrtDisc) / a;
+            float result = EffectivelyInfiniteSeconds;
+            if (t1 > 0f && t1 < result) result = t1;
+            if (t2 > 0f && t2 < result) result = t2;
+            return result;
         }
 
         public void Update(GameEngine engine)
@@ -165,18 +240,7 @@ namespace CastleDefense.Engine.Bot
             _recentCastleHealth.Add(me.CastleHealth);
             if (_recentCastleHealth.Count > HpHistoryWindow) _recentCastleHealth.RemoveAt(0);
 
-            const float EffectivelyInfiniteSeconds = 999999f;
-            float windowSeconds = HpHistoryWindow * DecisionIntervalTicks / 30f;
-            float hpDrainPerSecond = 0f;
-            if (_recentCastleHealth.Count == HpHistoryWindow)
-            {
-                int hpLostInWindow = _recentCastleHealth[0] - me.CastleHealth;
-                if (hpLostInWindow > 0) hpDrainPerSecond = hpLostInWindow / windowSeconds;
-            }
-            // A trickle of chip damage (a handful of HP/sec against a multi-thousand HP
-            // pool) technically yields a huge but not-actually-meaningful time-to-death;
-            // floor the drain rate so those don't get treated identically to "totally safe".
-            float timeToDeathSeconds = hpDrainPerSecond > 0.5f ? me.CastleHealth / hpDrainPerSecond : EffectivelyInfiniteSeconds;
+            float timeToDeathSeconds = EstimateTimeToDeathSeconds(me.CastleHealth);
 
             double moneyStillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
             float timeToInvestSeconds = me.Income > 0.01 ? (float)(moneyStillNeeded / me.Income) : EffectivelyInfiniteSeconds;
