@@ -444,7 +444,17 @@ namespace CastleDefense.Engine.Bot
         // still being built. Bounded to InvestmentCount < 3 (not unconditional) so this
         // can't stall these gadgets forever once income has scaled -- by investment 3
         // the trap can't reproduce (their cost no longer approximates income*cooldown).
-        private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money < me.InvestmentPrice;
+        // Was strict "<", which let deferral lift the exact instant money first reached
+        // InvestmentPrice -- precisely when a same-cost gadget competes hardest, not when
+        // it's safe to stop deferring. Traced two separate losses (`hunt 3`/`hunt v3`,
+        // both `offense=firebomb`, base cost $18 == the first InvestmentPrice exactly)
+        // where money hit $18.00 on the nose and firebomb (checked before the invest
+        // logic in Decide()) fired and consumed the ENTIRE $18 that same decision, before
+        // Invest() ever got a chance to run at a nonzero balance -- investment stayed at
+        // 0 for the whole rest of both games. "<=" keeps deferral active through the
+        // exact crossover tick, giving the invest check first claim there instead of
+        // losing every time to whichever gadget happens to be checked first.
+        private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice;
 
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
         // the loadout isn't fixed, so all four need real usage logic, not just whichever
