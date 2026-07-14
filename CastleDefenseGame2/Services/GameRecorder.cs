@@ -51,7 +51,8 @@ public class GameRecorder
         => _gadgetUses.Add((tick, player, gadgetId));
 
     public void Save(string replayDir, PlayerState p1, PlayerState p2,
-        int winner, long durationTicks, string gameVersion, GameDatabase db)
+        int winner, long durationTicks, string gameVersion, GameDatabase db,
+        string gameMode = null, string opponentType = null)
     {
         try
         {
@@ -60,9 +61,9 @@ public class GameRecorder
                 _gameId, gameVersion, _startedAt,
                 p1.Team.ToString(), p1.OffensiveGadget?.Id, p1.DefensiveGadget?.Id, p1.SignatureGadget?.Id,
                 p2.Team.ToString(), p2.OffensiveGadget?.Id, p2.DefensiveGadget?.Id, p2.SignatureGadget?.Id,
-                winner, durationTicks);
+                winner, durationTicks, gameMode, opponentType);
             db.InsertGadgetUses(_gameId, _gadgetUses);
-            Console.WriteLine($"[Recorder] Saved game {_gameId}: {_ticks.Count} ticks, winner={winner}");
+            Console.WriteLine($"[Recorder] Saved game {_gameId}: {_ticks.Count} ticks, winner={winner}, mode={gameMode}, opponent={opponentType}");
         }
         catch (Exception ex)
         {

@@ -14,6 +14,13 @@ namespace CastleDefense.Api.Services
         private readonly ConcurrentDictionary<string, GameEngine> _lobbyGames = new();
         private readonly ConcurrentDictionary<string, GameRecorder> _recorders = new();
         private readonly ConcurrentDictionary<string, Func<GameState, int>> _leagueOpponents = new();
+        // Human-readable description of what _leagueOpponents[gameId] actually is
+        // ("spam4", "antispam", "model:castle_defense_p1_v21", "random") -- persisted to
+        // the DB at game-end so recorded games can be mined later for "did the human
+        // already beat this specific opponent" without re-deriving it from action
+        // sequences. Previously this selection only ever lived in the Func closure
+        // itself and was discarded at game-end, unrecoverable after the fact.
+        private readonly ConcurrentDictionary<string, string> _opponentDescriptions = new();
         private readonly IHubContext<GameHub> _hubContext;
         private readonly AIBrain _aiBrain;
         private readonly List<(string name, AIBrain brain)> _leagueModels = new();
@@ -57,20 +64,24 @@ namespace CastleDefense.Api.Services
             int spamTier = Math.Max(Math.Min(timeSkip + _leagueRng.Next(-2, 3), 8), 1);
 
             Func<GameState, int> opponent;
+            string description;
 
             if (botSel == 1)
             {
                 opponent = state => AntiSpamAction(state.CurrentTick, state.Player2.Team);
+                description = "antispam";
             }
             else if (botSel >= 2 && botSel <= 5)
             {
                 opponent = _ => spamTier;
+                description = $"spam{spamTier}";
             }
             else if (botSel > 5 && _leagueModels.Count > 0)
             {
                 var chosen = _leagueModels[_leagueRng.Next(_leagueModels.Count)];
                 opponent = state => chosen.brain.GetBestAction(
                     state.GetStateVector(2), state.GetActionMask(2));
+                description = $"model:{chosen.name}";
             }
             else
             {
@@ -81,9 +92,60 @@ namespace CastleDefense.Api.Services
                     var valid = Enumerable.Range(0, mask.Length).Where(i => mask[i] == 1).ToList();
                     return valid[_leagueRng.Next(valid.Count)];
                 };
+                description = "random";
             }
 
             _leagueOpponents[gameId] = opponent;
+            _opponentDescriptions[gameId] = description;
+        }
+
+        // Practice mode: same opponent-execution mechanism as Training League
+        // (a Func<GameState,int> stashed in _leagueOpponents and invoked identically in
+        // ExecuteAsync), but the human picks the opponent explicitly instead of a random
+        // roll -- built specifically to let a human play the bot's own worst-performing
+        // matchups on demand (e.g. Green team vs Tier4 spam, or vs a specific ONNX
+        // checkpoint like v4/v7) rather than waiting for League's dice roll to happen to
+        // land on one. opponentSpec is one of: "spam1".."spam8", "antispam", or a
+        // substring match against a loaded league model's filename (e.g. "v4").
+        // Returns the resolved human-readable description (what actually got set up),
+        // or null if opponentSpec couldn't be resolved to anything.
+        public string SetupPracticeOpponent(string gameId, string opponentSpec)
+        {
+            if (string.IsNullOrWhiteSpace(opponentSpec)) return null;
+            string spec = opponentSpec.Trim();
+
+            Func<GameState, int> opponent;
+            string description;
+
+            if (string.Equals(spec, "antispam", StringComparison.OrdinalIgnoreCase))
+            {
+                opponent = state => AntiSpamAction(state.CurrentTick, state.Player2.Team);
+                description = "antispam";
+            }
+            else if (spec.StartsWith("spam", StringComparison.OrdinalIgnoreCase)
+                     && int.TryParse(spec.Substring(4), out var tier) && tier >= 1 && tier <= 8)
+            {
+                opponent = _ => tier;
+                description = $"spam{tier}";
+            }
+            else
+            {
+                var chosen = _leagueModels.FirstOrDefault(m => m.name.Contains(spec, StringComparison.OrdinalIgnoreCase));
+                if (chosen.brain == null) return null; // unresolvable -- caller should reject the join
+                opponent = state => chosen.brain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+                description = $"model:{chosen.name}";
+            }
+
+            _leagueOpponents[gameId] = opponent;
+            _opponentDescriptions[gameId] = description;
+            return description;
+        }
+
+        // Lets the practice-mode opponent picker show only opponents that actually
+        // exist right now (the loaded league model list can vary between machines/runs).
+        public (int[] spamTiers, bool antiSpamAvailable, string[] modelNames) GetPracticeOpponentOptions()
+        {
+            return (Enumerable.Range(1, 8).ToArray(), true, _leagueModels.Select(m => m.name).OrderBy(n => n).ToArray());
         }
 
         private static int AntiSpamAction(long tick, TeamColour team)
@@ -205,9 +267,11 @@ namespace CastleDefense.Api.Services
                                 int aiAction = _aiBrain.GetBestAction(aiState, aiActionMask);
                                 if (aiAction != 0) engine.ApplyAction(2, aiAction);
                             }
-                            else if (engine._state.GameMode == "league")
+                            else if (engine._state.GameMode == "league" || engine._state.GameMode == "practice")
                             {
-                                // Training-league opponent (random dummy / spam bot / anti-spam / ONNX model)
+                                // Training-league opponent (random dummy / spam bot / anti-spam / ONNX
+                                // model), or the same mechanism driven by a human-picked opponent in
+                                // Practice mode -- both just invoke whatever Func was stashed here.
                                 if (_leagueOpponents.TryGetValue(gameId, out var oppFunc))
                                 {
                                     int p2Action = oppFunc(engine._state);
@@ -223,17 +287,20 @@ namespace CastleDefense.Api.Services
                     if (engine._state.IsGameOver)
                     {
                         _leagueOpponents.TryRemove(gameId, out _);
+                        _opponentDescriptions.TryRemove(gameId, out var opponentDescription);
 
                         if (_recorders.TryRemove(gameId, out var finishedRecorder))
                         {
                             bool isSingleplayer = engine._state.GameMode == "sp"
                                                || engine._state.GameMode == "vai"
-                                               || engine._state.GameMode == "league";
+                                               || engine._state.GameMode == "league"
+                                               || engine._state.GameMode == "practice";
                             bool isWatch = engine._state.GameMode == "watch";
                             string subdir = isSingleplayer ? "singleplayer" : "multiplayer";
                             if (!isWatch) finishedRecorder.Save(Path.Combine(_replayDir, subdir),
                                 engine._state.Player1, engine._state.Player2,
-                                engine._state.WinnerSide, engine._state.CurrentTick, _gameVersion, _db);
+                                engine._state.WinnerSide, engine._state.CurrentTick, _gameVersion, _db,
+                                engine._state.GameMode, opponentDescription);
                         }
 
                         await _hubContext.Clients.Group(gameId).SendAsync("GameOver", engine._state);

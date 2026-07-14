@@ -52,12 +52,40 @@ public class GameDatabase
             );
             """;
         cmd.ExecuteNonQuery();
+
+        // Added after the fact -- older DB files won't have these. SQLite has no
+        // "ADD COLUMN IF NOT EXISTS", so probe pragma table_info first. Without this,
+        // there was no way to tell what a recorded league/practice game's opponent
+        // actually was (spam tier vs which ONNX model vs random dummy) -- that
+        // selection only ever lived in an in-memory dictionary during the game and
+        // was discarded at game-end, making old recordings impossible to mine for
+        // "did the human already beat this specific hard matchup" (see
+        // [[project_ai_opponent_heuristic]] for the session this was found dead-ended).
+        AddColumnIfMissing(conn, "games", "game_mode", "TEXT");
+        AddColumnIfMissing(conn, "games", "opponent_type", "TEXT");
+    }
+
+    private static void AddColumnIfMissing(SqliteConnection conn, string table, string column, string type)
+    {
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = $"PRAGMA table_info({table})";
+            using var reader = check.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                    return; // already present
+            }
+        }
+        using var alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type}";
+        alter.ExecuteNonQuery();
     }
 
     public void InsertGame(string id, string gameVersion, long playedAt,
         string p1Team, string p1Off, string p1Def, string p1Sig,
         string p2Team, string p2Off, string p2Def, string p2Sig,
-        int winner, long durationTicks)
+        int winner, long durationTicks, string gameMode = null, string opponentType = null)
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
@@ -65,11 +93,11 @@ public class GameDatabase
             INSERT INTO games (id, game_version, played_at,
                 p1_team, p1_gadget_off, p1_gadget_def, p1_gadget_sig,
                 p2_team, p2_gadget_off, p2_gadget_def, p2_gadget_sig,
-                winner, duration_ticks)
+                winner, duration_ticks, game_mode, opponent_type)
             VALUES ($id, $ver, $at,
                 $p1t, $p1o, $p1d, $p1s,
                 $p2t, $p2o, $p2d, $p2s,
-                $win, $dur)
+                $win, $dur, $mode, $opp)
             """;
         cmd.Parameters.AddWithValue("$id",  id);
         cmd.Parameters.AddWithValue("$ver", gameVersion);
@@ -84,6 +112,8 @@ public class GameDatabase
         cmd.Parameters.AddWithValue("$p2s", (object)p2Sig ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$win", winner);
         cmd.Parameters.AddWithValue("$dur", durationTicks);
+        cmd.Parameters.AddWithValue("$mode", (object)gameMode ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$opp", (object)opponentType ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
@@ -110,7 +140,7 @@ public class GameDatabase
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, game_version, played_at, p1_team, p2_team, winner, duration_ticks FROM games ORDER BY played_at DESC";
+        cmd.CommandText = "SELECT id, game_version, played_at, p1_team, p2_team, winner, duration_ticks, game_mode, opponent_type FROM games ORDER BY played_at DESC";
         using var reader = cmd.ExecuteReader();
         var results = new List<GameSummary>();
         while (reader.Read())
@@ -122,7 +152,9 @@ public class GameDatabase
                 reader.GetString(3),
                 reader.GetString(4),
                 reader.GetInt32(5),
-                reader.GetInt64(6)));
+                reader.GetInt64(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
         return results;
     }
@@ -137,5 +169,6 @@ public class GameDatabase
     }
 
     public record GameSummary(string Id, string GameVersion, long PlayedAt,
-        string P1Team, string P2Team, int Winner, long DurationTicks);
+        string P1Team, string P2Team, int Winner, long DurationTicks,
+        string GameMode = null, string OpponentType = null);
 }

@@ -116,6 +116,61 @@ namespace CastleDefense.Api.Hubs
             }
         }
 
+        // Practice mode: the human picks their OWN team/loadout (unlike Training
+        // League, where the server randomizes everything) AND which specific opponent
+        // to face ("spam1".."spam8", "antispam", or a league-model name fragment like
+        // "v4") instead of getting League's random 16-way roll. Built specifically so
+        // the bot's worst matchups can be replayed on demand for human-vs-bot
+        // comparison (e.g. Green team vs Tier4 spam) rather than waiting for League to
+        // happen to deal that exact combination.
+        public async Task JoinPracticeGame(string gameId, string teamName, string[] loadout, string opponentSpec)
+        {
+            var game = _gameService.GetGame(gameId);
+            if (game == null)
+            {
+                await Clients.Caller.SendAsync("Error", "Game not found.");
+                return;
+            }
+
+            if (!Enum.TryParse(teamName, true, out TeamColour team))
+            {
+                await Clients.Caller.SendAsync("Error", "Invalid team colour.");
+                return;
+            }
+
+            string resolvedOpponent;
+            lock (game)
+            {
+                if (!string.IsNullOrEmpty(game._state.Player1.ConnectionId)) return;
+
+                game._state.Player1.Side = 1;
+                game._state.Player1.ConnectionId = Context.ConnectionId;
+                game._state.Player1.Team = team;
+                game._state.Player1.SetLoadout(loadout);
+
+                game._state.Player2.Side = 2;
+                game._state.Player2.ConnectionId = "AI_BOT";
+                var oppTeam = GameDataManager.GetRandomTeam();
+                game._state.Player2.Team = oppTeam;
+                game._state.Player2.SetLoadout(new[] {
+                    GameDataManager.GetRandomOGadgetId(),
+                    GameDataManager.GetRandomDGadgetId(),
+                    GameDataManager.GetSignatureGadgetIdForTeam(oppTeam) });
+
+                resolvedOpponent = _gameService.SetupPracticeOpponent(gameId, opponentSpec);
+            }
+
+            if (resolvedOpponent == null)
+            {
+                await Clients.Caller.SendAsync("Error", $"Unknown opponent '{opponentSpec}'.");
+                return;
+            }
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
+            await Clients.Caller.SendAsync("GameJoined", 1, game._state);
+            _gameService.StartGame(gameId);
+        }
+
         public void SpawnUnit(string gameId, string unitId)
         {
             var game = _gameService.GetGame(gameId);

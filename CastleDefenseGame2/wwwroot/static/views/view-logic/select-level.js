@@ -3,11 +3,14 @@ import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
 
 export default async function initSelectLevel() {
+    const isPractice = connection.gameMode === 'practice';
+
     let selectedTeam = null;
     let selectedLevel = null;
     const teamElements = document.getElementsByClassName('team');
     const levelElements = document.getElementsByClassName('level');
-    
+    const modelSelect = document.getElementById('model-select');
+
     const handleTeamClick = (e) => {
         // A. Reset: Remove 'selected' from ALL teams
         // (Convert HTMLCollection to Array to loop easily)
@@ -27,7 +30,7 @@ export default async function initSelectLevel() {
         document.getElementById('select-team').style.backgroundColor = selectedTeam;
         if (selectedTeam == 'black')
             document.getElementById('select-team').style.color = 'white';
-        else 
+        else
             document.getElementById('select-team').style.color = 'black';
     };
 
@@ -45,6 +48,12 @@ export default async function initSelectLevel() {
 
         // C. Update the data variable
         selectedLevel = clickedElement.id;
+
+        if (isPractice) {
+            // A tier/AntiSpam tile overrides any model dropdown choice.
+            modelSelect.value = '';
+            connection.selectedOpponent = selectedLevel === 'antispam' ? 'antispam' : `spam${selectedLevel}`;
+        }
     };
 
     // 3. Attach the listener properly
@@ -55,12 +64,41 @@ export default async function initSelectLevel() {
         level.addEventListener('click', handleLevelClick);
     }
 
-    // Select previously selected team, or white team by default
-    if (connection.selectedTeam != null) {
-        document.getElementById(connection.selectedTeam).click();
-    } 
-    else {
-        document.getElementById('white').click();
+    if (isPractice) {
+        // Practice mode: the team was already picked on the previous screen (this is
+        // the bot's OWN team, playing a random loadout each game, same as every other
+        // matchup this bot has been benchmarked against) -- re-showing the team bar
+        // here would just be confusing, so hide it.
+        document.getElementById('team-bar').classList.add('d-none');
+        document.querySelector('#select-team h2').textContent = 'SPAM TIER OR ANTISPAM:';
+
+        const modelPicker = document.getElementById('model-picker');
+        modelPicker.classList.remove('d-none');
+        const opponents = await connection.getPracticeOpponents();
+        for (const name of opponents.modelNames) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            modelSelect.appendChild(opt);
+        }
+        modelSelect.onchange = () => {
+            if (modelSelect.value) {
+                Array.from(levelElements).forEach(level => level.classList.remove('selected'));
+                connection.selectedOpponent = modelSelect.value;
+            }
+        };
+
+        // Default to Tier 4 spam selected -- the bot's own most stubborn weak point
+        // per its benchmark dashboard, and likely the first thing worth playing.
+        document.getElementById('4').click();
+    } else {
+        // Select previously selected team, or white team by default
+        if (connection.selectedTeam != null) {
+            document.getElementById(connection.selectedTeam).click();
+        }
+        else {
+            document.getElementById('white').click();
+        }
     }
 
     const btnBack = document.getElementById('btnBack');
@@ -70,6 +108,14 @@ export default async function initSelectLevel() {
         showScreen('select-loadout');
     };
     btnSelect.onclick = async () => {
-        await connection.createGame(connection.selectedTeam, connection.selectedLoadout);
+        if (isPractice) {
+            if (!connection.selectedOpponent) {
+                alert('Pick an opponent first.');
+                return;
+            }
+            await connection.createPracticeGame();
+        } else {
+            await connection.createGame(connection.selectedTeam, connection.selectedLoadout);
+        }
     };
 }

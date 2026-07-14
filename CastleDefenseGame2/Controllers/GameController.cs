@@ -47,5 +47,12 @@ namespace CastleDefense.Api.Controllers
             var games = _gameService.GetAllGameIds();
             return Ok(games);
         }
+
+        [HttpGet("practice-opponents")]
+        public IActionResult GetPracticeOpponents()
+        {
+            var (spamTiers, antiSpamAvailable, modelNames) = _gameService.GetPracticeOpponentOptions();
+            return Ok(new { spamTiers, antiSpamAvailable, modelNames });
+        }
     }
 }

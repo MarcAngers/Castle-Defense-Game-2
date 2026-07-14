@@ -126,7 +126,7 @@ export default async function initSelectLoadout() {
     document.getElementById(initialOSelect).click();
     document.getElementById(initialDSelect).click();
 
-    if (connection.gameMode == 'sp' || connection.gameMode == 'watch') {
+    if (connection.gameMode == 'sp' || connection.gameMode == 'watch' || connection.gameMode == 'practice') {
         const btnBack = document.getElementById('btnBackSP');
         const btnLevel = document.getElementById('btnLevel');
 

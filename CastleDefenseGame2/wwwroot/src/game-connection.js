@@ -13,6 +13,7 @@ class GameConnection {
         this.currentGameId = null;
         this.selectedTeam = "white";
         this.selectedLoadout = [];
+        this.selectedOpponent = null; // Practice mode: "spam1".."spam8", "antispam", or a model name
         this.mySide = 0; // 1 = Left, 2 = Right
         this.latestState = null;
         this.winnerSide = 0;
@@ -100,6 +101,34 @@ class GameConnection {
         this.latestState = null;
 
         await this.connection.invoke("JoinGame", gameId, this.selectedTeam, this.selectedLoadout);
+    }
+
+    // Practice mode: create the lobby then join with an explicit opponent choice
+    // instead of Training League's random roll. See GameHub.JoinPracticeGame.
+    createPracticeGame = async () => {
+        const response = await fetch(`/api/games`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ gameMode: "practice" })
+        });
+        const data = await response.json();
+
+        this.currentGameId = data.gameId;
+        this.winnerSide = 0;
+        this.latestState = null;
+
+        await this.connection.invoke("JoinPracticeGame", data.gameId, this.selectedTeam, this.selectedLoadout, this.selectedOpponent);
+    }
+
+    getPracticeOpponents = async () => {
+        try {
+            const response = await fetch(`/api/games/practice-opponents`);
+            if (!response.ok) throw new Error("Failed to fetch practice opponents.");
+            return await response.json();
+        } catch (error) {
+            console.error("Error fetching practice opponents:", error);
+            return { spamTiers: [1, 2, 3, 4, 5, 6, 7, 8], antiSpamAvailable: true, modelNames: [] };
+        }
     }
 
     getAllGames = async () => {
