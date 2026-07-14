@@ -479,6 +479,142 @@ if (args.Length > 0 && args[0] == "dashboard")
     return;
 }
 
+if (args.Length > 0 && args[0] == "paramsearch")
+{
+    // Automated random search over the TTD/danger-trigger knobs pulled out into
+    // HeuristicBotSettings (SafetyMarginMultiplier, SafetyBufferSeconds,
+    // EnemyIsCloseDistance, RepairHpThreshold). Every one of these was a hand-picked
+    // "reasonable first guess" this session, validated only against 2-3 hand-chosen
+    // alternatives at most (see HpHistoryWindow's own tuning history for the closest
+    // precedent) -- a systematic search can try far more combinations, and cheaply,
+    // than manually guessing-and-validating one at a time. Deliberately does NOT touch
+    // the reactive-spend/unit-scoring constants in SpendOnUnits -- that domain has 4
+    // confirmed dead-end manual tuning attempts already this session; this search
+    // targets the domain that's actually been productive (the danger trigger itself).
+    //
+    // Two-stage discipline: this mode runs a CHEAP coarse pass (moderate sample sizes,
+    // a representative model subset, not the full roster) to rank candidates. Any
+    // promising candidate still needs the full 400-spam/300-model x2-replicate
+    // validation this project always requires before being trusted or committed --
+    // this mode is a triage step, not a replacement for that.
+    int candidateCount = args.Length > 1 && int.TryParse(args[1], out var cc) ? cc : 40;
+    var searchRng = new Random();
+
+    var dir = FindLeagueModelsDir();
+    // A small, deliberately mixed subset: the two hardest matchups all session (v4, v7),
+    // one more mid-weak one (v23), and two already-strong ones (v14, v21) as regression
+    // canaries so a candidate that only helps the weak side by wrecking the strong side
+    // shows up immediately, the same way every manual validation this session checked both.
+    var modelFragments = new[] { "v4", "v7", "v23", "v14", "v21" };
+    var resolvedModels = new List<(string label, string path)>();
+    if (dir != null)
+    {
+        foreach (var frag in modelFragments)
+        {
+            var match = Directory.GetFiles(dir, "*.onnx").FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains(frag, StringComparison.OrdinalIgnoreCase));
+            if (match != null) resolvedModels.Add((Path.GetFileNameWithoutExtension(match), match));
+        }
+    }
+    if (resolvedModels.Count == 0) Console.WriteLine("WARNING: no league_models found -- paramsearch will only use spam tiers.");
+
+    const int spamGamesPerTier = 60;
+    const int modelGamesPerOpponent = 40;
+
+    // (label, decisive win rate) for one matchup, alternating sides like RunMatchup.
+    double RunOneMatchup(Func<int, IArenaOpponent> botFactory, Func<int, IArenaOpponent> oppFactory, bool headStart, int games)
+    {
+        int decisiveWins = 0;
+        for (int i = 0; i < games; i++)
+        {
+            bool botIsP1 = i % 2 == 0;
+            int botSide = botIsP1 ? 1 : 2;
+            var (state, engine) = CreateGame(headStart);
+            var bot = botFactory(botSide);
+            var opp = oppFactory(botIsP1 ? 2 : 1);
+            while (!state.IsGameOver)
+            {
+                engine.Tick();
+                if (botIsP1) { bot.Update(engine); opp.Update(engine); }
+                else { opp.Update(engine); bot.Update(engine); }
+            }
+            (opp as IDisposable)?.Dispose();
+            if (state.WinnerSide == botSide && !state.IsTimeLimit) decisiveWins++;
+        }
+        return 100.0 * decisiveWins / games;
+    }
+
+    (double avgScore, Dictionary<string, double> perMatchup) EvaluateCandidate(HeuristicBotSettings settings)
+    {
+        var results = new Dictionary<string, double>();
+        for (int t = 1; t <= 8; t++)
+        {
+            int tt = t;
+            results[$"Tier{tt}Spam"] = RunOneMatchup(
+                side => new HeuristicBotAdapter(side, settings),
+                side => new TierSpamBaseline(side, tt),
+                false, spamGamesPerTier);
+        }
+        foreach (var (label, path) in resolvedModels)
+        {
+            results[label] = RunOneMatchup(
+                side => new HeuristicBotAdapter(side, settings),
+                side => new AIModelOpponent(side, path),
+                true, modelGamesPerOpponent);
+        }
+        double avg = results.Values.Average();
+        return (avg, results);
+    }
+
+    HeuristicBotSettings RandomSettings() => new HeuristicBotSettings
+    {
+        SafetyMarginMultiplier = (float)(1.05 + searchRng.NextDouble() * (2.2 - 1.05)),
+        SafetyBufferSeconds = (float)(0.25 + searchRng.NextDouble() * (4.5 - 0.25)),
+        EnemyIsCloseDistance = (float)(450 + searchRng.NextDouble() * (1050 - 450)),
+        RepairHpThreshold = (float)(0.55 + searchRng.NextDouble() * (0.90 - 0.55)),
+    };
+
+    string outputDir = args.Length > 2 ? args[2] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard"));
+    Directory.CreateDirectory(outputDir);
+    string searchCsvPath = Path.Combine(outputDir, "paramsearch_results.csv");
+    using var searchCsv = new StreamWriter(searchCsvPath, false);
+    var matchupLabels = Enumerable.Range(1, 8).Select(t => $"Tier{t}Spam").Concat(resolvedModels.Select(m => m.label)).ToList();
+    searchCsv.WriteLine("candidate,safetyMargin,safetyBuffer,enemyIsCloseDist,repairThreshold,avgScore," + string.Join(",", matchupLabels));
+
+    Console.WriteLine($"Parameter search: {candidateCount} candidates (+1 baseline), {spamGamesPerTier} games/spam-tier, {modelGamesPerOpponent} games/model ({resolvedModels.Count} models: {string.Join(", ", resolvedModels.Select(m => m.label))})\n");
+
+    var allCandidates = new List<(string name, HeuristicBotSettings settings, double avgScore, Dictionary<string, double> perMatchup)>();
+
+    void EvaluateAndLog(string name, HeuristicBotSettings settings)
+    {
+        var swc = System.Diagnostics.Stopwatch.StartNew();
+        var (avg, results) = EvaluateCandidate(settings);
+        allCandidates.Add((name, settings, avg, results));
+        searchCsv.WriteLine($"{name},{settings.SafetyMarginMultiplier:F3},{settings.SafetyBufferSeconds:F3},{settings.EnemyIsCloseDistance:F1},{settings.RepairHpThreshold:F3},{avg:F2}," +
+            string.Join(",", matchupLabels.Select(m => results[m].ToString("F1"))));
+        searchCsv.Flush();
+        Console.WriteLine($"[{swc.Elapsed:mm\\:ss}] {name,-12} margin={settings.SafetyMarginMultiplier:F2} buffer={settings.SafetyBufferSeconds:F2} dist={settings.EnemyIsCloseDistance:F0} repairHp={settings.RepairHpThreshold:F2}  =>  avg {avg:F2}%");
+    }
+
+    EvaluateAndLog("baseline", HeuristicBotSettings.Default);
+    for (int c = 1; c <= candidateCount; c++)
+        EvaluateAndLog($"cand{c}", RandomSettings());
+
+    var baseline = allCandidates.First(c => c.name == "baseline");
+    var ranked = allCandidates.OrderByDescending(c => c.avgScore).ToList();
+
+    Console.WriteLine("\n=== Top 8 candidates by average decisive win rate across all tested matchups ===");
+    Console.WriteLine($"baseline: avg {baseline.avgScore:F2}%  (" + string.Join(", ", matchupLabels.Select(m => $"{m}={baseline.perMatchup[m]:F0}%")) + ")\n");
+    foreach (var c in ranked.Take(8))
+    {
+        string marker = c.name == "baseline" ? " <== baseline" : "";
+        Console.WriteLine($"{c.name,-12} avg {c.avgScore,6:F2}%  (delta {c.avgScore - baseline.avgScore:+0.0;-0.0}){marker}");
+        Console.WriteLine($"    margin={c.settings.SafetyMarginMultiplier:F3} buffer={c.settings.SafetyBufferSeconds:F3} enemyDist={c.settings.EnemyIsCloseDistance:F1} repairHp={c.settings.RepairHpThreshold:F3}");
+        Console.WriteLine("    " + string.Join(", ", matchupLabels.Select(m => $"{m}={c.perMatchup[m]:F0}%")));
+    }
+    Console.WriteLine($"\nWrote {searchCsvPath}");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "loadouts")
 {
     string opponent = args.Length > 1 ? args[1] : "balanced";
@@ -710,7 +846,7 @@ RunMatchup("vs BalancedHuman", side => new BalancedHumanBaseline(side));
 class HeuristicBotAdapter : IArenaOpponent
 {
     private readonly HeuristicBot _bot;
-    public HeuristicBotAdapter(int side) => _bot = new HeuristicBot(side);
+    public HeuristicBotAdapter(int side, HeuristicBotSettings? settings = null) => _bot = new HeuristicBot(side, settings);
     public void Update(GameEngine engine) => _bot.Update(engine);
     public bool LastDecisionWasDanger => _bot.LastDecisionWasDanger;
     public int LastUnitsPurchased => _bot.LastUnitsPurchased;

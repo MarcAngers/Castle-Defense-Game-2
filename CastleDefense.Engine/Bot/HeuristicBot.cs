@@ -7,12 +7,32 @@ using System.Linq;
 
 namespace CastleDefense.Engine.Bot
 {
+    // Tunable knobs for the TTD/danger trigger, pulled out into an injectable settings
+    // object so an automated parameter search (CastleDefense.BotArena's "paramsearch"
+    // mode) can try candidate values without editing/rebuilding this file per
+    // candidate. Defaults match the values every fix this session was validated
+    // against -- passing null/omitting the constructor argument reproduces the exact
+    // committed behavior. Only the cheap, pure-comparison TTD/danger-trigger knobs are
+    // exposed here (never the reactive-spend/unit-scoring constants in SpendOnUnits --
+    // that domain has 4 confirmed dead-end tuning attempts this session already and
+    // isn't a good target for further automated search without a new angle there).
+    public class HeuristicBotSettings
+    {
+        public float SafetyMarginMultiplier { get; init; } = 1.4f;
+        public float SafetyBufferSeconds { get; init; } = 2f;
+        public float EnemyIsCloseDistance { get; init; } = 700f;
+        public float RepairHpThreshold { get; init; } = 0.75f;
+
+        public static readonly HeuristicBotSettings Default = new HeuristicBotSettings();
+    }
+
     // Rule-based opponent. Drives a side entirely through GameEngine's public API
     // (SpawnUnit / Invest / Repair / UseGadget) -- the same surface a human player
     // uses via the SignalR hub -- so it plays by the exact same rules a human does.
     public class HeuristicBot
     {
         private readonly int _side;
+        private readonly HeuristicBotSettings _settings;
 
         // Debug/test visibility into the last decision -- not used by the bot itself.
         public bool LastDecisionWasDanger { get; private set; }
@@ -61,9 +81,10 @@ namespace CastleDefense.Engine.Bot
 
         private const float EffectivelyInfiniteSeconds = 999999f;
 
-        public HeuristicBot(int side)
+        public HeuristicBot(int side, HeuristicBotSettings settings = null)
         {
             _side = side;
+            _settings = settings ?? HeuristicBotSettings.Default;
         }
 
         // Projects seconds-until-castle-death from the rolling HP window, modeling BOTH
@@ -183,7 +204,7 @@ namespace CastleDefense.Engine.Bot
             }
             float defenseScore = myUnits.Sum(Power);
 
-            bool enemyIsClose = enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < 700;
+            bool enemyIsClose = enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < _settings.EnemyIsCloseDistance;
             float castleHpPct = me.CastleMaxHealth > 0 ? (float)me.CastleHealth / me.CastleMaxHealth : 1f;
 
             // Under the boom strategy our standing army is intentionally near-zero most of
@@ -264,9 +285,7 @@ namespace CastleDefense.Engine.Bot
             // Require real headroom, not just "barely more time than needed" -- decisions
             // only run ~6/sec and an enemy's incoming mass can keep growing, so the drain
             // rate measured this instant is a floor on how bad it gets, not a guarantee.
-            const float SafetyMarginMultiplier = 1.4f;
-            const float SafetyBufferSeconds = 2f;
-            bool investmentRunwayIsSafe = timeToDeathSeconds >= timeToInvestSeconds * SafetyMarginMultiplier + SafetyBufferSeconds;
+            bool investmentRunwayIsSafe = timeToDeathSeconds >= timeToInvestSeconds * _settings.SafetyMarginMultiplier + _settings.SafetyBufferSeconds;
 
             // EXPERIMENT: castleHpPct < 0.9f dropped from this OR -- traced a v4 matchup
             // (trace v4, fine-grained log) where HP sat flat at exactly 90% (a stale,
@@ -355,7 +374,7 @@ namespace CastleDefense.Engine.Bot
             // move: the first repair alone takes CastleMaxHealth 2000 -> 12000, a ~6x swing
             // that can turn a losing race against the clock into a comfortable one for the
             // price of a single, cheap, permanent purchase.
-            bool repairWouldHelp = castleHpPct < 0.75f || inDanger;
+            bool repairWouldHelp = castleHpPct < _settings.RepairHpThreshold || inDanger;
             if (repairWouldHelp && me.Money >= me.RepairPrice * 1.25)
             {
                 if (engine.Repair(_side)) ActionCounts[10]++;
