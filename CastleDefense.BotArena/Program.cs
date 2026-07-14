@@ -352,14 +352,14 @@ if (args.Length > 0 && args[0] == "trace")
     var bot = new HeuristicBotAdapter(1);
     var foe = makeOpponent(2);
 
-    Console.WriteLine($"tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2inv\tP2units\tP2hp%\tP1comp\tP2comp");
+    Console.WriteLine($"tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2inv\tP2units\tP2hp%\tP1danger\tTTD\tTTI\tP1comp\tP2comp");
     while (!state.IsGameOver)
     {
         engine.Tick();
         bot.Update(engine);
         foe.Update(engine);
 
-        if (state.CurrentTick % 150 == 0)
+        if (state.CurrentTick % 15 == 0)
         {
             var p1u = state.Units.Count(u => u.Side == 1);
             var p2u = state.Units.Count(u => u.Side == 2);
@@ -367,7 +367,9 @@ if (args.Length > 0 && args[0] == "trace")
             var p2hp = 100.0 * state.Player2.CastleHealth / state.Player2.CastleMaxHealth;
             var p1comp = string.Join(",", state.Units.Where(u => u.Side == 1).GroupBy(u => u.DefinitionId).OrderByDescending(g => g.Count()).Select(g => $"{g.Key}:{g.Count()}"));
             var p2comp = string.Join(",", state.Units.Where(u => u.Side == 2).GroupBy(u => u.DefinitionId).OrderByDescending(g => g.Count()).Select(g => $"{g.Key}:{g.Count()}"));
-            Console.WriteLine($"{state.CurrentTick}\t{state.CurrentTick / 30}\t{state.Player1.Money:F0}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1u}\t{p1hp:F0}\t{state.Player2.Money:F0}\t{state.Player2.Income:F1}\t{state.Player2.InvestmentCount}\t{p2u}\t{p2hp:F0}\t{p1comp}\t{p2comp}");
+            string ttd = bot.LastTimeToDeathSeconds >= 999999f ? "inf" : bot.LastTimeToDeathSeconds.ToString("F1");
+            string tti = bot.LastTimeToInvestSeconds >= 999999f ? "inf" : bot.LastTimeToInvestSeconds.ToString("F1");
+            Console.WriteLine($"{state.CurrentTick}\t{state.CurrentTick / 30}\t{state.Player1.Money:F1}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1u}\t{p1hp:F0}\t{state.Player2.Money:F0}\t{state.Player2.Income:F1}\t{state.Player2.InvestmentCount}\t{p2u}\t{p2hp:F0}\t{bot.LastDecisionWasDanger}\t{ttd}\t{tti}\t{p1comp}\t{p2comp}");
         }
     }
     string traceResult = state.WinnerSide == 0 ? "draw (timeout, tied HP)"

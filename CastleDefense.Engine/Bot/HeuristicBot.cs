@@ -268,7 +268,19 @@ namespace CastleDefense.Engine.Bot
             const float SafetyBufferSeconds = 2f;
             bool investmentRunwayIsSafe = timeToDeathSeconds >= timeToInvestSeconds * SafetyMarginMultiplier + SafetyBufferSeconds;
 
-            bool inDanger = enemyIsClose && ((castleHpPct < 0.9f) || !investmentRunwayIsSafe);
+            // EXPERIMENT: castleHpPct < 0.9f dropped from this OR -- traced a v4 matchup
+            // (trace v4, fine-grained log) where HP sat flat at exactly 90% (a stale,
+            // non-recovering deficit from an earlier, now-resolved skirmish) while a
+            // SINGLE non-threatening enemy unit lingered nearby. This clause has no
+            // recency requirement (unlike the TTD-based runway check), so it latched
+            // inDanger permanently true off that stale reading alone, triggering a
+            // disproportionate reactive-buy spree (built up to 17 "doggo" units against
+            // that 1 enemy) that cost enough accumulated savings to lose the investment-5
+            // race to v4 by a wide margin. investmentRunwayIsSafe should already catch
+            // any GENUINE ongoing danger (it's a strictly more accurate, recency-aware
+            // signal) -- testing whether the cruder accumulated-damage clause is now
+            // pure liability rather than added safety. See [[project_ai_opponent_heuristic]].
+            bool inDanger = enemyIsClose && !investmentRunwayIsSafe;
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
