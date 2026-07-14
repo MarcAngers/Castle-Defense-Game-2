@@ -6,6 +6,8 @@ using CastleDefense.Engine.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 GameDataManager.Initialize();
 
@@ -248,6 +250,232 @@ if (args.Length > 0 && args[0] == "models")
         string name = Path.GetFileNameWithoutExtension(modelFile);
         RunMatchup($"vs {name}", side => new AIModelOpponent(side, modelFile), headStart);
     }
+    return;
+}
+
+if (args.Length > 0 && args[0] == "dashboard")
+{
+    // Sweeps the FULL team x offense x defense cross-tab (8 x 4 x 4 = 128 cells) for
+    // every opponent (all 8 spam tiers + every ONNX model found), so the dashboard can
+    // answer "is a weak matchup uniformly weak, or is it one bad team/gadget combo
+    // dragging the average down" -- Marc's explicit ask after Tier4 spam sat at ~41%
+    // in aggregate. Tier4 and the two hardest models (v4/v7) get extra games/cell since
+    // they're the ones worth resolving at finer confidence; everything else gets a
+    // lighter pass so the dashboard still covers the whole roster for comparison.
+    string outputDir = args.Length > 1 ? args[1] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard"));
+    Directory.CreateDirectory(outputDir);
+    string csvPath = Path.Combine(outputDir, "results.csv");
+    string jsonPath = Path.Combine(outputDir, "results.json");
+    string htmlPath = Path.Combine(outputDir, "dashboard.html");
+    string templatePath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard_template.html");
+
+    var allTeams = Enum.GetValues<TeamColour>();
+    var priorityModelFragments = new[] { "v4", "v7" };
+
+    var opponentSpecs = new List<(string label, string kind, Func<int, IArenaOpponent> factory, bool headStart, int gamesPerCell)>();
+    for (int t = 1; t <= 8; t++)
+    {
+        int tt = t;
+        int cellGames = tt == 4 ? 25 : 8;
+        opponentSpecs.Add(($"Tier{tt}Spam", "spam", side => new TierSpamBaseline(side, tt), false, cellGames));
+    }
+    var modelsDir = FindLeagueModelsDir();
+    if (modelsDir != null)
+    {
+        foreach (var f in Directory.GetFiles(modelsDir, "*.onnx").OrderBy(f => f))
+        {
+            var path = f;
+            string name = Path.GetFileNameWithoutExtension(path);
+            bool isPriority = priorityModelFragments.Any(p => name.Contains(p, StringComparison.OrdinalIgnoreCase));
+            int cellGames = isPriority ? 12 : 5;
+            opponentSpecs.Add((name, "model", side => new AIModelOpponent(side, path), true, cellGames));
+        }
+    }
+    else
+    {
+        Console.WriteLine("No league_models folder found -- dashboard will only cover spam tiers.");
+    }
+
+    int totalGames = opponentSpecs.Sum(o => 128 * o.gamesPerCell);
+    Console.WriteLine($"Dashboard sweep: {opponentSpecs.Count} opponents, {totalGames} games total. Writing to {outputDir}\n");
+
+    using var csv = new StreamWriter(csvPath, false);
+    csv.WriteLine("opponent,kind,team,offense,defense,outcome,ticks,seconds");
+
+    // opponent -> team -> "offense|defense" -> list of outcomes (raw, aggregated after the sweep)
+    var raw = new Dictionary<string, Dictionary<TeamColour, Dictionary<string, List<string>>>>();
+    var opponentKind = new Dictionary<string, string>();
+
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    int completed = 0;
+
+    foreach (var (label, kind, factory, headStart, cellGames) in opponentSpecs)
+    {
+        opponentKind[label] = kind;
+        var byTeam = raw[label] = new Dictionary<TeamColour, Dictionary<string, List<string>>>();
+
+        foreach (var team in allTeams)
+        {
+            var byCombo = byTeam[team] = new Dictionary<string, List<string>>();
+            foreach (var offense in offenseOptions)
+            {
+                foreach (var defense in defenseOptions)
+                {
+                    string comboKey = $"{offense}|{defense}";
+                    var outcomes = byCombo[comboKey] = new List<string>();
+
+                    for (int i = 0; i < cellGames; i++)
+                    {
+                        // Alternate which physical side the bot occupies, matching
+                        // RunMatchup's own convention ("cancel out any side asymmetry") --
+                        // a smoke test at cellGames=1 (bot always on side 1) showed Tier1
+                        // spam at 99.2% here vs the ~85% established via the alternating
+                        // "spam 400" benchmark, confirming the engine really does have a
+                        // side asymmetry and this sweep must alternate too or its numbers
+                        // won't be comparable to the rest of this project's benchmarks.
+                        bool botIsP1 = i % 2 == 0;
+                        int botSide = botIsP1 ? 1 : 2;
+                        int oppSide = botIsP1 ? 2 : 1;
+
+                        var (state, engine) = CreateGame(headStart);
+                        var botPlayer = botSide == 1 ? state.Player1 : state.Player2;
+                        var oppPlayer = botSide == 1 ? state.Player2 : state.Player1;
+                        AssignLoadout(botPlayer, botSide, team, offense, defense);
+                        AssignRandomLoadout(oppPlayer, oppSide);
+
+                        var bot = new HeuristicBotAdapter(botSide);
+                        var opponent = factory(oppSide);
+                        while (!state.IsGameOver)
+                        {
+                            engine.Tick();
+                            bot.Update(engine);
+                            opponent.Update(engine);
+                        }
+                        (opponent as IDisposable)?.Dispose();
+
+                        string outcome = state.WinnerSide == 0
+                            ? (state.IsTimeLimit ? "timeout_draw" : "draw")
+                            : state.WinnerSide == botSide
+                                ? (state.IsTimeLimit ? "timeout_win" : "decisive_win")
+                                : (state.IsTimeLimit ? "timeout_loss" : "decisive_loss");
+
+                        csv.WriteLine($"{label},{kind},{team},{offense},{defense},{outcome},{state.CurrentTick},{(state.CurrentTick / 30.0):F1}");
+                        outcomes.Add(outcome);
+                        completed++;
+                    }
+                }
+            }
+        }
+        csv.Flush();
+        Console.WriteLine($"[{sw.Elapsed:mm\\:ss}] {label,-26} done  ({completed}/{totalGames}, {100.0 * completed / totalGames:F1}%)");
+    }
+    csv.Dispose();
+
+    // --- Aggregate raw outcomes into win-rate stats and write results.json ---
+    JsonObject StatsNode(IEnumerable<string> outcomes)
+    {
+        int decisiveWins = 0, decisiveLosses = 0, timeoutWins = 0, timeoutLosses = 0, draws = 0, total = 0;
+        foreach (var outcome in outcomes)
+        {
+            total++;
+            switch (outcome)
+            {
+                case "decisive_win": decisiveWins++; break;
+                case "decisive_loss": decisiveLosses++; break;
+                case "timeout_win": timeoutWins++; break;
+                case "timeout_loss": timeoutLosses++; break;
+                default: draws++; break;
+            }
+        }
+        // Decisive-only win rate is the primary metric throughout this project's own
+        // benchmarking history -- a timeout win (higher HP at the 10-minute mark,
+        // castle never destroyed) is a much weaker signal than an actual castle kill.
+        double winRate = total > 0 ? 100.0 * decisiveWins / total : 0;
+        return new JsonObject
+        {
+            ["decisiveWins"] = decisiveWins,
+            ["decisiveLosses"] = decisiveLosses,
+            ["timeoutWins"] = timeoutWins,
+            ["timeoutLosses"] = timeoutLosses,
+            ["draws"] = draws,
+            ["total"] = total,
+            ["winRate"] = Math.Round(winRate, 1),
+        };
+    }
+
+    var opponentsArray = new JsonArray();
+    var byTeamRoot = new JsonObject();
+    var byOffenseRoot = new JsonObject();
+    var byDefenseRoot = new JsonObject();
+    var byComboRoot = new JsonObject();
+
+    foreach (var (label, kind, _, _, gamesPerCell) in opponentSpecs)
+    {
+        var byTeam = raw[label];
+        var allOutcomesForOpponent = byTeam.Values.SelectMany(c => c.Values).SelectMany(o => o).ToList();
+        var overall = StatsNode(allOutcomesForOpponent);
+        overall["name"] = label;
+        overall["kind"] = kind;
+        overall["gamesPerCell"] = gamesPerCell;
+        opponentsArray.Add(overall);
+
+        var teamNode = new JsonObject();
+        var offenseNode = new JsonObject();
+        var defenseNode = new JsonObject();
+        var comboNode = new JsonObject();
+
+        foreach (var team in allTeams)
+        {
+            var combos = byTeam[team];
+            teamNode[team.ToString()] = StatsNode(combos.Values.SelectMany(o => o));
+
+            var teamComboNode = new JsonObject();
+            foreach (var (comboKey, outcomes) in combos)
+                teamComboNode[comboKey] = StatsNode(outcomes);
+            comboNode[team.ToString()] = teamComboNode;
+        }
+        foreach (var offense in offenseOptions)
+            offenseNode[offense] = StatsNode(byTeam.Values.SelectMany(c => c.Where(kv => kv.Key.StartsWith(offense + "|")).SelectMany(kv => kv.Value)));
+        foreach (var defense in defenseOptions)
+            defenseNode[defense] = StatsNode(byTeam.Values.SelectMany(c => c.Where(kv => kv.Key.EndsWith("|" + defense)).SelectMany(kv => kv.Value)));
+
+        byTeamRoot[label] = teamNode;
+        byOffenseRoot[label] = offenseNode;
+        byDefenseRoot[label] = defenseNode;
+        byComboRoot[label] = comboNode;
+    }
+
+    var root = new JsonObject
+    {
+        ["generatedAt"] = DateTime.UtcNow.ToString("o"),
+        ["totalGames"] = totalGames,
+        ["teams"] = new JsonArray(allTeams.Select(t => JsonValue.Create(t.ToString())).ToArray()),
+        ["offenseOptions"] = new JsonArray(offenseOptions.Select(o => JsonValue.Create(o)).ToArray()),
+        ["defenseOptions"] = new JsonArray(defenseOptions.Select(d => JsonValue.Create(d)).ToArray()),
+        ["opponents"] = opponentsArray,
+        ["byTeam"] = byTeamRoot,
+        ["byOffense"] = byOffenseRoot,
+        ["byDefense"] = byDefenseRoot,
+        ["byCombo"] = byComboRoot,
+    };
+
+    var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+    string json = root.ToJsonString(jsonOptions);
+    File.WriteAllText(jsonPath, json);
+    Console.WriteLine($"\nWrote {csvPath}\nWrote {jsonPath}");
+
+    if (File.Exists(templatePath))
+    {
+        string template = File.ReadAllText(templatePath);
+        string html = template.Replace("/*__DASHBOARD_DATA__*/", "const DASHBOARD_DATA = " + json + ";");
+        File.WriteAllText(htmlPath, html);
+        Console.WriteLine($"Wrote {htmlPath}");
+    }
+    else
+    {
+        Console.WriteLine($"WARNING: template not found at {templatePath} -- dashboard.html not generated. Run again after creating it, or regenerate manually from results.json.");
+    }
+
     return;
 }
 
