@@ -593,9 +593,47 @@ namespace CastleDefense.Engine.Bot
             // still piling up money beyond what it needs, cost-per-value stops mattering
             // -- more cheap units just stalemates against an equally cheap trickle from
             // the other side. Switch to buying pure raw power instead, and make room for it.
+            //
+            // richMode used to ALSO require ownUnitCount >= MaxOwnUnitsOnField (120) --
+            // traced 12 of Marc's own recorded wins against the models the bot struggles
+            // with most (v4/v14/v25, 4 games each, --trace-human tooling) and found the
+            // shadow bot's own counterfactual read at every logged decision: whenever it
+            // suggested a concrete unit purchase at all (13 instances across 12 games), it
+            // was ALWAYS Tier1 or Tier4 -- even at Income 60-252, with the human buying
+            // Tier5-8 at those exact same moments. Root cause: at typical game lengths
+            // (~2-3 minutes even in these hard-fought matchups), buying one unit per
+            // ~0.167s decision never gets remotely close to 120 units on the field, so
+            // richMode/RawPower were structurally unreachable in practice -- ScoreUnit's
+            // cost-per-value ranking (which chronically favors the cheapest viable tier,
+            // per its own doc comment above) was the ONLY pool ever actually used, no
+            // matter how much money piled up. Dropped the unit-count requirement --
+            // richMode now fires on affordability alone (comfortably afford the best unit
+            // several times over), matching what a human clearly does once money stops
+            // being the constraint: buy the best unit, not the most cost-efficient one.
             double topCost = roster.Where(u => u.Cost > 0).Select(u => (double)u.Cost).DefaultIfEmpty(1).Max();
-            bool richMode = ownUnitCount >= MaxOwnUnitsOnField && me.Money >= topCost * 3;
-            int cap = richMode ? MaxOwnUnitsOnField * 2 : MaxOwnUnitsOnField;
+            bool richMode = me.Money >= topCost * 3;
+            int cap = (richMode || ownUnitCount >= MaxOwnUnitsOnField) ? MaxOwnUnitsOnField * 2 : MaxOwnUnitsOnField;
+
+            // First cut of this fix applied richMode's RawPower scoring during REACTIVE
+            // spending too (preferDefense:true) -- validated at full two-replicate
+            // discipline and while it delivered the hoped-for spam gains (Tier1-4 all up,
+            // Tier4 +5.4), it consistently regressed the three hardest, most adaptive
+            // models: v4 -4.95, v7 -5.15, v3 -3.0 (repeatable both replicates). All the
+            // trace evidence motivating this fix came from the human's NON-reactive
+            // econ-dump phase (buying Tier5-8 once safely rich, never from an urgent
+            // defend-right-now moment) -- nothing said a human facing an active threat
+            // should spend a big pile of money on ONE expensive unit instead of several
+            // cheaper ones that arrive sooner and spread the defense. Restricting
+            // RawPower to !preferDefense (this version) keeps reactive spending on the
+            // original, already-tuned cost-efficient ScoreUnit path, and re-validated
+            // clean: spam still gained across the board (Tier1 +1.5, Tier2 +2.95, Tier3
+            // +3.8, Tier4 +3.6, Tier5-8 flat), and critically v4 -- the actual top-
+            // priority matchup -- came back to flat (50.3%->50.5%, no longer regressed).
+            // v20/v21/v16 gained 2.8-4.15, v3/v7/v25 kept small residual dips (2.5-3.5,
+            // both replicates) that didn't clear on this pass but are minor next to the
+            // broad gains elsewhere -- worth another look if those three specifically
+            // become the priority again, but not blocking this fix.
+            bool useRawPower = richMode && !preferDefense;
 
             if (ownUnitCount >= cap) return;
 
@@ -627,7 +665,7 @@ namespace CastleDefense.Engine.Bot
                     pool = pool.Where(u => u.Tier >= minTier);
 
                 return pool
-                    .Select(def => (def, score: richMode ? RawPower(def, enemyHitDamage) : ScoreUnit(def, preferDefense, enemyHitDamage)))
+                    .Select(def => (def, score: useRawPower ? RawPower(def, enemyHitDamage) : ScoreUnit(def, preferDefense, enemyHitDamage)))
                     .OrderByDescending(x => x.score)
                     .ToList();
             }
