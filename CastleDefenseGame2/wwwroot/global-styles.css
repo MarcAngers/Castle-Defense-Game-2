@@ -79,8 +79,9 @@ button:active:not(:disabled) {
     pointer-events: none;
 }
 
-.ui-screen button, 
-.ui-screen input, 
+.ui-screen button,
+.ui-screen input,
+.ui-screen select,
 .ui-screen #game-id-list,
 .ui-screen #team-bar,
 .ui-screen .character,
