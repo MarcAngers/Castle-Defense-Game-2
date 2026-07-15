@@ -423,6 +423,28 @@ namespace CastleDefense.Engine.Bot
             // ignore entirely. Explicitly !inDanger (used to be implicit via the early
             // return above) -- while actively defending, reactive spending already ran
             // above and nothing further should be layered on the same decision.
+            //
+            // TESTED AND REJECTED: lowering this to InvestmentCount >= 3, motivated by
+            // tracing 4 of Marc's own recorded Green-vs-Tier4-spam wins (--trace-human
+            // tooling, CastleDefense.Simulation), which showed an identical human pattern
+            // in all 4 -- invest exactly 3 times (Income 2 -> ~8.5), then pivot entirely
+            // to buying Tier5 units and win within ~70s, tolerating HP as low as 31-56%
+            // rather than grinding 2 more investments (~$474 then ~$1677) first the way
+            // Income >= 50 forces (that threshold only crosses at InvestmentCount 5).
+            // Validated at full two-replicate discipline (spam n=400 x2, headstart) and
+            // it was a broad, consistent REGRESSION, not the hoped-for win: Tier1 -4.3,
+            // Tier2 -7.4, Tier3 -7.8, Tier4 -7.9 (the very matchup it targeted got WORSE,
+            // 65.4%->57.5%), Tier5 -8.4, Tier6 -3.2, timeout counts roughly doubled or
+            // more on nearly every tier -- games dragged to the 10-minute limit far more
+            // often instead of ending faster. A human's judgment about WHICH units to buy
+            // and WHEN doesn't transfer just by lowering this threshold: SpendOnUnits's
+            // generic tier-matching logic, given the same low income the human had,
+            // apparently buys a slower/weaker trickle that neither closes games out nor
+            // leaves enough surplus for investment 4 to ever land, stalling out worse
+            // than either pure strategy. Reverted -- see [[project_ai_opponent_heuristic]].
+            // Don't retry a bare threshold-lowering variant of this same idea; if
+            // revisited, the SpendOnUnits purchase logic itself likely needs to change
+            // for a low-income army-build phase to work, not just when it starts.
             if (!inDanger && me.Income >= 50)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);

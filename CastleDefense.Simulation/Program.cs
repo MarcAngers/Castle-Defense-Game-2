@@ -1,6 +1,8 @@
 using CastleDefense.Engine;
+using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Models.Hazards;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -147,6 +149,12 @@ namespace CastleDefense.Simulation
             if (args.Length >= 2 && args[0] == "--analyze-actions")
             {
                 AnalyzeActionDistribution(args[1], args.Contains("--mp"));
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--trace-human")
+            {
+                TraceHumanReplays(args[1]);
                 return;
             }
 
@@ -771,6 +779,205 @@ namespace CastleDefense.Simulation
             if (totalP2Avail > 0)
                 Console.WriteLine($"  P2  active decisions w/ invest available: {totalP2Avail,6}  " +
                                   $"chose other: {totalP2Missed,6} ({totalP2Missed * 100.0 / totalP2Avail:F2}%)");
+        }
+
+        // ── HUMAN DECISION TRACE ────────────────────────────────────────────────────
+        // Re-simulates each replay tick-by-tick (ground truth, faithful to the
+        // recorded actions) while a SEPARATE, persistent shadow HeuristicBot(side=1)
+        // is queried every tick on a throwaway clone of the exact same real state --
+        // it can freely Invest/Repair/SpawnUnit/UseGadget on the clone without ever
+        // touching the real trajectory. Because the SAME bot instance is reused across
+        // the whole game (not recreated per query), its internal decision cadence and
+        // rolling HP-drain window (see HeuristicBot.EstimateTimeToDeathSeconds) build
+        // up naturally from the real CastleHealth history, exactly as they would in a
+        // live game -- so its TTD/TTI/danger reads are faithful, not cold-started.
+        // This answers "what would the bot's own rules say to do right now, given
+        // the exact situation the human is actually in" at every human decision point.
+        static void TraceHumanReplays(string replayDir)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[TraceHuman] Directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var files = Directory.GetFiles(replayDir, "*.replay").OrderBy(x => x).ToArray();
+            if (files.Length == 0)
+            {
+                Console.Error.WriteLine($"[TraceHuman] No .replay files in {replayDir}");
+                Environment.Exit(1);
+            }
+
+            foreach (var path in files)
+            {
+                try { TraceOneHumanReplay(path); }
+                catch (Exception ex) { Console.Error.WriteLine($"[TraceHuman] Skip {Path.GetFileName(path)}: {ex.Message}"); }
+            }
+        }
+
+        static PlayerState ClonePlayerState(PlayerState src)
+        {
+            return new PlayerState
+            {
+                ConnectionId = src.ConnectionId,
+                Side = src.Side,
+                Team = src.Team,
+                Money = src.Money,
+                Income = src.Income,
+                InvestmentPrice = src.InvestmentPrice,
+                InvestmentCount = src.InvestmentCount,
+                CastleHealth = src.CastleHealth,
+                CastleMaxHealth = src.CastleMaxHealth,
+                RepairPrice = src.RepairPrice,
+                RepairCount = src.RepairCount,
+                IsInvulnerable = src.IsInvulnerable,
+                InvulnerableUntilTick = src.InvulnerableUntilTick,
+                OffensiveGadget = src.OffensiveGadget,
+                DefensiveGadget = src.DefensiveGadget,
+                SignatureGadget = src.SignatureGadget,
+                UnitCharges = new Dictionary<string, int>(src.UnitCharges),
+                CooldownTimers = new Dictionary<string, long>(src.CooldownTimers),
+                GadgetXp = new Dictionary<string, int>(src.GadgetXp),
+                GadgetCooldowns = new Dictionary<string, long>(src.GadgetCooldowns),
+            };
+        }
+
+        // Shallow-copies Units (the shadow bot only ever reads existing units and
+        // appends new ones via SpawnUnit -- it never calls Tick(), so nothing mutates
+        // an existing Unit in place) but deep-clones both PlayerStates, since Invest/
+        // Repair/SpawnUnit/UseGadget mutate PlayerState fields directly and must never
+        // leak back into the real trajectory.
+        static GameState CloneStateForShadow(GameState src)
+        {
+            var dst = new GameState();
+            dst.Map = src.Map;
+            dst.ShadowMap = src.ShadowMap;
+            dst.CurrentTick = src.CurrentTick;
+            dst.Player1 = ClonePlayerState(src.Player1);
+            dst.Player2 = ClonePlayerState(src.Player2);
+            dst.Units = new List<Unit>(src.Units);
+            dst.Hazards = new List<Hazard>(src.Hazards);
+            return dst;
+        }
+
+        static string DescribeAction(byte actionId, TeamColour team)
+        {
+            if (actionId == 0) return "wait";
+            if (actionId >= 1 && actionId <= 8)
+            {
+                var roster = GameDataManager.Teams.Find(t => t.Color == team)?.Roster;
+                string unitId = roster != null && actionId - 1 < roster.Count ? roster[actionId - 1].Id : "?";
+                return $"spawnT{actionId}({unitId})";
+            }
+            return actionId < ActionLabels.Length ? ActionLabels[actionId] : $"action{actionId}";
+        }
+
+        static void TraceOneHumanReplay(string path)
+        {
+            using var stream = File.OpenRead(path);
+            using var r = new BinaryReader(stream, Encoding.UTF8);
+
+            var magic = r.ReadBytes(4);
+            if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                throw new InvalidDataException("Not a CDRP file");
+
+            byte version = r.ReadByte();
+            string gameId = Encoding.ASCII.GetString(r.ReadBytes(6));
+            r.ReadInt64(); // timestamp
+            ReadStr(r); // game_version
+
+            string p1Team = ReadStr(r);
+            string p1Off = ReadStr(r), p1Def = ReadStr(r), p1Sig = ReadStr(r);
+            string p2Team = ReadStr(r);
+            string p2Off = ReadStr(r), p2Def = ReadStr(r), p2Sig = ReadStr(r);
+            byte winner = r.ReadByte();
+
+            long startingTick = 0;
+            double p1StartMoney = 0, p2StartMoney = 0;
+            if (version >= 2)
+            {
+                startingTick = r.ReadInt64();
+                p1StartMoney = r.ReadDouble();
+                p2StartMoney = r.ReadDouble();
+            }
+
+            uint tickCount = r.ReadUInt32();
+
+            var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+            int timeSkip = (int)(startingTick / (30 * 30));
+            var state = new GameState();
+            state.Player1 = new PlayerState(timeSkip);
+            state.Player2 = new PlayerState(timeSkip);
+            state.Player1.Side = 1; state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+            state.Player2.Side = 2; state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+            state.Player1.Money = p1StartMoney;
+            state.Player2.Money = p2StartMoney;
+            state.CurrentTick = startingTick;
+            if (l1.Length == 3) state.Player1.SetLoadout(l1);
+            if (l2.Length == 3) state.Player2.SetLoadout(l2);
+
+            var engine = new GameEngine(state);
+            var shadowBot = new HeuristicBot(1);
+
+            Console.WriteLine($"\n=== {gameId}: P1={p1Team} (off={p1Off} def={p1Def} sig={p1Sig}) vs P2={p2Team}, winner=P{winner}, {tickCount} ticks ({tickCount / 30}s) ===");
+            Console.WriteLine("tick\tsec\tACTION\tP1$\tP1inc\tP1inv\tP1hp%\tP2units\tBOTdanger\tBOTttd\tBOTtti\tBOTthreat\tBOTdef\tBOTwould");
+
+            int minHpPctSeen = 100;
+            int humanInvests = 0, humanRepairs = 0, botWouldInvestButDidnt = 0, humanInvestedWhileBotSaysDanger = 0;
+
+            for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+            {
+                byte p1Action = r.ReadByte();
+                byte p2Action = r.ReadByte();
+
+                // Query the shadow bot BEFORE this tick's real actions are applied, so
+                // it sees exactly the state the human was looking at when choosing.
+                var clone = CloneStateForShadow(state);
+                var cloneEngine = new GameEngine(clone);
+                int beforeInv = clone.Player1.InvestmentCount;
+                int beforeRep = clone.Player1.RepairCount;
+                var beforeUnitIds = new HashSet<Guid>(clone.Units.Where(u => u.Side == 1).Select(u => u.InstanceId));
+                shadowBot.Update(cloneEngine);
+                string botWould = "wait";
+                if (clone.Player1.InvestmentCount > beforeInv) botWould = "INVEST";
+                else if (clone.Player1.RepairCount > beforeRep) botWould = "REPAIR";
+                else
+                {
+                    var newUnit = clone.Units.Where(u => u.Side == 1 && !beforeUnitIds.Contains(u.InstanceId)).FirstOrDefault();
+                    if (newUnit != null) botWould = $"spawnT{newUnit.Tier}({newUnit.DefinitionId})";
+                }
+
+                if (p1Action != 0)
+                {
+                    string actionName = DescribeAction(p1Action, state.Player1.Team);
+                    var p2units = state.Units.Count(u => u.Side == 2);
+                    var p1hpPct = 100.0 * state.Player1.CastleHealth / state.Player1.CastleMaxHealth;
+                    minHpPctSeen = Math.Min(minHpPctSeen, (int)p1hpPct);
+                    string ttd = shadowBot.LastTimeToDeathSeconds >= 999999f ? "inf" : shadowBot.LastTimeToDeathSeconds.ToString("F1");
+                    string tti = shadowBot.LastTimeToInvestSeconds >= 999999f ? "inf" : shadowBot.LastTimeToInvestSeconds.ToString("F1");
+
+                    if (p1Action == 9)
+                    {
+                        humanInvests++;
+                        if (shadowBot.LastDecisionWasDanger) humanInvestedWhileBotSaysDanger++;
+                    }
+                    if (p1Action == 10) humanRepairs++;
+                    if (botWould == "INVEST" && p1Action != 9) botWouldInvestButDidnt++;
+
+                    Console.WriteLine($"{t}\t{t / 30}\t{actionName}\t{state.Player1.Money:F1}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1hpPct:F0}\t{p2units}\t{shadowBot.LastDecisionWasDanger}\t{ttd}\t{tti}\t{shadowBot.LastThreatScore:F1}\t{shadowBot.LastDefenseScore:F1}\t{botWould}");
+                }
+
+                engine.ApplyAction(1, p1Action);
+                engine.ApplyAction(2, p2Action);
+                engine.Tick();
+            }
+
+            Console.WriteLine($"[Summary] {gameId}: humanInvests={humanInvests} humanRepairs={humanRepairs} " +
+                               $"minHP%={minHpPctSeen} humanInvestedWhileBotSaysDanger={humanInvestedWhileBotSaysDanger} " +
+                               $"botWouldInvestButHumanDidnt={botWouldInvestButDidnt} finalWinner=P{state.WinnerSide} " +
+                               $"finalTick={state.CurrentTick} ({state.CurrentTick / 30}s)");
         }
 
         // ── ACTION DISTRIBUTION ANALYSIS ───────────────────────────────────────────
