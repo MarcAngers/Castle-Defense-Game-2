@@ -38,7 +38,20 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// wwwroot (index.html, script.js, and every static/views/*.html + *.js the SPA fetches
+// at runtime) is served with no Cache-Control by default, so browsers apply heuristic
+// caching and can silently keep running old JS/HTML for days after a deploy -- this is
+// what made the Practice mode feature look "broken" (a stale browser was still running
+// pre-Practice-mode code, not a real bug). Forcing revalidation on every request fixes
+// that: browsers still cache the bytes, but always check via ETag first, so an unchanged
+// file costs a cheap 304 while a changed one is never silently missed.
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "no-cache";
+    }
+});
 app.UseCors("AllowAll");
 app.MapControllers();
 app.MapHub<GameHub>("/gameHub");
