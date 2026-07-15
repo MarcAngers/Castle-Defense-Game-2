@@ -424,30 +424,85 @@ namespace CastleDefense.Engine.Bot
             // return above) -- while actively defending, reactive spending already ran
             // above and nothing further should be layered on the same decision.
             //
-            // TESTED AND REJECTED: lowering this to InvestmentCount >= 3, motivated by
-            // tracing 4 of Marc's own recorded Green-vs-Tier4-spam wins (--trace-human
-            // tooling, CastleDefense.Simulation), which showed an identical human pattern
-            // in all 4 -- invest exactly 3 times (Income 2 -> ~8.5), then pivot entirely
-            // to buying Tier5 units and win within ~70s, tolerating HP as low as 31-56%
-            // rather than grinding 2 more investments (~$474 then ~$1677) first the way
-            // Income >= 50 forces (that threshold only crosses at InvestmentCount 5).
-            // Validated at full two-replicate discipline (spam n=400 x2, headstart) and
-            // it was a broad, consistent REGRESSION, not the hoped-for win: Tier1 -4.3,
-            // Tier2 -7.4, Tier3 -7.8, Tier4 -7.9 (the very matchup it targeted got WORSE,
-            // 65.4%->57.5%), Tier5 -8.4, Tier6 -3.2, timeout counts roughly doubled or
-            // more on nearly every tier -- games dragged to the 10-minute limit far more
-            // often instead of ending faster. A human's judgment about WHICH units to buy
-            // and WHEN doesn't transfer just by lowering this threshold: SpendOnUnits's
-            // generic tier-matching logic, given the same low income the human had,
-            // apparently buys a slower/weaker trickle that neither closes games out nor
-            // leaves enough surplus for investment 4 to ever land, stalling out worse
-            // than either pure strategy. Reverted -- see [[project_ai_opponent_heuristic]].
-            // Don't retry a bare threshold-lowering variant of this same idea; if
-            // revisited, the SpendOnUnits purchase logic itself likely needs to change
-            // for a low-income army-build phase to work, not just when it starts.
+            // TESTED AND REJECTED (variant 1): lowering this to InvestmentCount >= 3 while
+            // keeping the existing generic SpendOnUnits(preferDefense:false) scorer,
+            // motivated by tracing 4 of Marc's own recorded Green-vs-Tier4-spam wins
+            // (--trace-human tooling, CastleDefense.Simulation), which showed an identical
+            // human pattern in all 4 -- invest exactly 3 times (Income 2 -> ~8.5), then
+            // pivot entirely to buying Tier5 units and win within ~70s, tolerating HP as
+            // low as 31-56% rather than grinding 2 more investments (~$474 then ~$1677)
+            // first the way Income >= 50 forces (that threshold only crosses at
+            // InvestmentCount 5). Validated at full two-replicate discipline (spam n=400
+            // x2, headstart): a broad, consistent REGRESSION, not the hoped-for win --
+            // Tier1 -4.3, Tier2 -7.4, Tier3 -7.8, Tier4 -7.9 (the very matchup it targeted
+            // got WORSE, 65.4%->57.5%), Tier5 -8.4, Tier6 -3.2, timeout counts roughly
+            // doubled or more on nearly every tier. Root cause identified afterward: the
+            // human wasn't just buying "whatever scores well" earlier -- checking the
+            // bot's own ScoreUnit formula against Green's roster showed Tier3 durdle
+            // actually outscores Tier5 gecko on defensive cost-efficiency (durdle is
+            // cheap and tanky but has almost no DPS, 4.8 vs gecko's 96) -- the generic
+            // scorer would never have converged on gecko at all. The human was optimizing
+            // for OFFENSIVE throughput to end the game fast, not cost-efficient trading,
+            // and committing to ONE unit type repeatedly rather than diluting across
+            // whatever the scorer ranks highest tick to tick.
+            //
+            // TESTED AND REJECTED (variant 2): same InvestmentCount >= 3 trigger, but
+            // replaced the generic scorer with a direct mimic of the observed behavior --
+            // save up for and repeatedly buy ONLY the team's Tier5 unit (the literal
+            // "wave-breaker" tier the human targeted in all 4 traces), never switching to
+            // anything else -- see BuyWaveBreaker below (dead code, not called). This one
+            // is NOT a clean regression like variant 1 -- it's a genuine, consistent
+            // trade-off. Validated at full two-replicate discipline: spam n=400 x2
+            // headstart gave a real, repeatable WIN on low/mid tiers, including the
+            // targeted matchup -- Tier1 +4.9, Tier2 +6.2, Tier3 +4.1, Tier4 65.4%->71.7%
+            // (+6.3) -- but a severe LOSS on high tiers, worse than variant 1 ever was:
+            // Tier5 -7.3, Tier6 -20.7(!), Tier7 -13.9(!), Tier8 -7.5. Mechanistically
+            // obvious in hindsight: locking onto Tier5 forever means the army never
+            // upgrades once the opponent's own units clearly outclass it, which a
+            // Tier6-8 spam bot's fixed high-tier output punishes hard. Worse, models
+            // n=300 headstart was CATASTROPHIC, not just a trade-off -- every single one
+            // of the 10 models dropped, most by 10-47 points (v14 -40.4, v25 -46.7, v22
+            // -12.2, v3 -9.7), including v4 (the actual highest-priority hard matchup)
+            // getting WORSE too (50.3%->40.7%, -9.6). Adaptive opponents punish a
+            // committed single-tier army far harder than a static spam bot ever could.
+            // Reverted. Two independently-designed attempts at "start the non-reactive
+            // army-build phase earlier" (lower the threshold; lower the threshold AND
+            // commit to one tier) have now both been tried and both net-lose once models
+            // are weighed in, despite variant 2 posting a real win on the narrow spam
+            // slice Marc's recordings came from. Don't attempt a third variant of "just
+            // move the threshold" without a mechanism that can tell a static spam bot
+            // apart from an adaptive one before committing to an early, narrow army --
+            // e.g. gating the early pivot on detecting the opponent hasn't invested/
+            // diversified after some observation window, not on the bot's OWN economy
+            // state alone. See [[project_ai_opponent_heuristic]] for the full writeup.
             if (!inDanger && me.Income >= 50)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
+            }
+        }
+
+        // Dead code (see the rejected-variant-2 comment above) -- kept as a documented
+        // starting point in case a future attempt gates this behind opponent-type
+        // detection instead of a pure economic threshold. Commits to repeatedly buying
+        // ONLY the team's Tier5 unit once affordable, mimicking the human's observed
+        // concentrated single-tier buying instead of the generic multi-candidate scorer
+        // in SpendOnUnits. Deliberately has no reserve/richMode/outclassing/tier-escalation
+        // logic (unlike SpendOnUnits) to isolate "commit to one unit type" as the only
+        // variable under test -- confirmed net-negative once models were weighed in (see
+        // above), so any revival of this needs at minimum a way to stop escalating past
+        // Tier5 once the opponent's own units outclass it.
+        private void BuyWaveBreaker(GameEngine engine, PlayerState me, List<UnitDefinition> roster)
+        {
+            int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
+            if (ownUnitCount >= MaxOwnUnitsOnField) return;
+
+            var waveBreaker = roster.FirstOrDefault(u => u.Tier == 5);
+            if (waveBreaker == null || me.Money < waveBreaker.Cost) return;
+
+            if (engine.SpawnUnit(_side, waveBreaker.Id))
+            {
+                LastUnitsPurchased++;
+                ActionCounts[5]++;
             }
         }
 
