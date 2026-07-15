@@ -10,10 +10,12 @@ public class RecordingsController : ControllerBase
     private readonly GameDatabase _db;
     private readonly string _replayDir;
 
-    public RecordingsController(GameDatabase db)
+    public RecordingsController(GameDatabase db, IHostEnvironment env)
     {
         _db = db;
-        _replayDir = Path.Combine(AppContext.BaseDirectory, "recordings");
+        // See the comment on dbPath in Program.cs -- recordings live under
+        // ContentRootPath, not bin/, so a build cleanup can't destroy them.
+        _replayDir = Path.Combine(env.ContentRootPath, "recordings");
     }
 
     [HttpGet]

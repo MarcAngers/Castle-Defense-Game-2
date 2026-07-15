@@ -15,7 +15,13 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<GameHostingService
 string modelPath = Path.Combine(AppContext.BaseDirectory, "AI_Models", "castle_defense_bot.onnx");
 builder.Services.AddSingleton<AIBrain>(new AIBrain(modelPath));
 
-string dbPath = Path.Combine(AppContext.BaseDirectory, "recordings", "game_records.db");
+// Recordings used to live under AppContext.BaseDirectory (bin/<Config>/net10.0/recordings),
+// which is git-ignored, disposable build output -- a routine bin/obj cleanup permanently
+// destroyed ~144 recorded games with no way to recover them. ContentRootPath (the project
+// source directory) survives build cleanup, so recordings now live there instead.
+// Interim fix only: this is still just loose files/SQLite next to the repo, not a real
+// datastore -- recorded game data should eventually move to a proper database.
+string dbPath = Path.Combine(builder.Environment.ContentRootPath, "recordings", "game_records.db");
 builder.Services.AddSingleton(new GameDatabase(dbPath));
 
 // Add CORS (Crucial for WebGL/Web clients)

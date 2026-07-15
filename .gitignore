@@ -444,3 +444,7 @@ __pycache__/
 # C# Build Artifacts
 bin/
 obj/
+
+# Recorded games (interim local storage -- see comment on dbPath in
+# CastleDefenseGame2/Program.cs; not meant to be checked into git)
+CastleDefenseGame2/recordings/

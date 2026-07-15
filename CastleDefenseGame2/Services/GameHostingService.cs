@@ -31,12 +31,14 @@ namespace CastleDefense.Api.Services
         private readonly string _gameVersion;
 
         public GameHostingService(IHubContext<GameHub> hubContext, AIBrain aiBrain,
-            GameDatabase db, IConfiguration config)
+            GameDatabase db, IConfiguration config, IHostEnvironment env)
         {
             _hubContext   = hubContext;
             _aiBrain      = aiBrain;
             _db           = db;
-            _replayDir    = Path.Combine(AppContext.BaseDirectory, "recordings");
+            // See the comment on dbPath in Program.cs -- recordings live under
+            // ContentRootPath, not bin/, so a build cleanup can't destroy them.
+            _replayDir    = Path.Combine(env.ContentRootPath, "recordings");
             _gameVersion  = config["GameVersion"] ?? "v1.0";
 
             string leagueDir = Path.Combine(AppContext.BaseDirectory, "league_models");
