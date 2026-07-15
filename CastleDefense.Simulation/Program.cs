@@ -1,3 +1,4 @@
+using CastleDefense.Api.Data;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
@@ -154,7 +155,11 @@ namespace CastleDefense.Simulation
 
             if (args.Length >= 2 && args[0] == "--trace-human")
             {
-                TraceHumanReplays(args[1]);
+                // Optional 3rd arg filters to games whose DB opponent_type/game_mode
+                // contains the given substring (e.g. "v4", "spam4", "model") -- useful
+                // once a replay dir mixes spam-bot and model-opponent recordings.
+                string filter = args.Length > 2 ? args[2] : null;
+                TraceHumanReplays(args[1], filter);
                 return;
             }
 
@@ -793,7 +798,42 @@ namespace CastleDefense.Simulation
         // live game -- so its TTD/TTI/danger reads are faithful, not cold-started.
         // This answers "what would the bot's own rules say to do right now, given
         // the exact situation the human is actually in" at every human decision point.
-        static void TraceHumanReplays(string replayDir)
+        // The .replay binary format has no opponent-identity field at all (see
+        // GameRecorder's doc comment) -- "which spam tier / which named model" only ever
+        // lives in game_records.db's opponent_type column, added after the fact. Once a
+        // replay directory has a mix of spam-bot and model-opponent recordings, both the
+        // header printout and the optional filter arg need that DB data to be usable.
+        static Dictionary<string, (string gameMode, string opponentType)> LoadOpponentInfo(string replayDir)
+        {
+            var result = new Dictionary<string, (string, string)>();
+            var candidates = new[]
+            {
+                Path.Combine(replayDir, "game_records.db"),
+                Path.Combine(replayDir, "..", "game_records.db"),
+            };
+            foreach (var candidate in candidates)
+            {
+                string full = Path.GetFullPath(candidate);
+                if (!File.Exists(full)) continue;
+                try
+                {
+                    var db = new GameDatabase(full);
+                    foreach (var g in db.GetAllGames())
+                        result[g.Id] = (g.GameMode, g.OpponentType);
+                    Console.WriteLine($"[TraceHuman] Loaded opponent info for {result.Count} game(s) from {full}");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[TraceHuman] Could not read {full}: {ex.Message}");
+                }
+                break; // first candidate found wins -- don't merge across two DB files
+            }
+            if (result.Count == 0)
+                Console.WriteLine("[TraceHuman] No game_records.db found near the replay dir -- opponent type won't be labeled (team/gadgets/actions still fully traced).");
+            return result;
+        }
+
+        static void TraceHumanReplays(string replayDir, string filter = null)
         {
             if (!Directory.Exists(replayDir))
             {
@@ -808,9 +848,23 @@ namespace CastleDefense.Simulation
                 Environment.Exit(1);
             }
 
+            var opponentInfo = LoadOpponentInfo(replayDir);
+
+            if (filter != null)
+            {
+                files = files.Where(f =>
+                {
+                    string gameId = Path.GetFileNameWithoutExtension(f);
+                    if (!opponentInfo.TryGetValue(gameId, out var info)) return false;
+                    return (info.opponentType?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (info.gameMode?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false);
+                }).ToArray();
+                Console.WriteLine($"[TraceHuman] {files.Length} replay(s) match filter '{filter}'");
+            }
+
             foreach (var path in files)
             {
-                try { TraceOneHumanReplay(path); }
+                try { TraceOneHumanReplay(path, opponentInfo); }
                 catch (Exception ex) { Console.Error.WriteLine($"[TraceHuman] Skip {Path.GetFileName(path)}: {ex.Message}"); }
             }
         }
@@ -872,7 +926,7 @@ namespace CastleDefense.Simulation
             return actionId < ActionLabels.Length ? ActionLabels[actionId] : $"action{actionId}";
         }
 
-        static void TraceOneHumanReplay(string path)
+        static void TraceOneHumanReplay(string path, Dictionary<string, (string gameMode, string opponentType)> opponentInfo = null)
         {
             using var stream = File.OpenRead(path);
             using var r = new BinaryReader(stream, Encoding.UTF8);
@@ -921,7 +975,11 @@ namespace CastleDefense.Simulation
             var engine = new GameEngine(state);
             var shadowBot = new HeuristicBot(1);
 
-            Console.WriteLine($"\n=== {gameId}: P1={p1Team} (off={p1Off} def={p1Def} sig={p1Sig}) vs P2={p2Team}, winner=P{winner}, {tickCount} ticks ({tickCount / 30}s) ===");
+            string opponentTag = "";
+            if (opponentInfo != null && opponentInfo.TryGetValue(gameId, out var info))
+                opponentTag = $" [{info.gameMode ?? "?"}/{info.opponentType ?? "unknown opponent"}]";
+
+            Console.WriteLine($"\n=== {gameId}: P1={p1Team} (off={p1Off} def={p1Def} sig={p1Sig}) vs P2={p2Team}{opponentTag}, winner=P{winner}, {tickCount} ticks ({tickCount / 30}s) ===");
             Console.WriteLine("tick\tsec\tACTION\tP1$\tP1inc\tP1inv\tP1hp%\tP2units\tBOTdanger\tBOTttd\tBOTtti\tBOTthreat\tBOTdef\tBOTwould");
 
             int minHpPctSeen = 100;
@@ -974,7 +1032,7 @@ namespace CastleDefense.Simulation
                 engine.Tick();
             }
 
-            Console.WriteLine($"[Summary] {gameId}: humanInvests={humanInvests} humanRepairs={humanRepairs} " +
+            Console.WriteLine($"[Summary] {gameId}{opponentTag}: humanInvests={humanInvests} humanRepairs={humanRepairs} " +
                                $"minHP%={minHpPctSeen} humanInvestedWhileBotSaysDanger={humanInvestedWhileBotSaysDanger} " +
                                $"botWouldInvestButHumanDidnt={botWouldInvestButDidnt} finalWinner=P{state.WinnerSide} " +
                                $"finalTick={state.CurrentTick} ({state.CurrentTick / 30}s)");
