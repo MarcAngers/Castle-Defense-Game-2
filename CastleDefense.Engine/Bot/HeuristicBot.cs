@@ -81,6 +81,20 @@ namespace CastleDefense.Engine.Bot
 
         private const float EffectivelyInfiniteSeconds = 999999f;
 
+        // Distinguishes a static single-tier spam bot (never changes what it spawns,
+        // by definition) from an adaptive opponent (model or human, which diversifies
+        // as its own economy/loadout evolves) -- feeds the early-army-pivot gate below.
+        // Cumulative since game start, not a rolling window: a spam bot's defining trait
+        // is NEVER changing, so any diversity observed even once permanently disqualifies
+        // "confident spammer" for the rest of the game, the same way a human would reason
+        // ("I've now seen them field a second unit type, so they're not a fixed spammer,
+        // even if they don't do it again"). Tracks distinct unit INSTANCES ever seen
+        // (not current on-field count, which fluctuates as units die) so the confidence
+        // count only grows, and distinct TIERS among those instances.
+        private readonly HashSet<Guid> _observedEnemyUnitIds = new HashSet<Guid>();
+        private readonly HashSet<int> _observedEnemyTiers = new HashSet<int>();
+        private const int MinEnemyUnitsForSpammerRead = 8;
+
         public HeuristicBot(int side, HeuristicBotSettings settings = null)
         {
             _side = side;
@@ -191,6 +205,14 @@ namespace CastleDefense.Engine.Bot
 
             var myUnits = state.Units.Where(u => u.Side == _side).ToList();
             var enemyUnits = state.Units.Where(u => u.Side != _side).ToList();
+
+            foreach (var u in enemyUnits)
+            {
+                if (_observedEnemyUnitIds.Add(u.InstanceId))
+                    _observedEnemyTiers.Add(u.Tier);
+            }
+            bool confidentStaticSpammer = _observedEnemyUnitIds.Count >= MinEnemyUnitsForSpammerRead && _observedEnemyTiers.Count == 1;
+            int observedEnemySpamTier = confidentStaticSpammer ? _observedEnemyTiers.First() : 0;
 
             // --- THREAT ASSESSMENT ---
             // Weight enemy strength by how close it is to our castle so a distant
@@ -475,34 +497,68 @@ namespace CastleDefense.Engine.Bot
             // e.g. gating the early pivot on detecting the opponent hasn't invested/
             // diversified after some observation window, not on the bot's OWN economy
             // state alone. See [[project_ai_opponent_heuristic]] for the full writeup.
+            // TESTED AND REJECTED (variant 3): implemented exactly the "gate on detected
+            // opponent behavior" mechanism the variant-2 writeup called for --
+            // confidentStaticSpammer (enemy has shown MinEnemyUnitsForSpammerRead=8 units,
+            // never once varied tier) gated an `else if` alongside (not replacing) the
+            // Income >= 50 branch, so the wave-breaker pivot only applied during the
+            // narrow InvestmentCount 3->5 window and behavior reverted to the untouched
+            // generic SpendOnUnits the instant Income reached 50 either way. Also fixed
+            // variant 2's Tier6-8 mechanism gap: BuyWaveBreaker outclassed the SPECIFIC
+            // observed spam tier by one (capped at 8) instead of hardcoding Tier5.
+            //
+            // Validated at full two-replicate discipline (spam n=400 x2, models n=300 x2,
+            // headstart). Partial success, net rejected: it DID fix what variant 2 broke
+            // -- no more catastrophic model collapse (worst single model was v25 at -11.0,
+            // not v25's -46.7 or v14's -40.4 from variant 2) -- confirming the opponent-
+            // read concept itself works as a circuit breaker against adaptive opponents.
+            // But it FAILED to deliver the thing this whole investigation was for: Tier4
+            // spam came back essentially flat (65.4%->65.6%, +0.2, noise-level), not
+            // variant 2's real +6.3. Tier1/Tier2 picked up new, consistent-both-replicates
+            // regressions (-4.75/-3.2) despite never being the target. Models were a mixed
+            // bag rather than a clean save -- v14/v21/v22 up 1.6-3.2, but v25 -11.0, v3
+            // -4.3, and v4 (the actual top-priority matchup) still down -4.5, not fixed.
+            //
+            // Root cause for the vanished Tier4 gain: variant 2's whole-game-permanent
+            // pivot (it replaced Income>=50 entirely, never handing back to generic
+            // spending at any income) is what let the human's "commit hard and win fast"
+            // strategy actually play out over a full game. Confining the SAME pivot to
+            // only the few investments' worth of game-time between count 3 and Income=50
+            // (~15-30s typically) undoes most of that benefit -- the win condition needed
+            // sustained aggression, not a brief early window before reverting to slower
+            // play. Confirms this lever is now dead-ended for good in EVERY combination
+            // tried (bare threshold; threshold + fixed tier; threshold + fixed tier +
+            // opponent-gating) -- a real 4th attempt would need the pivot to persist for
+            // the rest of the game once triggered (like variant 2) while ALSO carrying
+            // variant 3's tier-escalation fix and opponent-read gate together, which
+            // hasn't been tried. Reverted -- see [[project_ai_opponent_heuristic]] for the
+            // full three-variant writeup. BuyWaveBreaker/confidentStaticSpammer/
+            // observedEnemySpamTier tracking left in place as dead code for that attempt.
             if (!inDanger && me.Income >= 50)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
             }
         }
 
-        // Dead code (see the rejected-variant-2 comment above) -- kept as a documented
-        // starting point in case a future attempt gates this behind opponent-type
-        // detection instead of a pure economic threshold. Commits to repeatedly buying
-        // ONLY the team's Tier5 unit once affordable, mimicking the human's observed
-        // concentrated single-tier buying instead of the generic multi-candidate scorer
-        // in SpendOnUnits. Deliberately has no reserve/richMode/outclassing/tier-escalation
-        // logic (unlike SpendOnUnits) to isolate "commit to one unit type" as the only
-        // variable under test -- confirmed net-negative once models were weighed in (see
-        // above), so any revival of this needs at minimum a way to stop escalating past
-        // Tier5 once the opponent's own units outclass it.
-        private void BuyWaveBreaker(GameEngine engine, PlayerState me, List<UnitDefinition> roster)
+        // Commits to repeatedly buying ONLY units of targetTier once affordable, mimicking
+        // the human's observed concentrated single-tier buying instead of the generic
+        // multi-candidate scorer in SpendOnUnits. Deliberately has no reserve/richMode
+        // logic (unlike SpendOnUnits) -- only called from the confidentStaticSpammer
+        // branch above, which is itself gated tightly enough (income still low, opponent
+        // confirmed static) that competing for gadget money isn't the concern it is once
+        // SpendOnUnits takes over post-Income-50.
+        private void BuyWaveBreaker(GameEngine engine, PlayerState me, List<UnitDefinition> roster, int targetTier)
         {
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
             if (ownUnitCount >= MaxOwnUnitsOnField) return;
 
-            var waveBreaker = roster.FirstOrDefault(u => u.Tier == 5);
+            var waveBreaker = roster.FirstOrDefault(u => u.Tier == targetTier);
             if (waveBreaker == null || me.Money < waveBreaker.Cost) return;
 
             if (engine.SpawnUnit(_side, waveBreaker.Id))
             {
                 LastUnitsPurchased++;
-                ActionCounts[5]++;
+                if (targetTier >= 1 && targetTier <= 8) ActionCounts[targetTier]++;
             }
         }
 
