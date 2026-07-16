@@ -1093,6 +1093,17 @@ namespace CastleDefense.Engine.Bot
                     break;
 
                 case "wave":
+                {
+                    // Sweeps the ENTIRE map width and knocks back every enemy it touches --
+                    // except WaveHazard.ProcessEffect explicitly skips "wall"-prefixed units
+                    // (they can't be knocked back at all) and gives tier-8 units a token
+                    // 25-unit knockback instead of the usual 500-3000. Marc's direct report:
+                    // "it sent out a tidal wave to knock back my wall. Not only can the wall
+                    // not be knocked back, but it's a single unit and poses zero threat to
+                    // the castle, so trying to knock it back is totally a waste." Don't even
+                    // consider casting if the only enemies on the field are walls -- there's
+                    // nothing the cast could possibly affect.
+                    if (!enemyUnits.Any(u => !u.DefinitionId.StartsWith("wall"))) break;
                     // Always fires from our own edge regardless of target position -- but
                     // like reinforcements, the cast itself has a real cost that can compete
                     // with saving for the first InvestmentPrice; see DeferForInvestment.
@@ -1104,6 +1115,7 @@ namespace CastleDefense.Engine.Bot
                     if (inDanger || BigSpendJustified(me, def, 0))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
+                }
 
                 case "goo":
                     {
