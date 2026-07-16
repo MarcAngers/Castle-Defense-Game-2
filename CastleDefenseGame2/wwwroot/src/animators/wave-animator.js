@@ -19,9 +19,16 @@ export default class WaveAnimator {
         
         // Get the server duration in ticks (e.g., 5 seconds = 150 ticks)
         const hazardTicks = gadgetData ? (gadgetData.hazardduration || gadgetData.HazardDuration || 210) : 210;
-        
-        // Convert server ticks (30 per sec) to frontend milliseconds!
-        this.duration = (hazardTicks / 20) * 1000;
+
+        // Convert server ticks (30 per sec, GameEngine.TICKS_PER_SECOND) to frontend
+        // milliseconds. Was dividing by 20 -- the comment already said 30 per sec, but
+        // the divisor didn't match, making every level's animation run 1.5x too long
+        // (5s/7s/10s became 7.5s/10.5s/15s) and its speed proportionally too slow, since
+        // speed is derived from this.duration below. The server's WaveHazard sweeps the
+        // real knockback hitbox at the TRUE (faster) rate, so it was reaching and
+        // launching units well before the slower visual wave sprite appeared to catch
+        // up to them.
+        this.duration = (hazardTicks / 30) * 1000;
 
         this.timer = 0;
         this.isFinished = false;
