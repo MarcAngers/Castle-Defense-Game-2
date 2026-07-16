@@ -26,12 +26,12 @@ export default class AnimationManager {
         }
     }
 
-    update(deltaTime) {
+    update(deltaTime, state) {
         this.shakeX = 0;
         this.shakeY = 0;
 
         this.activeAnimations.forEach(anim => {
-            anim.update(deltaTime);
+            anim.update(deltaTime, state);
             
             // Accumulate screen shake from any intense animations
             if (anim.shakeX) this.shakeX += anim.shakeX;

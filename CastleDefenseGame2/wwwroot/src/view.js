@@ -162,7 +162,7 @@ class View {
         this.drawBackground(loader.assets.teamList[this.latestState.map]);
         this.ctx.restore();
 
-        this.animationManager.update(deltaTime);
+        this.animationManager.update(deltaTime, state);
 
         this.ctx.save();
         

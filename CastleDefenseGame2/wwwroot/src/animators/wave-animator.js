@@ -32,6 +32,7 @@ export default class WaveAnimator {
 
         this.timer = 0;
         this.isFinished = false;
+        this._hasSeenHazard = false;
 
         // --- TIER SETTINGS FOR SCREEN SHAKE ---
         if (this.level === 1) {
@@ -46,10 +47,30 @@ export default class WaveAnimator {
         this.shakeY = 0;
     }
 
-    update(deltaTime) {
+    update(deltaTime, state) {
         this.timer += deltaTime;
 
-        if (this.timer >= this.duration) {
+        // Stay on screen for as long as the server's real hazard exists, rather
+        // than guessing from a fixed client-side duration -- Marc's report: the
+        // wave was disappearing before units were done getting knocked back,
+        // i.e. the visual's assumed lifetime was shorter than the hazard's true
+        // one. `this.duration` (computed in the constructor from HazardDuration)
+        // is still used for the brief pre-broadcast position estimate in draw()
+        // below, but no longer decides when the animation ends.
+        const hazard = state?.hazards?.find(h => (h.type || h.Type) === 'Wave' && (h.side ?? h.Side) === this.side);
+        if (hazard) {
+            this._hasSeenHazard = true;
+        } else if (this._hasSeenHazard) {
+            // The real hazard has genuinely expired server-side -- end here.
+            this.isFinished = true;
+            this.shakeX = 0;
+            this.shakeY = 0;
+            return;
+        } else if (this.timer >= this.duration * 2) {
+            // Safety net only: never saw a real hazard at all (e.g. state
+            // unavailable this frame) -- don't animate forever. Generous
+            // multiple of the nominal duration so it never cuts off a real,
+            // still-running hazard.
             this.isFinished = true;
             this.shakeX = 0;
             this.shakeY = 0;
