@@ -896,11 +896,67 @@ namespace CastleDefense.Simulation
             };
         }
 
-        // Shallow-copies Units (the shadow bot only ever reads existing units and
-        // appends new ones via SpawnUnit -- it never calls Tick(), so nothing mutates
-        // an existing Unit in place) but deep-clones both PlayerStates, since Invest/
-        // Repair/SpawnUnit/UseGadget mutate PlayerState fields directly and must never
-        // leak back into the real trajectory.
+        // CONFIRMED BUG (found investigating a real winner mismatch: CF03FF's true
+        // recorded winner is P1 per both game_records.db and the .replay header, but
+        // this tool's own re-simulation produced P2 winning at an earlier tick).
+        // Units used to be shallow-copied here on the theory that "the shadow bot only
+        // ever reads existing units and appends new ones via SpawnUnit, never mutates
+        // one in place" -- true for the AOE gadgets (nuke/firebomb/meteor/poison/
+        // blackhole all defer their actual effect via engine.ScheduleAction, which
+        // never fires since the clone engine is discarded before its Tick() is ever
+        // called to process the schedule) but FALSE for heal and speed: HealEffect and
+        // SpeedEffect mutate existing units IMMEDIATELY (ally.Statuses.Add(...), no
+        // ScheduleAction at all). Since the shallow copy shared the exact same Unit
+        // object references as the real trajectory, every time the shadow bot's
+        // counterfactual query considered casting heal or speed (using the human's own
+        // equipped loadout), it permanently attached a real "Heal"/"Speed" ActiveStatus
+        // to the REAL units -- which GameEngine.ProcessStatuses() (called every real
+        // tick from then on) would then apply as genuine, ongoing heal-over-time /
+        // speed buffs the human never actually cast. CF03FF's defense gadget is heal --
+        // exactly the contamination pattern. This corrupted the derived HP/combat
+        // trajectory (and therefore final winner/tick) for any traced game whose
+        // loadout included heal or speed, while leaving the RECORDED ACTION LOG itself
+        // untouched (actions are read directly from the file, never derived from this
+        // clone) -- see [[project_ai_opponent_heuristic]] for the full impact
+        // assessment across this session's traces.
+        //
+        // Fix: deep-clone every Unit (and its Statuses list) so the shadow bot can
+        // mutate its own clone's units freely without ever touching the real ones.
+        // Hazards are still shallow-copied -- every current gadget that creates one
+        // (firebomb/poison/blackhole) does so via ScheduleAction, same as the AOE
+        // damage gadgets, so it's verified safe today, but would need the same
+        // treatment if a future gadget ever created one synchronously.
+        static ActiveStatus CloneStatus(ActiveStatus s) => new ActiveStatus(s.Name, s.ExpiresAtTick, s.Value, s.Side, s.SourceGadgetId);
+
+        static Unit CloneUnit(Unit src) => new Unit
+        {
+            InstanceId = src.InstanceId,
+            DefinitionId = src.DefinitionId,
+            Side = src.Side,
+            Tier = src.Tier,
+            Width = src.Width,
+            Height = src.Height,
+            CurrentHealth = src.CurrentHealth,
+            MaxHealth = src.MaxHealth,
+            CurrentShield = src.CurrentShield,
+            Position = src.Position,
+            YPosition = src.YPosition,
+            CurrentSpeed = src.CurrentSpeed,
+            PendingKnockback = src.PendingKnockback,
+            LastKnockbackTick = src.LastKnockbackTick,
+            AttacksWithoutKnockback = src.AttacksWithoutKnockback,
+            Damage = src.Damage,
+            Range = src.Range,
+            AttackSpeed = src.AttackSpeed,
+            AttackCooldown = src.AttackCooldown,
+            Weight = src.Weight,
+            PushForce = src.PushForce,
+            EffectiveWeight = src.EffectiveWeight,
+            AttackType = src.AttackType,
+            ArmorType = src.ArmorType,
+            Statuses = src.Statuses.Select(CloneStatus).ToList(),
+        };
+
         static GameState CloneStateForShadow(GameState src)
         {
             var dst = new GameState();
@@ -909,7 +965,7 @@ namespace CastleDefense.Simulation
             dst.CurrentTick = src.CurrentTick;
             dst.Player1 = ClonePlayerState(src.Player1);
             dst.Player2 = ClonePlayerState(src.Player2);
-            dst.Units = new List<Unit>(src.Units);
+            dst.Units = src.Units.Select(CloneUnit).ToList();
             dst.Hazards = new List<Hazard>(src.Hazards);
             return dst;
         }
