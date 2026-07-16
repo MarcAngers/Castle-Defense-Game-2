@@ -849,7 +849,7 @@ namespace CastleDefense.Engine.Bot
                     // side) in the blast radius -- a real cost, not a free chip. Only
                     // worth it against an actual cluster, and only where none of our own
                     // units would eat the same blast.
-                    int? target = FindBestAoeTarget(enemyUnits, radius);
+                    int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
                     if (target.HasValue && enemyUnits.Count >= 2 && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
                         used = engine.UseGadget(_side, def.Id, target.Value);
                     break;
@@ -859,21 +859,32 @@ namespace CastleDefense.Engine.Bot
                 {
                     // Leaves a damage-over-time zone that burns ANYONE standing in it,
                     // ally or enemy (FireHazard doesn't filter by side). Prefer the densest
-                    // enemy cluster, but if that overlaps our own units, retarget to
-                    // whichever enemy is farthest from our army instead of skipping the
-                    // cast outright -- still a valid burn, and this gadget needs real usage
-                    // to ever earn enough XP to upgrade past its weak base tier.
+                    // enemy cluster, but if that overlaps our own units, retarget instead
+                    // of skipping the cast outright -- still a valid burn, and this gadget
+                    // needs real usage to ever earn enough XP to upgrade past its weak
+                    // base tier.
                     // Base-tier cost ($18) matches the first InvestmentPrice exactly, and
                     // this fires off a single enemy unit anywhere -- the most permissive
                     // trigger of any offense gadget. Same trap shape as reinforcements/wave/
                     // goo (see DeferForInvestment); defer it while that first foothold is
                     // still being built.
                     if (DeferForInvestment(me)) break;
-                    int? target = FindBestAoeTarget(enemyUnits, radius);
+                    int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
                     if (target.HasValue && myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
                     {
-                        float myAvgPos = myUnits.Count > 0 ? myUnits.Average(u => u.Position) : myCastlePos;
-                        target = (int)enemyUnits.OrderByDescending(u => Math.Abs(u.Position - myAvgPos)).First().Position;
+                        // Retarget used to pick whichever enemy was literally FARTHEST
+                        // from our own army to dodge the overlap -- that's just the same
+                        // back-most bias again by a different path (our army sits closer
+                        // to the front line, so "farthest from us" skews toward the
+                        // enemy's back). Pick the most front-most (closest to our castle)
+                        // enemy that genuinely won't catch our own units in the blast
+                        // instead; skip the cast if no such target exists rather than
+                        // deliberately hitting whoever's safest-but-least-threatening.
+                        var safe = enemyUnits
+                            .Where(u => !myUnits.Any(m => Math.Abs(m.Position - ProjectedPosition(u, def.Delay)) <= radius))
+                            .OrderBy(u => Math.Abs(ProjectedPosition(u, def.Delay) - myCastlePos))
+                            .ToList();
+                        target = safe.Count > 0 ? (int)ProjectedPosition(safe[0], def.Delay) : (int?)null;
                     }
                     if (target.HasValue)
                         used = engine.UseGadget(_side, def.Id, target.Value);
@@ -983,7 +994,7 @@ namespace CastleDefense.Engine.Bot
                 case "poison":
                     {
                         // Both of these only ever affect enemy units -- no friendly fire risk.
-                        int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius));
+                        int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius), myCastlePos, def.Delay);
                         if (target.HasValue)
                             used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
@@ -995,7 +1006,7 @@ namespace CastleDefense.Engine.Bot
                         // in its radius (and can instantly kill non-tier-8 units at its core),
                         // so only fire it where none of our own units would get caught in it.
                         int radius = Math.Max(150, def.Radius);
-                        int? target = FindBestAoeTarget(enemyUnits, radius);
+                        int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
                         if (target.HasValue && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
                             used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
@@ -1004,8 +1015,39 @@ namespace CastleDefense.Engine.Bot
             if (used) ActionCounts[13]++;
         }
 
-        // Finds the enemy unit position with the most enemy "power" clustered within radius.
-        private int? FindBestAoeTarget(List<Unit> targets, int radius)
+        // Projects where a unit will actually BE after leadTicks pass (a gadget's
+        // deployment delay, GadgetDefinition.Delay), based on its own current speed and
+        // side-determined direction of travel (GameEngine's own movement step: side 1
+        // moves toward +X, side 2 toward -X -- see GameEngine.cs's per-tick movement
+        // logic). CurrentSpeed is already 0 whenever a unit is engaged in combat or
+        // attacking a castle (GameEngine sets it that way every tick), so a
+        // stationary/fighting unit is correctly not led at all -- only units still
+        // actively marching get projected forward.
+        private static float ProjectedPosition(Unit u, int leadTicks)
+        {
+            if (leadTicks <= 0 || u.CurrentSpeed <= 0) return u.Position;
+            float direction = u.Side == 1 ? 1f : -1f;
+            return u.Position + u.CurrentSpeed * leadTicks * direction;
+        }
+
+        // Finds the best AOE launch position -- prefers a dense, high-power cluster
+        // that's ALSO meaningfully threatening (close to advancing on OUR OWN castle),
+        // not just whichever cluster has the most raw power. Previously scored purely by
+        // clustered power with no positional preference at all: a freshly-spawned clump
+        // of cheap fodder still bunched up near the enemy's own spawn point can easily
+        // outscore a more spread-out, more dangerous front line on density alone,
+        // systematically biasing every AOE gadget toward the BACK of the enemy
+        // formation instead of the front -- Marc's own play flagged exactly this
+        // ("targeting is supposed to launch at the front-most enemy unit, but it looks
+        // like we're targeting the back-most instead"). Reuses the same threat-proximity
+        // weighting formula as the threatScore calculation earlier in Decide().
+        //
+        // Also leads each unit by its own current speed over the gadget's deployment
+        // delay (leadTicks, from GadgetDefinition.Delay -- ~1.6-2.3s across the offense/
+        // signature gadgets that use this, per master_gadgets.csv) so the blast lands
+        // where units WILL be when it actually goes off, not where they were standing
+        // at the moment the cast was queued.
+        private int? FindBestAoeTarget(List<Unit> targets, int radius, int myCastlePos, int leadTicks = 0)
         {
             if (targets.Count == 0) return null;
 
@@ -1013,16 +1055,20 @@ namespace CastleDefense.Engine.Bot
             float bestScore = -1f;
             foreach (var candidate in targets)
             {
+                float candidatePos = ProjectedPosition(candidate, leadTicks);
                 float score = 0f;
                 foreach (var other in targets)
                 {
-                    if (Math.Abs(other.Position - candidate.Position) <= radius)
+                    if (Math.Abs(ProjectedPosition(other, leadTicks) - candidatePos) <= radius)
                         score += Power(other);
                 }
+                float distToMyCastle = Math.Abs(candidatePos - myCastlePos);
+                float threatWeight = Math.Max(0.15f, 1200f / (distToMyCastle + 250f));
+                score *= threatWeight;
                 if (score > bestScore)
                 {
                     bestScore = score;
-                    bestPos = (int)candidate.Position;
+                    bestPos = (int)candidatePos;
                 }
             }
             return bestPos;

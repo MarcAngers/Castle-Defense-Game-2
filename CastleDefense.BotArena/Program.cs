@@ -743,6 +743,35 @@ if (args.Length > 0 && args[0] == "trace")
     return;
 }
 
+if (args.Length > 0 && args[0] == "mirror")
+{
+    // Sanity check, not a benchmark: HeuristicBot vs itself. Not meant to catch win-rate
+    // regressions (there's no "better" side to compare against -- both are the exact
+    // same policy) but to catch anything a gadget-targeting/economic change could break
+    // structurally: games should still end in a reasonable time (not stall out to the
+    // 10-minute timeout constantly), and the P1/P2 win split should stay roughly even
+    // (random team/loadout assignment is the only asymmetry, so a big skew would flag a
+    // real side-dependent bug in the change under test).
+    bool headStart = args.Contains("headstart");
+    int games = args.Skip(1).Select(a => int.TryParse(a, out var g) ? g : (int?)null).FirstOrDefault(g => g.HasValue) ?? gamesPerMatchup;
+    Console.WriteLine($"Running {games} heuristic-vs-heuristic games (sanity check, not a benchmark){(headStart ? " (with time-machine head starts)" : " (fresh start)")}...\n");
+
+    int p1Wins = 0, p2Wins = 0, draws = 0, timeouts = 0;
+    long totalTicks = 0;
+    for (int i = 0; i < games; i++)
+    {
+        var (winner, ticks, isTimeLimit) = RunOneGame(side => new HeuristicBotAdapter(side), side => new HeuristicBotAdapter(side), headStart);
+        totalTicks += ticks;
+        if (isTimeLimit) timeouts++;
+        if (winner == 1) p1Wins++;
+        else if (winner == 2) p2Wins++;
+        else draws++;
+    }
+    double avgSeconds = totalTicks / (double)games / 30.0;
+    Console.WriteLine($"P1 wins: {p1Wins}/{games} ({100.0 * p1Wins / games:F1}%)  P2 wins: {p2Wins}/{games} ({100.0 * p2Wins / games:F1}%)  draws: {draws}  timeouts: {timeouts}  avg length: {avgSeconds:F1}s");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "spam")
 {
     // Matches Marc's own model-evaluation setup: fixed-tier spam bots (spawn that tier
