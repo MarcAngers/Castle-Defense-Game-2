@@ -914,15 +914,26 @@ namespace CastleDefense.Simulation
             return dst;
         }
 
-        static string DescribeAction(byte actionId, TeamColour team)
+        static string DescribeAction(byte actionId, PlayerState p1)
         {
             if (actionId == 0) return "wait";
             if (actionId >= 1 && actionId <= 8)
             {
-                var roster = GameDataManager.Teams.Find(t => t.Color == team)?.Roster;
+                var roster = GameDataManager.Teams.Find(t => t.Color == p1.Team)?.Roster;
                 string unitId = roster != null && actionId - 1 < roster.Count ? roster[actionId - 1].Id : "?";
                 return $"spawnT{actionId}({unitId})";
             }
+            // Show the SPECIFIC equipped gadget (e.g. "wave_2"), not just the generic
+            // slot label -- needed to see which family a human actually paired with an
+            // attack wave (speed vs heal vs wave vs poison/meteor pre-placement etc).
+            string gadgetId = actionId switch
+            {
+                11 => p1.OffensiveGadget?.Id,
+                12 => p1.DefensiveGadget?.Id,
+                13 => p1.SignatureGadget?.Id,
+                _ => null
+            };
+            if (gadgetId != null) return $"{ActionLabels[actionId]}({gadgetId})";
             return actionId < ActionLabels.Length ? ActionLabels[actionId] : $"action{actionId}";
         }
 
@@ -980,7 +991,7 @@ namespace CastleDefense.Simulation
                 opponentTag = $" [{info.gameMode ?? "?"}/{info.opponentType ?? "unknown opponent"}]";
 
             Console.WriteLine($"\n=== {gameId}: P1={p1Team} (off={p1Off} def={p1Def} sig={p1Sig}) vs P2={p2Team}{opponentTag}, winner=P{winner}, {tickCount} ticks ({tickCount / 30}s) ===");
-            Console.WriteLine("tick\tsec\tACTION\tP1$\tP1inc\tP1inv\tP1hp%\tP2units\tBOTdanger\tBOTttd\tBOTtti\tBOTthreat\tBOTdef\tBOTwould");
+            Console.WriteLine("tick\tsec\tACTION\tP1$\tP1inc\tP1inv\tP1hp%\tP1units\tP1pos\tP2units\tBOTdanger\tBOTttd\tBOTtti\tBOTthreat\tBOTdef\tBOTwould");
 
             int minHpPctSeen = 100;
             int humanInvests = 0, humanRepairs = 0, botWouldInvestButDidnt = 0, humanInvestedWhileBotSaysDanger = 0;
@@ -1009,8 +1020,16 @@ namespace CastleDefense.Simulation
 
                 if (p1Action != 0)
                 {
-                    string actionName = DescribeAction(p1Action, state.Player1.Team);
-                    var p2units = state.Units.Count(u => u.Side == 2);
+                    string actionName = DescribeAction(p1Action, state.Player1);
+                    var p1UnitsList = state.Units.Where(u => u.Side == 1).ToList();
+                    var p2unitsList = state.Units.Where(u => u.Side == 2).ToList();
+                    // Average position tells us roughly where the human's own army is
+                    // sitting (near our own castle at 200 = still home/defensive; pushed
+                    // out toward MAP_WIDTH-200=1800 = actively marching an attack) --
+                    // needed to see whether a gadget cast lines up with an actual attack
+                    // wave (per Marc's feedback: speed-boosting an advancing army, healing
+                    // it mid-push, or pre-placing poison/meteor on an empty enemy castle).
+                    string p1Pos = p1UnitsList.Count > 0 ? p1UnitsList.Average(u => u.Position).ToString("F0") : "-";
                     var p1hpPct = 100.0 * state.Player1.CastleHealth / state.Player1.CastleMaxHealth;
                     minHpPctSeen = Math.Min(minHpPctSeen, (int)p1hpPct);
                     string ttd = shadowBot.LastTimeToDeathSeconds >= 999999f ? "inf" : shadowBot.LastTimeToDeathSeconds.ToString("F1");
@@ -1024,7 +1043,7 @@ namespace CastleDefense.Simulation
                     if (p1Action == 10) humanRepairs++;
                     if (botWould == "INVEST" && p1Action != 9) botWouldInvestButDidnt++;
 
-                    Console.WriteLine($"{t}\t{t / 30}\t{actionName}\t{state.Player1.Money:F1}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1hpPct:F0}\t{p2units}\t{shadowBot.LastDecisionWasDanger}\t{ttd}\t{tti}\t{shadowBot.LastThreatScore:F1}\t{shadowBot.LastDefenseScore:F1}\t{botWould}");
+                    Console.WriteLine($"{t}\t{t / 30}\t{actionName}\t{state.Player1.Money:F1}\t{state.Player1.Income:F1}\t{state.Player1.InvestmentCount}\t{p1hpPct:F0}\t{p1UnitsList.Count}\t{p1Pos}\t{p2unitsList.Count}\t{shadowBot.LastDecisionWasDanger}\t{ttd}\t{tti}\t{shadowBot.LastThreatScore:F1}\t{shadowBot.LastDefenseScore:F1}\t{botWould}");
                 }
 
                 engine.ApplyAction(1, p1Action);
