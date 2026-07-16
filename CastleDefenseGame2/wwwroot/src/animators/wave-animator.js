@@ -67,16 +67,27 @@ export default class WaveAnimator {
         const waveImg = loader.assets.gadgets[imgKey] || loader.assets.gadgets['wave'];
         if (!waveImg) return;
 
-        // --- THE PERFECT SPEED MATH ---
-        // Speed = MAP_WIDTH (2000px) / duration in milliseconds
-        // This ensures the animation distance matches the server physics distance flawlessly.
-        const speed = 2000 / this.duration; 
-        const distanceTraveled = this.timer * speed;
-
-        // P1 moves right (+), P2 moves left (-)
-        const currentX = this.side === 1 
-            ? this.startX + distanceTraveled 
-            : this.startX - distanceTraveled;
+        // Drive position from the server's actual WaveHazard, not a client-side
+        // clock. The hazard is already broadcast every tick in GameStateUpdate
+        // (it's just a field on GameState nothing previously read), and its
+        // Position is in the same raw game-unit space units render at directly
+        // (see view.js's unit.position usage) -- so this is exact, immune to
+        // frame-rate jitter, and doesn't depend on matching a start-position
+        // constant to WaveEffect's (it was off by 50 units: -50/2050 here vs
+        // the engine's actual -100/2100). Only fall back to the local timer-
+        // based estimate for the brief window before the first state update
+        // naming this hazard arrives.
+        const hazard = state?.hazards?.find(h => (h.type || h.Type) === 'Wave' && (h.side ?? h.Side) === this.side);
+        let currentX;
+        if (hazard) {
+            currentX = hazard.position ?? hazard.Position;
+        } else {
+            const speed = 2000 / this.duration;
+            const distanceTraveled = this.timer * speed;
+            currentX = this.side === 1
+                ? this.startX + distanceTraveled
+                : this.startX - distanceTraveled;
+        }
 
         // Add a subtle bobbing motion to the water
         const bobOffset = Math.sin(this.timer / 150) * 5;
