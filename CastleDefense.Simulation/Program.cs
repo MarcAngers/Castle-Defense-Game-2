@@ -153,6 +153,21 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 2 && args[0] == "--analyze-death-economy")
+            {
+                // Optional 3rd arg filters to games whose DB opponent_type/game_mode
+                // contains the given substring, same convention as --trace-human.
+                string filter = args.Length > 2 ? args[2] : null;
+                AnalyzeDeathEconomy(args[1], filter);
+                return;
+            }
+
+            if (args.Length >= 3 && args[0] == "--trace-bot-death")
+            {
+                TraceBotDeath(args[1], args[2]);
+                return;
+            }
+
             if (args.Length >= 2 && args[0] == "--trace-human")
             {
                 // Optional 3rd arg filters to games whose DB opponent_type/game_mode
@@ -784,6 +799,253 @@ namespace CastleDefense.Simulation
             if (totalP2Avail > 0)
                 Console.WriteLine($"  P2  active decisions w/ invest available: {totalP2Avail,6}  " +
                                   $"chose other: {totalP2Missed,6} ({totalP2Missed * 100.0 / totalP2Avail:F2}%)");
+        }
+
+        // Marc's ask: "is my income higher than the bot's at the end of these games, and
+        // how much money did the bot have when it died?" -- unlike --trace-human (which
+        // only ever applies P1's real actions to a real engine while querying a SEPARATE
+        // shadow bot for P1's OWN counterfactual decisions), this replays BOTH players'
+        // actual recorded actions through one real GameEngine, the same faithful pattern
+        // AnalyzeInvestBehavior already uses -- so P2's income/money here are the real
+        // bot's real recorded numbers, not inferred or shadow-simulated. Same caveat as
+        // ever: unseeded RNG (spawn Y-jitter, meteor spread) can drift COMBAT pacing/
+        // outcomes late-game, but invest count (and therefore income) and money are pure
+        // functions of the recorded action stream itself, so they're reliable even where
+        // exact death-tick timing might be a beat off from the true original game.
+        static void AnalyzeDeathEconomy(string replayDir, string filter = null)
+        {
+            if (!Directory.Exists(replayDir))
+            {
+                Console.Error.WriteLine($"[DeathEconomy] Directory not found: {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var files = Directory.GetFiles(replayDir, "*.replay").OrderBy(x => x).ToArray();
+            if (files.Length == 0)
+            {
+                Console.Error.WriteLine($"[DeathEconomy] No .replay files in {replayDir}");
+                Environment.Exit(1);
+            }
+
+            var opponentInfo = LoadOpponentInfo(replayDir);
+
+            if (filter != null)
+            {
+                files = files.Where(f =>
+                {
+                    string gameId = Path.GetFileNameWithoutExtension(f);
+                    if (!opponentInfo.TryGetValue(gameId, out var info)) return false;
+                    return (info.opponentType?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (info.gameMode?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false);
+                }).ToArray();
+                Console.WriteLine($"[DeathEconomy] {files.Length} replay(s) match filter '{filter}'");
+            }
+
+            Console.WriteLine($"{"GameId",-8} {"Winner",-8} {"P1(human)Inc",-14} {"P2(bot)Inc",-12} {"P2 died@",-10} {"P2$@death",-11} {"P2 finalHP%",-12}");
+
+            foreach (var path in files)
+            {
+                try
+                {
+                    using var stream = File.OpenRead(path);
+                    using var r = new BinaryReader(stream, Encoding.UTF8);
+
+                    var magic = r.ReadBytes(4);
+                    if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                        throw new InvalidDataException("Not a CDRP file");
+
+                    byte version = r.ReadByte();
+                    string gameId = Encoding.ASCII.GetString(r.ReadBytes(6));
+                    r.ReadInt64();
+                    ReadStr(r); // game_version
+                    string p1Team = ReadStr(r);
+                    string p1Off = ReadStr(r); string p1Def = ReadStr(r); string p1Sig = ReadStr(r);
+                    string p2Team = ReadStr(r);
+                    string p2Off = ReadStr(r); string p2Def = ReadStr(r); string p2Sig = ReadStr(r);
+                    byte winner = r.ReadByte();
+
+                    long startingTick = 0;
+                    double p1StartMoney = 0, p2StartMoney = 0;
+                    if (version >= 2)
+                    {
+                        startingTick = r.ReadInt64();
+                        p1StartMoney = r.ReadDouble();
+                        p2StartMoney = r.ReadDouble();
+                    }
+
+                    uint tickCount = r.ReadUInt32();
+
+                    var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+                    var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+                    if (version == 1 && tickCount > 0)
+                    {
+                        long ap = stream.Position;
+                        byte[] probe = r.ReadBytes(Math.Min((int)tickCount, 100) * 2);
+                        stream.Seek(ap, SeekOrigin.Begin);
+                        var (ts, bonus) = InferV1TimeMachineState(p1Team, l1, p2Team, l2, probe, 100);
+                        startingTick = 30L * 30 * ts;
+                        var proto = new PlayerState(ts);
+                        double amt = bonus ? proto.InvestmentPrice + proto.Income : proto.Money;
+                        p1StartMoney = amt; p2StartMoney = amt;
+                    }
+
+                    int timeSkip = (int)(startingTick / (30 * 30));
+                    var state = new GameState();
+                    state.Player1 = new PlayerState(timeSkip); state.Player2 = new PlayerState(timeSkip);
+                    state.Player1.Side = 1; state.Player2.Side = 2;
+                    state.Player1.Money = p1StartMoney; state.Player2.Money = p2StartMoney;
+                    state.CurrentTick = startingTick;
+                    state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+                    state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+                    if (l1.Length == 3) state.Player1.SetLoadout(l1);
+                    if (l2.Length == 3) state.Player2.SetLoadout(l2);
+                    var engine = new GameEngine(state);
+
+                    bool p2AlreadyDead = false;
+                    long p2DeathTick = -1;
+                    double p2MoneyAtDeath = -1;
+                    double p2InvestmentPriceAtDeath = -1;
+                    int p2InvestmentCountAtDeath = -1;
+
+                    for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+                    {
+                        byte p1Action = r.ReadByte();
+                        byte p2Action = r.ReadByte();
+
+                        engine.ApplyAction(1, p1Action);
+                        engine.ApplyAction(2, p2Action);
+                        engine.Tick();
+
+                        if (!p2AlreadyDead && state.Player2.CastleHealth <= 0)
+                        {
+                            p2AlreadyDead = true;
+                            p2DeathTick = state.CurrentTick;
+                            p2MoneyAtDeath = state.Player2.Money;
+                            p2InvestmentPriceAtDeath = state.Player2.InvestmentPrice;
+                            p2InvestmentCountAtDeath = state.Player2.InvestmentCount;
+                        }
+                    }
+
+                    string deathTickStr = p2DeathTick >= 0 ? $"{p2DeathTick}({p2DeathTick / 30.0:F0}s)" : "never";
+                    string deathMoneyStr = p2DeathTick >= 0 ? $"{p2MoneyAtDeath:F1}" : "n/a";
+                    string couldHaveInvested = p2DeathTick >= 0 && p2MoneyAtDeath >= p2InvestmentPriceAtDeath ? "YES" : (p2DeathTick >= 0 ? "no" : "n/a");
+                    string nextPriceStr = p2DeathTick >= 0 ? $"inv#{p2InvestmentCountAtDeath}->#{p2InvestmentCountAtDeath + 1}@{p2InvestmentPriceAtDeath:F0}" : "n/a";
+                    double p2FinalHpPct = state.Player2.CastleMaxHealth > 0 ? 100.0 * state.Player2.CastleHealth / state.Player2.CastleMaxHealth : 0;
+
+                    string opp = opponentInfo.TryGetValue(gameId, out var oppInfo) ? oppInfo.opponentType : "?";
+                    Console.WriteLine($"{gameId,-8} P{winner,-7} {state.Player1.Income,-14:F1} {state.Player2.Income,-12:F1} {deathTickStr,-10} {deathMoneyStr,-11} {nextPriceStr,-20} couldInvest={couldHaveInvested,-4} hp%={p2FinalHpPct:F0}  ({opp})");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  [skip] {Path.GetFileName(path)}: {ex.Message}");
+                }
+            }
+        }
+
+        // Diagnostic for the "bot dies holding savings" investigation. Replays BOTH
+        // players' exact RECORDED actions (faithful to the true game -- the real
+        // trajectory is driven ONLY by recorded bytes, never by any bot logic), while a
+        // SEPARATE, PERSISTENT shadow HeuristicBot(side=2) is queried every tick on a
+        // deep-cloned throwaway copy of the exact same real state -- the same proven
+        // pattern --trace-human already uses for a shadow P1, just applied to P2. Because
+        // the same shadow bot instance persists across the whole game, its internal
+        // decision cadence and rolling HP-drain window build up naturally and faithfully
+        // from the REAL CastleHealth history, so its exposed LastDecisionWasDanger/
+        // LastTimeToDeathSeconds/etc. fields are a true read of what the REAL bot's
+        // internals were almost certainly computing at each point -- without the earlier,
+        // rejected approach's problem (a live-redriven P2 diverges too far from the real
+        // trajectory over a whole game to be useful) or a hand-reconstructed formula's
+        // risk of a subtle transcription/phase mistake.
+        static void TraceBotDeath(string replayDir, string gameId)
+        {
+            string path = Path.Combine(replayDir, gameId + ".replay");
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"[TraceBotDeath] Replay not found: {path}");
+                Environment.Exit(1);
+            }
+
+            using var stream = File.OpenRead(path);
+            using var r = new BinaryReader(stream, Encoding.UTF8);
+
+            var magic = r.ReadBytes(4);
+            if (magic[0] != 'C' || magic[1] != 'D' || magic[2] != 'R' || magic[3] != 'P')
+                throw new InvalidDataException("Not a CDRP file");
+
+            byte version = r.ReadByte();
+            Encoding.ASCII.GetString(r.ReadBytes(6));
+            r.ReadInt64();
+            ReadStr(r);
+            string p1Team = ReadStr(r);
+            string p1Off = ReadStr(r), p1Def = ReadStr(r), p1Sig = ReadStr(r);
+            string p2Team = ReadStr(r);
+            string p2Off = ReadStr(r), p2Def = ReadStr(r), p2Sig = ReadStr(r);
+            r.ReadByte(); // winner
+
+            long startingTick = 0;
+            double p1StartMoney = 0, p2StartMoney = 0;
+            if (version >= 2)
+            {
+                startingTick = r.ReadInt64();
+                p1StartMoney = r.ReadDouble();
+                p2StartMoney = r.ReadDouble();
+            }
+
+            uint tickCount = r.ReadUInt32();
+
+            var l1 = new[] { p1Off, p1Def, p1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var l2 = new[] { p2Off, p2Def, p2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+            int timeSkip = (int)(startingTick / (30 * 30));
+            var state = new GameState();
+            state.Player1 = new PlayerState(timeSkip); state.Player2 = new PlayerState(timeSkip);
+            state.Player1.Side = 1; state.Player2.Side = 2;
+            state.Player1.Money = p1StartMoney; state.Player2.Money = p2StartMoney;
+            state.CurrentTick = startingTick;
+            state.Player1.Team = Enum.Parse<TeamColour>(p1Team, ignoreCase: true);
+            state.Player2.Team = Enum.Parse<TeamColour>(p2Team, ignoreCase: true);
+            if (l1.Length == 3) state.Player1.SetLoadout(l1);
+            if (l2.Length == 3) state.Player2.SetLoadout(l2);
+            var engine = new GameEngine(state);
+            var shadowBot = new HeuristicBot(2);
+
+            Console.WriteLine($"=== {gameId}: P1={p1Team}(off={p1Off} def={p1Def} sig={p1Sig}) vs P2={p2Team}(off={p2Off} def={p2Def} sig={p2Sig}) -- REAL recorded actions, shadow-bot(side=2) diagnostics ===");
+            Console.WriteLine("tick\tsec\tP2$\tP2inc\tP2inv\tP2invPrice\tP2hp%\tdanger\tttd\ttti\tthreat\tdef\trealActionP2");
+
+            for (uint t = 0; t < tickCount && !state.IsGameOver; t++)
+            {
+                byte p1Action = r.ReadByte();
+                byte p2Action = r.ReadByte();
+
+                // Query the shadow bot on a deep clone BEFORE this tick's real recorded
+                // actions are applied, so it sees exactly the state the real bot was
+                // looking at -- same order-of-operations as --trace-human's shadow P1.
+                var clone = CloneStateForShadow(state);
+                var cloneEngine = new GameEngine(clone);
+                int beforeInv = clone.Player2.InvestmentCount;
+                int beforeRep = clone.Player2.RepairCount;
+                double beforeMoney = clone.Player2.Money;
+                shadowBot.Update(cloneEngine);
+                string shadowWould = "wait";
+                if (clone.Player2.InvestmentCount > beforeInv) shadowWould = "INVEST";
+                else if (clone.Player2.RepairCount > beforeRep) shadowWould = "REPAIR";
+                else if (clone.Player2.Money < beforeMoney) shadowWould = "spend";
+
+                engine.ResetLastActions();
+                engine.ApplyAction(1, p1Action);
+                engine.ApplyAction(2, p2Action);
+                engine.Tick();
+
+                if (state.CurrentTick % 5 == 0)
+                {
+                    var me = state.Player2;
+                    double hpPct = me.CastleMaxHealth > 0 ? 100.0 * me.CastleHealth / me.CastleMaxHealth : 0;
+                    Console.WriteLine($"{state.CurrentTick}\t{state.CurrentTick / 30}\t{me.Money:F1}\t{me.Income:F1}\t{me.InvestmentCount}\t{me.InvestmentPrice:F1}\t{hpPct:F0}\t{shadowBot.LastDecisionWasDanger}\t{shadowBot.LastTimeToDeathSeconds:F1}\t{shadowBot.LastTimeToInvestSeconds:F1}\t{shadowBot.LastThreatScore:F1}\t{shadowBot.LastDefenseScore:F1}\t{engine.LastActionP2}\tshadowWould={shadowWould}");
+                }
+            }
+
+            Console.WriteLine($"[Summary] P2 final: HP={state.Player2.CastleHealth}/{state.Player2.CastleMaxHealth}, Money={state.Player2.Money:F1}, InvestmentCount={state.Player2.InvestmentCount}, tick={state.CurrentTick} ({state.CurrentTick / 30}s), gameOver={state.IsGameOver}, winner={state.WinnerSide}");
         }
 
         // ── HUMAN DECISION TRACE ────────────────────────────────────────────────────
