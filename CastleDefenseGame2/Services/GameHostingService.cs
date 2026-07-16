@@ -1,6 +1,7 @@
 using CastleDefense.Api.Data;
 using CastleDefense.Api.Hubs;
 using CastleDefense.Engine;
+using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 using Microsoft.AspNetCore.SignalR;
@@ -14,6 +15,13 @@ namespace CastleDefense.Api.Services
         private readonly ConcurrentDictionary<string, GameEngine> _lobbyGames = new();
         private readonly ConcurrentDictionary<string, GameRecorder> _recorders = new();
         private readonly ConcurrentDictionary<string, Func<GameState, int>> _leagueOpponents = new();
+        // HeuristicBot doesn't fit the Func<GameState,int> pattern above -- it drives
+        // engine.Invest/Repair/SpawnUnit/UseGadget directly (and can take more than one
+        // of those in a single decision, e.g. a gadget cast AND an investment), and it
+        // carries real per-game mutable state (decision cadence, rolling HP-drain window)
+        // that must persist tick-to-tick, so it needs its own per-game instance rather
+        // than a stateless closure. See ExecuteAsync for how it's driven.
+        private readonly ConcurrentDictionary<string, HeuristicBot> _heuristicOpponents = new();
         // Human-readable description of what _leagueOpponents[gameId] actually is
         // ("spam4", "antispam", "model:castle_defense_p1_v21", "random") -- persisted to
         // the DB at game-end so recorded games can be mined later for "did the human
@@ -116,6 +124,14 @@ namespace CastleDefense.Api.Services
             if (string.IsNullOrWhiteSpace(opponentSpec)) return null;
             string spec = opponentSpec.Trim();
 
+            // Checked before the generic model-name .Contains() fallback below so a
+            // future league model can never accidentally shadow this exact-match spec.
+            if (string.Equals(spec, "heuristic", StringComparison.OrdinalIgnoreCase))
+            {
+                SetupHeuristicOpponent(gameId);
+                return "heuristic";
+            }
+
             Func<GameState, int> opponent;
             string description;
 
@@ -143,11 +159,25 @@ namespace CastleDefense.Api.Services
             return description;
         }
 
+        // Singleplayer's opponent: the same tuned HeuristicBot used throughout this
+        // codebase's own benchmarking (CastleDefense.BotArena) and recording analysis
+        // (--trace-human), not the deployed ONNX model. A fresh instance per game since
+        // it carries real per-game state (decision cadence, rolling HP window) that must
+        // not leak between games.
+        public void SetupHeuristicOpponent(string gameId)
+        {
+            _heuristicOpponents[gameId] = new HeuristicBot(2);
+            _opponentDescriptions[gameId] = "heuristic";
+        }
+
         // Lets the practice-mode opponent picker show only opponents that actually
         // exist right now (the loaded league model list can vary between machines/runs).
+        // "heuristic" is always available (it has no external model file dependency) and
+        // is listed alongside the league models in the same dropdown -- see select-level.js.
         public (int[] spamTiers, bool antiSpamAvailable, string[] modelNames) GetPracticeOpponentOptions()
         {
-            return (Enumerable.Range(1, 8).ToArray(), true, _leagueModels.Select(m => m.name).OrderBy(n => n).ToArray());
+            var names = new[] { "heuristic" }.Concat(_leagueModels.Select(m => m.name)).OrderBy(n => n).ToArray();
+            return (Enumerable.Range(1, 8).ToArray(), true, names);
         }
 
         private static int AntiSpamAction(long tick, TeamColour team)
@@ -249,10 +279,14 @@ namespace CastleDefense.Api.Services
                             }
 
                             // P2 AI / opponent
-                            if (engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
-                                engine._state.GameMode == "watch")
+                            if ((engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
+                                engine._state.GameMode == "watch") && !_heuristicOpponents.ContainsKey(gameId))
                             {
-                                // Standard ONNX singleplayer bot
+                                // Standard ONNX singleplayer bot -- "sp" games all have a
+                                // HeuristicBot opponent set up instead (see JoinGame/the
+                                // Update() call below), so this branch is effectively
+                                // "vai"/"watch"-only now; kept as the ONNX path for those
+                                // since neither one was asked to change.
                                 float[] aiState     = engine._state.GetStateVector(2);
                                 int[]   aiActionMask = engine._state.GetActionMask(2);
 
@@ -282,6 +316,20 @@ namespace CastleDefense.Api.Services
                             }
                         }
 
+                        // HeuristicBot-driven opponent (Singleplayer's tuned bot, or a
+                        // Practice-mode pick of it) -- deliberately OUTSIDE the %3==0
+                        // gate above and called every real tick. HeuristicBot manages its
+                        // own decision cadence internally (~6/sec, every 5 ticks, see
+                        // DecisionIntervalTicks) and self-throttles via state.CurrentTick,
+                        // exactly like CastleDefense.BotArena's arena loop and
+                        // --trace-human's shadow-bot query already call it -- gating it
+                        // behind this loop's own %3==0 cadence too would just misalign
+                        // the two independent clocks for no benefit.
+                        if (_heuristicOpponents.TryGetValue(gameId, out var heuristicBot))
+                        {
+                            heuristicBot.Update(engine);
+                        }
+
                         engine.Tick();
                         recorder?.RecordTick(engine.LastActionP1, engine.LastActionP2);
                     }
@@ -289,6 +337,7 @@ namespace CastleDefense.Api.Services
                     if (engine._state.IsGameOver)
                     {
                         _leagueOpponents.TryRemove(gameId, out _);
+                        _heuristicOpponents.TryRemove(gameId, out _);
                         _opponentDescriptions.TryRemove(gameId, out var opponentDescription);
 
                         if (_recorders.TryRemove(gameId, out var finishedRecorder))

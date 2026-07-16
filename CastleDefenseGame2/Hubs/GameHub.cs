@@ -112,6 +112,12 @@ namespace CastleDefense.Api.Hubs
                 game._state.Player2.Team = GameDataManager.GetRandomTeam();
                 game._state.Player2.SetLoadout(new string[] { GameDataManager.GetRandomOGadgetId(), GameDataManager.GetRandomDGadgetId(), GameDataManager.GetSignatureGadgetIdForTeam(game._state.Player2.Team) });
 
+                // Singleplayer's opponent is the same tuned HeuristicBot used throughout
+                // this codebase's own benchmarking/recording analysis, not the deployed
+                // ONNX model -- "watch" is left untouched (still ONNX), only "sp" changes.
+                if (game._state.GameMode == "sp")
+                    _gameService.SetupHeuristicOpponent(gameId);
+
                 _gameService.StartGame(gameId);
             }
         }
