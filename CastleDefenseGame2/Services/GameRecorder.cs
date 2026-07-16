@@ -57,11 +57,17 @@ public class GameRecorder
         try
         {
             WriteReplay(replayDir, p1, p2, winner, gameVersion);
+            // Captured directly from the true live PlayerState at game-over -- no
+            // resimulation involved, so unlike a replayed reconstruction this is exact.
+            // See GameDatabase's schema comment for why this was added.
+            double? p1HpPct = p1.CastleMaxHealth > 0 ? 100.0 * p1.CastleHealth / p1.CastleMaxHealth : (double?)null;
+            double? p2HpPct = p2.CastleMaxHealth > 0 ? 100.0 * p2.CastleHealth / p2.CastleMaxHealth : (double?)null;
             db.InsertGame(
                 _gameId, gameVersion, _startedAt,
                 p1.Team.ToString(), p1.OffensiveGadget?.Id, p1.DefensiveGadget?.Id, p1.SignatureGadget?.Id,
                 p2.Team.ToString(), p2.OffensiveGadget?.Id, p2.DefensiveGadget?.Id, p2.SignatureGadget?.Id,
-                winner, durationTicks, gameMode, opponentType);
+                winner, durationTicks, gameMode, opponentType,
+                p1.Income, p2.Income, p1.Money, p2.Money, p1HpPct, p2HpPct);
             db.InsertGadgetUses(_gameId, _gadgetUses);
             Console.WriteLine($"[Recorder] Saved game {_gameId}: {_ticks.Count} ticks, winner={winner}, mode={gameMode}, opponent={opponentType}");
         }

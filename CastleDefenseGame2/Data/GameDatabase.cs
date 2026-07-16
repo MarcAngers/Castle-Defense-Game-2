@@ -63,6 +63,23 @@ public class GameDatabase
         // [[project_ai_opponent_heuristic]] for the session this was found dead-ended).
         AddColumnIfMissing(conn, "games", "game_mode", "TEXT");
         AddColumnIfMissing(conn, "games", "opponent_type", "TEXT");
+
+        // Added to answer "was the bot dying while sitting on unspent savings" without
+        // having to resimulate the replay -- resimulating BOTH sides' recorded actions
+        // through a fresh GameEngine was found to diverge substantially from the true
+        // recorded game late in a match (unseeded RNG in combat -- spawn Y-jitter/meteor
+        // spread -- compounds far more than previously realized once a real opponent's
+        // actions are being replayed too, not just a human's own shadow-bot query), so
+        // the resulting "money/HP at the moment of death" figures it produced were
+        // unreliable. These columns capture the REAL final PlayerState directly at
+        // game-over time (GameRecorder.Save already receives the true live PlayerState
+        // objects, no resimulation involved) so future analysis has ground truth.
+        AddColumnIfMissing(conn, "games", "p1_final_income", "REAL");
+        AddColumnIfMissing(conn, "games", "p2_final_income", "REAL");
+        AddColumnIfMissing(conn, "games", "p1_final_money", "REAL");
+        AddColumnIfMissing(conn, "games", "p2_final_money", "REAL");
+        AddColumnIfMissing(conn, "games", "p1_final_hp_pct", "REAL");
+        AddColumnIfMissing(conn, "games", "p2_final_hp_pct", "REAL");
     }
 
     private static void AddColumnIfMissing(SqliteConnection conn, string table, string column, string type)
@@ -85,7 +102,10 @@ public class GameDatabase
     public void InsertGame(string id, string gameVersion, long playedAt,
         string p1Team, string p1Off, string p1Def, string p1Sig,
         string p2Team, string p2Off, string p2Def, string p2Sig,
-        int winner, long durationTicks, string gameMode = null, string opponentType = null)
+        int winner, long durationTicks, string gameMode = null, string opponentType = null,
+        double? p1FinalIncome = null, double? p2FinalIncome = null,
+        double? p1FinalMoney = null, double? p2FinalMoney = null,
+        double? p1FinalHpPct = null, double? p2FinalHpPct = null)
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
@@ -93,11 +113,14 @@ public class GameDatabase
             INSERT INTO games (id, game_version, played_at,
                 p1_team, p1_gadget_off, p1_gadget_def, p1_gadget_sig,
                 p2_team, p2_gadget_off, p2_gadget_def, p2_gadget_sig,
-                winner, duration_ticks, game_mode, opponent_type)
+                winner, duration_ticks, game_mode, opponent_type,
+                p1_final_income, p2_final_income, p1_final_money, p2_final_money,
+                p1_final_hp_pct, p2_final_hp_pct)
             VALUES ($id, $ver, $at,
                 $p1t, $p1o, $p1d, $p1s,
                 $p2t, $p2o, $p2d, $p2s,
-                $win, $dur, $mode, $opp)
+                $win, $dur, $mode, $opp,
+                $p1inc, $p2inc, $p1mon, $p2mon, $p1hp, $p2hp)
             """;
         cmd.Parameters.AddWithValue("$id",  id);
         cmd.Parameters.AddWithValue("$ver", gameVersion);
@@ -114,6 +137,12 @@ public class GameDatabase
         cmd.Parameters.AddWithValue("$dur", durationTicks);
         cmd.Parameters.AddWithValue("$mode", (object)gameMode ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$opp", (object)opponentType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p1inc", (object)p1FinalIncome ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p2inc", (object)p2FinalIncome ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p1mon", (object)p1FinalMoney ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p2mon", (object)p2FinalMoney ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p1hp", (object)p1FinalHpPct ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$p2hp", (object)p2FinalHpPct ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
