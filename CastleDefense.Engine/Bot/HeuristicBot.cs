@@ -809,6 +809,43 @@ namespace CastleDefense.Engine.Bot
         // losing every time to whichever gadget happens to be checked first.
         private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice;
 
+        // Looks up an enemy unit's actual spawn cost from its own team's roster --
+        // Unit (the runtime instance) only carries Tier/DefinitionId, not Cost, so this
+        // needs the owning player's Team to find the right roster.
+        private static double EstimateUnitCost(GameEngine engine, Unit u)
+        {
+            var owner = u.Side == 1 ? engine._state.Player1 : engine._state.Player2;
+            var roster = GameDataManager.Teams.FirstOrDefault(t => t.Color == owner.Team)?.Roster;
+            return roster?.FirstOrDefault(d => d.Id == u.DefinitionId)?.Cost ?? 0;
+        }
+
+        // Total $ value of enemy units within radius of position -- used to estimate
+        // whether an AOE gadget cast is actually worth its cost (see BigSpendJustified).
+        private static double EstimateEnemyValueNear(GameEngine engine, List<Unit> enemyUnits, float position, int radius)
+        {
+            return enemyUnits.Where(u => Math.Abs(u.Position - position) <= radius).Sum(u => EstimateUnitCost(engine, u));
+        }
+
+        // Marc's direct playtest feedback: watched the bot spend $200+ (a huge fraction
+        // of its money, with income nowhere near able to support it) on goo healing a
+        // dying wall against a single cheap attacking unit, while he calmly saved for
+        // his next investment and won the economy race unopposed. His framing: "the
+        // model should almost never spend a large proportion (80+%) of its money on a
+        // gadget unless it knows it is worth it" -- e.g. 5 tier4 units worth $50+ each
+        // justifies a $20 nuke, but 3 tier1 units worth $3 each do not, unless income is
+        // already high enough that upgrading the gadget's own XP is worth it on its own.
+        //
+        // estimatedEnemyValue should be 0 for gadgets that don't target enemies at all
+        // (heal/reinforcements/speed/wall/rage/wave/goo) -- there's no comparable $
+        // payoff to estimate for those, so a big spend there is only justified by
+        // already-high income (same carve-out Marc described), never by target value.
+        private const float BigSpendMoneyFraction = 0.8f;
+        private static bool BigSpendJustified(PlayerState me, GadgetDefinition def, double estimatedEnemyValue)
+        {
+            if (def.Cost < me.Money * BigSpendMoneyFraction) return true; // not actually a big spend relative to our money
+            return estimatedEnemyValue >= def.Cost || me.Income >= 50;
+        }
+
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
         // the loadout isn't fixed, so all four need real usage logic, not just whichever
         // one happened to be equipped when this was written.
@@ -825,13 +862,17 @@ namespace CastleDefense.Engine.Bot
             switch (family)
             {
                 case "snipe":
+                {
                     // No splash, no friendly fire, no self-castle-damage. SnipeEffect
                     // targets whichever enemy is nearest the given position, so aiming at
                     // our own castle makes it snipe whichever enemy is closest to reaching
                     // it -- directly preventing the exact chip damage that ends games,
                     // rather than chasing whoever hits hardest somewhere else on the field.
-                    used = engine.UseGadget(_side, def.Id, myCastlePos);
+                    var nearest = enemyUnits.OrderBy(u => Math.Abs(u.Position - myCastlePos)).First();
+                    if (BigSpendJustified(me, def, EstimateUnitCost(engine, nearest)))
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
+                }
 
                 case "freeze":
                     // Hits and freezes EVERY enemy unit on the field regardless of
@@ -850,7 +891,8 @@ namespace CastleDefense.Engine.Bot
                     // worth it against an actual cluster, and only where none of our own
                     // units would eat the same blast.
                     int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
-                    if (target.HasValue && enemyUnits.Count >= 2 && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
+                    if (target.HasValue && enemyUnits.Count >= 2 && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius)
+                        && BigSpendJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius)))
                         used = engine.UseGadget(_side, def.Id, target.Value);
                     break;
                 }
@@ -886,7 +928,7 @@ namespace CastleDefense.Engine.Bot
                             .ToList();
                         target = safe.Count > 0 ? (int)ProjectedPosition(safe[0], def.Delay) : (int?)null;
                     }
-                    if (target.HasValue)
+                    if (target.HasValue && BigSpendJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius)))
                         used = engine.UseGadget(_side, def.Id, target.Value);
                     break;
                 }
@@ -909,7 +951,10 @@ namespace CastleDefense.Engine.Bot
                 {
                     if (myUnits.Count == 0) return; // nothing to heal
                     float avgHpPct = myUnits.Average(u => u.MaxHealth > 0 ? (float)u.CurrentHealth / u.MaxHealth : 1f);
-                    if (avgHpPct < 0.85f)
+                    // None of these defense gadgets target enemies, so there's no $ value
+                    // to weigh the cost against -- BigSpendJustified(0) only lets a big
+                    // spend through when income is already high, same as the others below.
+                    if (avgHpPct < 0.85f && BigSpendJustified(me, def, 0))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
                 }
@@ -920,11 +965,12 @@ namespace CastleDefense.Engine.Bot
                     // real cost ($12 base) that competes with saving for the first
                     // InvestmentPrice ($18) -- see DeferForInvestment.
                     if (DeferForInvestment(me)) break;
-                    used = engine.UseGadget(_side, def.Id, myCastlePos);
+                    if (BigSpendJustified(me, def, 0))
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "speed":
-                    if (myUnits.Count > 0)
+                    if (myUnits.Count > 0 && BigSpendJustified(me, def, 0))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
@@ -935,7 +981,7 @@ namespace CastleDefense.Engine.Bot
                     // grants NO xp, which stalls its upgrade path if we keep trying anyway.
                     // Wait for the existing one to die before recasting.
                     bool alreadyHaveWall = engine._state.Units.Any(u => u.Side == _side && u.DefinitionId.StartsWith("wall"));
-                    if (alreadyHaveWall) break;
+                    if (alreadyHaveWall || !BigSpendJustified(me, def, 0)) break;
 
                     // WallEffect ignores the position for level 1 (fixed spawn point) but
                     // uses it directly for level 2/3, so place it in our own front line
@@ -965,11 +1011,17 @@ namespace CastleDefense.Engine.Bot
                     break;
 
                 case "rage":
-                    if (myUnits.Count > 0 && (inDanger || myUnits.Any(u => enemyUnits.Any(e => Math.Abs(e.Position - u.Position) < 250))))
+                    if (myUnits.Count > 0 && (inDanger || myUnits.Any(u => enemyUnits.Any(e => Math.Abs(e.Position - u.Position) < 250)))
+                        && BigSpendJustified(me, def, 0))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "divine":
+                    // Deliberately NOT gated by BigSpendJustified -- its own trigger
+                    // (critical HP or a genuine incoming mass while already in danger) is
+                    // already a strong, self-contained justification for spending big;
+                    // survival is the whole point of a panic button, not a cost-effectiveness
+                    // question a value gate should second-guess.
                     if (castleHpPct < 0.3f || (inDanger && enemyUnits.Count >= 3))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
@@ -979,12 +1031,19 @@ namespace CastleDefense.Engine.Bot
                     // like reinforcements, the cast itself has a real cost that can compete
                     // with saving for the first InvestmentPrice; see DeferForInvestment.
                     if (DeferForInvestment(me)) break;
-                    used = engine.UseGadget(_side, def.Id, myCastlePos);
+                    if (BigSpendJustified(me, def, 0))
+                        used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
 
                 case "goo":
                     {
-                        if (DeferForInvestment(me)) break;
+                        // The canonical case this whole gate was built for: Marc watched
+                        // the bot spend $200+ on goo healing a dying wall against one
+                        // cheap attacker while his own economy pulled ahead unopposed.
+                        // Healing doesn't target enemies, so there's no value to weigh
+                        // against the cost -- BigSpendJustified(0) only lets it through
+                        // once income is already high enough not to matter.
+                        if (DeferForInvestment(me) || !BigSpendJustified(me, def, 0)) break;
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
                         used = engine.UseGadget(_side, def.Id, target);
                         break;
@@ -995,7 +1054,7 @@ namespace CastleDefense.Engine.Bot
                     {
                         // Both of these only ever affect enemy units -- no friendly fire risk.
                         int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius), myCastlePos, def.Delay);
-                        if (target.HasValue)
+                        if (target.HasValue && BigSpendJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius))))
                             used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
                     }
@@ -1007,7 +1066,8 @@ namespace CastleDefense.Engine.Bot
                         // so only fire it where none of our own units would get caught in it.
                         int radius = Math.Max(150, def.Radius);
                         int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
-                        if (target.HasValue && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
+                        if (target.HasValue && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius)
+                            && BigSpendJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius)))
                             used = engine.UseGadget(_side, def.Id, target.Value);
                         break;
                     }
