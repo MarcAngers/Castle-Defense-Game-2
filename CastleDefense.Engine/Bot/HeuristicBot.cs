@@ -897,6 +897,7 @@ namespace CastleDefense.Engine.Bot
                 }
 
                 case "freeze":
+                {
                     // Hits and freezes EVERY enemy unit on the field regardless of
                     // position -- no friendly fire. Frozen units skip their whole
                     // attack/move step, so they take free hits while stunned. This is what
@@ -904,18 +905,39 @@ namespace CastleDefense.Engine.Bot
                     // defenders can otherwise permanently pin a much bigger army just by
                     // always having *something* in contact range.
                     //
-                    // Freeze does no direct damage of its own -- Marc's framing: "against a
-                    // $100 army it would see very little value by itself, but if you couple
-                    // it with a solid unit, that could multiply the value." Its entire
-                    // payoff is other units of ours capitalizing on the free hits, so
-                    // require an army of our own on the field to capitalize with (this also
-                    // covers the original chokepoint-stalemate case, which by definition
-                    // already has our own units pinned in contact). Previously had no
-                    // economic gate at all, unlike every other gadget -- add the standard
-                    // not-a-big-spend-or-income-is-high check too.
-                    if (myUnits.Count > 0 && BigSpendJustified(me, def, 0))
+                    // CORRECTION (Marc): freeze also deals a real, flat amount of direct
+                    // damage to every enemy hit -- FreezeEffect.Execute unconditionally
+                    // calls ApplyDamage(enemy, BaseValue, ...) before applying the Freeze
+                    // status, and BaseValue scales hard with level (10 / 150 / 1200 per
+                    // master_gadgets.csv). Against a wave of units with less HP than that
+                    // (every team's tier-1 unit has <=10 HP, so base-level freeze is a
+                    // guaranteed kill on any tier-1 swarm regardless of army size), it's
+                    // effectively a guaranteed-kill AOE, not just a CC multiplier -- value
+                    // it the same way nuke/firebomb value their blast: the $ cost of every
+                    // enemy actually killed outright by the flat damage (shield absorbs
+                    // damage before health -- see GameEngine.ApplyDamage -- so both must be
+                    // covered for a real kill). This is IN ADDITION to, not instead of, the
+                    // multiplier case below: a cast can be justified by either.
+                    double freezeKillValue = enemyUnits
+                        .Where(u => u.CurrentHealth + u.CurrentShield <= def.BaseValue)
+                        .Sum(u => EstimateUnitCost(engine, u));
+                    bool killValueJustifies = TargetValueJustified(me, def, freezeKillValue);
+
+                    // Beyond guaranteed kills, freeze's remaining value is a MULTIPLIER on
+                    // other units of ours capitalizing on the free hits against whatever
+                    // survives -- Marc's framing: "against a $100 army it would see very
+                    // little value by itself, but if you couple it with a solid unit, that
+                    // could multiply the value." Require an army of our own on the field to
+                    // capitalize with (this also still covers the original chokepoint-
+                    // stalemate case, which by definition already has our own units pinned
+                    // in contact). Previously had no economic gate of any kind -- add the
+                    // standard not-a-big-spend-or-income-is-high check too.
+                    bool multiplierJustifies = myUnits.Count > 0 && BigSpendJustified(me, def, 0);
+
+                    if (killValueJustifies || multiplierJustifies)
                         used = engine.UseGadget(_side, def.Id, 0);
                     break;
+                }
 
                 case "nuke":
                 {
@@ -1096,15 +1118,23 @@ namespace CastleDefense.Engine.Bot
                         // direct playtest: the bot cast goo (heals allies, slows enemies)
                         // against his own army attacking its castle with ZERO allied units
                         // of its own anywhere nearby -- there was nothing for the heal to
-                        // do. Goo's whole value is allies surviving to keep benefiting from
-                        // it (Marc: "their value can swing wildly depending if your allied
-                        // units are able to survive and continue being healed... or get
-                        // 1-shot and that value is lost") -- with no allies present at all,
-                        // that value is unconditionally zero. heal already bails the same
-                        // way for the same reason; goo never had the equivalent check.
-                        if (myUnits.Count == 0) return;
-                        if (DeferForInvestment(me) || !BigSpendJustified(me, def, 0)) break;
-                        int target = (int)myUnits.Average(u => u.Position);
+                        // do. Goo's heal value depends on allies surviving to keep
+                        // benefiting from it (Marc: "their value can swing wildly depending
+                        // if your allied units are able to survive and continue being
+                        // healed... or get 1-shot and that value is lost") -- with no allies
+                        // present at all, the HEAL half of goo is unconditionally zero.
+                        //
+                        // But goo has a second, genuinely independent value source: per
+                        // GooHazard.ProcessEffect, it unconditionally applies a real 0.5x-
+                        // speed Slow to ANY enemy standing in it, allies or not. That's a
+                        // "buy time" effect like wall/wave, not something that needs allies
+                        // at all -- so don't bail outright with no allies; only require them
+                        // for the heal-driven justification, and fall back to the same
+                        // inDanger time-bridge reasoning wall/wave use for the slow-only case.
+                        bool healUseCase = myUnits.Count > 0 && BigSpendJustified(me, def, 0);
+                        bool slowUseCase = inDanger;
+                        if (DeferForInvestment(me) || (!healUseCase && !slowUseCase)) break;
+                        int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
                         used = engine.UseGadget(_side, def.Id, target);
                         break;
                     }
