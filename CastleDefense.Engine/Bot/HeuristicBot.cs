@@ -23,6 +23,21 @@ namespace CastleDefense.Engine.Bot
         public float EnemyIsCloseDistance { get; init; } = 700f;
         public float RepairHpThreshold { get; init; } = 0.75f;
 
+        // Attack-vs-savings balance knobs (see HeuristicBot's own field comments for the
+        // full design). Marc's own explicit framing when he gave these: "those numbers I
+        // mentioned are pulled out of thin air" -- starting guesses only, meant to be
+        // swept (CastleDefense.BotArena's "paramsearch-attack" mode) rather than trusted
+        // as committed values. Defaults here are exactly those guesses.
+        // Tuned via CastleDefense.BotArena's "paramsearch-attack" mode (60-candidate
+        // random search, triage sample size) -- winning candidate ("cand57") scored
+        // 89.17% avg vs the original hand-picked guesses' 86.41% (+2.8) on the same
+        // triage matchup set. Still needs full two-replicate validation before being
+        // trusted -- see HeuristicBot's own comment for that result.
+        public float EnemyHpEvaluationSeconds { get; init; } = 27.04f; // how long to watch an ongoing push before judging its HP trend
+        public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 0.314f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
+        public int KillerInstinctHpThreshold { get; init; } = 2676; // absolute enemy castle HP -- below this, ignore savings discipline and go for the kill
+        public float AttackSpendFraction { get; init; } = 0.91f; // non-reactive spending capped at this fraction of the income RATE (a flow limit, not a fraction of the money pile)
+
         public static readonly HeuristicBotSettings Default = new HeuristicBotSettings();
     }
 
@@ -42,6 +57,8 @@ namespace CastleDefense.Engine.Bot
         public float LastDefenseScore { get; private set; }
         public float LastTimeToDeathSeconds { get; private set; }
         public float LastTimeToInvestSeconds { get; private set; }
+        public bool LastAttackDisengaged { get; private set; }
+        public bool LastKillerInstinct { get; private set; }
 
         // Running per-game tally of every successful action actually taken, indexed by
         // the same 14-action ID space as GetActionMask/ApplyAction (0=wait unused here,
@@ -94,6 +111,55 @@ namespace CastleDefense.Engine.Bot
         private readonly HashSet<Guid> _observedEnemyUnitIds = new HashSet<Guid>();
         private readonly HashSet<int> _observedEnemyTiers = new HashSet<int>();
         private const int MinEnemyUnitsForSpammerRead = 8;
+
+        // --- ATTACK-VS-SAVINGS BALANCE ---
+        // Marc's design, refined over two rounds of feedback:
+        // 1. Enemy investment landing while we're pushing their castle is the single
+        //    highest-confidence "this attack has failed strategically" signal -- an
+        //    instant swing regardless of any HP progress made. Always disengages.
+        // 2. Enemy castle HP is a REAL secondary signal, not a bad one -- Marc's own
+        //    correction to a first draft that dropped it entirely: "the more HP the
+        //    enemy is losing, the more effective the attack is... I still want the bot
+        //    to have that killer instinct." Essentially-zero HP loss over a real
+        //    evaluation window (EnemyHpEvaluationSeconds) is a clear stall signal; any
+        //    real, meaningful drain is a "keep the pressure on" signal and never forces
+        //    a disengage by itself.
+        // 3. If the enemy castle drops to a low absolute HP (KillerInstinctHpThreshold)
+        //    during an attack, that's "go for the kill" territory -- ignore savings
+        //    discipline (and even an active disengage cooldown) and spend freely to
+        //    finish it.
+        // 4. Never spend 100% of resources on offense -- but this must be a FLOW cap
+        //    (spending capped as a fraction of the INCOME RATE, so savings strictly
+        //    accrue over time), not a fraction of the current money stockpile. Marc's
+        //    own clarifying question caught this: an earlier version reserved 25% of
+        //    the current money pile, which only protects a snapshot -- it doesn't
+        //    guarantee spending stays below income, so it doesn't guarantee savings
+        //    actually GROW over time the way "10-20% of income" does.
+        //
+        // First cut of this system (a hard stall detector purely off enemy-castle-HP
+        // trajectory, no investment signal, no flow-based savings) was tried and
+        // reverted after regressing v23/Tier4 with no compensating win -- seeing HP as
+        // the ONLY signal, evaluated too strictly, was the problem. Second cut (enemy-
+        // investment signal + a STOCK-based 25%-of-money reserve, no HP signal at all)
+        // was a wash (real gains on Tier3/Tier8, real losses on Tier4/v21/v25/v7,
+        // v23 still down some) -- not committed, superseded by this version.
+        //
+        // The four knobs below (EnemyHpEvaluationSeconds, MinMeaningfulEnemyHpLossPct-
+        // PerSecond, KillerInstinctHpThreshold, AttackSpendFraction) live on
+        // HeuristicBotSettings, NOT as consts here -- Marc's own words when he gave
+        // them: "those numbers I mentioned are pulled out of thin air," meant to be
+        // swept (CastleDefense.BotArena's "paramsearch-attack" mode) rather than
+        // trusted as committed values. AttackEngageDistance/AttackDisengageCooldown-
+        // Seconds/AttackAllowanceCapSeconds stayed as plain consts -- Marc didn't flag
+        // those three as guesses, so they weren't included in the sweep.
+        private const float AttackEngageDistance = 700f; // matches EnemyIsCloseDistance's scale, mirrored toward the enemy castle
+        private const float AttackDisengageCooldownSeconds = 15f; // full savings mode for this long after a stall/instant-swing trigger
+        private const float AttackAllowanceCapSeconds = 10f; // cap how much unspent allowance can bank while idle, so this stays a flow limit rather than turning into an unbounded stockpile reserve
+        private long _attackStartTick = -1; // -1 = not currently tracking a push
+        private int _enemyHpAtAttackStart;
+        private int _enemyInvestCountAtAttackStart = -1;
+        private long _disengageUntilTick = 0;
+        private double _attackSpendAllowance = 0;
 
         public HeuristicBot(int side, HeuristicBotSettings settings = null)
         {
@@ -534,9 +600,72 @@ namespace CastleDefense.Engine.Bot
             // hasn't been tried. Reverted -- see [[project_ai_opponent_heuristic]] for the
             // full three-variant writeup. BuyWaveBreaker/confidentStaticSpammer/
             // observedEnemySpamTier tracking left in place as dead code for that attempt.
-            if (!inDanger && me.Income >= 50)
+
+            // --- ATTACK-VS-SAVINGS EVALUATION --- (see field comments above for the design)
+            var enemy = _side == 1 ? state.Player2 : state.Player1;
+            int enemyCastlePos = _side == 1 ? GameEngine.MAP_WIDTH - 200 : 200;
+            bool pushingEnemyCastle = myUnits.Any(u => Math.Abs(u.Position - enemyCastlePos) < AttackEngageDistance);
+
+            if (pushingEnemyCastle && _attackStartTick < 0)
             {
-                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits);
+                _attackStartTick = state.CurrentTick;
+                _enemyHpAtAttackStart = enemy.CastleHealth;
+                _enemyInvestCountAtAttackStart = enemy.InvestmentCount;
+            }
+            else if (!pushingEnemyCastle)
+            {
+                // No push in progress -- the next one gets its own fresh snapshot
+                // rather than inheriting a stale comparison point.
+                _attackStartTick = -1;
+                _enemyInvestCountAtAttackStart = -1;
+            }
+            else
+            {
+                // Signal 1 (highest confidence): the enemy successfully invested
+                // while we were pushing their castle -- an instant swing regardless
+                // of any HP progress made.
+                if (_enemyInvestCountAtAttackStart >= 0 && enemy.InvestmentCount > _enemyInvestCountAtAttackStart)
+                {
+                    _disengageUntilTick = state.CurrentTick + (long)(AttackDisengageCooldownSeconds * 30);
+                    _enemyInvestCountAtAttackStart = enemy.InvestmentCount;
+                }
+
+                // Signal 2: after a real evaluation window, is this attack actually
+                // hurting them? Essentially-zero HP loss over the window is a clear
+                // stall; any real, meaningful drain (fast or slow) is a "keep the
+                // pressure on" signal and never forces a disengage by itself.
+                float elapsedSeconds = (state.CurrentTick - _attackStartTick) / 30f;
+                if (elapsedSeconds >= _settings.EnemyHpEvaluationSeconds)
+                {
+                    float enemyHpLostPct = enemy.CastleMaxHealth > 0
+                        ? 100f * (_enemyHpAtAttackStart - enemy.CastleHealth) / enemy.CastleMaxHealth
+                        : 0f;
+                    // Rate * window, not a flat total -- lets the sweep tune the rate
+                    // independently of how long the window is.
+                    float minMeaningfulPct = _settings.MinMeaningfulEnemyHpLossPctPerSecond * _settings.EnemyHpEvaluationSeconds;
+                    if (enemyHpLostPct < minMeaningfulPct)
+                    {
+                        _disengageUntilTick = state.CurrentTick + (long)(AttackDisengageCooldownSeconds * 30);
+                    }
+                    // Rebaseline either way -- keep judging fresh progress against a
+                    // recent snapshot, not an increasingly stale starting point.
+                    _attackStartTick = state.CurrentTick;
+                    _enemyHpAtAttackStart = enemy.CastleHealth;
+                }
+            }
+
+            // Signal 3: killer instinct -- the enemy castle is low enough in
+            // absolute terms that finishing them off outweighs normal savings
+            // discipline, overriding even a just-triggered disengage cooldown.
+            bool killerInstinct = enemy.CastleHealth <= _settings.KillerInstinctHpThreshold;
+            LastKillerInstinct = killerInstinct;
+
+            bool attackDisengaged = state.CurrentTick < _disengageUntilTick && !killerInstinct;
+            LastAttackDisengaged = attackDisengaged;
+
+            if (!inDanger && me.Income >= 50 && !attackDisengaged)
+            {
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct);
             }
         }
 
@@ -584,7 +713,7 @@ namespace CastleDefense.Engine.Bot
         // (they just queue up waiting for a turn to attack).
         private const int MaxOwnUnitsOnField = 120;
 
-        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits)
+        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false)
         {
             LastUnitsPurchased = 0;
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
@@ -698,8 +827,9 @@ namespace CastleDefense.Engine.Bot
             // unit-count requirement -- the Income>=50 gate upstream already establishes
             // "this is not the early game" far more reliably than a live battlefield
             // headcount combat losses can suppress at will.
-            double reserve = 0;
-            if (!preferDefense)
+            double gadgetReserve = 0;
+            double spendable = me.Money;
+            if (!preferDefense && !killerInstinct)
             {
                 double gadgetGap = double.MaxValue;
                 foreach (var g in new[] { me.OffensiveGadget, me.DefensiveGadget, me.SignatureGadget })
@@ -710,12 +840,27 @@ namespace CastleDefense.Engine.Bot
                     if (g.Cost > me.Money) gadgetGap = Math.Min(gadgetGap, g.Cost - me.Money);
                 }
                 // Cap at 70% of current money -- replacements still need to keep flowing.
-                if (gadgetGap != double.MaxValue) reserve = Math.Min(gadgetGap, me.Money * 0.7);
+                gadgetReserve = gadgetGap != double.MaxValue ? Math.Min(gadgetGap, me.Money * 0.7) : 0;
+
+                // Flow-based savings cap (Marc's explicit correction to an earlier
+                // stock-based version): accrue a spending "allowance" from the INCOME
+                // RATE at AttackSpendFraction, not from the current money pile. Spending
+                // is capped by this allowance and the allowance is debited by exactly
+                // what's spent below, so cumulative attack spending can never outpace
+                // cumulative income -- the complement fraction (~15%) is guaranteed net
+                // savings growth over time regardless of how big the stockpile is.
+                // Capped at AttackAllowanceCapSeconds worth so unspent allowance can't
+                // bank indefinitely while idle, which would turn this back into a
+                // stockpile-shaped mechanic instead of a flow-shaped one.
+                float decisionSeconds = DecisionIntervalTicks / 30f;
+                _attackSpendAllowance = Math.Min(
+                    _attackSpendAllowance + me.Income * decisionSeconds * _settings.AttackSpendFraction,
+                    me.Income * AttackAllowanceCapSeconds * _settings.AttackSpendFraction);
+
+                spendable = Math.Max(0, Math.Min(me.Money - gadgetReserve, _attackSpendAllowance));
             }
 
-            LastSpendDebug = $"money={me.Money:F1} reserve={reserve:F1} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= me.Money - reserve)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
-
-            double spendable = me.Money - reserve;
+            LastSpendDebug = $"money={me.Money:F1} spendable={spendable:F1} allowance={_attackSpendAllowance:F1} killerInstinct={killerInstinct} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= spendable)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
             var matchedPick = tierMatched.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
             var outclassPick = outclassing.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
 
@@ -737,6 +882,7 @@ namespace CastleDefense.Engine.Bot
             if (engine.SpawnUnit(_side, pick.def.Id))
             {
                 LastUnitsPurchased++;
+                if (!preferDefense && !killerInstinct) _attackSpendAllowance = Math.Max(0, _attackSpendAllowance - pick.def.Cost);
                 if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ActionCounts[pick.def.Tier]++;
             }
         }

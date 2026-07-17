@@ -615,6 +615,136 @@ if (args.Length > 0 && args[0] == "paramsearch")
     return;
 }
 
+if (args.Length > 0 && args[0] == "paramsearch-attack")
+{
+    // Same harness shape as "paramsearch" above, but targets the four attack-vs-
+    // savings knobs on HeuristicBotSettings (EnemyHpEvaluationSeconds,
+    // MinMeaningfulEnemyHpLossPctPerSecond, KillerInstinctHpThreshold,
+    // AttackSpendFraction) instead of the danger-trigger knobs. Marc's own framing
+    // when he gave the starting values: "those numbers I mentioned are pulled out
+    // of thin air... we should run some experiments to tweak those numbers." Holds
+    // the four already-tuned danger-trigger knobs fixed at their defaults --
+    // searching all 8 at once would need far more candidates for the same coverage
+    // and risks perturbing settings that were already validated separately.
+    int candidateCount = args.Length > 1 && int.TryParse(args[1], out var cc) ? cc : 40;
+    var searchRng = new Random();
+
+    var dir = FindLeagueModelsDir();
+    // Same deliberately mixed subset as "paramsearch": the two hardest matchups all
+    // project (v4, v7), one more mid-weak one (v23), and two already-strong ones
+    // (v14, v21) as regression canaries. Tier4 spam and v23 in particular already
+    // showed real, repeatable regressions in this system's hand-tuned iterations --
+    // exactly the canaries this search needs to watch closest.
+    var modelFragments = new[] { "v4", "v7", "v23", "v14", "v21" };
+    var resolvedModels = new List<(string label, string path)>();
+    if (dir != null)
+    {
+        foreach (var frag in modelFragments)
+        {
+            var match = Directory.GetFiles(dir, "*.onnx").FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains(frag, StringComparison.OrdinalIgnoreCase));
+            if (match != null) resolvedModels.Add((Path.GetFileNameWithoutExtension(match), match));
+        }
+    }
+    if (resolvedModels.Count == 0) Console.WriteLine("WARNING: no league_models found -- paramsearch-attack will only use spam tiers.");
+
+    const int spamGamesPerTier = 60;
+    const int modelGamesPerOpponent = 40;
+
+    double RunOneMatchup(Func<int, IArenaOpponent> botFactory, Func<int, IArenaOpponent> oppFactory, bool headStart, int games)
+    {
+        int decisiveWins = 0;
+        for (int i = 0; i < games; i++)
+        {
+            bool botIsP1 = i % 2 == 0;
+            int botSide = botIsP1 ? 1 : 2;
+            var (state, engine) = CreateGame(headStart);
+            var bot = botFactory(botSide);
+            var opp = oppFactory(botIsP1 ? 2 : 1);
+            while (!state.IsGameOver)
+            {
+                engine.Tick();
+                if (botIsP1) { bot.Update(engine); opp.Update(engine); }
+                else { opp.Update(engine); bot.Update(engine); }
+            }
+            (opp as IDisposable)?.Dispose();
+            if (state.WinnerSide == botSide && !state.IsTimeLimit) decisiveWins++;
+        }
+        return 100.0 * decisiveWins / games;
+    }
+
+    (double avgScore, Dictionary<string, double> perMatchup) EvaluateCandidate(HeuristicBotSettings settings)
+    {
+        var results = new Dictionary<string, double>();
+        for (int t = 1; t <= 8; t++)
+        {
+            int tt = t;
+            results[$"Tier{tt}Spam"] = RunOneMatchup(
+                side => new HeuristicBotAdapter(side, settings),
+                side => new TierSpamBaseline(side, tt),
+                false, spamGamesPerTier);
+        }
+        foreach (var (label, path) in resolvedModels)
+        {
+            results[label] = RunOneMatchup(
+                side => new HeuristicBotAdapter(side, settings),
+                side => new AIModelOpponent(side, path),
+                true, modelGamesPerOpponent);
+        }
+        double avg = results.Values.Average();
+        return (avg, results);
+    }
+
+    HeuristicBotSettings RandomAttackSettings() => new HeuristicBotSettings
+    {
+        // Danger-trigger knobs held fixed at their already-validated defaults.
+        EnemyHpEvaluationSeconds = (float)(8 + searchRng.NextDouble() * (30 - 8)),
+        MinMeaningfulEnemyHpLossPctPerSecond = (float)(0.05 + searchRng.NextDouble() * (2.0 - 0.05)),
+        KillerInstinctHpThreshold = (int)(500 + searchRng.NextDouble() * (10000 - 500)),
+        AttackSpendFraction = (float)(0.55 + searchRng.NextDouble() * (0.97 - 0.55)),
+    };
+
+    string outputDir = args.Length > 2 ? args[2] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard"));
+    Directory.CreateDirectory(outputDir);
+    string searchCsvPath = Path.Combine(outputDir, "paramsearch_attack_results.csv");
+    using var searchCsv = new StreamWriter(searchCsvPath, false);
+    var matchupLabels = Enumerable.Range(1, 8).Select(t => $"Tier{t}Spam").Concat(resolvedModels.Select(m => m.label)).ToList();
+    searchCsv.WriteLine("candidate,hpEvalSeconds,minHpLossPctPerSec,killerInstinctHp,attackSpendFraction,avgScore," + string.Join(",", matchupLabels));
+
+    Console.WriteLine($"Attack-savings parameter search: {candidateCount} candidates (+1 baseline), {spamGamesPerTier} games/spam-tier, {modelGamesPerOpponent} games/model ({resolvedModels.Count} models: {string.Join(", ", resolvedModels.Select(m => m.label))})\n");
+
+    var allCandidates = new List<(string name, HeuristicBotSettings settings, double avgScore, Dictionary<string, double> perMatchup)>();
+
+    void EvaluateAndLog(string name, HeuristicBotSettings settings)
+    {
+        var swc = System.Diagnostics.Stopwatch.StartNew();
+        var (avg, results) = EvaluateCandidate(settings);
+        allCandidates.Add((name, settings, avg, results));
+        searchCsv.WriteLine($"{name},{settings.EnemyHpEvaluationSeconds:F2},{settings.MinMeaningfulEnemyHpLossPctPerSecond:F3},{settings.KillerInstinctHpThreshold},{settings.AttackSpendFraction:F3},{avg:F2}," +
+            string.Join(",", matchupLabels.Select(m => results[m].ToString("F1"))));
+        searchCsv.Flush();
+        Console.WriteLine($"[{swc.Elapsed:mm\\:ss}] {name,-12} hpEval={settings.EnemyHpEvaluationSeconds:F1}s minLossRate={settings.MinMeaningfulEnemyHpLossPctPerSecond:F3}%/s killerHp={settings.KillerInstinctHpThreshold} spendFrac={settings.AttackSpendFraction:F2}  =>  avg {avg:F2}%");
+    }
+
+    EvaluateAndLog("baseline", HeuristicBotSettings.Default);
+    for (int c = 1; c <= candidateCount; c++)
+        EvaluateAndLog($"cand{c}", RandomAttackSettings());
+
+    var baseline = allCandidates.First(c => c.name == "baseline");
+    var ranked = allCandidates.OrderByDescending(c => c.avgScore).ToList();
+
+    Console.WriteLine("\n=== Top 8 candidates by average decisive win rate across all tested matchups ===");
+    Console.WriteLine($"baseline: avg {baseline.avgScore:F2}%  (" + string.Join(", ", matchupLabels.Select(m => $"{m}={baseline.perMatchup[m]:F0}%")) + ")\n");
+    foreach (var c in ranked.Take(8))
+    {
+        string marker = c.name == "baseline" ? " <== baseline" : "";
+        Console.WriteLine($"{c.name,-12} avg {c.avgScore,6:F2}%  (delta {c.avgScore - baseline.avgScore:+0.0;-0.0}){marker}");
+        Console.WriteLine($"    hpEvalSeconds={c.settings.EnemyHpEvaluationSeconds:F2} minLossPctPerSec={c.settings.MinMeaningfulEnemyHpLossPctPerSecond:F3} killerInstinctHp={c.settings.KillerInstinctHpThreshold} attackSpendFraction={c.settings.AttackSpendFraction:F3}");
+        Console.WriteLine("    " + string.Join(", ", matchupLabels.Select(m => $"{m}={c.perMatchup[m]:F0}%")));
+    }
+    Console.WriteLine($"\nWrote {searchCsvPath}");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "loadouts")
 {
     string opponent = args.Length > 1 ? args[1] : "balanced";
