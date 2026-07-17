@@ -680,11 +680,26 @@ namespace CastleDefense.Engine.Bot
             // still worth protecting a little: units are cheap enough to always win the
             // "who's affordable first" race against them, which can starve a gadget of the
             // money needed to ever fire even though it's checked earlier the same decision.
-            // Only bother once a minimal army (10 units) is out, and only during
-            // non-reactive spending -- while actively clearing a wave off the castle
-            // (preferDefense), survival comes first and nothing should be held back.
+            // Only during non-reactive spending -- while actively clearing a wave off the
+            // castle (preferDefense), survival comes first and nothing should be held back.
+            //
+            // Used to ALSO require ownUnitCount >= 10 before bothering with a reserve at
+            // all. Marc's report (white team stops using its always-positive-EV cash
+            // gadget the moment it starts attacking): traced two fresh recordings and
+            // confirmed cash (15s cooldown) fired like clockwork every ~15s for the whole
+            // early/mid game, then stopped completely the moment a sustained tier6/7
+            // push began, for the rest of a 150-260s game -- exactly the reported bug.
+            // Root cause: SpendOnUnits(preferDefense:false) is only ever reached once
+            // Income>=50 (Decide()'s own gate), already a very mature economy -- but the
+            // ownUnitCount>=10 condition measures the STANDING army on the field, which
+            // during an active push can stay under 10 indefinitely (units die at the
+            // front about as fast as they're produced), so the reserve that's supposed to
+            // protect gadget affordability never engaged for the entire push. Dropped the
+            // unit-count requirement -- the Income>=50 gate upstream already establishes
+            // "this is not the early game" far more reliably than a live battlefield
+            // headcount combat losses can suppress at will.
             double reserve = 0;
-            if (!preferDefense && ownUnitCount >= 10)
+            if (!preferDefense)
             {
                 double gadgetGap = double.MaxValue;
                 foreach (var g in new[] { me.OffensiveGadget, me.DefensiveGadget, me.SignatureGadget })
