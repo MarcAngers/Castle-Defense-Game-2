@@ -15,6 +15,14 @@ namespace CastleDefense.Api.Services
         private readonly ConcurrentDictionary<string, GameEngine> _lobbyGames = new();
         private readonly ConcurrentDictionary<string, GameRecorder> _recorders = new();
         private readonly ConcurrentDictionary<string, Func<GameState, int>> _leagueOpponents = new();
+        // Training League's "watch mode": both sides are AI, the connecting browser is
+        // a pure spectator (see GameHub.JoinGame's "league" branch). P2 is always the
+        // HeuristicBot (via _heuristicOpponents, same mechanism singleplayer already
+        // uses); this dictionary drives P1 instead, via a specific ONNX league model.
+        // Separate from _leagueOpponents (which only ever drives side 2) so Practice
+        // mode -- which also uses "league"'s sibling _leagueOpponents mechanism for a
+        // human-picked P2 opponent -- can never have its real human P1 overridden.
+        private readonly ConcurrentDictionary<string, Func<GameState, int>> _leagueP1Opponents = new();
         // HeuristicBot doesn't fit the Func<GameState,int> pattern above -- it drives
         // engine.Invest/Repair/SpawnUnit/UseGadget directly (and can take more than one
         // of those in a single decision, e.g. a gadget cast AND an investment), and it
@@ -107,6 +115,27 @@ namespace CastleDefense.Api.Services
 
             _leagueOpponents[gameId] = opponent;
             _opponentDescriptions[gameId] = description;
+        }
+
+        // Training League "watch mode": P1 = castle_defense_p1_v4 (ONNX, via the same
+        // league_models pool used elsewhere), P2 = HeuristicBot -- the connecting
+        // browser is a spectator, not a player (see GameHub.JoinGame's "league"
+        // branch, which no longer assigns Player1.ConnectionId to the caller). Built
+        // per Marc's request to watch this specific matchup play out and diagnose why
+        // it's the bot's single worst one, mirroring the "system to watch the bots
+        // play each other" he'd set up before.
+        public void SetupTrainingLeagueWatchMatch(string gameId)
+        {
+            var v4 = _leagueModels.FirstOrDefault(m => m.name.Contains("v4", StringComparison.OrdinalIgnoreCase));
+            if (v4.brain != null)
+            {
+                _leagueP1Opponents[gameId] = state => v4.brain.GetBestAction(
+                    state.GetStateVector(1), state.GetActionMask(1));
+            }
+            _heuristicOpponents[gameId] = new HeuristicBot(2);
+            _opponentDescriptions[gameId] = v4.brain != null
+                ? $"leaguewatch:{v4.name}_vs_heuristic"
+                : "leaguewatch:v4_model_missing_vs_heuristic";
         }
 
         // Practice mode: same opponent-execution mechanism as Training League
@@ -278,6 +307,16 @@ namespace CastleDefense.Api.Services
                                 if (p1Action != 0) engine.ApplyAction(1, p1Action);
                             }
 
+                            // Training League watch mode's P1 (v4 ONNX) -- only present
+                            // for games set up via SetupTrainingLeagueWatchMatch; Practice
+                            // mode's "league" sibling never populates this, so a real human
+                            // P1 there is never touched.
+                            if (_leagueP1Opponents.TryGetValue(gameId, out var p1Func))
+                            {
+                                int p1Action = p1Func(engine._state);
+                                if (p1Action != 0) engine.ApplyAction(1, p1Action);
+                            }
+
                             // P2 AI / opponent
                             if ((engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
                                 engine._state.GameMode == "watch") && !_heuristicOpponents.ContainsKey(gameId))
@@ -337,6 +376,7 @@ namespace CastleDefense.Api.Services
                     if (engine._state.IsGameOver)
                     {
                         _leagueOpponents.TryRemove(gameId, out _);
+                        _leagueP1Opponents.TryRemove(gameId, out _);
                         _heuristicOpponents.TryRemove(gameId, out _);
                         _opponentDescriptions.TryRemove(gameId, out var opponentDescription);
 

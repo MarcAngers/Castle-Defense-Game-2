@@ -25,19 +25,24 @@ namespace CastleDefense.Api.Hubs
                 return;
             }
 
-            // Training League: server assigns everything — skip client team/loadout entirely
+            // Training League: watch castle_defense_p1_v4 (P1) play HeuristicBot (P2),
+            // both with random teams/loadouts. Both sides are AI-controlled -- the
+            // connecting browser is a pure spectator (side 0), never assigned either
+            // player's ConnectionId, so it can't accidentally act for either side (the
+            // Invest/Repair/SpawnUnit/UseGadget handlers below already no-op for any
+            // caller that isn't recognized as Player1 or Player2).
             if (game._state.GameMode == "league")
             {
                 lock (game)
                 {
-                    if (!string.IsNullOrEmpty(game._state.Player1.ConnectionId)) return;
+                    if (game._state.Player1.ConnectionId == "AI_BOT") return; // already set up
 
                     int timeSkip = Math.Max(_leagueRng.Next(-8, 9), 0);
                     string upg   = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
 
                     game._state.Player1 = new PlayerState(timeSkip);
                     game._state.Player1.Side         = 1;
-                    game._state.Player1.ConnectionId = Context.ConnectionId;
+                    game._state.Player1.ConnectionId = "AI_BOT";
                     game._state.Player1.Team         = GameDataManager.GetRandomTeam();
                     game._state.Player1.SetLoadout(new[] {
                         GameDataManager.GetRandomOGadgetId()  + upg,
@@ -61,11 +66,11 @@ namespace CastleDefense.Api.Hubs
 
                     game._state.CurrentTick = 30 * 30 * timeSkip;
                     game.RewirePlayerEvents();
-                    _gameService.SetupLeagueOpponent(gameId, timeSkip);
+                    _gameService.SetupTrainingLeagueWatchMatch(gameId);
                 }
 
                 await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-                await Clients.Caller.SendAsync("GameJoined", 1, game._state);
+                await Clients.Caller.SendAsync("GameJoined", 0, game._state);
                 _gameService.StartGame(gameId);
                 return;
             }
