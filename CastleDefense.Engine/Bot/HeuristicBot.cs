@@ -420,7 +420,7 @@ namespace CastleDefense.Engine.Bot
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos);
-            TryUseDefenseGadget(engine, me, myUnits, myCastlePos, inDanger);
+            TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger);
             TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct);
 
             // --- MILITARY / ECONOMY ---
@@ -1153,7 +1153,7 @@ namespace CastleDefense.Engine.Bot
         }
 
         // The defense slot can be any of "heal" / "reinforcements" / "speed" / "wall".
-        private void TryUseDefenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, int myCastlePos, bool inDanger)
+        private void TryUseDefenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger)
         {
             var def = me.DefensiveGadget;
             if (!IsReady(me, def)) return;
@@ -1208,7 +1208,14 @@ namespace CastleDefense.Engine.Bot
                     // pressed for time (inDanger); otherwise fall back to the normal
                     // not-a-big-spend gate so it can still be used opportunistically once
                     // cheap/affordable without meaningfully competing with investing.
-                    if (!inDanger && !BigSpendJustified(me, def, 0)) break;
+                    //
+                    // Same trap as goo's heal case (see its own comment): BigSpendJustified's
+                    // "cost is <80% of current money" branch approves this unconditionally
+                    // once money is high enough, with no regard for whether there's anything
+                    // to tank at all. A wall with zero enemies on the field delays nothing --
+                    // require an enemy present before considering it on that basis (inDanger
+                    // already implies a real, close threat on its own, so it's untouched).
+                    if (!inDanger && (enemyUnits.Count == 0 || !BigSpendJustified(me, def, 0))) break;
 
                     // WallEffect ignores the position for level 1 (fixed spawn point) but
                     // uses it directly for level 2/3, so place it in our own front line
