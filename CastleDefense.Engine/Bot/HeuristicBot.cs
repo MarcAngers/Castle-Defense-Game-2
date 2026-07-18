@@ -34,16 +34,7 @@ namespace CastleDefense.Engine.Bot
         // triage matchup set. Still needs full two-replicate validation before being
         // trusted -- see HeuristicBot's own comment for that result.
         public float EnemyHpEvaluationSeconds { get; init; } = 27.04f; // how long to watch an ongoing push before judging its HP trend
-        // Playtest value: Marc wants to feel out 0.1%/s himself before settling on a
-        // final number. Previously shipped at his literal 5.0f (see commit
-        // 3aa24d18) -- that pairing with the 27.04s window makes the "still working"
-        // bar 135% of max HP, mathematically unreachable, so the signal degraded into
-        // a periodic forced-disengage cycle rather than a real effectiveness read
-        // (see HeuristicBot's own comment/memory for that finding). 0.1%/s times the
-        // same 27.04s window is a much more reachable ~2.7% bar. Not yet validated at
-        // the project's usual two-replicate discipline -- this is an experiential
-        // playtest config pending Marc's feedback, not a benchmarked decision.
-        public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 0.1f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
+        public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 0.314f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
         public int KillerInstinctHpThreshold { get; init; } = 2676; // absolute enemy castle HP -- below this, ignore savings discipline and go for the kill
         public float AttackSpendFraction { get; init; } = 0.91f; // non-reactive spending capped at this fraction of the income RATE (a flow limit, not a fraction of the money pile)
 
@@ -672,24 +663,7 @@ namespace CastleDefense.Engine.Bot
             bool attackDisengaged = state.CurrentTick < _disengageUntilTick && !killerInstinct;
             LastAttackDisengaged = attackDisengaged;
 
-            // --- COUNTER-TIER-8 PRIORITY SHIFT ---
-            // Marc's own game-design framing: the first tier-8 fielded is meant to be a
-            // near-guaranteed win unless the opponent can field one of their own -- so
-            // the moment the ENEMY has one on the field, racing to the $25k (7th)
-            // investment threshold becomes the priority that matters, overriding normal
-            // army spending (investing itself is already handled as the standing top
-            // priority earlier in this method; this just stops competing with it for the
-            // same dollars). Once we've reached that threshold ourselves, tier-8s are
-            // "pretty affordable" per Marc's own words and this shift is no longer
-            // needed -- richMode (now firing at 1x a tier-8's cost, not 3x) already
-            // buys them freely from there, and gadgets are already unconstrained by cost
-            // once Income>=50 (true many times over past $25k). killerInstinct still
-            // wins even over this -- finishing a winning fight matters more than banking
-            // savings for a threshold that's about to be moot anyway.
-            bool enemyHasTier8 = enemyUnits.Any(u => u.Tier == 8);
-            bool racingToCounterTier8 = enemyHasTier8 && me.InvestmentCount < 7 && !killerInstinct;
-
-            if (!inDanger && me.Income >= 50 && !attackDisengaged && !racingToCounterTier8)
+            if (!inDanger && me.Income >= 50 && !attackDisengaged)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct);
             }
@@ -765,15 +739,8 @@ namespace CastleDefense.Engine.Bot
             // richMode now fires on affordability alone (comfortably afford the best unit
             // several times over), matching what a human clearly does once money stops
             // being the constraint: buy the best unit, not the most cost-efficient one.
-            // Multiplier lowered from 3x to 1x per Marc's explicit game-design intent:
-            // "you don't need $40k before spawning a tier 8... let the bot spawn a tier
-            // 8 whenever it can afford to. If you're at that level of income then a
-            // stream of lower tier units isn't a huge drain on your economy." The
-            // richMode/RawPower switch itself was already validated (see the comment
-            // above) -- this only changes WHEN it kicks in, not whether it's the right
-            // thing to do once it does.
             double topCost = roster.Where(u => u.Cost > 0).Select(u => (double)u.Cost).DefaultIfEmpty(1).Max();
-            bool richMode = me.Money >= topCost * 1.0;
+            bool richMode = me.Money >= topCost * 3;
             int cap = (richMode || ownUnitCount >= MaxOwnUnitsOnField) ? MaxOwnUnitsOnField * 2 : MaxOwnUnitsOnField;
 
             // First cut of this fix applied richMode's RawPower scoring during REACTIVE
