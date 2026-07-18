@@ -1304,7 +1304,22 @@ namespace CastleDefense.Engine.Bot
                         // at all -- so don't bail outright with no allies; only require them
                         // for the heal-driven justification, and fall back to the same
                         // inDanger time-bridge reasoning wall/wave use for the slow-only case.
-                        bool healUseCase = myUnits.Count > 0 && BigSpendJustified(me, def, 0);
+                        //
+                        // A third bug, found from Marc's report of the bot repeatedly
+                        // casting goo over its own idle wall with ZERO enemies anywhere on
+                        // the field (he'd never spawned a single unit): BigSpendJustified's
+                        // FIRST branch ("cost is <80% of current money, don't sweat it")
+                        // approves goo unconditionally whenever money climbs past ~$87.50
+                        // (Cost 70 / 0.8), with no regard to income OR the estimatedEnemyValue
+                        // argument passed in -- it was only ever meant as a "this is basically
+                        // free, don't overthink a REAL opportunity" shortcut, not a substitute
+                        // for there being any value at all. With no enemy on the field, an
+                        // idle ally (even just the wall) isn't taking damage and has nothing
+                        // to heal -- myUnits.Count>0 alone can't tell "ally is fighting" apart
+                        // from "ally is standing there doing nothing." Require an enemy to
+                        // actually be present for the heal case, same as the slow case already
+                        // requires via inDanger.
+                        bool healUseCase = myUnits.Count > 0 && enemyUnits.Count > 0 && BigSpendJustified(me, def, 0);
                         bool slowUseCase = inDanger;
                         if (DeferForInvestment(me) || (!healUseCase && !slowUseCase)) break;
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
