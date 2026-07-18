@@ -34,13 +34,16 @@ namespace CastleDefense.Engine.Bot
         // triage matchup set. Still needs full two-replicate validation before being
         // trusted -- see HeuristicBot's own comment for that result.
         public float EnemyHpEvaluationSeconds { get; init; } = 27.04f; // how long to watch an ongoing push before judging its HP trend
-        // Overridden from the sweep's winning 0.314 to Marc's own explicit design call:
-        // the training opponents don't play a good defend-and-invest game, so a mere
-        // 0.3%/s drain reads as "working" against them in a way it wouldn't against a
-        // real, competent defender. His number ships as the default regardless of what
-        // the benchmark prefers -- see HeuristicBot's own comment for the validated
-        // delta and a real interaction this surfaced with the evaluation window.
-        public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 5.0f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
+        // Playtest value: Marc wants to feel out 0.1%/s himself before settling on a
+        // final number. Previously shipped at his literal 5.0f (see commit
+        // 3aa24d18) -- that pairing with the 27.04s window makes the "still working"
+        // bar 135% of max HP, mathematically unreachable, so the signal degraded into
+        // a periodic forced-disengage cycle rather than a real effectiveness read
+        // (see HeuristicBot's own comment/memory for that finding). 0.1%/s times the
+        // same 27.04s window is a much more reachable ~2.7% bar. Not yet validated at
+        // the project's usual two-replicate discipline -- this is an experiential
+        // playtest config pending Marc's feedback, not a benchmarked decision.
+        public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 0.1f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
         public int KillerInstinctHpThreshold { get; init; } = 2676; // absolute enemy castle HP -- below this, ignore savings discipline and go for the kill
         public float AttackSpendFraction { get; init; } = 0.91f; // non-reactive spending capped at this fraction of the income RATE (a flow limit, not a fraction of the money pile)
 
