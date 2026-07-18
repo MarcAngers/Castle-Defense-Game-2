@@ -12,6 +12,25 @@ export default function initGameScreen() {
     document.getElementById('game-over-title').innerHTML = 'P' + connection.winnerSide + ' WINS!!!';
     document.getElementById('game-time').innerHTML = 'GAME TIME: ' + formatGameTime(connection.latestState.currentTick);
 
+    document.getElementById('game-over-id-text').innerText = connection.currentGameId || '------';
+
+    const btnCopyGameId = document.getElementById('btnCopyGameId');
+    btnCopyGameId.onclick = async () => {
+        if (!connection.currentGameId) return;
+
+        try {
+            await navigator.clipboard.writeText(connection.currentGameId);
+
+            btnCopyGameId.innerText = "Copied!";
+
+            setTimeout(() => {
+                btnCopyGameId.innerText = "Copy";
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy game ID', err);
+        }
+    };
+
     const btnMainMenu = document.getElementById('btnMainMenu');
 
     btnMainMenu.onclick = () => {

@@ -1,0 +1,25 @@
+#game-over {
+    color: black;
+    text-align: center;
+}
+
+/* Matches lobby.css's lobby-id-wrapper/id-display-box look, reused here so the
+   game ID is just as easy to spot and copy after a game as it is in the lobby. */
+.lobby-id-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 2vh;
+    margin-bottom: 2vh;
+}
+.id-display-box {
+    color: #444;
+    background-color: white;
+    padding: 15px 30px;
+    margin-left: 40px;
+
+    font-family: 'Press Start 2P', cursive;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
