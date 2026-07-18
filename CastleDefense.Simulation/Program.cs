@@ -1021,6 +1021,7 @@ namespace CastleDefense.Simulation
                 // Query the shadow bot on a deep clone BEFORE this tick's real recorded
                 // actions are applied, so it sees exactly the state the real bot was
                 // looking at -- same order-of-operations as --trace-human's shadow P1.
+                long preTickTick = state.CurrentTick;
                 var clone = CloneStateForShadow(state);
                 var cloneEngine = new GameEngine(clone);
                 int beforeInv = clone.Player2.InvestmentCount;
@@ -1037,7 +1038,21 @@ namespace CastleDefense.Simulation
                 engine.ApplyAction(2, p2Action);
                 engine.Tick();
 
-                if (state.CurrentTick % 5 == 0)
+                // CONFIRMED BUG (found chasing a "why won't it invest" mystery in 9D6D19):
+                // this gate used to check state.CurrentTick -- the POST-Tick() value --
+                // while shadowBot.Update() above decides against preTickTick, the value
+                // BEFORE Tick() advanced it by 1. HeuristicBot only actually calls Decide()
+                // once every DecisionIntervalTicks=5 ticks; since post-tick is always
+                // exactly pre-tick+1, and no multiple of 5 is ever exactly one more than
+                // another multiple of 5, this print gate could NEVER land on the same tick
+                // the shadow bot actually decided on. Every real decision (INVEST/REPAIR/
+                // spend) was silently computed and discarded one iteration before a print,
+                // and every iteration that DID print landed on a tick where Update() had
+                // already returned early (not a decision tick), leaving shadowWould stuck
+                // at its "wait" default -- 100% of the time, regardless of what the bot
+                // was really doing. Gate on preTickTick (the same value the decision was
+                // actually made against) instead.
+                if (preTickTick % 5 == 0)
                 {
                     var me = state.Player2;
                     double hpPct = me.CastleMaxHealth > 0 ? 100.0 * me.CastleHealth / me.CastleMaxHealth : 0;
