@@ -12,9 +12,21 @@ export default function initGameScreen() {
         myTeam = loader.assets.teamList[connection.latestState.player2.team];
         startingCameraX = 2000;
     }
+
+    if (connection.mySide == 0) {
+        // Spectator (Training League watch mode): both sides are AI-controlled and
+        // there's nothing for a human to click, so skip the interactive shop UI
+        // entirely and show both players' stats side by side instead of just one.
+        startingCameraX = 1000;
+        document.getElementById('hud-bottom').style.display = 'none';
+        document.getElementById('hud-top').style.float = 'left';
+        document.getElementById('hud-top-label').style.display = 'block';
+        document.getElementById('hud-top-p2').style.display = 'block';
+    } else {
+        initShopUI(myTeam);
+    }
+
     view.panTo(startingCameraX);
-    
-    initShopUI(myTeam);
 
     let animationFrameId;
 
@@ -39,6 +51,15 @@ export default function initGameScreen() {
 }
 
 function updateUI(state) {
+    if (connection.mySide == 0) {
+        // Spectator: no shop to keep in sync, just both sides' money/income readout.
+        document.getElementById('money').innerHTML = Math.floor(state.player1.money);
+        document.getElementById('income').innerHTML = state.player1.income.toFixed(1);
+        document.getElementById('money-p2').innerHTML = Math.floor(state.player2.money);
+        document.getElementById('income-p2').innerHTML = state.player2.income.toFixed(1);
+        return;
+    }
+
     const pState = connection.mySide == 1 ? state.player1 : state.player2;
     const money = document.getElementById('money');
     const income = document.getElementById('income');
