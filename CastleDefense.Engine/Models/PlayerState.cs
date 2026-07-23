@@ -53,19 +53,8 @@ namespace CastleDefense.Engine.Models
 
             for (int i = 1; i <= timeSkip; i++)
             {
-                InvestmentCount++;
-                Income = Math.Pow(Math.E, 0.0109 * Math.Pow(InvestmentCount, 3) + 0.0011 * Math.Pow(InvestmentCount, 2) + 0.4351 * InvestmentCount + 0.5268);
-                InvestmentPrice = Income * (InvestmentCount * 4 + 8);
-
-                RepairCount++;
-                double rp = Math.Pow(Math.E, 0.0109 * Math.Pow(RepairCount, 3) + 0.0011 * Math.Pow(RepairCount, 2) + 0.4351 * RepairCount + 0.5268);
-                RepairPrice = rp * (RepairCount * 5 + 5);
-                if (RepairCount >= 8)
-                    RepairPrice *= 2;
-
-                float pct = (float)CastleHealth / CastleMaxHealth;
-                CastleMaxHealth = 1000 + 11000 * RepairCount;
-                CastleHealth = (int)Math.Min(CastleMaxHealth * (pct + 0.2), CastleMaxHealth);
+                ApplyInvestmentStep();
+                ApplyRepairStep();
             }
 
             // Don't start at full HP
@@ -73,6 +62,53 @@ namespace CastleDefense.Engine.Models
 
             // Start with a bit of money
             Money += Income;
+        }
+
+        // Applies exactly one investment step in place -- the SINGLE source of truth for
+        // the income/price formula (and its two hardcoded high-tier overrides at
+        // InvestmentCount 7/8). Previously this math was duplicated between
+        // GameEngine.Invest and the timeSkip constructor above; when the InvestmentCount
+        // 7/8 overrides were hand-tuned directly in GameEngine.Invest, the time-machine
+        // constructor was never updated to match, so any headstart game (including every
+        // BotArena "headstart" benchmark run) at InvestmentCount>=7 silently used the
+        // stale pre-override formula instead of the real values a live game would produce.
+        // Factoring this out means a future rebalance can only ever happen in one place.
+        public void ApplyInvestmentStep()
+        {
+            InvestmentCount++;
+            // Equation for player income: e^(0.0109x^3 + 0.0011x^2 + 0.4351x + 0.5268), R^2 = 0.9997
+            Income = Math.Pow(Math.E, 0.0109 * Math.Pow(InvestmentCount, 3) + 0.0011 * Math.Pow(InvestmentCount, 2) + 0.4351 * InvestmentCount + 0.5268);
+            // Each investment should take twice as long as the last
+            InvestmentPrice = Income * (InvestmentCount * 4 + 8);
+
+            if (InvestmentCount == 7)
+            {
+                Income = 750;
+                InvestmentPrice = 25000;
+            }
+            if (InvestmentCount == 8)
+            {
+                Income = 2500;
+                InvestmentPrice = 100000;
+            }
+        }
+
+        // Applies exactly one repair step in place -- same single-source-of-truth
+        // reasoning as ApplyInvestmentStep, previously duplicated between
+        // GameEngine.Repair and the timeSkip constructor above.
+        public void ApplyRepairStep()
+        {
+            RepairCount++;
+            double rp = Math.Pow(Math.E, 0.0109 * Math.Pow(RepairCount, 3) + 0.0011 * Math.Pow(RepairCount, 2) + 0.4351 * RepairCount + 0.5268);
+            RepairPrice = rp * (RepairCount * 5 + 5);
+            if (RepairCount >= 8)
+                RepairPrice *= 2;
+
+            float pct = (float)CastleHealth / CastleMaxHealth;
+            // Equation for increasing castle health:
+            CastleMaxHealth = 1000 + 11000 * RepairCount;
+            // Increase castle health and heal by 20%:
+            CastleHealth = (int)Math.Min(CastleMaxHealth * (pct + 0.2), CastleMaxHealth);
         }
 
         public void SetLoadout(string[] loadout)

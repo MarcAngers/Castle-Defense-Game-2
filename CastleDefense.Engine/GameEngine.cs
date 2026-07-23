@@ -254,23 +254,10 @@ namespace CastleDefense.Engine
             // 2. Deduct cost
             player.Money -= player.InvestmentPrice;
 
-            // 3. Increase income and next investment price
-            player.InvestmentCount++;
-            // Equation for player income: e^(                  0.0109x^3                 +                    0.0011x^2                +           0.4351x                + 0.5268                     log R^2 = 0.9997
-            player.Income = Math.Pow(Math.E, 0.0109 * Math.Pow(player.InvestmentCount, 3) + 0.0011 * Math.Pow(player.InvestmentCount, 2) + 0.4351 * player.InvestmentCount + 0.5268);
-            // Each investment should take twice as long as the last
-            player.InvestmentPrice = player.Income * (player.InvestmentCount * 4 + 8);
-
-            if (player.InvestmentCount == 7)
-            {
-                player.Income = 750;
-                player.InvestmentPrice = 25000;
-            }
-            if (player.InvestmentCount == 8)
-            {
-                player.Income = 2500;
-                player.InvestmentPrice = 100000;
-            }
+            // 3. Increase income and next investment price -- single source of truth is
+            // PlayerState.ApplyInvestmentStep (also used by the timeSkip "time machine"
+            // constructor, so the two can never desync again; see its own comment).
+            player.ApplyInvestmentStep();
 
             return true;
         }
@@ -287,18 +274,10 @@ namespace CastleDefense.Engine
             // 2. Deduct cost
             player.Money -= player.RepairPrice;
 
-            // 3. Increase health and repair price
-            player.RepairCount++;
-            double rp = Math.Pow(Math.E, 0.0109 * Math.Pow(player.RepairCount, 3) + 0.0011 * Math.Pow(player.RepairCount, 2) + 0.4351 * player.RepairCount + 0.5268);
-            player.RepairPrice = rp * (player.RepairCount * 5 + 5);
-            if (player.RepairCount >= 8)
-                player.RepairPrice *= 2;
-
-            float pct = (float)player.CastleHealth / player.CastleMaxHealth;
-            // Equation for increasing castle health:
-            player.CastleMaxHealth = 1000 + 11000 * player.RepairCount;
-            // Increase castle health and heal by 20%:
-            player.CastleHealth = (int)Math.Min(player.CastleMaxHealth * (pct + 0.2), player.CastleMaxHealth);
+            // 3. Increase health and repair price -- single source of truth is
+            // PlayerState.ApplyRepairStep (also used by the timeSkip "time machine"
+            // constructor, so the two can never desync again; see its own comment).
+            player.ApplyRepairStep();
 
             return true;
         }
