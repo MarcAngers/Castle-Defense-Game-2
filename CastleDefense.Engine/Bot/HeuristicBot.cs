@@ -38,6 +38,24 @@ namespace CastleDefense.Engine.Bot
         public int KillerInstinctHpThreshold { get; init; } = 2676; // absolute enemy castle HP -- below this, ignore savings discipline and go for the kill
         public float AttackSpendFraction { get; init; } = 0.91f; // non-reactive spending capped at this fraction of the income RATE (a flow limit, not a fraction of the money pile)
 
+        // Per-spend EV check for REACTIVE defense (unit purchases, freeze, wall, wave,
+        // goo's slow) -- Marc's own explicit framing: "the whole point [of buying time]
+        // is so we can save up in that extra time we're buying ourselves. If we spend
+        // all our money on defensive units and slowing down the enemy attack, we
+        // haven't actually accomplished anything except delaying the inevitable."
+        // Converts the runway DEFICIT (how many seconds short of safely reaching the
+        // next investment we actually are, ignoring the conservative safety margin --
+        // see reactiveSpendBudget in Decide()) into a dollar budget at our own income
+        // rate, so defensive spending is judged against what it's actually worth in
+        // savings-progress terms, not spent unconditionally just because SOME danger
+        // exists. >1.0 allows some slack above pure breakeven, since real defense isn't
+        // a perfectly efficient time-for-money exchange. A genuinely new lever vs. the
+        // 4 previously-rejected reactive-spend-cap attempts (which all capped WHAT got
+        // bought via combat-power ratios/exclusions) -- this caps based on an actual
+        // economic trade, and only engages when the (now DPS-math-aware) danger signal
+        // says there's a real deficit to bridge at all.
+        public float ReactiveSpendEVMultiplier { get; init; } = 1.5f;
+
         public static readonly HeuristicBotSettings Default = new HeuristicBotSettings();
     }
 
@@ -400,6 +418,24 @@ namespace CastleDefense.Engine.Bot
             // rate measured this instant is a floor on how bad it gets, not a guarantee.
             bool investmentRunwayIsSafe = timeToDeathSeconds >= timeToInvestSeconds * _settings.SafetyMarginMultiplier + _settings.SafetyBufferSeconds;
 
+            // How many seconds of runway we're ACTUALLY short, ignoring the conservative
+            // safety margin above -- the raw gap between "how long until I can invest"
+            // and "how long until I die if nothing changes." This is what reactive
+            // defensive spending should be judged against: Marc's own framing, from a
+            // direct playtest breakdown of a single tier-5 unit dealing 120 DPS against a
+            // 12,000 HP castle (~100s of real runway, comfortably enough to just keep
+            // investing through) -- "we need to remember *why* we want to slow [an
+            // attack] down... if we spend all our money on defensive units and slowing
+            // down the enemy attack, we haven't actually accomplished anything except
+            // delaying the inevitable." Converting the deficit into a dollar figure at our
+            // own income rate answers "is this specific defensive spend actually worth
+            // the savings-progress it costs" directly, rather than spending unconditionally
+            // the moment `inDanger` is true. If there's no deficit at all (we'd reach the
+            // investment safely even without the margin), this is 0 -- no defensive spend
+            // is worth anything since nothing needs bridging.
+            float runwayDeficitSeconds = Math.Max(0f, timeToInvestSeconds - timeToDeathSeconds);
+            double reactiveSpendBudget = runwayDeficitSeconds * me.Income * _settings.ReactiveSpendEVMultiplier;
+
             // EXPERIMENT: castleHpPct < 0.9f dropped from this OR -- traced a v4 matchup
             // (trace v4, fine-grained log) where HP sat flat at exactly 90% (a stale,
             // non-recovering deficit from an earlier, now-resolved skirmish) while a
@@ -444,9 +480,9 @@ namespace CastleDefense.Engine.Bot
             }
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
-            TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger);
-            TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger);
-            TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct);
+            TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
+            TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
+            TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct, reactiveSpendBudget);
 
             // --- MILITARY / ECONOMY ---
             // Boom strategy: a spam bot (or a human who isn't optimizing) never invests,
@@ -495,7 +531,7 @@ namespace CastleDefense.Engine.Bot
 
             if (inDanger)
             {
-                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits);
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget);
             }
 
             // Fallback investment check: the primary one now happens at the very top of
@@ -738,7 +774,7 @@ namespace CastleDefense.Engine.Bot
         // (they just queue up waiting for a turn to attack).
         private const int MaxOwnUnitsOnField = 120;
 
-        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false)
+        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false, double reactiveSpendBudget = double.MaxValue)
         {
             LastUnitsPurchased = 0;
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
@@ -883,6 +919,21 @@ namespace CastleDefense.Engine.Bot
                     me.Income * AttackAllowanceCapSeconds * _settings.AttackSpendFraction);
 
                 spendable = Math.Max(0, Math.Min(me.Money - gadgetReserve, _attackSpendAllowance));
+            }
+            else if (preferDefense && !killerInstinct)
+            {
+                // Per-spend EV cap (Marc's explicit ask): reactive spending used to have
+                // "no investment reserve at all, by design, since reactive defense
+                // shouldn't hold back when actually threatened" -- true when the threat
+                // is genuinely severe, but his own D3596E playtest breakdown showed the
+                // bot spending hundreds of dollars defending against a single unit that
+                // basic DPS-vs-HP math shows was barely a threat at all. reactiveSpendBudget
+                // (computed in Decide() from the actual runway deficit x income) answers
+                // "how much is genuinely worth spending to bridge to the next investment"
+                // directly -- cap spendable to it here rather than leaving reactive
+                // spending totally unconstrained. killerInstinct still bypasses this
+                // entirely (finishing an already-winning fight isn't a savings question).
+                spendable = Math.Min(me.Money, reactiveSpendBudget);
             }
 
             LastSpendDebug = $"money={me.Money:F1} spendable={spendable:F1} allowance={_attackSpendAllowance:F1} killerInstinct={killerInstinct} dominantTier={dominantEnemyTier} anyAffordableCount={anyAffordable.Count(x => x.def.Cost > 0 && x.def.Cost <= spendable)} cheapestAny={(anyAffordable.Count > 0 ? anyAffordable.Min(x => x.def.Cost) : -1)}";
@@ -1093,7 +1144,7 @@ namespace CastleDefense.Engine.Bot
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
         // the loadout isn't fixed, so all four need real usage logic, not just whichever
         // one happened to be equipped when this was written.
-        private void TryUseOffenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger)
+        private void TryUseOffenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger, double reactiveSpendBudget)
         {
             var def = me.OffensiveGadget;
             if (!IsReady(me, def)) return;
@@ -1174,7 +1225,14 @@ namespace CastleDefense.Engine.Bot
                     // BEFORE (or instead of) committing money to units, so any defenders
                     // sent afterward land their hits on an immobilized target instead of a
                     // fully-active one that's already killed them.
-                    bool buyTimeJustifies = inDanger;
+                    //
+                    // Also require the cost to fit the per-spend EV budget (see Decide()'s
+                    // reactiveSpendBudget) -- inDanger alone says a real deficit exists,
+                    // but not that THIS specific cast is worth its cost given how small
+                    // that deficit actually is (Marc's D3596E point: a weak, isolated
+                    // threat shouldn't justify unlimited defensive spend just because some
+                    // deficit exists at all).
+                    bool buyTimeJustifies = inDanger && def.Cost <= reactiveSpendBudget;
 
                     if (killValueJustifies || multiplierJustifies || buyTimeJustifies)
                         used = engine.UseGadget(_side, def.Id, 0);
@@ -1234,7 +1292,7 @@ namespace CastleDefense.Engine.Bot
         }
 
         // The defense slot can be any of "heal" / "reinforcements" / "speed" / "wall".
-        private void TryUseDefenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger)
+        private void TryUseDefenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger, double reactiveSpendBudget)
         {
             var def = me.DefensiveGadget;
             if (!IsReady(me, def)) return;
@@ -1294,9 +1352,14 @@ namespace CastleDefense.Engine.Bot
                     // "cost is <80% of current money" branch approves this unconditionally
                     // once money is high enough, with no regard for whether there's anything
                     // to tank at all. A wall with zero enemies on the field delays nothing --
-                    // require an enemy present before considering it on that basis (inDanger
-                    // already implies a real, close threat on its own, so it's untouched).
-                    if (!inDanger && (enemyUnits.Count == 0 || !BigSpendJustified(me, def, 0))) break;
+                    // require an enemy present before considering it on that basis.
+                    //
+                    // Also require the cost to fit the per-spend EV budget (see Decide()'s
+                    // reactiveSpendBudget) before letting inDanger alone justify it -- a
+                    // real deficit existing doesn't mean THIS specific cast is worth its
+                    // cost against how small that deficit actually is.
+                    bool dangerJustifies = inDanger && def.Cost <= reactiveSpendBudget;
+                    if (!dangerJustifies && (enemyUnits.Count == 0 || !BigSpendJustified(me, def, 0))) break;
 
                     // WallEffect ignores the position for level 1 (fixed spawn point) but
                     // uses it directly for level 2/3, so place it in our own front line
@@ -1310,7 +1373,7 @@ namespace CastleDefense.Engine.Bot
         }
 
         private void TryUseSignatureGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits,
-            int myCastlePos, bool inDanger, float castleHpPct)
+            int myCastlePos, bool inDanger, float castleHpPct, double reactiveSpendBudget)
         {
             var def = me.SignatureGadget;
             if (!IsReady(me, def)) return;
@@ -1359,9 +1422,11 @@ namespace CastleDefense.Engine.Bot
                     if (DeferForInvestment(me)) break;
                     // Like wall, wave buys TIME (knockback) rather than a tangible stat --
                     // most valuable exactly when the runway model says time is actually
-                    // short. Prioritize it whenever genuinely in danger; otherwise fall back
-                    // to the normal not-a-big-spend gate for opportunistic, cheap casts.
-                    if (inDanger || BigSpendJustified(me, def, 0))
+                    // short. Prioritize it whenever genuinely in danger (and the cost fits
+                    // the per-spend EV budget, see Decide()'s reactiveSpendBudget); otherwise
+                    // fall back to the normal not-a-big-spend gate for opportunistic, cheap
+                    // casts.
+                    if ((inDanger && def.Cost <= reactiveSpendBudget) || BigSpendJustified(me, def, 0))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;
                 }
@@ -1408,7 +1473,9 @@ namespace CastleDefense.Engine.Bot
                         // actually be present for the heal case, same as the slow case already
                         // requires via inDanger.
                         bool healUseCase = myUnits.Count > 0 && enemyUnits.Count > 0 && BigSpendJustified(me, def, 0);
-                        bool slowUseCase = inDanger;
+                        // Also gated on the per-spend EV budget (Decide()'s
+                        // reactiveSpendBudget) -- same reasoning as wall/wave/freeze.
+                        bool slowUseCase = inDanger && def.Cost <= reactiveSpendBudget;
                         if (DeferForInvestment(me) || (!healUseCase && !slowUseCase)) break;
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
                         used = engine.UseGadget(_side, def.Id, target);
