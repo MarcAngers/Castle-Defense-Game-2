@@ -53,8 +53,6 @@ namespace CastleDefense.Engine.Models.Hazards
                                 state.CurrentTick + (30 * 3),
                                 -1f * this.BaseValue
                             ));
-
-                            player.AddGadgetXp("goo", 10);
                         }
                     }
                 }
