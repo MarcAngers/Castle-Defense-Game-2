@@ -634,8 +634,30 @@ namespace CastleDefense.Engine
             if (player.CastleHealth <= 0)
             {
                 player.CastleHealth = 0;
-                _state.IsGameOver = true;
-                _state.WinnerSide = player.Side == 1 ? 2 : 1;
+
+                // A genuine simultaneous double-KO (e.g. a nuke, which always damages
+                // Player1 then Player2 in that fixed order via NukeEffect) is a draw, not
+                // a win for whichever DamageCastle call happens to run second. But
+                // multiple units/effects landing overkill hits on the SAME already-dead
+                // castle within the same tick is the ordinary common case (several
+                // attackers in contact at once) -- that must NOT be mistaken for a
+                // double-KO, or every decisive win with more than one attacker in range
+                // gets silently downgraded to a "draw" the instant a second hit lands on
+                // the loser. The distinguishing test: is THIS hit against the side that
+                // was about to be recorded as the winner (i.e. their castle, not the
+                // loser's, just ALSO reached 0)? Only that is a genuine double-KO.
+                // WinnerSide=0 already means "draw" elsewhere (see the MAX_TICKS
+                // timeout-tie check in Tick()).
+                if (_state.IsGameOver)
+                {
+                    if (player.Side == _state.WinnerSide)
+                        _state.WinnerSide = 0;
+                }
+                else
+                {
+                    _state.IsGameOver = true;
+                    _state.WinnerSide = player.Side == 1 ? 2 : 1;
+                }
             }
         }
 

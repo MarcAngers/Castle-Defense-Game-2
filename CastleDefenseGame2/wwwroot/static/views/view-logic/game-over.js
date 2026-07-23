@@ -9,7 +9,9 @@ export default function initGameScreen() {
     let viewingStats = true;
     let animationFrameId;
 
-    document.getElementById('game-over-title').innerHTML = 'P' + connection.winnerSide + ' WINS!!!';
+    document.getElementById('game-over-title').innerHTML = connection.winnerSide == 0
+        ? 'DRAW!'
+        : 'P' + connection.winnerSide + ' WINS!!!';
     document.getElementById('game-time').innerHTML = 'GAME TIME: ' + formatGameTime(connection.latestState.currentTick);
 
     document.getElementById('game-over-id-text').innerText = connection.currentGameId || '------';
