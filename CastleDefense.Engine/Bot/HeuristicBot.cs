@@ -365,7 +365,32 @@ namespace CastleDefense.Engine.Bot
             _recentCastleHealth.Add(me.CastleHealth);
             if (_recentCastleHealth.Count > HpHistoryWindow) _recentCastleHealth.RemoveAt(0);
 
-            float timeToDeathSeconds = EstimateTimeToDeathSeconds(me.CastleHealth);
+            // Complement the OBSERVED-drain estimate above with a PROACTIVE one computed
+            // directly from the current enemy roster's own stats -- Marc's own explicit
+            // ask, from a direct playtest report: "it is important to try and do some of
+            // this math in-game to determine an accurate threat level." His example: a
+            // single tier-5 unit at 120 DPS against a 12,000 HP castle is ~100 seconds of
+            // runway, comfortably enough to reach the next investment -- but the
+            // OBSERVED-drain model only reacts to damage that has ALREADY landed inside
+            // the short rolling window (HpHistoryWindow), so a single, isolated, genuinely
+            // weak threat that lands a few real hits can look scarier in that short window
+            // than it truly is over the long run, triggering reactive spending that isn't
+            // actually warranted. The projected estimate below is a clean instant read of
+            // "given exactly what's in range of my castle right now, how long until it
+            // falls" -- immune to that short-window noise. Take whichever of the two
+            // estimates says we have MORE runway: a real, escalating threat will show a
+            // short time-to-death on BOTH estimates once it's actually in range and
+            // dealing damage (so this doesn't blind the bot to genuine danger), but an
+            // isolated weak threat that's already landed a stray hit or two no longer
+            // forces a falsely short reading just because of recent noise.
+            var enemyState = _side == 1 ? state.Player2 : state.Player1;
+            var enemyRoster = GameDataManager.Teams.FirstOrDefault(t => t.Color == enemyState.Team)?.Roster;
+            float projectedDps = EstimateProjectedThreatDps(engine, enemyUnits, enemyRoster);
+            float projectedTimeToDeathSeconds = projectedDps > 0.01f
+                ? me.CastleHealth / projectedDps
+                : EffectivelyInfiniteSeconds;
+
+            float timeToDeathSeconds = Math.Max(EstimateTimeToDeathSeconds(me.CastleHealth), projectedTimeToDeathSeconds);
 
             double moneyStillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
             float timeToInvestSeconds = me.Income > 0.01 ? (float)(moneyStillNeeded / me.Income) : EffectivelyInfiniteSeconds;
@@ -969,6 +994,42 @@ namespace CastleDefense.Engine.Bot
         // exact crossover tick, giving the invest check first claim there instead of
         // losing every time to whichever gadget happens to be checked first.
         private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice;
+
+        // Sums the real, current incoming damage-per-second against OUR castle: only
+        // enemy units already within their own attack Range of it count (the same
+        // castleInRange check GameEngine.MoveAndFight uses before ever calling
+        // AttackCastle), so a large force still marching in from across the map isn't
+        // counted as an active threat before it actually is one -- matching the same
+        // "react to what's real, not what might happen" philosophy the rest of this
+        // file already uses (see inDanger's own history of over-eager triggers). DPS is
+        // Damage * AttackSpeed directly (GameEngine.AttackCastle sets AttackCooldown to
+        // 1000f/AttackSpeed ms per hit, so AttackSpeed is already attacks/second).
+        private static float EstimateProjectedThreatDps(GameEngine engine, List<Unit> enemyUnits, List<UnitDefinition> enemyRoster)
+        {
+            if (enemyRoster == null || enemyRoster.Count == 0) return 0f;
+            float dps = 0f;
+            foreach (var u in enemyUnits)
+            {
+                var def = enemyRoster.FirstOrDefault(d => d.Id == u.DefinitionId);
+                if (def == null) continue;
+                // Every unit in this roster is melee (Range is always 0 -- there's no
+                // Range column in master_roster.csv), so a raw position comparison
+                // against myCastlePos would need EXACT equality to ever trigger and
+                // would in practice never fire at all. Reuse GameEngine's own
+                // GetDistanceToEnemyCastle (already accounts for the unit's Width and
+                // which side it's attacking) so this matches the SAME contact-distance
+                // test the real castleInRange check uses before ever calling
+                // AttackCastle -- found via an n=50 sanity run where this bug silently
+                // zeroed out the projected estimate for every matchup (Math.Max against
+                // an always-infinite projected TTD unconditionally discarded the real,
+                // working observed-drain estimate), most visibly on Tier1 spam (58% vs
+                // the ~90% baseline) since that matchup leans hardest on real reactive
+                // defense.
+                if (engine.GetDistanceToEnemyCastle(u) <= def.Range)
+                    dps += def.Damage * def.AttackSpeed;
+            }
+            return dps;
+        }
 
         // Looks up an enemy unit's actual spawn cost from its own team's roster --
         // Unit (the runtime instance) only carries Tier/DefinitionId, not Cost, so this
