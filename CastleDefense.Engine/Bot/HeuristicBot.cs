@@ -419,7 +419,7 @@ namespace CastleDefense.Engine.Bot
             }
 
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
-            TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos);
+            TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger);
             TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger);
             TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct);
 
@@ -1032,7 +1032,7 @@ namespace CastleDefense.Engine.Bot
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
         // the loadout isn't fixed, so all four need real usage logic, not just whichever
         // one happened to be equipped when this was written.
-        private void TryUseOffenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos)
+        private void TryUseOffenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger)
         {
             var def = me.OffensiveGadget;
             if (!IsReady(me, def)) return;
@@ -1095,7 +1095,27 @@ namespace CastleDefense.Engine.Bot
                     // standard not-a-big-spend-or-income-is-high check too.
                     bool multiplierJustifies = myUnits.Count > 0 && BigSpendJustified(me, def, 0);
 
-                    if (killValueJustifies || multiplierJustifies)
+                    // A third, genuinely independent justification, found from Marc's
+                    // direct playtest report: the bot was sending cheap defenders into a
+                    // strong enemy unit FIRST, only casting freeze once those defenders
+                    // were already dying or dead -- backwards, since the whole point of
+                    // freezing is to buy time BEFORE spending on units to capitalize on
+                    // it, not after. The `multiplierJustifies` gate above requires
+                    // myUnits.Count>0, which structurally can't fire until after that
+                    // reactive spend has already happened -- a chicken-and-egg ordering
+                    // bug. But freeze doesn't actually need an army to be worth casting on
+                    // its own: per FreezeEffect, a frozen enemy skips its whole
+                    // attack/move step for the status duration, which is a real,
+                    // standalone "buy time" effect exactly like wall/wave/goo's slow --
+                    // not something that requires our own units present to have value.
+                    // Justify it the same way those do: whenever the runway model says
+                    // we're genuinely pressed for time (inDanger), freeze the threat
+                    // BEFORE (or instead of) committing money to units, so any defenders
+                    // sent afterward land their hits on an immobilized target instead of a
+                    // fully-active one that's already killed them.
+                    bool buyTimeJustifies = inDanger;
+
+                    if (killValueJustifies || multiplierJustifies || buyTimeJustifies)
                         used = engine.UseGadget(_side, def.Id, 0);
                     break;
                 }
