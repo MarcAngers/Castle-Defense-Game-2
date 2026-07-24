@@ -116,6 +116,8 @@ namespace CastleDefense.Simulation
 
     public record TrackerData(int Matches, int Wins, int First100Wins, int RecentWins, int RecentTotal);
 
+    enum OpponentKind { RandomDummy, AntiSpam, Spam, League, Heuristic, SelfPlay }
+
     class Program
     {
         const int N_STEPS = 8192;
@@ -253,11 +255,12 @@ namespace CastleDefense.Simulation
                 GameState  state       = null;
                 GameEngine engine      = null;
                 string     oppName     = "Random Dummy";
-                int        botSel      = 0;
+                OpponentKind oppKind   = OpponentKind.RandomDummy;
                 int        timeSkip    = 0;
                 int        spamTier    = 1;
                 SpamBot    spamBot     = null;
                 AIBrain    leagueBrain = null;
+                HeuristicBot heuristicBot = null;
                 var        randBot     = new RandomBot();
                 var        antiBot     = new AntiSpamBot();
 
@@ -317,19 +320,61 @@ namespace CastleDefense.Simulation
                             GameDataManager.GetSignatureGadgetIdForTeam(state.Player2.Team) + upg });
 
                         engine  = new GameEngine(state, rewardParams);
-                        botSel  = _rand.Next(16);
                         spamTier = Math.Max(Math.Min(timeSkip + _rand.Next(-2, 3), 8), 1);
                         spamBot  = new SpamBot(spamTier);
-                        leagueBrain = null;
-                        oppName = "Random Dummy";
+                        leagueBrain  = null;
+                        heuristicBot = null;
 
-                        if (botSel == 1) oppName = "Anti-Spam Bot";
-                        else if (botSel >= 2 && botSel <= 5) oppName = $"Spam Bot T{spamTier}";
-                        else if (botSel > 5 && leagueModels.Count > 0)
+                        // Opponent mix — roughly an 80/20 current/past split (OpenAI Five-style):
+                        // "current" = self-play (always exactly as strong as the model being
+                        // trained, since it's a live mirror) + HeuristicBot (a fixed, genuinely
+                        // strong anchor — ~85-95% vs every prior league checkpoint per the
+                        // CastleDefense.BotArena dashboard). "past" = the old static league
+                        // checkpoints plus simple scripted bots, kept around so the model
+                        // doesn't lose all exposure to weaker/simpler play styles (a prior run's
+                        // notes flagged Random Dummy win rate declining from league overfitting).
+                        // Self-play needs trainingBrain to exist yet (only null for a brief
+                        // instant at connection start before the first ONNX export lands) and
+                        // League needs at least one model on disk; both fall back to Random
+                        // Dummy if unavailable.
+                        double roll = _rand.NextDouble();
+                        if (roll < 0.03)
+                        {
+                            oppKind = OpponentKind.RandomDummy;
+                            oppName = "Random Dummy";
+                        }
+                        else if (roll < 0.06)
+                        {
+                            oppKind = OpponentKind.AntiSpam;
+                            oppName = "Anti-Spam Bot";
+                        }
+                        else if (roll < 0.12)
+                        {
+                            oppKind = OpponentKind.Spam;
+                            oppName = $"Spam Bot T{spamTier}";
+                        }
+                        else if (roll < 0.20 && leagueModels.Count > 0)
                         {
                             var chosen = leagueModels[_rand.Next(leagueModels.Count)];
                             leagueBrain = chosen.brain;
+                            oppKind     = OpponentKind.League;
                             oppName     = chosen.name;
+                        }
+                        else if (roll < 0.50)
+                        {
+                            heuristicBot = new HeuristicBot(2);
+                            oppKind = OpponentKind.Heuristic;
+                            oppName = "Heuristic Bot";
+                        }
+                        else if (trainingBrain != null)
+                        {
+                            oppKind = OpponentKind.SelfPlay;
+                            oppName = "Self-Play";
+                        }
+                        else
+                        {
+                            oppKind = OpponentKind.RandomDummy;
+                            oppName = "Random Dummy";
                         }
 
                         nextEpStart = true;
@@ -346,9 +391,21 @@ namespace CastleDefense.Simulation
 
                         // Invest exploration: if the model has stopped investing, it never sees
                         // invest data and can't rediscover the behaviour no matter how large
-                        // the reward signal is. Force action 9 ~5 % of the time when it's valid
+                        // the reward signal is. Force action 9 ~5% of the time when it's valid
                         // to inject invest experience and break the data-starvation loop.
-                        const float INVEST_EXPLORE = 0.90f;
+                        //
+                        // BUG FOUND 2026-07-24: this was set to 0.90f (forcing invest on 90% of
+                        // legal opportunities), not the 0.05f the comment above always described
+                        // -- confirmed via `git log -p` that this was wrong from the very first
+                        // commit that introduced it, not a later regression. At 90%, the model's
+                        // own policy essentially never gets to choose NOT to invest when it
+                        // legally could, which forecloses exactly the conditional judgment
+                        // (invest now vs. defend first) that HeuristicBot's whole multi-session
+                        // tuning history found to be the single highest-leverage decision in this
+                        // economy (see project_ai_opponent_heuristic memory). Reverted to the
+                        // originally-intended 5% -- real exploration nudge, not a behavioral
+                        // override.
+                        const float INVEST_EXPLORE = 0.05f;
                         if (p1Mask[9] == 1 && p1Action != 9 && _rand.NextDouble() < INVEST_EXPLORE)
                             p1Action = 9;
 
@@ -361,10 +418,33 @@ namespace CastleDefense.Simulation
                             if (state.IsGameOver) break;
 
                             int p2Action = 0;
-                            if      (botSel == 0)                      p2Action = randBot.GetAction();
-                            else if (botSel == 1)                      p2Action = antiBot.GetAction(state.CurrentTick, state.Player1.Team);
-                            else if (botSel >= 2 && botSel <= 5)       p2Action = spamBot.GetAction();
-                            else if (leagueBrain != null && fi == 0)   p2Action = leagueBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+                            switch (oppKind)
+                            {
+                                case OpponentKind.RandomDummy:
+                                    p2Action = randBot.GetAction();
+                                    break;
+                                case OpponentKind.AntiSpam:
+                                    p2Action = antiBot.GetAction(state.CurrentTick, state.Player1.Team);
+                                    break;
+                                case OpponentKind.Spam:
+                                    p2Action = spamBot.GetAction();
+                                    break;
+                                case OpponentKind.League:
+                                    if (fi == 0) p2Action = leagueBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+                                    break;
+                                case OpponentKind.Heuristic:
+                                    // HeuristicBot acts directly on the engine/state (SpawnUnit/
+                                    // Invest/Repair/UseGadget), not through the discrete action
+                                    // space — call it once per real tick, same convention
+                                    // CastleDefense.BotArena's trace/hunt/spam modes already use.
+                                    // It self-paces its own decision cadence internally, so this
+                                    // is a no-op on ticks it doesn't want to act on.
+                                    heuristicBot.Update(engine);
+                                    break;
+                                case OpponentKind.SelfPlay:
+                                    if (fi == 0) p2Action = trainingBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+                                    break;
+                            }
 
                             var tick = engine.Step(fi == 0 ? p1Action : 0, p2Action, 0f);
                             cumRew  += tick.P1Reward;

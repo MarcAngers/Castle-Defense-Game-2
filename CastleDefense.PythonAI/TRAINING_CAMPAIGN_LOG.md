@@ -1,0 +1,242 @@
+# RL Training Campaign Log
+
+Started 2026-07-24 while Marc is away for the weekend, per his explicit go-ahead to
+work autonomously on: (1) increasing simulated games/minute, (2) tuning training
+parameters, (3) building a workflow to push the PPO model's performance further,
+using the now-strong HeuristicBot (~90%+ vs the old league checkpoints, see
+`project_ai_opponent_heuristic` memory) as a training-league anchor.
+
+## Starting-state findings (before any changes)
+
+**The training pipeline is far more sophisticated than the CLAUDE.md summary or prior
+memory entries described** — `train_ai_cluster.py` is a hand-rolled architecture, not
+a plain `SubprocVecEnv` + `model.learn()` setup: a custom binary TCP batch protocol
+per arena, GPU-batched log-prob/value re-inference, direct rollout-buffer writes
+(avoiding 8192 individual `.add()` calls), N-step board-eval reward shaping from a
+hand-fit linear evaluator (`GameState.EvaluateBoard()`, coefficients from
+`train_evaluator.py` → `evaluator_weights.json`), a GA-based reward-hyperparameter
+search (`ga_runner.py`, multiple `ga_runs/` going back to May), and a BC pretraining
+pipeline (`bc_pretrain.py`) from human replay recordings. This already reflects a lot
+of real engineering effort — the plateau is not from a naive setup.
+
+**`training_progress.csv` from the last full run (10M steps, target reached) showed a
+genuine plateau/slight decline**: win rate vs the training opponent pool sat at
+36.6%–39.2% for the final ~3M steps, trending slightly DOWN by the end. Matches
+Marc's own description exactly. Archived as
+`training_progress_ARCHIVE_pre_campaign.csv` before starting fresh.
+
+### Three real, well-evidenced bugs/gaps found and fixed before touching anything else
+
+1. **`INVEST_EXPLORE` was 0.90, not the 0.05 its own comment describes**
+   (`CastleDefense.Simulation/Program.cs`). This forces the training policy to invest
+   on 90% of ticks where investing is legal, regardless of what the model itself would
+   choose. Confirmed via `git log -p` that this was wrong from the very first commit
+   that introduced it (not a later regression) — the comment always said "~5%" while
+   the constant was always `0.90f`. This directly forecloses the single highest-
+   leverage judgment call this economy has (invest now vs. defend first) — exactly
+   what HeuristicBot's entire multi-session tuning history found to be the hardest,
+   most important thing to get right (see `project_ai_opponent_heuristic` memory, the
+   whole "money-pinning" and "time-to-death" sagas). A model that's forced to invest
+   90% of the time it legally can never gets to learn when NOT to. **Fixed: reverted
+   to 0.05f** (real exploration nudge, not a behavioral override).
+
+2. **GA-tuned reward params were never actually being applied.** `reward_params_{port}.json`
+   files (which `RewardParams.LoadFromJson` reads per-arena, falling back silently to
+   `RewardParams.Default` if missing) did not exist anywhere in the repo, despite a
+   fully-populated `ga_best_params.json` from a real search (CombatScale 1.0→0.509,
+   WinReward 54000→35164, AntiSpend 700→1113, etc. — not small deltas). So the last
+   full run very likely trained against the untuned defaults, not the GA winner.
+   **Fixed: ran `apply_ga_params.py`**, which writes all 14 `reward_params_{port}.json`
+   files (and confirmed it's a no-op on `train_ai_cluster.py`'s `BOARD_SHAPING_*`
+   constants — those were already patched to match `ga_best_params.json` from a prior
+   run).
+
+3. **The Python venv's `torch` was CPU-only.** `ai_env/` existed but was missing its
+   `Scripts/` folder entirely (broken/incomplete venv, no `python.exe`/`pip`/`activate`
+   inside it) — had to be recreated from scratch with the system Python 3.11.5. Plain
+   `pip install torch==2.10.0` from `requirements.txt` silently grabs the `+cpu` wheel
+   on Windows (no error, no warning) — `train_ai_cluster.py` hardcodes `device="cuda"`
+   everywhere, which would either crash outright or (worse) silently degrade if SB3/PyTorch
+   handled it more gracefully. GPU-batched inference is a load-bearing part of this
+   architecture's whole throughput design, so this alone could have devastated both
+   correctness and speed for the *whole* prior run if it happened before too — not yet
+   confirmed either way. **Fixed: reinstalled `torch==2.10.0+cu128`** from
+   `https://download.pytorch.org/whl/cu128` (matches driver's CUDA 13.2, backward compatible)
+   with `--force-reinstall` (plain re-run of the pinned-version install silently no-ops
+   as "already satisfied" even when the installed build is the wrong variant — worth
+   remembering for any future venv rebuild on this project).
+
+### Opponent-pool / league redesign (`CastleDefense.Simulation/Program.cs`)
+
+Old pool: 16-way uniform roll — 1/16 Random Dummy, 1/16 AntiSpam, 4/16 SpamBot
+(tier ≈ headstart ± 2), 10/16 → uniform over the 10 old static league ONNX checkpoints
+(v3/4/7/14/16/20/21/22/23/25). **No self-play, no HeuristicBot at all.**
+
+New weighted pool (`OpponentKind` enum + explicit cumulative-probability roll):
+- 3% Random Dummy, 3% AntiSpam, 6% SpamBot, 8% old static league models (kept for
+  exposure to weaker/simpler play styles — a stale memory note flagged Random Dummy
+  win rate declining over training from league overfitting, so this isn't zeroed out)
+- 30% HeuristicBot (`CastleDefense.Engine.Bot.HeuristicBot`, side=2, fresh instance
+  per episode) — a genuinely strong, non-ONNX anchor. Wired in by calling
+  `heuristicBot.Update(engine)` once per real tick (mirrors the exact call convention
+  `CastleDefense.BotArena`'s trace/hunt/spam modes already use — it self-paces its own
+  5-tick decision cadence internally), immediately before `engine.Step(p1Action, 0, ...)`
+  for that tick, since HeuristicBot acts directly on `PlayerState`/`Units` rather than
+  through the discrete 14-action space.
+- 50% Self-play: P2 uses the SAME live `trainingBrain` reference P1 uses (already kept
+  current via the existing ACK-based reload mechanism) — a live mirror, not a frozen
+  snapshot, so difficulty is always automatically calibrated to the model's own current
+  skill. Falls back to Random Dummy in the (startup-only) edge case where
+  `trainingBrain` is still null.
+
+This is a pragmatic ~80/20 "current/past" split (current = HeuristicBot + self-play =
+80%; past = dummy/antispam/spam/old-static-models = 20%), per Marc's OpenAI-Five framing,
+using HeuristicBot as the fixed hard anchor and self-play as the adaptive one. **Judgment
+call, not something Marc confirmed** — flagged here for review. A literal 80/20 was
+chosen over something gentler because HeuristicBot is genuinely beatable in places
+(v4 got HeuristicBot down to 72% per the latest dashboard sweep) and self-play difficulty
+is self-calibrating by construction, so this shouldn't be able to produce a "can never
+win, no gradient signal" dead end the way e.g. 80% HeuristicBot alone might early on.
+
+No literal PPO `.zip` checkpoints survive anywhere in the repo (only inference-only
+ONNX exports for the 10 kept models) — almost certainly the same/an adjacent cleanup
+incident that destroyed ~144 replay recordings on 2026-07-14 (see
+`project_recordings_data_loss` memory). This forecloses literally resuming from v25 or
+v4's PPO weights.
+
+## Warm-start decision (executed)
+
+Since no `.zip` survives for v25 (or v4, the strongest model per the dashboard — see
+below), literal PPO resume is impossible. **Decision: regenerate `castle_defense_p1_v25_bc.zip`
+via `bc_pretrain.py`** (this is exactly what `TRAINING_BASE_MODEL` already pointed to)
+from the 69 human replays that currently exist — all singleplayer (human vs. AI),
+zero multiplayer (none survived the 2026-07-14 loss). `find_recordings_root()` doesn't
+find the real location (`CastleDefenseGame2/recordings/`, not the `bin/{Debug,Release}/net10.0/recordings`
+paths it checks) — had to pass `--replay-dir` explicitly, and as an ABSOLUTE path (a
+relative one resolves against the wrong cwd, since the C# exporter subprocess runs
+with `cwd=NET10_DIR`, not the caller's cwd — cost one failed attempt before catching
+this).
+
+Result: 69 replays → 45 P1-wins (24 skipped, P2 won) → 2,096 raw (obs, action) pairs →
+1,270 after dropping 826 (39.4%) where the recorded action is invalid under the
+re-simulated mask (a known, documented artifact of time-machine-started games being
+re-simulated from tick 0 — see `filter_valid()`'s docstring). BC-trained a fresh
+MaskablePPO (no `castle_defense_p1_v25.zip` to fine-tune from either — confirmed via
+the script's own "[BC] Could not load ... starting from scratch" fallback) to 69.3%
+action-prediction accuracy over 20 epochs. Saved as `castle_defense_p1_v25_bc.zip`,
+matching `TRAINING_BASE_MODEL`'s existing name exactly — no config change needed there.
+
+This is a thin dataset (1,270 examples, single-perspective, P1-wins-only, no
+multiplayer gold-standard data) compared to whatever produced the ORIGINAL
+`v25_bc.zip` before it was lost — expectations should be modest, but it's still a real
+behavioral prior (invest 18% of actions, sensible tier-spawn distribution) rather than
+pure random initialization, and costs nothing to include. Training run renamed from
+`v26` (the prior plateaued attempt) to **`v27`** to keep this campaign's results
+cleanly separable from the old, differently-configured run's history.
+
+## Throughput measurement
+
+With all three bugs above fixed (real CUDA, GA reward params applied, invest-explore
+at 5%) and `batch_size=4096`, measured wall-clock throughput directly from live
+`training_progress.csv` deltas (two independent Bash-only timed samples, since mixing
+timestamps across different tool sandboxes turned out to have clock skew — one
+apparent "589,824 steps in 6 seconds" reading was a measurement artifact from that,
+not real):
+
+- **N_ENVS=14 (unchanged from before): ~25,000-28,000 steps/sec, roughly 1,700-2,000
+  games/minute.**
+- **N_ENVS=18 (tried, since the CPU — i5-13600K, 14C/20T — showed headroom, bursting
+  to 27-99% across samples rather than pegged): ~22,300 steps/sec — essentially flat
+  or slightly worse, not the ~29% gain proportional scaling would predict.** GPU
+  utilization was only ~45% during the N_ENVS=14 run, so the GPU isn't the bottleneck
+  either. Most likely explanation: Python-side per-update work (batch reshaping, GPU
+  re-inference, direct rollout-buffer writes, `model.train()`, ONNX export, and now a
+  bigger total rollout to process — 147,456 samples/update at N_ENVS=18 vs 114,688 at
+  N_ENVS=14) scales with total step count regardless of how many arenas produced it,
+  and/or Python-side thread coordination overhead across more arena-receiver threads
+  offsets the extra parallel C# simulation. **Reverted to N_ENVS=14** — 18 added
+  processes/RAM/open ports for no measured benefit. Not deeply profiled further
+  (e.g. no per-phase timing breakdown of collect vs. train vs. export within a single
+  update) given the time budget for this campaign — worth a real profiler pass in a
+  future session if throughput becomes the limiting factor again.
+
+At ~1,800 games/minute, a multi-day unattended run should accumulate on the order of
+millions of games — not literally "tens of thousands in minutes" but in the right
+neighborhood over the course of the weekend, and a large step up from whatever the
+prior (CPU-only-torch, wrong invest-explore, untuned-reward) runs were actually
+achieving.
+
+## Batch size
+
+`batch_size` raised from 1024 → 4096 (114,688-sample rollout per update ÷ 4096 = 28
+even minibatches/epoch × 6 epochs). Chosen as a "substantial but not reckless" first
+step per Marc's ask — his old runs plateauing suggests noisy small-batch gradients
+compounding with a weak opponent pool; `learning_rate` was already dropped to 0.0001
+specifically "for large-batch training" per that comment's own history, so this should
+already be anticipated/stable. Can be pushed further (8192) if the run looks stable
+and GPU headroom allows — RTX 3070 Ti is trivially large for a [512,512] net regardless
+of batch size in this range.
+
+## Launch
+
+Started 2026-07-24 ~14:16 EDT as two independent detached processes (both survive
+this Claude Code session pausing/ending — launched via PowerShell `Start-Process`,
+not a shell job tied to any one tool call):
+
+1. **Training** — `ai_env\Scripts\python.exe -u train_ai_cluster.py`, cwd
+   `CastleDefense.PythonAI/`, stdout/stderr → `campaign_run.log` /
+   `campaign_run.err.log`. PID recorded in `campaign_run.pid`. `-u` (unbuffered) was
+   necessary — the first launch attempt without it produced a completely empty log
+   for the first ~20s+ despite the process running fine (Windows fully buffers
+   redirected-to-file stdout by default), which would have left this whole campaign
+   unobservable for a multi-day run. Model name `castle_defense_p1_v27`, warm-started
+   from the freshly-regenerated `castle_defense_p1_v25_bc.zip`, `total_timesteps`
+   raised to 2,000,000,000 (see rationale above), `batch_size=4096`, `N_ENVS=14`,
+   GA-tuned reward params applied, new weighted opponent pool (HeuristicBot + self-play
+   + old league + spam/antispam/dummy) live, `INVEST_EXPLORE=0.05`.
+
+2. **Checkpoint benchmarking** — `benchmark_checkpoints.ps1` (same directory), a
+   separate detached PowerShell process. Every 25 minutes: copies
+   `current_model.onnx` (re-exported by the training loop after every PPO update) into
+   `CastleDefense.Simulation/bin/Release/net10.0/league_models/` as
+   `v27_snap_<UTC-timestamp>.onnx`, runs
+   `CastleDefense.BotArena.exe models headstart 150 v27_snap_<timestamp>` (HeuristicBot
+   vs that exact snapshot, sides alternated, time-machine head starts), and appends
+   `(timestamp, training_steps, games, heuristic_winrate_pct, model_winrate_approx_pct,
+   snapshot_file)` to `checkpoint_benchmark_log.csv` — full raw BotArena output also
+   kept per-check under `checkpoint_benchmark_raw/`. Keeps only the 10 most recent
+   snapshot files in `league_models/` (these are frequent, cheap self-checkpoints, not
+   meant to accumulate as permanent league anchors — pruned automatically). **Caught
+   and fixed one real bug before trusting this unattended**: the win-rate regex didn't
+   account for `BotArena`'s fixed-width `{decisiveWinRate,5:F1}` padding (e.g.
+   `( 70.0%)` has a leading space inside the parens) — verified against real captured
+   output before launching, not just eyeballing the regex.
+
+Both processes confirmed healthy after launch: 14 arena processes running, training
+progress climbing (`training_progress.csv` growing every ~114k steps as expected),
+benchmark loop's startup banner written cleanly.
+
+## How to check on this later
+
+- `tail campaign_run.log` / `tail training_progress.csv` — training progress
+  (win rate is against the whole new weighted pool, not directly comparable to any
+  pre-campaign number since HeuristicBot alone is ~15-30% for a weak/fresh model).
+- `tail checkpoint_benchmark_log.csv` — the metric that actually matters: model's
+  win rate specifically vs HeuristicBot over time, unaffected by opponent-pool mix
+  changes.
+- `Get-Process -Id (Get-Content campaign_run.pid)` / `...benchmark_loop.pid` — confirm
+  both are still alive.
+- To stop either: `Stop-Process -Id <pid> -Force`, then also
+  `Get-Process CastleDefense.Simulation | Stop-Process -Force` to clean up arena
+  children (they don't self-terminate if the parent Python process is killed
+  ungracefully) — matches this project's standing "always kill stray game/arena
+  processes" habit (see `feedback_style` memory).
+- Periodic checkpoints: `castle_defense_p1_v27.zip` (saved every 10 PPO updates,
+  skipped if a degenerate-policy check fires) is the safe resume point;
+  `castle_defense_p1_v27_last.zip` only exists after a graceful stop (Ctrl+C), which a
+  forceful `Stop-Process` won't produce — resume from the periodic `.zip`, not `_last`,
+  if this gets killed hard.
+
+---
+*(Log continues below as the campaign progresses — periodic benchmark results,
+plateau diagnosis if one occurs, and any further tuning.)*

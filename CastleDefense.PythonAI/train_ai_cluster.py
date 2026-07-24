@@ -10,6 +10,16 @@ import queue
 from pathlib import Path
 from collections import deque, defaultdict
 
+# Windows defaults stdout/stderr to the system codepage (cp1252) whenever it's not a
+# real console -- e.g. redirected to a log file for a detached background run, which
+# this campaign needs for multi-day unattended training. Several print()s below use
+# non-ASCII characters (entropy schedule arrows), which then crash the whole process
+# with UnicodeEncodeError the instant output isn't a live terminal. Force UTF-8
+# unconditionally so file-redirected runs behave identically to interactive ones.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import numpy as np
 import torch as th
 import gymnasium as gym
@@ -37,8 +47,20 @@ BOARD_SHAPING_END       =   21.308428
 BOARD_SHAPING_ANNEAL    = 3_000_000
 BOARD_SHAPING_LOOKAHEAD = 30         # AI-steps ≈ 270 game ticks ≈ 9 s (covers ~3 income periods)
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v26"  # saves checkpoints here
+TRAINING_MODEL_NAME = "castle_defense_p1_v27"  # saves checkpoints here
+# v27, not v26: the prior v26 attempt (10M steps, plateaued 36-39% WR, see
+# TRAINING_CAMPAIGN_LOG.md) ran with an accidentally-90%-forced invest action, untuned
+# reward params (the GA-tuned reward_params_{port}.json files didn't exist), and very
+# likely CPU-only torch -- distinct enough config that reusing "v26" would confuse
+# later comparisons against that old training_progress.csv (archived, not deleted).
 TRAINING_BASE_MODEL = "castle_defense_p1_v25_bc"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
+# Freshly regenerated 2026-07-24 from the 69 currently-available human replays (all
+# singleplayer, P1-wins-only per bc_pretrain.py's convention -- no multiplayer replays
+# survived the 2026-07-14 data-loss incident). No PPO .zip checkpoint for v25 itself
+# survives (only its ONNX export) so this is a fresh MaskablePPO BC-trained straight
+# from demonstrations, not a fine-tune of the real v25 policy. 1,270 usable examples
+# after filtering -- thin, but should still beat pure-random init as a starting prior
+# (69.3% action-prediction accuracy reached in BC training).
 TRAINING_MODEL_ONNX = "current_model.onnx"
 
 # Entropy annealing: decays linearly from start → ENT_FLOOR over the training run.
@@ -481,7 +503,15 @@ if __name__ == "__main__":
 
     custom_hyperparams = {
         "n_steps":      N_STEPS,
-        "batch_size":   1024,
+        # Raised from 1024 (was ~0.9% of the 114,688-sample rollout per minibatch,
+        # 112 minibatches/epoch) to 4096 (28 minibatches/epoch, still an even divisor
+        # of N_ENVS*N_STEPS) per Marc's explicit ask to increase batch size
+        # substantially — his prior runs plateauing around a ~20k-game mark is
+        # consistent with noisy small-batch gradient estimates compounding with a
+        # 16-way-random (now weighted, see CastleDefense.Simulation/Program.cs)
+        # opponent pool. learning_rate is already reduced to 0.0001 below specifically
+        # "for large-batch training" per that comment's own history — kept as-is.
+        "batch_size":   4096,
         "n_epochs":     6,       # reduced from 10 — fewer passes = less policy drift per update
         "gamma":        0.9998,
         "gae_lambda":   0.98,
@@ -526,7 +556,14 @@ if __name__ == "__main__":
     # ── SB3 internal setup (bypasses model.learn()) ──
     model.set_logger(configure(None, ["stdout"]))
     model._current_progress_remaining = 1.0
-    total_timesteps = 10_000_000
+    # Raised from 10M for this campaign: at the measured ~25-28k steps/sec, 10M steps
+    # completes in under 7 minutes -- the entropy-annealing schedule (which is driven
+    # by this same total_timesteps, not just the stop condition) would finish almost
+    # immediately and then the run would just HALT, defeating an unattended multi-day
+    # campaign. 2B gives a realistic multi-day annealing horizon even if real
+    # throughput ends up well below the measured spam/simple-opponent-heavy benchmark
+    # rate (self-play/HeuristicBot games are likely longer and more contested).
+    total_timesteps = 2_000_000_000
     if not hasattr(model, 'num_timesteps') or model.num_timesteps is None:
         model.num_timesteps = 0
     if not hasattr(model, '_n_updates') or model._n_updates is None:
