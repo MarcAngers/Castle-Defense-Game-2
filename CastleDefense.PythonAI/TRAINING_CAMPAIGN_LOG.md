@@ -292,6 +292,119 @@ already-running processes), which has a real cost (loses the current in-flight b
 though not the saved model checkpoint) — not something to do casually mid-campaign
 without a specific reason.
 
+## Checkpoint-vs-HeuristicBot benchmark, first 9 readings (97.7M-587M of 2B steps)
+
+| training_steps | heuristic WR | model WR (approx) |
+|---|---|---|
+| 97.7M | 82.7% | 17.3% |
+| 142.1M | 75.3% | 24.7% |
+| 192.2M | 79.3% | 20.7% |
+| 246.3M | 72.7% | 27.3% |
+| 306.9M | 79.3% | 20.7% |
+| 372.2M | 82.0% | 18.0% |
+| 440.6M | 76.7% | 23.3% |
+| 510.5M | 70.7% | 29.3% |
+| 587.0M | 72.0% | 28.0% |
+
+n=150/reading, noisy (this project's own established noise band is ~8-12 points at
+this sample size), but the model's win rate vs HeuristicBot averages ~20.9% across
+the first 3 readings vs ~26.9% across the most recent 3 -- a real, if modest, upward
+drift. HeuristicBot itself beats ~70-95% of every prior best RL checkpoint this
+project has ever produced, so a fresh/BC-only-warm-started model already winning
+20-29% of games against it (at only ~29% of the total training budget) is a
+meaningfully different, more encouraging signal than the old flat ~50%-vs-a-much-
+weaker-opponent-pool plateau this campaign was launched to fix.
+
+## Traced Marc's new Blue+snipe/wall wins, found and diagnosed a real trace-human bug
+
+Marc recorded 2 fresh human wins (`883B91`, `A25FBF` in
+`CastleDefenseGame2/recordings/singleplayer/`, `opponent_type=heuristic`, both
+Blue/snipe/wall/**wave** as his loadout) specifically to see if his own tidal-wave
+usage revealed anything actionable for the snipe|wall weak matchup or the wave-as-
+time-bridge valuation. Ran `--trace-human` (single, cheap process -- did not need to
+pause the benchmark loop or touch training, since replaying 2 short recordings is
+near-instant and the underlying simulation is deterministic/tick-based, not
+wall-clock-paced, so it can't corrupt any concurrent CPU-bound benchmark numbers even
+under contention).
+
+**Found a real, previously-undocumented bug in `--trace-human`'s replay fidelity for
+any game where a `HeuristicBot`-driven side is present** (i.e. every `sp`/`practice`
+recording tagged `opponent_type=heuristic` -- confirmed by testing 5 different
+existing recordings, 4 of which diverged from their recorded outcome, only one
+happened to land on the same winner by chance while still cutting hundreds of ticks
+short). Root cause, confirmed by reading the code directly (not guessed):
+- HeuristicBot casts gadgets via a direct `engine.UseGadget(side, gadgetId, position)`
+  call with a REAL, meaningful position (`myCastlePos` for defensive intent -- e.g.
+  snipe's doc comment: "aiming at our own castle makes it snipe whichever enemy is
+  closest to reaching it").
+- The `.replay` format only ever records the discrete action ID (0-13) per tick via
+  `GameEngine.LastActionP1/P2` -- there is no field for a gadget's target position at
+  all.
+- `TraceOneHumanReplay` (and any other replay-driven re-simulation) can only replay
+  the recorded discrete ID back through `engine.ApplyAction(side, actionId)`, and
+  `ApplyAction`'s gadget cases (`GameEngine.cs` ~line 912-918) always pass position
+  `-1`, which triggers a DIFFERENT "Bot Auto-Targeting" heuristic (~line 304-325):
+  targets the closest enemy unit with a ±300 lead offset -- not `myCastlePos`.
+- So any HeuristicBot-driven gadget cast gets silently RETARGETED during replay to a
+  different unit/position than it really hit live, which can cascade into a
+  completely different game trajectory and, eventually, a different winner/ending
+  tick than what's stored in `game_records.db`/the `.replay` header.
+
+Human-cast gadgets (Marc's own, as P1) are NOT affected by this specific bug --
+the live web game's human-cast path also goes through `ApplyAction(1, actionId)` with
+the same `-1` auto-targeting, so there's no information LOST for human casts
+specifically (same targeting logic both live and in replay). The divergence is
+entirely attributable to the OPPONENT side's (HeuristicBot's) gadget casts.
+
+**Practical effect on this analysis:** the recorded action IDENTITY/TIMING (e.g. "Marc
+cast his signature gadget at tick 2771") is reliable straight from the raw byte
+stream regardless of this bug -- but the surrounding SIMULATED economic state
+(money/HP%/army composition) in the trace printout is only as reliable as however
+much of the game preceded the FIRST HeuristicBot gadget mistargeting event, which
+isn't visible in the human-focused trace log (it only prints P1's non-wait actions,
+not P2's). Both traced games showed clear symptoms: game `883B91`'s re-simulation
+ended at tick 2888 (96s) vs. the recorded 6872 (229s); game `A25FBF`'s ended at 2572
+(85s) vs. the recorded 7236 (241s) -- meaning the trace for `A25FBF` cut off BEFORE
+any wave cast appears in the log at all, right as HP had already dropped to 25%
+(exactly the kind of moment a wave cast would matter most, per Marc's own framing).
+
+**What the reliable portion actually showed (game `883B91` only, since `A25FBF`'s
+wave cast never appears before the trace's cutoff):** Marc invested 5 times reaching
+income 59.9 by ~86s, then cast `wall_2` (tick 2667/88s, P2 army already at 8 units),
+`wave_2` (tick 2771/92s, HP had just ticked down to 98%, P2 army had surged to 29
+units), then `snipe_2` immediately after (tick 2817/93s, HP 80%, P2 army at 38 units).
+**This is consistent with Marc's own framing of wave as a PROACTIVE stall cast** --
+thrown right as a swarm was visibly forming (8→29 units in ~4 seconds) and HP had
+JUST started dropping, not as a last-ditch reactive save at a much lower HP -- rather
+than HeuristicBot's own reactive-only design (which only spends defensively once
+`inDanger` is already true, i.e., after real damage has already started accumulating
+past a threshold). This lines up with the standing, unresolved "genuinely overwhelmed"
+failure pattern documented throughout [[project_ai_opponent_heuristic]] -- a bot that
+only reaches for its own wall/wave-equivalent tools AFTER `inDanger` fires is
+structurally always a beat late compared to a human who fires proactively the moment
+a swarm is visibly forming.
+
+**Not fixed this session** (out of scope for what was asked, and a real fix -- adding
+a target-position field to the `.replay` binary format, a version bump, and updating
+every writer/reader -- is a nontrivial, separate piece of engineering, not a quick
+patch). Flagged as a follow-up task (see below) since it affects the trustworthiness
+of `--trace-human` for EVERY `opponent_type=heuristic` recording that has ever been
+or will be made, not just these two.
+
+**If this general "proactive stall gadget, cast before `inDanger`, not after" idea is
+pursued as an actual HeuristicBot change** (a genuinely different lever than either
+of the two already-rejected snipe-tuning attempts -- see above -- since it's about
+WHEN defensive gadgets fire relative to `inDanger`, not about snipe's specific value
+gate): note that freeze already has exactly this shape (`buyTimeJustifies = inDanger`,
+committed and validated) but wall/wave still gate on `inDanger` too (per
+`TryUseDefenseGadget`/wave's signature-slot handling) -- so "cast proactively on a
+forming swarm, not just once already in danger" would need a DIFFERENT, earlier
+trigger than `inDanger` itself (something like "enemy unit count crossed N in the last
+few decisions," mirroring the swarm-formation signal Marc's own account describes),
+not just reusing `inDanger` again. Worth trying, but per this project's whole
+snipe/wall tuning history, needs full two-replicate validation before trusting any
+one-off benchmark read.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
