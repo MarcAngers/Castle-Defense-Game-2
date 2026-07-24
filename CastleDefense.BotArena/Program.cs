@@ -776,9 +776,18 @@ if (args.Length > 0 && args[0] == "hunt")
         ? side => new TierSpamBaseline(side, huntTier)
         : MakeModelOpponentOrRusher(huntOpponentArg);
 
+    // Optional trailing "<offense> <defense>" pair forces P1's loadout instead of
+    // randomizing it -- lets a specific weak combo (e.g. snipe|wall) be traced
+    // directly instead of waiting for it to come up by chance across 200 rerolls.
+    // e.g. `hunt 4 headstart snipe wall`
+    string? forceOffense = args.Length > 3 ? args[3] : null;
+    string? forceDefense = args.Length > 4 ? args[4] : null;
+
     for (int attempt = 0; attempt < 200; attempt++)
     {
         var (huntState, huntEngine) = CreateGame(headStart);
+        if (forceOffense != null && forceDefense != null)
+            AssignLoadout(huntState.Player1, 1, huntState.Player1.Team, forceOffense, forceDefense);
         var huntBot = new HeuristicBotAdapter(1);
         var huntFoe = makeHuntFoe(2);
 

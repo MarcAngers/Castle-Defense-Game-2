@@ -1164,6 +1164,24 @@ namespace CastleDefense.Engine.Bot
                     // it -- directly preventing the exact chip damage that ends games,
                     // rather than chasing whoever hits hardest somewhere else on the field.
                     var nearest = enemyUnits.OrderBy(u => Math.Abs(u.Position - myCastlePos)).First();
+
+                    // TRIED AND REJECTED (2026-07-24): adding `|| inDanger` here, mirroring
+                    // freeze's already-validated `buyTimeJustifies = inDanger` fix, on the
+                    // theory that snipe|wall's status as this project's single weakest
+                    // offense/defense combo (~82.6% vs HeuristicBot's usual 90%+) was caused
+                    // by snipe's single-target value check rarely clearing its cost bar
+                    // against cheap early swarms (unlike nuke/firebomb, whose splash sums
+                    // value across every unit hit). Validated at full two-replicate
+                    // discipline (spam n=400x2, models n=300x2, headstart): spam was flat/
+                    // slightly positive (no regression), but v4 -- the intended beneficiary
+                    // -- showed NO consistent gain (+2.7 then -1.7, net +0.5, noise) while
+                    // v16 (-8.55 avg), v21 (-6.4 avg), and v25 (-6.4 avg) all regressed
+                    // CONSISTENTLY in both replicates, not just one. Reverted. Same lesson
+                    // as the earlier rejected snipe `DeferForInvestment` attempt: a change
+                    // motivated by sound-sounding reasoning about this case's own doc
+                    // comment can still be a net loss against adaptive opponents once
+                    // actually measured -- don't re-attempt an inDanger-based snipe-firing
+                    // relaxation without a genuinely different angle.
                     if (TargetValueJustified(me, def, EstimateUnitCost(engine, nearest)))
                         used = engine.UseGadget(_side, def.Id, myCastlePos);
                     break;

@@ -237,6 +237,61 @@ benchmark loop's startup banner written cleanly.
   forceful `Stop-Process` won't produce — resume from the periodic `.zip`, not `_last`,
   if this gets killed hard.
 
+## Secondary task: snipe|wall tactical pass (tried, rejected)
+
+While training ran in the background, investigated the snipe|wall loadout — the
+single weakest offense/defense combo per the latest dashboard sweep (82.6% overall,
+74.5-94.5% by team, vs. HeuristicBot's usual 90%+). Added a small reusable tool first
+(`hunt <opponent> [headstart] <offense> <defense>` in `CastleDefense.BotArena`, kept
+even though the fix built with it was rejected — forces P1's loadout instead of
+waiting for it to come up by chance across 200 rerolls) and traced real snipe|wall
+losses against Tier4 spam and v4. Both traces showed the standard, already-understood
+"genuinely overwhelmed, lost the economic race" pattern, not an obvious snipe-specific
+bug — but reading `TryUseOffenseGadget`'s snipe case turned up a real structural
+asymmetry: `TargetValueJustified` requires the ONE sniped unit's cost to clear
+snipe's own cost, whereas nuke/firebomb's splash sums value across every unit hit —
+so against cheap early swarms (many teams' tier1-3 units cost $1-10), snipe almost
+never clears its ~$30 bar and sits unused for exactly the low-income phase wall (a
+passive, non-clearing defense) also can't help with.
+
+**Fix tried:** added `|| inDanger` to snipe's cast gate, mirroring the already-
+validated freeze fix (`buyTimeJustifies = inDanger`, commit `2d92d53f`) — once
+genuinely in danger, snipe the nearest threat regardless of its raw dollar value,
+since it's stopping real ongoing chip damage right now (exactly what the case's own
+doc comment already claimed snipe was for).
+
+**Rejected after full two-replicate validation** (spam n=400x2, models n=300x2,
+headstart, benchmark loop paused during both replicate pairs to avoid CPU
+contention with the validation runs, training left running throughout since game
+simulation is deterministic/tick-based, not wall-clock-paced, so contention only
+affects validation speed, not correctness):
+- Spam: flat to slightly positive, no regression (Tier1 ~86%, Tier4 ~80.4% avg,
+  everything else 91-99.5%).
+- Models: **v4, the intended beneficiary, showed no consistent gain** (+2.7 then
+  -1.7 across the two replicates, netting to +0.5 — noise, not a real improvement).
+  Meanwhile **v16 (-8.55 avg), v21 (-6.4 avg), and v25 (-6.4 avg) all regressed
+  consistently in BOTH independent replicates** — a real signal per this project's
+  own established discipline (same-direction movement across two independent runs,
+  not just one), not noise.
+
+Reverted, documented as a rejected experiment in `HeuristicBot.cs` matching this
+project's established pattern (same fate as the earlier-rejected snipe
+`DeferForInvestment` attempt from an earlier session — see
+[[project_ai_opponent_heuristic]]). **Lesson reinforced:** snipe is apparently a
+genuinely hard gadget to tune here — two independent attempts motivated by sound,
+specific reasoning (one about investment timing, one about danger-gated firing) have
+now both been net losses against adaptive opponents despite each targeting a real,
+correctly-diagnosed mechanism. A third attempt should use a genuinely different
+lever, not another variant of loosening/tightening snipe's firing condition.
+
+Not deployed to the live training run's HeuristicBot opponent (moot, since it was
+reverted) — worth noting for the future: any HeuristicBot.cs change that IS kept
+would need the training arenas restarted to pick up the new `CastleDefense.Engine.dll`
+(each project has its own separate build output copy; a `dotnet build` doesn't affect
+already-running processes), which has a real cost (loses the current in-flight batch,
+though not the saved model checkpoint) — not something to do casually mid-campaign
+without a specific reason.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
