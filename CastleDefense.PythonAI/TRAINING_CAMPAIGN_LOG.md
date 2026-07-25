@@ -421,24 +421,40 @@ ticked down). Needs its own new trigger, not a reuse of `inDanger` -- freeze alr
 has an `inDanger`-gated proactive fix (`buyTimeJustifies`, commit `2d92d53f`), but
 that's a different shape of fix (still `inDanger`-based) than what this asks for.
 
-**2. Snipe targeting radius -- the "genuinely different angle" this project's twice-
-rejected snipe-tuning attempts needed.** Marc's own words: "Currently the targeting on
-it is exactly precise on your click, with a tie breaker favoring higher HP targets. In
-a real game though it's rare that you're able to exactly target the unit you want
-(usually a high tier, high HP unit) when there's a sea of lower tier units all around
-them. I want to adjust the gadget targeting to give a wider range around the selected
-target to find the highest HP unit to fire at, so less snipes get wasted on little
-tier 1 units that are running right next to the big tier 7 unit that is the actual
-intended target." Concretely: instead of `SnipeEffect` hitting the single nearest unit
-to the aim point exactly, search a radius around the aim point and pick the
-highest-HP unit within that window -- a targeting-QUALITY fix, distinct in kind from
-both prior rejected snipe attempts (`DeferForInvestment` gating and the `inDanger`
-firing-condition change above), since it doesn't touch WHEN/WHETHER snipe fires, only
-WHAT it hits once it does. `SnipeEffect`'s implementation (wherever it lives --
-likely `CastleDefense.Engine/Models/Hazards/` or similar, not yet located this
-session) is the place to look; `HeuristicBot.cs`'s snipe case (targets nearest-to-
-`myCastlePos`) would stay unchanged, since the radius/HP-priority logic belongs in the
-effect itself, not the bot's targeting POSITION choice.
+**2. Snipe targeting radius -- CORRECTED 2026-07-25: this is a GAME MECHANIC change,
+not a HeuristicBot-only change.** Marc's explicit correction: "the sniper targeting
+change im requesting is also for human players. When the gadget is targeted from a
+click on the screen, there should be an automatic search in the near vicinity to find
+the highest HP target." So the fix belongs in `SnipeEffect.Execute()` itself
+(`CastleDefense.Engine/Gadgets/SnipeEffect.cs`, confirmed/read this session) -- it
+resolves EVERY snipe cast's target from a `position` argument regardless of whether
+that position came from a human's screen click or `HeuristicBot`'s `myCastlePos` call,
+so fixing the effect fixes both simultaneously; no separate bot-side change needed.
+
+Current implementation (confirmed by reading it): picks the single enemy unit whose
+position is closest to the cast `position`, with a tie-break on `MaxHealth` that only
+fires on an EXACT distance tie (`==` on a continuous position value -- essentially
+dead code in practice, matches Marc's "rare that you're able to exactly target the
+unit you want" framing exactly). Fix: within some radius of `position`, pick the
+HIGHEST-HP unit in that window instead of strictly the nearest one -- so a click near
+a high-tier/high-HP target surrounded by cheap fodder lands on the intended target
+instead of whichever tier-1 unit happens to be a pixel closer.
+
+**This is a real GAME BALANCE/mechanics change** (affects human play, not just bot
+decision quality) -- **validate accordingly**: standard two-replicate
+HeuristicBot-vs-benchmark discipline still applies (since HeuristicBot also casts
+snipe and will benefit/change too), but this also changes what a HUMAN's snipe clicks
+do, so it's worth Marc's own playtest feel-check in addition to the automated
+win-rate validation, not just the BotArena numbers alone. Radius size is a new tunable
+constant with no existing precedent to copy -- pick a first-guess value (e.g. on the
+order of a unit-cluster's typical spacing, would need reading `master_roster.csv`/unit
+`Width` or checking typical inter-unit spacing empirically), validate, and be ready to
+sweep it if the first guess is clearly too wide (grabs targets across the whole field)
+or too narrow (barely different from today's exact-nearest behavior). This is
+distinct in kind from both prior rejected snipe attempts (`DeferForInvestment` gating
+and the `inDanger` firing-condition change above), since it doesn't touch WHEN/WHETHER
+snipe fires or WHERE it's aimed, only WHICH unit gets hit once it's aimed at a
+region -- the "genuinely different angle" this project's snipe-tuning history needed.
 
 Both are explicitly deferred -- do not implement until the v27 run reaches its
 stopping point (or is deliberately stopped) and the post-training evaluation plan
