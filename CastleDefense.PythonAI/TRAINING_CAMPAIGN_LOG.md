@@ -867,6 +867,64 @@ the watchdog he asked for is now itself validated against a real false-positive 
 which is arguably a more convincing sign it's well-calibrated than if it had simply
 never fired at all.
 
+## Invests/game as a progress metric, not just a sanity gate (2026-07-25)
+
+Marc's instinct: "for a healthy strong strategy the average number of invests per
+game should be around 5+... something to have an eye on" -- flagged as worth
+verifying precisely rather than trusting the guess, and worth tracking over training
+as a progress signal (does it climb as the model improves), not just the sanity
+watchdog's binary alive/dead check.
+
+**Human reference (exact, not estimated):** recovered the precise game count from the
+saved `bc_pretrain_run.log` -- 53 of the 69 available replays were P1 (human) wins
+(16 skipped as P2 wins). The raw `bc_sp.bin` export (before BC's separate mask-
+validity filtering, which is about training-data quality, not about whether an
+action really happened) contains 595 total Invest actions across those 53 games:
+**595 / 53 = 11.2 invests/game in human wins.** Notably higher than Marc's own ~5
+guess -- his estimate undersold it, exactly the kind of thing worth verifying rather
+than assuming.
+
+**Model references (new tool built for this, `invest-stats` mode in
+`CastleDefense.BotArena`):** neither `RunMatchup` nor any existing mode tracks a
+model's own final `InvestmentCount` (only win/loss/timeout) -- added a small
+dedicated mode (`invest-stats <modelFragment> [headstart] [games]`) that plays a
+model vs HeuristicBot (sides alternated) and reports both sides' average final
+`InvestmentCount` (a `PlayerState` field that only ever increases, so its value at
+game-over is exactly the total number of times that side invested). Ran n=60/model,
+headstart, kept modest specifically to limit CPU competition with the live training
+run:
+
+| source | avg invests/game | context |
+|---|---|---|
+| Human wins (n=53 games) | **11.2** | strongest reference, real wins |
+| HeuristicBot (vs v4) | 5.17 | the project's own tuned, strong bot |
+| **castle_defense_p1_v4** (strongest RL model vs HeuristicBot) | **4.48** | close to HeuristicBot's own number |
+| HeuristicBot (vs v25_bc) | 4.77 | -- |
+| castle_defense_p1_v25_bc (v28's warm-start base) | 2.15 | notably lower than v4 |
+
+**Reading on this:** strong/competent play (human wins, HeuristicBot itself, and v4 --
+the strongest RL checkpoint against HeuristicBot) clusters in the **~4.5-11 range**,
+while `v25_bc` (weaker economically despite still being the single strongest model by
+raw win rate, per the earlier full ranking) sits at **~2.15** -- a real, measurable
+gap between "has a decent overall strategy" and "has a genuinely strong economy."
+Worth noting explicitly: invests/game isn't a strictly monotonic proxy for win rate
+by itself (v25_bc actually has a HIGHER win rate vs HeuristicBot than v4 despite
+fewer invests/game -- different viable strategies can win without maxing the
+economy) -- but it's still a meaningful, independent signal of whether a model is
+developing a real economic game, distinct from just "does it win."
+
+**v28's current invests/game (from `training_progress.csv`, tracked continuously) is
+~1.1-1.7 so far** (noisy at this very early stage, ~1% of the training budget) --
+essentially at or slightly below its own `v25_bc` starting point's level (2.15), not
+yet showing the climb toward the 4.5+ "strong economy" range that would indicate real
+improvement. **Interpretation going forward, exactly per Marc's framing:** if this
+stays pinned near ~2 while the win-rate-vs-heuristic benchmark also stalls, that's a
+sign the model isn't learning the economic core (a real diagnostic signal, distinct
+from the sanity watchdog's pass/fail); if it climbs toward the 4.5+ range alongside a
+rising win-rate-vs-heuristic trend, that's genuine strategic improvement, not just
+noise. **This will be reported alongside the checkpoint-vs-heuristic benchmark in
+every periodic status update from here on**, not tracked separately/silently.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it

@@ -253,6 +253,53 @@ if (args.Length > 0 && args[0] == "models")
     return;
 }
 
+// Marc's ask (2026-07-25): average invests-per-game as a progress metric for the RL
+// campaign, not just a win-rate number -- needs a real reference point for "what does
+// good play look like" rather than a guessed target. RunMatchup/RunOneGame don't
+// expose final InvestmentCount at all (only winner/ticks/timeout), so this is a
+// dedicated mode: plays a model against HeuristicBot (sides alternated, same
+// fairness convention as RunMatchup) and reports both sides' average final
+// InvestmentCount (PlayerState.InvestmentCount only ever increases, so its value at
+// game-over is exactly the total number of times that side invested that game).
+// Usage: invest-stats <modelFragment> [headstart] [games]
+if (args.Length > 0 && args[0] == "invest-stats")
+{
+    string modelArg = args.Length > 1 ? args[1] : "v4";
+    bool headStart = args.Length > 2 && args[2] == "headstart";
+    int games = args.Length > 3 && int.TryParse(args[3], out var ig) ? ig : 100;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    var match = Directory.GetFiles(dir, "*.onnx").FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains(modelArg, StringComparison.OrdinalIgnoreCase));
+    if (match == null) { Console.WriteLine($"No model matching '{modelArg}' found in {dir}."); return; }
+    string modelName = Path.GetFileNameWithoutExtension(match);
+
+    Console.WriteLine($"Running {games} games: {modelName} vs HeuristicBot{(headStart ? " (headstart)" : "")}...");
+
+    var modelInvests = new List<int>();
+    var botInvests = new List<int>();
+    for (int i = 0; i < games; i++)
+    {
+        bool modelIsP1 = i % 2 == 0;
+        var (state, engine) = CreateGame(headStart);
+        var modelOpp = new AIModelOpponent(modelIsP1 ? 1 : 2, match);
+        var bot = new HeuristicBotAdapter(modelIsP1 ? 2 : 1);
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            if (modelIsP1) { modelOpp.Update(engine); bot.Update(engine); }
+            else { bot.Update(engine); modelOpp.Update(engine); }
+        }
+        modelInvests.Add(modelIsP1 ? state.Player1.InvestmentCount : state.Player2.InvestmentCount);
+        botInvests.Add(modelIsP1 ? state.Player2.InvestmentCount : state.Player1.InvestmentCount);
+        (modelOpp as IDisposable)?.Dispose();
+    }
+
+    Console.WriteLine($"{modelName}: avg invests/game = {modelInvests.Average():F2}  (min={modelInvests.Min()}, max={modelInvests.Max()})");
+    Console.WriteLine($"HeuristicBot:      avg invests/game = {botInvests.Average():F2}  (min={botInvests.Min()}, max={botInvests.Max()})");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "dashboard")
 {
     // Sweeps the FULL team x offense x defense cross-tab (8 x 4 x 4 = 128 cells) for
