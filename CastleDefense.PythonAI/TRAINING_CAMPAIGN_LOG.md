@@ -405,6 +405,116 @@ not just reusing `inDanger` again. Worth trying, but per this project's whole
 snipe/wall tuning history, needs full two-replicate validation before trusting any
 one-off benchmark read.
 
+## POST-TRAINING QUEUE (do NOT implement until the v27 training run finishes)
+
+Marc queued two HeuristicBot changes explicitly deferred until after training
+completes (both need the training arenas' CPU headroom free, and both should go
+through the standard two-replicate validation discipline once implemented):
+
+**1. Wave/wall "swarm is forming" trigger.** From the tidal-wave trace above: fire
+proactively (independent of `inDanger`) once the enemy army is rapidly growing, the
+way Marc's own play does it -- not only after `inDanger` (real accumulated damage)
+already fires, which is structurally always a beat late. Candidate signal: something
+like "enemy unit count rose by N over the last few decisions" (mirrors the swarm-
+formation read from the `883B91` trace: 8->29 units in ~4 seconds right as HP first
+ticked down). Needs its own new trigger, not a reuse of `inDanger` -- freeze already
+has an `inDanger`-gated proactive fix (`buyTimeJustifies`, commit `2d92d53f`), but
+that's a different shape of fix (still `inDanger`-based) than what this asks for.
+
+**2. Snipe targeting radius -- the "genuinely different angle" this project's twice-
+rejected snipe-tuning attempts needed.** Marc's own words: "Currently the targeting on
+it is exactly precise on your click, with a tie breaker favoring higher HP targets. In
+a real game though it's rare that you're able to exactly target the unit you want
+(usually a high tier, high HP unit) when there's a sea of lower tier units all around
+them. I want to adjust the gadget targeting to give a wider range around the selected
+target to find the highest HP unit to fire at, so less snipes get wasted on little
+tier 1 units that are running right next to the big tier 7 unit that is the actual
+intended target." Concretely: instead of `SnipeEffect` hitting the single nearest unit
+to the aim point exactly, search a radius around the aim point and pick the
+highest-HP unit within that window -- a targeting-QUALITY fix, distinct in kind from
+both prior rejected snipe attempts (`DeferForInvestment` gating and the `inDanger`
+firing-condition change above), since it doesn't touch WHEN/WHETHER snipe fires, only
+WHAT it hits once it does. `SnipeEffect`'s implementation (wherever it lives --
+likely `CastleDefense.Engine/Models/Hazards/` or similar, not yet located this
+session) is the place to look; `HeuristicBot.cs`'s snipe case (targets nearest-to-
+`myCastlePos`) would stay unchanged, since the radius/HP-priority logic belongs in the
+effect itself, not the bot's targeting POSITION choice.
+
+Both are explicitly deferred -- do not implement until the v27 run reaches its
+stopping point (or is deliberately stopped) and the post-training evaluation plan
+below has run.
+
+## Post-training plan (drafted 2026-07-25, before the run finished)
+
+Marc asked whether an autonomous plan exists for after training completes, given
+~30h estimated remaining (though observed throughput this run -- 1.66B/2B steps in
+~10.3h as of this writing -- suggests it may finish well before that estimate; will
+update this section once it actually stops). Concrete steps, in order:
+
+1. **Confirm the run's actual stopping condition.** Either it reaches 2B steps and
+   exits cleanly (`train_ai_cluster.py`'s own `total_timesteps` check), or it needs to
+   be stopped deliberately (e.g. if the checkpoint-vs-HeuristicBot trend clearly
+   plateaus well before 2B, no need to burn the full budget). Either way: confirm
+   `castle_defense_p1_v27.zip` (the periodic checkpoint, saved every 10 updates) is
+   present and not from a degenerate-policy rollback, and stop the benchmark loop +
+   arena processes cleanly (`Stop-Process` on the tracked PIDs, then confirm no
+   stray `CastleDefense.Simulation.exe` processes remain, per the standing
+   "kill stray game processes" habit).
+
+2. **Full evaluation via BotArena, not just the periodic 150-game spot-checks.**
+   Export `castle_defense_p1_v27.zip` to ONNX (`export_onnx.py`/
+   `export_league_models.py` pattern), drop it into `league_models/` alongside the
+   existing v3/4/7/14/16/20/21/22/23/25, then run the full `dashboard` mode (team x
+   offense x defense cross-tab, all 8 spam tiers + every model including v27) for a
+   real, high-confidence read -- not just aggregate win rate, the same team/loadout
+   breakdown that already found Tier4's roster-imbalance and snipe|wall's weakness
+   for the heuristic side. Compare v27's aggregate HeuristicBot win rate against v4's
+   72.0% (the current strongest model) -- that's the real bar for "did this campaign
+   actually produce a better model."
+
+3. **Branch on outcome:**
+   - **If v27 is a clear step up (materially beats v4's ~72% heuristic-win-rate
+     bar, i.e. HeuristicBot wins LESS than ~72% against v27):** export it into the
+     live `league_models/` sets (training arenas' AND the web game's, per
+     `export_league_models.py`'s existing copy-to-both-locations behavior) so it
+     becomes a real league anchor going forward. Consider a SECOND warm-started run
+     from v27 itself (now that a real, better PPO `.zip` checkpoint exists to resume
+     from, unlike this run's BC-only warm start) -- likely the single highest-leverage
+     next step, since resuming from an actually-decent policy rather than a thin BC
+     prior should compound faster. Exploiter-style opponents (per the original
+     campaign brief's stretch goal) become worth building at that point too, once
+     there's a genuinely strong model worth trying to break.
+   - **If v27 plateaued or regressed (still losing badly to HeuristicBot, similar to
+     the old ~50%-vs-weak-pool pattern):** diagnose before re-running blind. Check
+     the full `training_progress.csv`/`training_progress_opponents.csv` history for
+     where/whether it plateaued, check `checkpoint_benchmark_log.csv`'s trend for the
+     same, and specifically check per-opponent-type win rate (self-play vs
+     HeuristicBot vs old-league-models) to see whether the 80/20 weighting needs
+     rebalancing, or whether self-play collapsed into a degenerate strategy, or
+     whether batch_size=4096 needs to go further. This is exactly the kind of
+     diagnosis-over-blind-retry the original campaign brief asked for.
+
+4. **Implement and validate the two queued HeuristicBot changes above** (wave/wall
+   swarm trigger, snipe targeting radius) at standard two-replicate discipline, same
+   as every other change in [[project_ai_opponent_heuristic]].
+
+5. **Keep the records current**: update `TRAINING_CAMPAIGN_LOG.md` and
+   `project_ai_training.md`/`project_ai_opponent_heuristic.md` memory with the final
+   outcome, same discipline as the rest of this campaign.
+
+**What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
+executable without him (mechanical: stop processes cleanly, run the existing
+dashboard tooling, implement+validate two already-fully-specified changes, write it
+up). Step 3's BRANCH POINT is where his judgment genuinely matters -- "is this good
+enough to make it the new league anchor and commit real time to a second run" and
+"should exploiter agents happen now or later" are calls about how to spend the REST
+of the weekend, not just a mechanical next step, so that decision point will be
+reported to him rather than assumed. If he's unreachable when the run finishes, the
+default is: run the full evaluation (steps 1-2) and the two queued fixes (step 4)
+regardless -- those are valuable either way -- and hold off on committing to a second
+full training run or exploiter-agent work until he's confirmed the direction, since
+those are the expensive, hours-long commitments a wrong guess would waste.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
