@@ -11,10 +11,19 @@ Run from CastleDefense.PythonAI/ with the ai_env activated:
     python export_league_models.py
 """
 import os
+import sys
 import shutil
 import torch as th
 from sb3_contrib import MaskablePPO
 from stable_baselines3 import PPO
+
+# Windows defaults stdout to the system codepage (cp1252) whenever it's not a real
+# console -- the arrow character in this script's own "[OK] name -> path" print then
+# crashes the whole export mid-loop the instant output isn't a live terminal (same
+# root cause already fixed in train_ai_cluster.py). Force UTF-8 unconditionally.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.normpath(os.path.join(
