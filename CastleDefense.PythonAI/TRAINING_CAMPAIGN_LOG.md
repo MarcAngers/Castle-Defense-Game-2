@@ -518,6 +518,118 @@ update this section once it actually stops). Concrete steps, in order:
    `project_ai_training.md`/`project_ai_opponent_heuristic.md` memory with the final
    outcome, same discipline as the rest of this campaign.
 
+## Exploiter degeneracy gate (Marc green-lit both warm-start continuation AND a full exploiter run, 2026-07-25)
+
+Marc approved building a full exploiter-training loop (not just the basic single-run
+probe), on the condition of an automated degeneracy check so exploiter results can be
+evaluated autonomously without him having to watch every game. His method, verbatim:
+"A great way we can look to see if the exploiter is a degenerate strategy or not is to
+compare action distributions. You can take a second to analyze the human games we have
+recorded and compute the mean non-wait (non-zero) action distribution. Then you can
+compare the exploiters action distribution to see if its completely degenerate. I'd
+say any action reaching 90+% of total actions would probably be a degenerate
+strategy."
+
+**Human baseline computed (prep step, done now, doesn't touch training):** loaded
+`bc_sp.bin` (fresh, 2026-07-24, P1-wins-only singleplayer human games) and
+`bc_mp.bin` (STALE -- dated 2026-07-09, predates the 2026-07-14 recordings data-loss
+incident, kept only as a secondary cross-check since no real multiplayer replays
+currently exist) directly -- both already contain ONLY non-wait actions (the BC
+exporter itself only records significant actions, not idle "wait" ticks, so no extra
+filtering was needed to isolate "non-wait" specifically).
+
+| action | sp (2026-07-24, n=2096) | mp (STALE, n=417) | combined (n=2513) |
+|---|---|---|---|
+| Tier1 | 9.4% | 29.3% | 12.7% |
+| Tier2 | 1.6% | 2.2% | 1.7% |
+| Tier3 | 3.3% | 4.1% | 3.4% |
+| Tier4 | 10.3% | 5.0% | 9.4% |
+| Tier5 | 8.4% | 4.1% | 7.7% |
+| Tier6 | 5.1% | 0.2% | 4.3% |
+| Tier7 | 12.3% | 0% | 10.2% |
+| Tier8 | 2.4% | 0% | 2.0% |
+| Invest | 28.4% | 19.2% | 26.9% |
+| Repair | 2.4% | 3.1% | 2.5% |
+| OffGadget | 3.8% | 7.7% | 4.4% |
+| DefGadget | 9.0% | 20.4% | 10.9% |
+| SigGadget | 3.6% | 4.8% | 3.8% |
+
+**Reference: max single non-wait action across all three views is Invest at 28.4%
+(sp) / 26.9% (combined) -- well under Marc's 90% degenerate threshold, with real
+weight spread across every tier and every gadget category.** This is the healthy-play
+reference distribution. Invest being the single largest category matches this
+project's whole standing narrative (investment timing is the highest-leverage,
+hardest-to-learn decision in this economy) -- not a red flag, expected.
+
+**Post-training exploiter gate (to apply once an exploiter run exists):** compute the
+exploiter's own non-wait action distribution the same way (straightforward from the
+training arena's own per-action tallies, or a quick post-hoc pass over its recorded
+games) and compare against this table.
+- **Any single action >= 90% of the exploiter's own non-wait actions -> flag as
+  degenerate.** Likely exploiting an engine/balance artifact (e.g. spamming one
+  specific gadget or tier nonstop rather than playing a real strategy) -- report it to
+  Marc as a found bug/imbalance rather than feeding it back into v27's training pool.
+- **A spread broadly similar in SHAPE to the human reference (no single category
+  anywhere near 90%, real representation across multiple tiers/gadgets/economy
+  actions) -> passes the degeneracy check.** Combined with traces of actual games
+  (not just the aggregate win rate) looking like real, sensible play, this is the
+  autonomous go/no-go gate for whether an exploiter's win is worth feeding back into
+  target training: **non-degenerate by this test AND traces look real -> candidate to
+  feed back; degenerate by this test -> report as a found exploit, do not train
+  against it.**
+
+## TRAINING RUN COMPLETE (discovered 2026-07-25 ~13:27 EDT, had finished hours earlier)
+
+`train_ai_cluster.py` reached its full 2,000,000,000-step budget and exited cleanly
+at **2026-07-25 02:39-02:40 EDT** (log: "Reached 2,000,000,000 timesteps. Training
+complete." / "Done." / "Last clean checkpoint remains at castle_defense_p1_v27.zip"),
+**~12.4 hours after launch, well under Marc's ~30h estimate** -- both
+`castle_defense_p1_v27.zip` (periodic checkpoint) and `castle_defense_p1_v27_last.zip`
+(final graceful save) are present and intact, no errors anywhere in the log. The
+training process (and its 14 arena children) had already exited on their own; only
+the checkpoint-benchmark loop kept running afterward (harmlessly re-benchmarking the
+now-static final model every 25 minutes for the following ~11 hours, since nothing
+told it training had stopped) -- this wasn't caught earlier because nothing was
+actively polling for the stop condition during that window.
+
+**Silver lining: those extra ~11 hours of redundant benchmarking produced 26
+independent 150-game readings of the exact same final, fully-converged checkpoint --
+3,900 games total, a genuinely large, high-confidence sample of v27's real strength.**
+Final result: **mean 20.6% win rate vs HeuristicBot (range 15.3-25.3% across the 26
+readings), NOT a clear improvement over v4 (the current strongest model, 28.0% win
+rate vs HeuristicBot per the last full dashboard sweep).**
+
+**Correcting an earlier report:** with only 9 early readings available, the previous
+status update read a "modest upward drift" (~21%->~27% first-3 vs last-3 average).
+**With the full 53-reading history now available, that reversed** -- binning into 5
+chunks across the whole run shows the model's win rate vs HeuristicBot actually
+PEAKED around 22-24% mid-training (steps ~100M-1.4B) and drifted back DOWN to ~20-22%
+by the end (steps ~1.5B-2B and the 26 post-completion re-reads), settling at ~19.6%
+in the very last few readings. **The early "upward drift" was real but didn't hold --
+this looks more like a peak-then-mild-decline shape than sustained improvement,**
+though still nowhere near catastrophic (no collapse, stayed in a fairly narrow
+15-33% band the whole run). Full per-chunk numbers:
+
+| readings | steps range | mean model WR |
+|---|---|---|
+| 1-10 | 98M-662M | 22.8% |
+| 11-20 | 741M-1431M | 24.3% |
+| 21-30 | 1504M-2000M | 21.5% |
+| 31-40 | 2000M (post-completion re-reads) | 21.1% |
+| 41-50 | 2000M (post-completion re-reads) | 19.9% |
+| 51-53 | 2000M (post-completion re-reads) | 19.6% |
+
+**This is an honest, not-fully-successful outcome on the narrow "beat v4" bar** --
+though this heuristic-only benchmark is a useful proxy, not the full picture (the
+`models` dashboard sweep against the OTHER 9 old league checkpoints, team/loadout
+breakdowns, etc. haven't been run yet for v27 -- that's the next, already-approved
+step). Given this, the per-opponent-type training-progress breakdown
+(`training_progress_opponents.csv`) is worth checking specifically for whether
+self-play collapsed into something degenerate, or whether the model overfit to
+beating the easier 20% of the pool (spam/dummy/old-league) while genuinely
+plateauing against HeuristicBot/self-play specifically -- diagnosis, not blind
+re-launch, per the standing campaign discipline.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
