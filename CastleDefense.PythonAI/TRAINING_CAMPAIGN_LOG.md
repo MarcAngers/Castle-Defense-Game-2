@@ -674,6 +674,110 @@ made this campaign didn't work at all -- most of them (CUDA, GA reward params,
 invest-explore, league diversity) are independently well-justified and still likely
 correct; something else in the 2B-step run itself degraded the policy.
 
+## ROOT CAUSE FOUND: the whole v27 run's P1 side was acting randomly, not from its own policy
+
+Diagnosed why v27 regressed below v25_bc. Checked all four of Marc's hypotheses
+against real evidence rather than guessing:
+
+**(a) Self-play collapse -- REJECTED, replaced by a more basic finding: self-play
+never ran at all.** `training_progress_opponents.csv` (366,206 rows spanning the
+whole run) contains the string "Self-Play" **zero times**, despite the opponent pool
+being coded for a 50% weight. At the very first checkpoint (before any per-opponent
+rolling-window statistic saturates, so raw counts are meaningful), the actual
+observed distribution was **Random Dummy 56.1%, Heuristic Bot 26.8%**, spam/antispam
+~10%, league models collectively ~5% -- i.e. every self-play roll (50% of ALL games)
+was silently landing on Random Dummy instead. Not a learned degenerate equilibrium --
+self-play never had the chance to run at all.
+
+**(b) Catastrophic forgetting -- CONFIRMED, but the mechanism is more basic than
+"RL reward pulled it toward a different optimum."** Root cause (found by checking
+`CastleDefense.Simulation/Program.cs`'s `modelPath` resolution against
+`train_ai_cluster.py`'s `start_arenas()`): each arena was launched with only a port
+argument, so `modelPath` defaulted to the bare relative filename
+`"current_model.onnx"`, resolved against the arena's own working directory
+(`NET10_DIR` = `CastleDefense.Simulation/bin/Release/net10.0/`) -- but
+`export_current_model()` writes the file to `_SCRIPT_DIR` (`CastleDefense.PythonAI/`,
+where the Python script itself runs). **Confirmed directly: the file never existed at
+the path any arena ever checked** (`ls` on that exact path during the live campaign
+returned nothing). Consequence: `trainingBrain` was **null for the entire 2-billion-
+step run, in every arena, the whole time**. Since `p1Action = trainingBrain != null ?
+trainingBrand.GetBestAction(...) : GetRandomValidAction(p1Mask)`, **P1's own actions
+during every single game fell back to uniformly random, valid-but-otherwise-arbitrary
+moves -- never the model's own learned policy.** PPO was training on (state,
+random-action) pairs completely disconnected from the policy being updated for the
+ENTIRE run -- not a subtle reward-shaping issue, a basic plumbing bug that severed the
+model from its own rollout data.
+
+This also explains why the whole-pool win rate/reward/invest-rate were **completely
+flat across all six chunks of the run** (55.9-56.1% winrate, ~122.4-122.9 reward,
+~0.098-0.104 invests/game, every single chunk, start to finish -- verified directly,
+not eyeballed) -- there was no real feedback loop for the model's OWN choices to
+improve, since its own choices were never actually being executed. 2 billion steps of
+policy-gradient updates weighted toward imitating uniformly-random actions plausibly
+explains the slow erosion of the BC-derived weights (a real, if unglamorous,
+degradation mechanism) rather than any coherent rise-then-plateau trajectory.
+
+**(c) Reward misspecification -- not supported as a separate/additional cause.**
+Reward and win-rate moved together the whole run (both flat), not divergently -- if
+the GA-tuned reward params were pointing the model toward a wrong-direction proxy,
+reward would be expected to rise while win-rate fell or vice versa. No such divergence
+was observed. Not ruled out as a minor contributor, but the modelPath bug alone is
+sufficient to explain everything observed, so this wasn't chased further.
+
+**(d) Overfitting the easy 80/20 split -- moot given (b)/(a): there was no real 80/20
+split in practice.** With self-play collapsing to Random Dummy, the ACTUAL realized
+opponent mix was roughly 56% trivial Random Dummy + 27% HeuristicBot + ~17% everything
+else -- a much weaker/easier realized curriculum than designed, compounding (b)'s
+damage rather than being an independent cause.
+
+**Fixed** (`train_ai_cluster.py`'s `start_arenas()`): pass the ONNX path as an
+explicit absolute argument to each arena, eliminating the cwd-relative ambiguity
+entirely (`CastleDefense.Simulation/Program.cs`'s `modelPath` already correctly
+accepted a second CLI arg -- it just was never given one). **Verified with a live
+smoke test post-fix, not just code review:** "Self-Play" now appears at ~49% share
+(matching the intended weight almost exactly), Random Dummy back down to its correct
+~3%, and **`Invests/Game` jumped from ~0.1 (the ENTIRE broken v27 run, every single
+chunk) to ~2+ (the fixed smoke test) -- a ~20x difference**, consistent with a policy
+that actually understands investing matters (matches the human baseline's 28.4%
+Invest share) rather than one whose actions were noise.
+
+## Recommendation
+
+**What to warm-start from:** `castle_defense_p1_v25_bc` -- still the strongest model
+in the league (31.0% vs HeuristicBot) and completely untouched by this bug (BC
+pretraining doesn't go through the arena/self-play path at all). Do NOT warm-start
+from `v27` -- it's a regression, not a checkpoint worth building on.
+
+**What config to change:** the `start_arenas()` fix above is necessary and sufficient
+to make self-play (and therefore the whole opponent-mix design) actually work as
+intended for any future run. No other config change is indicated by this diagnosis --
+reward params, batch size, invest-explore rate, and the opponent-pool weights
+themselves were never actually exercised as designed, so none of them are implicated.
+
+**On Marc's own question -- given v25_bc/BC is currently the strongest model, is more/
+better behavior cloning actually the higher-ROI path over more RL right now?**
+Genuinely worth weighing, not a rhetorical question to wave past:
+- BC's ceiling is fundamentally capped by imitating existing human play -- it cannot
+  discover strategies better than what's in the demonstration data, no matter how much
+  more data is collected. RL's whole value proposition is the ability to exceed human
+  play through self-directed exploration -- but that value was never actually
+  realized this run because of the bug above, not because RL itself failed here.
+- Given the bug is now fixed and verified, a proper RL run (self-play genuinely
+  running at ~50%, P1 genuinely acting from its own policy) hasn't been tried yet --
+  this run doesn't provide real evidence against RL's potential, since it never
+  actually ran as designed.
+- More/better BC data (particularly real multiplayer human-vs-human games, weighted
+  10x over singleplayer in `bc_pretrain.py`'s own design -- zero currently exist,
+  all lost in the 2026-07-14 incident) is comparatively cheap and would likely raise
+  the BC floor further regardless of what happens with RL, and Marc is the one who'd
+  need to actually play those games.
+- **This is a genuine fork needing Marc's call, not something to guess at:** (1)
+  relaunch RL now that the bug is fixed and see if it actually improves on v25_bc this
+  time (the original plan, now on a real footing), (2) prioritize collecting more/
+  better human demonstrations (especially multiplayer) and re-run BC, or (3) both,
+  time permitting. Given how much of the weekend may remain, flagging this explicitly
+  rather than picking one autonomously.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
