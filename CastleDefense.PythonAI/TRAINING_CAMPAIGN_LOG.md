@@ -630,6 +630,50 @@ beating the easier 20% of the pool (spam/dummy/old-league) while genuinely
 plateauing against HeuristicBot/self-play specifically -- diagnosis, not blind
 re-launch, per the standing campaign discipline.
 
+## Full model ranking, post-training (2026-07-25) -- a real regression, not just a shortfall
+
+The full team/loadout dashboard sweep (`dashboard` mode) was too slow to be practical
+for a same-day answer (~40 min for a standard model, ~90+ min projected for v4/v7's
+priority weighting, 21 opponents total -- killed after 2/13 models to avoid an
+8+ hour wait) -- switched to the faster `models headstart 300` mode (aggregate win
+rate only, no per-team/loadout breakdown) to answer the actual question asked
+(ranking), and it finished in a reasonable time. Full result, n=300/model, sorted by
+model strength (ascending heuristic win rate):
+
+| rank | model | heuristic WR | model WR |
+|---|---|---|---|
+| 1 | **v25_bc** | 69.0% | **31.0%** |
+| 2 | v4 | 73.0% | 27.0% |
+| 3 | v23 | 75.0% | 25.0% |
+| 4 | v27_last | 77.0% | 23.0% |
+| 5 | v25 | 77.3% | 22.7% |
+| **6** | **v27** | **78.7%** | **21.3%** |
+| 7 | v21 | 81.3% | 18.7% |
+| 8 | v16 | 82.3% | 17.7% |
+| 9 | v20 | 83.3% | 16.7% |
+| 10 | v7 | 86.3% | 13.7% |
+| 11 | v22 | 90.0% | 10.0% |
+| 12 | v3 | 90.7% | 9.3% |
+| 13 | v14 | 96.3% | 3.7% |
+
+**v27 ranks 6th of 13 -- middle of the pack, not the strongest, and not better than
+v4** (matches the checkpoint-benchmark log's own final ~20.6% average). **But the
+more important finding: `v25_bc` -- the BC-only warm-start base this entire 2B-step,
+~12-hour run started FROM, with zero RL training applied -- is the single strongest
+model in the whole league, clearly ahead of v27 (31.0% vs 21.3% model win rate) and
+even ahead of v4.** This means the RL run didn't just fail to improve on its starting
+point -- **it left the model measurably WORSE than where it began.** This is a
+regression, not merely a disappointing result, and changes the framing for what to do
+next: warm-starting a continuation FROM v27 would mean building on top of a
+regression, not real progress. Before deciding what to warm-start from, the next step
+is diagnosing the actual mechanism (check `training_progress_opponents.csv`'s
+per-opponent-type breakdown for signs of self-play collapsing into something
+degenerate, or the model overfitting the easy 20% of the pool at the expense of real
+skill against HeuristicBot/self-play specifically) rather than assuming the fixes
+made this campaign didn't work at all -- most of them (CUDA, GA reward params,
+invest-explore, league diversity) are independently well-justified and still likely
+correct; something else in the 2B-step run itself degraded the policy.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
