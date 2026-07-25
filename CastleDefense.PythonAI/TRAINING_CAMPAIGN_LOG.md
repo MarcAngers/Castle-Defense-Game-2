@@ -778,6 +778,57 @@ Genuinely worth weighing, not a rhetorical question to wave past:
   time permitting. Given how much of the weekend may remain, flagging this explicitly
   rather than picking one autonomously.
 
+## v28 relaunch (2026-07-25, Marc's decision: focus on RL, BC off the table for now)
+
+Marc chose to focus on RL (can't provide more recordings, so BC improvement isn't
+available right now) and asked to relaunch autonomously now that the plumbing bug is
+fixed, with an explicit requirement: build an actual watchdog this time, not just
+manual check-ins, so a repeat of the v27 failure mode (12+ hours to notice) can't
+happen again.
+
+**Config:** `TRAINING_MODEL_NAME` -> `castle_defense_p1_v28`, warm-started from
+`castle_defense_p1_v25_bc` (unchanged -- still the strongest model, confirmed
+unaffected by the bug). Same `total_timesteps=2_000_000_000` budget (no reason found
+to change it). Archived all v27 artifacts (`checkpoint_benchmark_log_v27_ARCHIVE.csv`,
+`campaign_run_v27_ARCHIVE.log`, `checkpoint_benchmark_raw_v27_ARCHIVE/`) rather than
+deleting, so the diagnosed failure stays inspectable.
+
+**Two new pieces of infrastructure, both requested explicitly:**
+
+1. **`benchmark_checkpoints.ps1` now stops itself once training actually finishes**,
+   instead of idling for hours re-benchmarking a static model (exactly what happened
+   for ~11 hours after v27 completed). Tracks the training PID (`campaign_run.pid`)
+   and `training_progress.csv`'s step count; requires BOTH "process not found" AND
+   "steps unchanged" to hold for two consecutive cycles before stopping (a single
+   coincidence of either alone isn't trusted). Also parameterized the snapshot tag
+   (`-ModelTag v28`) instead of hardcoding `v27_snap_*`.
+
+2. **New `sanity_watchdog.py`** -- a one-shot (not looping) fail-fast check launched
+   alongside training:
+   - **Fast phase (~5 min in):** reads `training_progress_opponents.csv` for
+     Self-Play's actual share of the opponent pool and `training_progress.csv` for
+     invests/game. If Self-Play's share is under 25% (designed weight is 50%) OR
+     invests/game is under 0.5 (healthy runs show ~2+, the v27 bug showed a flat
+     ~0.1) -- **both are the exact measurable signature of the v27 bug** -- it kills
+     the training and arena processes immediately and logs why, rather than letting
+     a broken run burn its full budget unnoticed.
+   - **Slow phase (~1 hour in):** logs the checkpoint-vs-HeuristicBot benchmark's
+     trend so far (informational, not a hard gate -- one hour isn't enough readings
+     to trust given this project's established noise band).
+
+**Launched as three independent detached processes** (`Start-Process`, survive
+session pauses): training (PID tracked in `campaign_run.pid`), the fixed benchmark
+loop (`benchmark_loop.pid`), and the sanity watchdog (`watchdog.pid`).
+
+**Early numbers already look dramatically different from the broken run** (confirmed
+directly from the live log at the first checkpoint, 802,816 steps / 977 games):
+**Self-Play: 500 games (~51% share, matching the intended 50% weight almost
+exactly)** and **Invests/Game: 0.94 and climbing** -- vs. the ENTIRE v27 run's flat
+~0.1 the whole way through. This is strong, direct, early confirmation the model is
+genuinely driving its own actions this time, not the earlier automated watchdog
+verdict alone (that check is still pending its first 5-minute mark as this was
+written, and will be reported once in).
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it

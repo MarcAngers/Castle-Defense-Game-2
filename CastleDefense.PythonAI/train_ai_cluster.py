@@ -47,12 +47,16 @@ BOARD_SHAPING_END       =   21.308428
 BOARD_SHAPING_ANNEAL    = 3_000_000
 BOARD_SHAPING_LOOKAHEAD = 30         # AI-steps ≈ 270 game ticks ≈ 9 s (covers ~3 income periods)
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v27"  # saves checkpoints here
-# v27, not v26: the prior v26 attempt (10M steps, plateaued 36-39% WR, see
-# TRAINING_CAMPAIGN_LOG.md) ran with an accidentally-90%-forced invest action, untuned
-# reward params (the GA-tuned reward_params_{port}.json files didn't exist), and very
-# likely CPU-only torch -- distinct enough config that reusing "v26" would confuse
-# later comparisons against that old training_progress.csv (archived, not deleted).
+TRAINING_MODEL_NAME = "castle_defense_p1_v28"  # saves checkpoints here
+# v28, not v27: the v27 run (2B steps, see TRAINING_CAMPAIGN_LOG.md) had every
+# intended fix applied (CUDA, GA reward params, invest-explore, HeuristicBot+self-play
+# league) EXCEPT one -- start_arenas() never passed the arenas their ONNX path, so
+# trainingBrain was null the whole run: P1 acted uniformly randomly the entire time
+# (never its own policy) and self-play (50% of the intended pool) silently fell
+# through to Random Dummy every single game. Root-caused and fixed (see the
+# start_arenas() fix below and the campaign log's full diagnosis) -- v27.zip is a
+# confirmed REGRESSION below its own v25_bc warm-start base, not a checkpoint worth
+# resuming from. Left in place as diagnosed evidence, not deleted.
 TRAINING_BASE_MODEL = "castle_defense_p1_v25_bc"  # warm-start source if NAME.zip doesn't exist; set to None to start fresh
 # Freshly regenerated 2026-07-24 from the 69 currently-available human replays (all
 # singleplayer, P1-wins-only per bc_pretrain.py's convention -- no multiplayer replays
