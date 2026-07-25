@@ -212,11 +212,37 @@ def export_current_model(model, path=TRAINING_MODEL_ONNX):
 # ─── Arena management ─────────────────────────────────────────────────────────
 
 def start_arenas():
+    # CRITICAL FIX (found 2026-07-25, after the v27 campaign completed and its final
+    # model turned out WORSE than its own BC-only warm-start base): each arena is
+    # spawned with cwd=NET10_DIR, but was previously launched with only the port arg,
+    # so CastleDefense.Simulation/Program.cs's modelPath defaulted to the bare
+    # relative filename "current_model.onnx" -- resolved against NET10_DIR, NOT
+    # against _SCRIPT_DIR where export_current_model() actually writes it. The file
+    # NEVER existed at the path the arena checked (confirmed: zero "[Model] Reloaded"
+    # or "[Model] Reload failed" lines in the entire v27 run's log -- TryLoadTrainingBrain
+    # silently no-ops on File.Exists()==false), so `trainingBrain` was null for the
+    # ENTIRE 2B-step run. Two catastrophic consequences: (1) P1's own actions during
+    # every game fell back to GetRandomValidAction(p1Mask) -- i.e. PURELY RANDOM, never
+    # the model's own learned policy -- so PPO trained on (state, random-action) pairs
+    # completely disconnected from the policy being updated; (2) self-play (P2 using
+    # this same trainingBrain, 50% of the intended opponent mix) silently fell through
+    # to Random Dummy every single time (confirmed: "Self-Play" appears ZERO times in
+    # training_progress_opponents.csv; Random Dummy's true share was ~56% of games at
+    # the first checkpoint, not the intended 3%). This alone explains the whole
+    # campaign's result: win rate/reward/invest-rate were completely flat across all
+    # 2B steps (no real learning signal), and the final model regressed measurably
+    # below its own BC starting point (a plausible mechanism: 2B steps of policy-
+    # gradient updates weighted toward uniformly-random actions slowly eroding the
+    # initially-good BC-cloned weights, rather than any coherent improve-then-plateau
+    # trajectory). Fixed by passing the ONNX path as an explicit, absolute second
+    # argument -- eliminates the cwd-relative ambiguity entirely regardless of either
+    # side's working directory.
+    onnx_abs_path = str((_SCRIPT_DIR / TRAINING_MODEL_ONNX).resolve())
     procs = []
     for i in range(N_ENVS):
         port = 5000 + i
         proc = subprocess.Popen(
-            [ARENA_EXE, str(port)],
+            [ARENA_EXE, str(port), onnx_abs_path],
             cwd=str(NET10_DIR),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
