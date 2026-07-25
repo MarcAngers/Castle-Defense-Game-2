@@ -37,7 +37,7 @@ LOG_FILE     = os.path.join(SCRIPT_DIR, "watchdog.log")
 
 FAST_DELAY_SECONDS = 300           # ~5 min: enough for several checkpoints at measured throughput
 SLOW_DELAY_SECONDS = 3600          # ~1 hour total
-MIN_SELFPLAY_SHARE = 0.25          # designed weight is 0.50; broken run showed ~0.0
+MIN_SELFPLAY_COUNT = 20            # absolute floor, immune to the rolling-cap artifact (see latest_opponent_counts); broken run showed exactly 0, ever
 MIN_INVESTS_PER_GAME = 0.5         # healthy runs show ~2+; broken run was stuck at ~0.1
 
 
@@ -79,7 +79,31 @@ def halt_training(reason):
         "this matches the exact signature of the v27 null-training-brain bug (see TRAINING_CAMPAIGN_LOG.md).")
 
 
-def latest_opponent_shares():
+def latest_opponent_counts():
+    """
+    Returns {opponent: sample_count} at the most recent timestep.
+
+    NOTE: sample_count is a rolling deque capped at maxlen=500 (see ProgressTracker
+    in train_ai_cluster.py) -- once an opponent has ever been selected 500+ times,
+    every future row shows exactly 500 regardless of how much MORE it's been played
+    since. This means a naive "share of the sum across all opponents at this
+    timestep" comparison is only valid before ANY opponent has saturated -- once
+    high-frequency opponents (Self-Play, HeuristicBot) hit the cap while low-
+    frequency ones (individual old league models, spam tiers) haven't yet, the
+    capped ones' computed "share" is artificially deflated (their true count could
+    be arbitrarily higher than 500, but the sum treats it as exactly 500) while the
+    uncapped ones' share is inflated by comparison. Learned this the hard way: the
+    very first version of this check false-alarmed and killed a genuinely healthy
+    v28 run at ~3.5M steps because Self-Play and HeuristicBot had BOTH already hit
+    the 500 cap (confirming real, frequent selection) while every other opponent was
+    still well under it -- the ratio looked wrong even though the raw evidence
+    (500, the maximum trackable value) was exactly what a working self-play
+    mechanism should show. Fixed: check the RAW count against an absolute floor
+    instead of a share of a cap-corrupted sum. A working self-play mechanism will
+    clear a small absolute floor (a few dozen selections) quickly regardless of how
+    many OTHER opponents have or haven't saturated; the real bug's signature was
+    ZERO occurrences ever, not "a smaller share than intended."
+    """
     if not os.path.exists(OPP_CSV):
         return None
     with open(OPP_CSV, newline="") as f:
@@ -88,10 +112,7 @@ def latest_opponent_shares():
         return None
     last_ts = rows[-1]["timestep"]
     latest = [r for r in rows if r["timestep"] == last_ts]
-    total = sum(int(r["sample_count"]) for r in latest)
-    if total == 0:
-        return None
-    return {r["opponent"]: int(r["sample_count"]) / total for r in latest}
+    return {r["opponent"]: int(r["sample_count"]) for r in latest}
 
 
 def latest_invests_per_game():
@@ -113,17 +134,18 @@ def main():
         log("Training process is not running at the fast-check mark -- nothing to gate, exiting.")
         sys.exit(1)
 
-    shares = latest_opponent_shares()
+    counts = latest_opponent_counts()
     invests = latest_invests_per_game()
-    selfplay_share = (shares or {}).get("Self-Play", 0.0)
+    selfplay_count = (counts or {}).get("Self-Play", 0)
 
-    log(f"Latest opponent shares: {shares}")
+    log(f"Latest opponent sample counts: {counts}")
     log(f"Latest invests/game: {invests}")
 
     fail_reasons = []
-    if selfplay_share < MIN_SELFPLAY_SHARE:
+    if selfplay_count < MIN_SELFPLAY_COUNT:
         fail_reasons.append(
-            f"Self-Play share is {selfplay_share:.1%} (expected ~50%) -- matches the null-training-brain bug signature")
+            f"Self-Play sample count is {selfplay_count} (expected to clear {MIN_SELFPLAY_COUNT}+ quickly if "
+            f"self-play is running at all) -- matches the null-training-brain bug signature (zero, ever)")
     if invests is None or invests < MIN_INVESTS_PER_GAME:
         fail_reasons.append(
             f"invests/game is {invests} (expected ~2+) -- matches the null-training-brain bug signature")
@@ -132,7 +154,7 @@ def main():
         halt_training("; ".join(fail_reasons))
         sys.exit(1)
 
-    log(f"PASS (fast checks): Self-Play={selfplay_share:.1%}, invests/game={invests:.2f} -- "
+    log(f"PASS (fast checks): Self-Play sample count={selfplay_count}, invests/game={invests:.2f} -- "
         f"the model is genuinely driving its own actions this run.")
 
     remaining = SLOW_DELAY_SECONDS - FAST_DELAY_SECONDS

@@ -829,6 +829,44 @@ genuinely driving its own actions this time, not the earlier automated watchdog
 verdict alone (that check is still pending its first 5-minute mark as this was
 written, and will be reported once in).
 
+## The watchdog itself had a bug: a false alarm at ~3.5M steps, found, fixed, relaunched
+
+The new `sanity_watchdog.py` did exactly what it was built to do -- caught a
+suspicious signal fast and halted training rather than waiting -- except this time
+the suspicious signal was wrong. At its first fast check (~5 min in, step 3,555,328),
+it computed Self-Play's "share" of the opponent pool as 24.6% (below the 25% floor)
+and killed a genuinely healthy run.
+
+**Root cause of the false alarm:** `training_progress_opponents.csv`'s `sample_count`
+column is a rolling deque capped at `maxlen=500` (see `ProgressTracker` in
+`train_ai_cluster.py`) -- once an opponent has been selected 500+ times, every future
+row shows exactly 500 regardless of how much more it's actually been played. Checking
+directly at the exact moment the watchdog fired confirmed **both `Self-Play` and
+`Heuristic Bot` had already hit the 500 cap** while every other, rarer opponent
+(individual spam tiers, old league models) was still well under it -- so the "share
+of the sum" computation was comparing a cap-corrupted value against uncapped smaller
+ones, artificially deflating the two high-frequency opponents' apparent share. The
+RAW evidence (500, the maximum trackable value, for both) was exactly what a working
+self-play mechanism should show -- the real v27 bug's signature was ZERO occurrences
+ever, categorically different from "a smaller-than-expected share of a capped sum."
+This is the same rolling-window artifact already discovered and worked around earlier
+this session (when first trying to measure true opponent-selection frequency from
+this file) -- should have been anticipated when writing this exact check and wasn't.
+
+**Fixed:** replaced the share-of-capped-sum computation with a simple absolute floor
+on Self-Play's raw sample count (`>= 20`) -- immune to the cap artifact, since a
+working mechanism clears a small absolute floor quickly regardless of what other
+opponents have or haven't saturated, while the real bug's signature (exactly zero,
+forever) will never clear any positive floor at all.
+
+**Cleaned up** the orphaned `plot_training.py --watch` subprocess left behind by the
+forceful `taskkill` (same pattern as before -- killing the parent doesn't kill its
+children) and **relaunched all three processes** (training, benchmark loop, fixed
+watchdog) immediately. Reported to Marc transparently rather than glossing over it --
+the watchdog he asked for is now itself validated against a real false-positive case,
+which is arguably a more convincing sign it's well-calibrated than if it had simply
+never fired at all.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
