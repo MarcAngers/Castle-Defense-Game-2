@@ -264,6 +264,16 @@ namespace CastleDefense.Simulation
                 var        randBot     = new RandomBot();
                 var        antiBot     = new AntiSpamBot();
 
+                // 2026-07-26 invest-curriculum fix (see TRAINING_CAMPAIGN_LOG.md): rolled
+                // once per episode below. Scattered independent per-tick forcing let the
+                // model win the forced tick's reward without ever assembling a coherent,
+                // complete high-investment trajectory -- a full economic game needs several
+                // successive investments to survive against the model's own competing
+                // unit-spending, at ever-increasing cost, which a flat 5% roll essentially
+                // never accomplishes. A per-episode flag forces a real end-to-end winning
+                // economic game a fraction of the time instead.
+                bool investCurriculumEpisode = false;
+
                 bool disconnected = false;
 
                 while (!disconnected) // ── BATCH LOOP ──
@@ -377,6 +387,10 @@ namespace CastleDefense.Simulation
                             oppName = "Random Dummy";
                         }
 
+                        // 15% of episodes become a coherent invest-heavy curriculum game (see
+                        // const declarations below for the actual force probabilities).
+                        investCurriculumEpisode = _rand.NextDouble() < 0.15;
+
                         nextEpStart = true;
                     }
 
@@ -389,24 +403,26 @@ namespace CastleDefense.Simulation
                             ? trainingBrain.GetBestAction(p1Obs, p1Mask)
                             : GetRandomValidAction(p1Mask);
 
-                        // Invest exploration: if the model has stopped investing, it never sees
-                        // invest data and can't rediscover the behaviour no matter how large
-                        // the reward signal is. Force action 9 ~5% of the time when it's valid
-                        // to inject invest experience and break the data-starvation loop.
+                        // Invest exploration, redesigned 2026-07-26 (see TRAINING_CAMPAIGN_LOG.md
+                        // "Why won't the model learn to invest?"). The flat 5% per-tick roll this
+                        // replaced measurably failed: real P(invest) collapsed from ~5.5e-52 to
+                        // ~9.2e-143 over 261M->397M steps of training -- PPO's clipped surrogate
+                        // objective cannot recover a near-zero-probability action from isolated
+                        // forced samples faster than a systemic push (see the self-play fix below)
+                        // can drive it back down, and scattered single forced invests essentially
+                        // never assemble into the coherent multi-investment trajectory a real
+                        // winning economic game requires.
                         //
-                        // BUG FOUND 2026-07-24: this was set to 0.90f (forcing invest on 90% of
-                        // legal opportunities), not the 0.05f the comment above always described
-                        // -- confirmed via `git log -p` that this was wrong from the very first
-                        // commit that introduced it, not a later regression. At 90%, the model's
-                        // own policy essentially never gets to choose NOT to invest when it
-                        // legally could, which forecloses exactly the conditional judgment
-                        // (invest now vs. defend first) that HeuristicBot's whole multi-session
-                        // tuning history found to be the single highest-leverage decision in this
-                        // economy (see project_ai_opponent_heuristic memory). Reverted to the
-                        // originally-intended 5% -- real exploration nudge, not a behavioral
-                        // override.
-                        const float INVEST_EXPLORE = 0.05f;
-                        if (p1Mask[9] == 1 && p1Action != 9 && _rand.NextDouble() < INVEST_EXPLORE)
+                        // Two-tier replacement: a small residual per-tick baseline (roughly the
+                        // old rate, kept so non-curriculum episodes still see occasional invest
+                        // data) plus a much higher force rate for the ~15% of episodes flagged
+                        // `investCurriculumEpisode` above, so those specific episodes play out a
+                        // real, complete high-investment game end to end -- not just one forced
+                        // tick in isolation.
+                        const float INVEST_EXPLORE_BASELINE  = 0.02f;
+                        const float INVEST_CURRICULUM_FORCE  = 0.90f;
+                        float investForceProb = investCurriculumEpisode ? INVEST_CURRICULUM_FORCE : INVEST_EXPLORE_BASELINE;
+                        if (p1Mask[9] == 1 && p1Action != 9 && _rand.NextDouble() < investForceProb)
                             p1Action = 9;
 
                         float      cumRew    = 0f;
@@ -442,7 +458,29 @@ namespace CastleDefense.Simulation
                                     heuristicBot.Update(engine);
                                     break;
                                 case OpponentKind.SelfPlay:
-                                    if (fi == 0) p2Action = trainingBrain.GetBestAction(state.GetStateVector(2), state.GetActionMask(2));
+                                    if (fi == 0)
+                                    {
+                                        var p2Obs  = state.GetStateVector(2);
+                                        var p2Mask = state.GetActionMask(2);
+                                        p2Action = trainingBrain.GetBestAction(p2Obs, p2Mask);
+
+                                        // 2026-07-26 self-play asymmetry fix: P1 (the trainee) gets
+                                        // the invest-exploration nudge above; before this fix, the
+                                        // self-play opponent copy (identical weights) never did.
+                                        // Since neither side invests on its own, that was the ONLY
+                                        // source of economy in a self-play game -- confirmed via a
+                                        // controlled experiment to inflate Self-Play's tracked win
+                                        // rate to ~84% purely from this artifact (a clean mirror
+                                        // match with no forcing on either side gave a normal ~58%).
+                                        // Applying the identical forcing to P2 here removes that
+                                        // confound. This is self-play-specific: every OTHER opponent
+                                        // (Heuristic/spam/league) intentionally keeps its own fixed,
+                                        // unforced behavior -- "does investing beat a fixed external
+                                        // strategy" is the valid asymmetric experiment we want to
+                                        // keep running everywhere except self-play.
+                                        if (p2Mask[9] == 1 && p2Action != 9 && _rand.NextDouble() < investForceProb)
+                                            p2Action = 9;
+                                    }
                                     break;
                             }
 

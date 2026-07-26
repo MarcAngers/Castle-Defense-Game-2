@@ -1596,6 +1596,93 @@ explicit instruction that careful analysis-before-action is now the default:**
 Not acted on. Reporting the mechanism and options; v29 remains paused pending Marc's
 call on which lever(s) to pull.
 
+## Invest-collapse fixes implemented and validated (2026-07-26)
+
+Marc approved the fixes conceptually and asked for implementation specifics worked
+out carefully, then a fast/cheap test BEFORE committing to a long run, plus a
+reasoned resume-vs-restart recommendation. v29 stayed paused throughout; two short
+(15M-step) controlled tests used the freed CPU instead.
+
+**Implemented in `CastleDefense.Simulation/Program.cs` (rebuilt, committed):**
+1. **Self-play asymmetry fix.** The self-play opponent copy (P2, literally the same
+   `trainingBrain` weights as P1) now gets the identical invest-exploration forcing
+   P1 gets. Every OTHER opponent type (Heuristic/spam/league) is left untouched --
+   that asymmetry is the valid experiment ("does investing beat a fixed external
+   strategy") we want to keep, it's only a confound when the "opponent" is a mirror
+   of the trainee itself.
+2. **Coherent invest-curriculum episodes**, replacing the flat scattered 5% roll.
+   15% of episodes are flagged at episode start and force ~90% of legal invest
+   opportunities for their entire duration (both sides, if self-play) -- so those
+   episodes play out a real, complete high-investment game end to end, not just an
+   isolated forced tick. The remaining 85% of episodes keep a small residual 2%
+   baseline rate.
+
+**Deliberately NOT implemented this round:** exempting forced samples from PPO's
+clip, and an action-specific probability floor. Both require overriding
+`MaskablePPO.train()` (which this pipeline calls directly, unmodified) -- real
+surgery on SB3-contrib internals, more invasive and slower to get right than the two
+above. Held in reserve if the simpler fixes hadn't tested out; they did, so not
+needed yet (see results below).
+
+**Test harness:** a standalone copy (`test_invest_fix.py`, not part of the real
+campaign) with env-var overrides for model name/base/ONNX path/step budget, so two
+independent 15M-step tests could run without touching `train_ai_cluster.py` or any
+real checkpoint. `castle_defense_p1_v29.zip` was never touched directly -- a protected
+copy (`castle_defense_p1_v29_testresume.zip`) was used for the resume test.
+
+**Test A -- fresh warm-start from `v25_bc`, 15M steps, new C# fixes in place:**
+Real (unforced) P(invest) via `model-diag`, zero forced exploration:
+**geometric mean 0.2765** (up from a starting point of essentially 0, since `v25_bc`
+never had a single legal-invest decision sampled in earlier testing). Concretely,
+the model chose to invest voluntarily in **61 of 109** decisions where it was legal
+(56%) across 150 real games. Win rate vs the mixed pool: 62.7%, healthy. **The fix
+works, decisively, from a healthy starting point.**
+
+**Test B -- resumed from the collapsed `v29.zip` (P(invest) ~9.2e-143), 15M more
+steps, the SAME new C# fixes:** Real P(invest): **geometric mean 1.44e-136** --
+statistically indistinguishable from where it started (7 orders of magnitude of
+technical movement, but both numbers are equally "never" in practical terms). **Zero
+voluntary invests observed** across 19,319 legal-invest decisions in 150 games (vs.
+61 for Test A). Win rate 59.3%, entropy lower (0.258 vs 0.377 nats) -- consistent
+with a policy that is simply too entrenched for a 15M-step burst (or plausibly much
+longer) to meaningfully dislodge. **The fix does NOT rescue the collapsed
+checkpoint** in a comparable budget.
+
+**This directly answers Marc's practical question, with real evidence rather than
+just reasoning:**
+- **Yes, the fixes apply to a resumed run** -- they live entirely in the C# arena
+  binary and the (unmodified) Python training script's behavior, not in the
+  checkpoint's weights. Test B proves this: it used the identical fixed binary and
+  picked up the new curriculum/self-play logic exactly like Test A did.
+- **But applying correctly is not the same as recovering successfully.** The v29
+  checkpoint's entrenchment (the same one-way-ratchet mechanism documented in the
+  previous entry: raising a near-zero action's probability is clip-bottlenecked,
+  while the forces that suppressed it were not) is severe enough that the identical
+  fix, run for the identical number of steps, produces a working policy from a
+  healthy base and produces no measurable change from a collapsed one.
+
+**Recommendation: RESTART fresh from `v25_bc` with the fixes in place, not resume
+`castle_defense_p1_v29.zip`.** Reasoning: (1) empirically validated above -- the
+exact same intervention that cleanly works from `v25_bc` measurably fails to move
+the collapsed checkpoint in a like-for-like test; (2) v29's 400M+ steps of "progress"
+are entirely progress at executing a narrow tier-1-rush strategy we are specifically
+trying to move away from (confirmed in the prior entry: v29@397M beats v25_bc 84%
+head-to-head, but at that same never-invest strategy) -- there is no real
+economic-play progress in that checkpoint worth preserving; (3) `v25_bc` is already
+an independently strong base (beat HeuristicBot in earlier campaign testing, was the
+single strongest model in the full league ranking before this campaign began).
+Continuing from the collapsed checkpoint isn't free even if it eventually did
+recover -- it would need to first unlearn ~140 orders of magnitude of entrenched
+confidence against a mechanism this investigation shows actively resists that
+recovery, before any of the curriculum's benefit could show through.
+
+**Not yet done: launching the real long run.** Cleanup still needed (test model
+files, league_models copies, killing the `plot_training.py` watcher leftovers each
+short test spawned) and the new model naming decision (a fresh name, e.g. `v30`, to
+keep this clean break distinct from `v29`'s collapsed history, similar to why `v29`
+wasn't just a continuation of `v28`). Reporting test results and the restart
+recommendation to Marc before proceeding, per his explicit instruction.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
