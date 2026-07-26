@@ -1299,6 +1299,131 @@ eroding general skill. Reporting for Marc's call rather than changing the oppone
 mix unprompted -- this is exactly the kind of pool-composition decision he should
 make, not one to guess at autonomously.
 
+## Root cause of the self-play divergence FOUND (2026-07-26): the trainee's forced invest-exploration nudge only applies to one side of self-play
+
+Marc's context correction first: "Random Dummy" actually plays like a low-tier spam
+bot in practice (it only ever successfully executes cheap unit spawns, since it
+tries a literal random action every tick and most others are illegal/unaffordable
+most of the time) -- it is NOT a trivial do-nothing baseline. This matters a lot for
+interpreting the divergence table in the previous entry, see below.
+
+**Paused v29 via `pause_training.ps1`** (clean, 0 processes remained) to free CPU for
+controlled experiments, per Marc's instruction. Built three new diagnostic modes in
+`CastleDefense.BotArena` (`model-diag`, `model-vs-model`, `selfplay-sim`) plus a
+`GetRawLogits` method on `AIBrain` (exposes pre-argmax logits so real-game entropy can
+be measured directly, not just the training script's own noise-based health check).
+
+**Finding 1 -- the policy has NEVER voluntarily invested, at any point measured,
+including before any v29 RL training happened.** `model-diag` runs a model through
+~150 real games (diverse opponent pool, pure argmax, zero forced exploration) and
+tallies its actual chosen actions:
+
+| Checkpoint | Real invests/game | Action mix (non-wait) |
+|---|---|---|
+| `v25_bc` (0 steps of v29 RL) | **0.00** | 98.5% spawnT1, 1.5% spawnT2, nothing else |
+| v29 @ 261M steps | **0.00** | 97.3% spawnT1, rest negligible |
+| v29 @ 397M steps (latest) | **0.00** | 95.5% spawnT1, rest negligible |
+
+Cross-checked against the existing, already-validated `invest-stats` tool (not just
+the new one) -- same result, 0.00 invests/game for `v25_bc` vs HeuristicBot. **The
+"invests/game climbing to ~9, healthy, within the 4.5-11 reference range" I reported
+last update was wrong** -- that metric is computed from `training_progress.csv`,
+which counts P1's action AFTER `CastleDefense.Simulation`'s `INVEST_EXPLORE` forces
+investment ~5% of legal opportunities. The model's real, unforced policy has
+converged to (and never left) a pure tier-1-spam strategy with no economy at all.
+Real entropy per decision (masked softmax over legal actions, measured on real game
+states, not synthetic noise): ~0.35-0.36 nats at both 261M and 397M steps -- low
+(fairly peaked) but not collapsing further; what IS still climbing is raw logit
+*magnitude* (the training script's own `range=` diagnostic: ~10-19 in the first
+70M steps -> 500+ now) -- the model is getting more confident in the SAME narrow
+strategy, not discovering a narrower one.
+
+**Finding 2 -- the model is NOT getting worse in absolute skill. It is real,
+measurable, and better than its own ancestor at head-to-head play.** Direct
+`model-vs-model` matches (no forcing either side):
+- `v25_bc` vs v29@397M: **v29 wins 84.0%** (21/150 vs 126/150, 3 draws).
+- v29@261M vs v29@397M: **v29@397M wins 57.3%** (64/150 vs 86/150).
+
+So RL training has genuinely improved execution of the tier-1-rush strategy over
+time -- better micro/targeting/timing within the same never-invest framework. This
+rules out "the policy is rotting/forgetting" as the mechanism. It has gotten better
+at the one thing it does, which just isn't enough against an opponent that scales.
+
+**Finding 3 -- re-baselining Random Dummy per Marc's correction: the ~57% reading is
+NOT alarming.** Since Random Dummy behaves like a low-tier spam bot in practice, and
+v29's real policy IS a tier-1-spam bot (Finding 1), a v29-vs-RandomDummy game is
+functionally rush-vs-rush -- a close, noisy matchup is the EXPECTED shape, not a red
+flag on its own. The alarming reads are the ones against opponents that actually
+scale an economy (HeuristicBot ~4-5 invests/game, real league checkpoints v4/v7/v25)
+-- those declines are real and this investigation explains why (below).
+
+**Finding 4 -- THE mechanism: self-play's win rate is overwhelmingly a measurement
+artifact of the forced-exploration asymmetry, not genuine skill.** Confirmed the
+self-play sampling mechanism first: `CastleDefense.Simulation/Program.cs` uses the
+literal same `trainingBrain` object for both P1 and the self-play P2 (not a stale
+snapshot -- always perfectly in sync, reloaded together whenever Python acks a new
+version). A clean `model-vs-model` mirror match of v29@397M against itself (no
+forcing either side) gives a normal, unremarkable **58.0%/42.0%** split (in line with
+ordinary team/loadout-draw noise, similar magnitude to the post-seat-bias-fix
+HeuristicBot mirror baseline).
+
+**But real self-play training games are NOT this clean mirror match.**
+`INVEST_EXPLORE` (5% forced invest when legal) applies ONLY to P1's action --
+never to the self-play opponent's action, even though it's the identical brain. Built
+`selfplay-sim` to reproduce exactly this one asymmetry (side A gets the 5% nudge,
+side B doesn't, otherwise identical model) and it turns the clean 58/42 mirror into
+**92.7%/7.3%** -- MORE extreme than the 83.8% actually tracked in live training, and
+side A's invests/game (4.54, entirely from forced actions) lands right in the
+"healthy-looking" range that was mistakenly read as real economic learning.
+
+**Why this specific asymmetry produces wildly different effects depending on
+opponent:** against HeuristicBot (which already invests ~4-5x/game on its own), P1's
+occasional forced invest barely moves the needle -- Heuristic still wins ~85-95% of
+these games, which is the model's real, ungenerous skill level against a true
+scaling opponent. Against a self-play copy (which, per Finding 1, would ALSO never
+invest without forcing), that same 5% forced nudge is the ONLY economy either side
+ever sees -- so P1 gets a total, uncontested, mechanical economic edge that has
+nothing to do with strategic skill. Since self-play is 50% of every training batch,
+this artifact dominates half of the model's entire training signal, teaching the
+optimizer "the current strategy is winning big" -- which is entrenching (not
+correcting) the never-invest tier-1-rush strategy, evidenced by the logit-range
+climb in Finding 1. Meanwhile that same strategy is genuinely, measurably losing
+ground against every opponent that actually scales (HeuristicBot, v4, v7, v25 --
+see the previous entry's decline table), because it was never a complete strategy
+against those in the first place.
+
+**Full causal chain, evidence-backed end to end:** BC pretraining produced (or RL
+never corrected) a policy that structurally never invests -> self-play's asymmetric
+forced-exploration nudge fabricates an artificial ~90%+ "win rate" for that exact
+non-strategy against itself -> since self-play is half of training, this false
+positive signal dominates the reward landscape and pushes the policy to become MORE
+confident in the never-invest rush (rising logit range) -> the same strategy
+genuinely deteriorates against every opponent that scales its own economy, because
+scaling opponents were never actually beaten by pure rush, and the model has no
+countervailing signal telling it so (since the one place its "wins" outnumber its
+losses -- self-play -- is a mechanical artifact, not real feedback).
+
+**Not yet fixed or acted on, per Marc's explicit instruction to validate the cause
+first.** Reporting the mechanism for his decision. The two most obvious candidate
+levers (not implemented): (a) stop applying `INVEST_EXPLORE` asymmetrically -- either
+apply it to the self-play opponent too, or don't apply it during self-play at all;
+(b) address the underlying never-invest degeneracy more directly (e.g. an explicit
+reward term or exploration schedule targeted at investment specifically, since 5%
+forced-action exploration alone clearly isn't teaching the model to WANT to invest
+after 400M+ steps). Both are real design decisions, not mechanical fixes -- left for
+Marc.
+
+**Pause/resume validated cleanly as part of this investigation, per Marc's request.**
+`pause_training.ps1` stopped everything with zero remaining processes. After the
+diagnostics above, `resume_training.ps1` correctly found and resumed from
+`castle_defense_p1_v29.zip` ("Resuming training: castle_defense_p1_v29.zip", not a
+fresh warm-start), all 14 arenas reconnected cleanly. One pre-existing quirk
+reconfirmed (already documented in the pause/resume entry above): `training_progress.csv`
+/ `training_progress_opponents.csv` get cleared and restart their own step/game
+counters at 0 on every resume -- this is a script-local counter, not the model's real
+`num_timesteps` (which the checkpoint zip preserves correctly). Not a new issue,
+just re-verified under real use.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*

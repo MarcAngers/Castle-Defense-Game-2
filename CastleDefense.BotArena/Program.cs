@@ -300,6 +300,179 @@ if (args.Length > 0 && args[0] == "invest-stats")
     return;
 }
 
+// Diagnostic for the 2026-07-26 self-play-divergence investigation: measures the
+// RL checkpoint's REAL in-game decision entropy/confidence (not the training script's
+// own check_policy_health, which only samples random noise observations) and its
+// real action-distribution, against a diverse opponent pool. Directly answers "has
+// the policy collapsed to a narrow/overconfident strategy" using actual game states.
+// Usage: model-diag <modelFragment> [games]
+if (args.Length > 0 && args[0] == "model-diag")
+{
+    string modelArg = args.Length > 1 ? args[1] : "v29";
+    int games = args.Length > 2 && int.TryParse(args[2], out var dg) ? dg : 150;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    var match = Directory.GetFiles(dir, "*.onnx")
+        .Where(f => Path.GetFileNameWithoutExtension(f).Contains(modelArg, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+        .FirstOrDefault();
+    if (match == null) { Console.WriteLine($"No model matching '{modelArg}' found in {dir}."); return; }
+    string modelName = Path.GetFileNameWithoutExtension(match);
+    var brain = new AIBrain(match);
+
+    var actionLabels = new[]
+    {
+        "wait", "spawnT1", "spawnT2", "spawnT3", "spawnT4", "spawnT5", "spawnT6", "spawnT7", "spawnT8",
+        "invest", "repair", "offenseGadget", "defenseGadget", "sigGadget"
+    };
+
+    var pool = new List<Func<int, IArenaOpponent>>();
+    for (int t = 1; t <= 8; t++) { int tt = t; pool.Add(side => new TierSpamBaseline(side, tt)); }
+    pool.Add(side => new RusherBaseline(side));
+    pool.Add(side => new InvestorBaseline(side));
+    pool.Add(side => new BalancedHumanBaseline(side));
+    pool.Add(side => new HeuristicBotAdapter(side));
+
+    long[] actionCounts = new long[14];
+    long totalNonWaitActions = 0;
+    long totalDecisions = 0;
+    double entropySum = 0;
+    double logLegalCountSum = 0; // for a reference "max possible entropy" baseline
+    double maxLogitRangeSeen = 0;
+    int wins = 0, losses = 0, draws = 0;
+
+    Console.WriteLine($"[model-diag] {modelName}: {games} games vs a {pool.Count}-opponent mixed pool...\n");
+
+    for (int i = 0; i < games; i++)
+    {
+        bool modelIsP1 = i % 2 == 0;
+        int modelSide = modelIsP1 ? 1 : 2;
+        var (state, engine) = CreateGame(false);
+        var opponent = pool[rng.Next(pool.Count)](modelIsP1 ? 2 : 1);
+
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            if (state.CurrentTick % 3 == 0)
+            {
+                var sv = state.GetStateVector(modelSide);
+                var mask = state.GetActionMask(modelSide);
+                var logits = brain.GetRawLogits(sv);
+
+                int legalCount = 0;
+                float maxLogit = float.MinValue, minLogit = float.MaxValue;
+                for (int a = 0; a < 14; a++)
+                {
+                    if (mask[a] == 0) continue;
+                    legalCount++;
+                    if (logits[a] > maxLogit) maxLogit = logits[a];
+                    if (logits[a] < minLogit) minLogit = logits[a];
+                }
+                if (legalCount > 0)
+                {
+                    // Masked softmax entropy (nats) over legal actions only.
+                    double sumExp = 0;
+                    var expVals = new double[14];
+                    for (int a = 0; a < 14; a++)
+                    {
+                        if (mask[a] == 0) continue;
+                        expVals[a] = Math.Exp(logits[a] - maxLogit);
+                        sumExp += expVals[a];
+                    }
+                    double entropy = 0;
+                    int bestA = 0; float bestScore = float.MinValue;
+                    for (int a = 0; a < 14; a++)
+                    {
+                        if (mask[a] == 0) continue;
+                        double p = expVals[a] / sumExp;
+                        if (p > 1e-12) entropy -= p * Math.Log(p);
+                        if (logits[a] > bestScore) { bestScore = logits[a]; bestA = a; }
+                    }
+                    entropySum += entropy;
+                    logLegalCountSum += Math.Log(legalCount);
+                    totalDecisions++;
+                    maxLogitRangeSeen = Math.Max(maxLogitRangeSeen, maxLogit - minLogit);
+
+                    actionCounts[bestA]++;
+                    if (bestA != 0) totalNonWaitActions++;
+                    if (bestA != 0) engine.ApplyAction(modelSide, bestA);
+                }
+            }
+            opponent.Update(engine);
+        }
+        if (state.WinnerSide == modelSide) wins++;
+        else if (state.WinnerSide == 0) draws++;
+        else losses++;
+        (opponent as IDisposable)?.Dispose();
+    }
+    brain.Dispose();
+
+    Console.WriteLine($"Win rate vs mixed pool: {100.0*wins/games:F1}%  (losses {losses}, draws {draws})");
+    Console.WriteLine($"Decisions sampled: {totalDecisions}");
+    Console.WriteLine($"Mean real-game entropy: {entropySum/totalDecisions:F3} nats  (mean max-possible given legal-action count: {logLegalCountSum/totalDecisions:F3} nats)");
+    Console.WriteLine($"Max logit range (legal actions) seen in any single decision: {maxLogitRangeSeen:F1}");
+    Console.WriteLine("─── ACTION DISTRIBUTION (% of non-wait decisions) ────────────────");
+    for (int a = 1; a < actionLabels.Length; a++)
+    {
+        double pct = totalNonWaitActions > 0 ? actionCounts[a] * 100.0 / totalNonWaitActions : 0;
+        Console.WriteLine($"  {actionLabels[a],-16} {actionCounts[a],8}  ({pct,5:F2}%)");
+    }
+    return;
+}
+
+// Usage: model-vs-model <fragA> <fragB> [games]
+if (args.Length > 0 && args[0] == "model-vs-model")
+{
+    string fragA = args.Length > 1 ? args[1] : "";
+    string fragB = args.Length > 2 ? args[2] : "";
+    int games = args.Length > 3 && int.TryParse(args[3], out var mg) ? mg : 100;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    string? PickLatest(string frag) => Directory.GetFiles(dir, "*.onnx")
+        .Where(f => Path.GetFileNameWithoutExtension(f).Contains(frag, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+        .FirstOrDefault();
+    var pathA = PickLatest(fragA);
+    var pathB = PickLatest(fragB);
+    if (pathA == null) { Console.WriteLine($"No model matching '{fragA}' found."); return; }
+    if (pathB == null) { Console.WriteLine($"No model matching '{fragB}' found."); return; }
+    string nameA = Path.GetFileNameWithoutExtension(pathA);
+    string nameB = Path.GetFileNameWithoutExtension(pathB);
+
+    Console.WriteLine($"Running {games} games: {nameA} vs {nameB} (alternating sides)...\n");
+
+    int aWins = 0, bWins = 0, draws = 0, timeouts = 0;
+    var aInvests = new List<int>();
+    var bInvests = new List<int>();
+    for (int i = 0; i < games; i++)
+    {
+        bool aIsP1 = i % 2 == 0;
+        var (state, engine) = CreateGame(false);
+        var oppA = new AIModelOpponent(aIsP1 ? 1 : 2, pathA);
+        var oppB = new AIModelOpponent(aIsP1 ? 2 : 1, pathB);
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            oppA.Update(engine);
+            oppB.Update(engine);
+        }
+        int aSide = aIsP1 ? 1 : 2;
+        if (state.IsTimeLimit) timeouts++;
+        if (state.WinnerSide == aSide) aWins++;
+        else if (state.WinnerSide == 0) draws++;
+        else bWins++;
+        aInvests.Add(aIsP1 ? state.Player1.InvestmentCount : state.Player2.InvestmentCount);
+        bInvests.Add(aIsP1 ? state.Player2.InvestmentCount : state.Player1.InvestmentCount);
+        oppA.Dispose();
+        oppB.Dispose();
+    }
+    Console.WriteLine($"{nameA} wins: {aWins}/{games} ({100.0*aWins/games:F1}%)  {nameB} wins: {bWins}/{games} ({100.0*bWins/games:F1}%)  draws: {draws}  timeouts: {timeouts}");
+    Console.WriteLine($"{nameA} avg invests/game: {aInvests.Average():F2}   {nameB} avg invests/game: {bInvests.Average():F2}");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "dashboard")
 {
     // Sweeps the FULL team x offense x defense cross-tab (8 x 4 x 4 = 128 cells) for
@@ -1101,6 +1274,76 @@ if (args.Length > 0 && args[0] == "actions")
         Console.WriteLine($"  {actionLabels[i],-16} {counts[i],8}  ({pct,5:F2}%)");
     }
     Console.WriteLine($"  (total non-wait actions: {totalNonWait} -- ActionCounts doesn't track waits, only successful actions taken)");
+    return;
+}
+
+// Targeted experiment for the 2026-07-26 self-play-divergence investigation:
+// replicates the ONE real asymmetry between training's self-play and a clean mirror
+// match -- CastleDefense.Simulation's INVEST_EXPLORE forces P1 (always the trainee)
+// to invest ~5% of the time it's legally able to, but the self-play opponent copy
+// (P2, same trainingBrain weights) never gets that forcing. If the real policy never
+// voluntarily invests (confirmed via model-diag: 0.00 invests/game at every v29
+// checkpoint tested), this forced nudge could be the ONLY source of any economy on
+// either side of a self-play game -- giving side A a real, artificial edge that a
+// truly clean mirror match (model-vs-model, both sides unforced) wouldn't show.
+// Usage: selfplay-sim <modelFragment> [games]
+if (args.Length > 0 && args[0] == "selfplay-sim")
+{
+    string modelArg = args.Length > 1 ? args[1] : "v29";
+    int games = args.Length > 2 && int.TryParse(args[2], out var sg) ? sg : 150;
+    const float INVEST_EXPLORE = 0.05f;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    var match = Directory.GetFiles(dir, "*.onnx")
+        .Where(f => Path.GetFileNameWithoutExtension(f).Contains(modelArg, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+        .FirstOrDefault();
+    if (match == null) { Console.WriteLine($"No model matching '{modelArg}' found in {dir}."); return; }
+    string modelName = Path.GetFileNameWithoutExtension(match);
+
+    Console.WriteLine($"[selfplay-sim] {modelName} vs itself, {games} games -- side A gets the same 5% forced-invest nudge real training's P1 gets, side B (self-play opponent) does not...\n");
+
+    var brainA = new AIBrain(match);
+    var brainB = new AIBrain(match);
+    int aWins = 0, bWins = 0, draws = 0, timeouts = 0;
+    var aInvests = new List<int>();
+    var bInvests = new List<int>();
+
+    for (int i = 0; i < games; i++)
+    {
+        bool aIsP1 = i % 2 == 0;
+        int aSide = aIsP1 ? 1 : 2;
+        int bSide = aIsP1 ? 2 : 1;
+        var (state, engine) = CreateGame(false);
+
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            if (state.CurrentTick % 3 == 0)
+            {
+                foreach (var (brain, side, forceInvest) in new[] { (brainA, aSide, true), (brainB, bSide, false) })
+                {
+                    var sv = state.GetStateVector(side);
+                    var mask = state.GetActionMask(side);
+                    int action = brain.GetBestAction(sv, mask);
+                    if (forceInvest && mask[9] == 1 && action != 9 && rng.NextDouble() < INVEST_EXPLORE)
+                        action = 9;
+                    if (action != 0) engine.ApplyAction(side, action);
+                }
+            }
+        }
+        if (state.IsTimeLimit) timeouts++;
+        if (state.WinnerSide == aSide) aWins++;
+        else if (state.WinnerSide == 0) draws++;
+        else bWins++;
+        aInvests.Add(aIsP1 ? state.Player1.InvestmentCount : state.Player2.InvestmentCount);
+        bInvests.Add(aIsP1 ? state.Player2.InvestmentCount : state.Player1.InvestmentCount);
+    }
+    brainA.Dispose(); brainB.Dispose();
+
+    Console.WriteLine($"Side A (5%-forced-invest, like real P1) wins: {aWins}/{games} ({100.0*aWins/games:F1}%)  Side B (unforced, like real self-play opponent) wins: {bWins}/{games} ({100.0*bWins/games:F1}%)  draws: {draws}  timeouts: {timeouts}");
+    Console.WriteLine($"Side A avg invests/game: {aInvests.Average():F2}   Side B avg invests/game: {bInvests.Average():F2}");
     return;
 }
 
