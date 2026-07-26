@@ -762,7 +762,15 @@ if __name__ == "__main__":
             # Progress tracking
             tracker.record_episodes(all_episodes, total_reward, N_ENVS * N_STEPS, invest_count)
 
-            if update_n % 10 == 0:
+            # Tightened from every 10 updates to every 3 (2026-07-26, for Marc's
+            # pause/resume workflow): at the measured ~9-10k steps/sec, 10 updates
+            # was ~2 minutes of at-risk progress on a pause; 3 updates is ~35
+            # seconds. model.save() already writes the full resumable PPO state
+            # (weights + optimizer + num_timesteps), not just an inference export --
+            # confirmed by reading the load path below, which only resets
+            # num_timesteps when warm-starting from TRAINING_BASE_MODEL, not when
+            # resuming TRAINING_MODEL_NAME itself.
+            if update_n % 3 == 0:
                 logit_range, action0_rate = check_policy_health(model)
                 if not is_degenerate_drop(logit_range, action0_rate, peak_logit_range, update_n):
                     print(f"[Update {update_n}] {model.num_timesteps:,} steps | "

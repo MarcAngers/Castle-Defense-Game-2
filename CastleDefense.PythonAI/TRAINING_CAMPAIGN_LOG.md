@@ -1009,6 +1009,76 @@ pressure given how easily an incomplete attempt introduced a worse (stalemate) b
 Given this, the training relaunch proceeds on the ORIGINAL engine (seat bias not yet
 fixed) -- see the sequencing note below.
 
+## Pause/resume for the training run (2026-07-26)
+
+Marc's need: pause the run when he wants to use his PC, resume seamlessly later,
+given a single run may now take 50+ hours.
+
+**Verified `train_ai_cluster.py` already saves a genuinely resumable checkpoint, not
+just an inference export** -- `model.save(TRAINING_MODEL_NAME)` writes SB3's full PPO
+state (policy + optimizer weights, `num_timesteps`, `_n_updates`) into
+`castle_defense_p1_v28.zip`, confirmed by inspecting the saved zip's `data` entry
+directly (`num_timesteps: 382255104`, not 0). The existing "Resuming training:
+{file}" load path does NOT reset `num_timesteps` (only the separate warm-start-from-
+`v25_bc` path does that, intentionally) -- so a plain restart of the same script
+already resumes correctly; the earlier "no resumable checkpoints survived" finding
+was about `.zip` files being deleted by an unrelated cleanup incident, not a save/load
+defect.
+
+**Tightened the checkpoint cadence from every 10 PPO updates to every 3** (~35s of
+at-risk progress at the measured throughput instead of ~2 min), since Marc may want
+to pause somewhat spontaneously.
+
+**Two scripts, both tested against the real live run, not just reasoned about:**
+- **`pause_training.ps1`** -- stops training, the benchmark loop, and the sanity
+  watchdog (via their PID files), then cleans up the processes a forceful kill can't
+  take with it (the 14 arena children, the `plot_training.py --watch` subprocess
+  chain) automatically. Reports the latest checkpoint's timestamp/size when done.
+- **`resume_training.ps1`** -- relaunches all three as detached processes exactly as
+  originally launched; no special "resume" flag needed since `train_ai_cluster.py`
+  auto-detects `castle_defense_p1_v28.zip`. Skips relaunching anything already
+  running (checks PID files first), so it's safe to run repeatedly.
+
+**Validated with a real pause-resume-pause-resume cycle** (not just a design review):
+resumed the actual in-progress v28 run (surviving from earlier in this session at
+382,255,104 steps), confirmed via the saved zip's `data.num_timesteps` (not the
+console log -- see the note below), ran it briefly (confirmed healthy: invests/game
+already at 4.36 and climbing, matching a resumed model with real prior skill rather
+than a fresh start), paused it (confirmed zero training/arena processes remained,
+checkpoint advanced to 382,943,232 -- proving real progress was saved), then resumed
+again cleanly.
+
+**One display quirk worth knowing, not a functional bug:** the console/CSV progress
+log's "steps" and "games" counts (from `ProgressTracker`, e.g. `training_progress.csv`)
+are a script-local counter that always restarts at 0 on every launch -- they are NOT
+the model's real persisted step count. After a resume, `training_progress.csv` will
+show small numbers again even though the actual model (entropy schedule, the 2B-step
+stop condition, everything that matters) is genuinely continuing from where it left
+off. **To check true total progress after a resume, read the checkpoint directly**
+(`python -c "import zipfile,json; print(json.load(zipfile.ZipFile('castle_defense_p1_v28.zip').open('data'))['num_timesteps'])"`)
+rather than trusting the CSV's own step column across a pause boundary.
+
+**Commands, for Marc directly:**
+```
+cd C:\repos\Castle-Defense-Game-2\CastleDefense.PythonAI
+powershell -File pause_training.ps1     # pause -- safe to use the PC afterward
+powershell -File resume_training.ps1    # resume exactly where it left off
+```
+
+## Sequencing note: relaunched on the ORIGINAL (seat-bias-unresolved) engine
+
+Given the seat-bias fix wasn't safely shippable this session (see above), and Marc's
+own stated need for pause/resume is independent of whether that fix lands, training
+was resumed on the **original, unmodified engine** -- the same one this v28 run had
+already been training on all along (no engine change was actually shipped for v28's
+run; only `CastleDefense.BotArena`'s diagnostic tooling and `train_ai_cluster.py`'s
+save-cadence were touched). This is a deliberate call, not an oversight: continuing
+382M+ steps of real progress now, with real pause/resume in place, seemed better than
+losing a weekend's momentum waiting on a properly-validated engine fix. The seat bias
+remains a known, well-diagnosed, open issue (follow-up task spawned) -- whenever it
+does get fixed, this run's results should be treated as measured on the biased
+engine, same caveat as everything measured so far this whole campaign.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
