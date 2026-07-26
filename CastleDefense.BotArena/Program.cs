@@ -958,6 +958,59 @@ if (args.Length > 0 && args[0] == "mirror")
     return;
 }
 
+// Controlled seat-bias diagnostic (2026-07-26): the existing "mirror" mode randomizes
+// team/loadout INDEPENDENTLY per side, so a skew there could be team-balance noise, not
+// a real engine-level P1/P2 asymmetry. This forces the EXACT same team AND loadout on
+// both sides -- the only remaining variable is which physical side (1 vs 2) a given
+// unit/player occupies. A truly fair engine should land at ~50/50 within noise; any real
+// skew here is a genuine, isolated engine bug, not a game-balance artifact.
+// Usage: mirror-fixed <team> <offense> <defense> [games] [headstart]
+if (args.Length > 0 && args[0] == "mirror-fixed")
+{
+    string teamArg = args.Length > 1 ? args[1] : "White";
+    string offense = args.Length > 2 ? args[2] : "nuke";
+    string defense = args.Length > 3 ? args[3] : "wall";
+    int games = args.Length > 4 && int.TryParse(args[4], out var mfg) ? mfg : gamesPerMatchup;
+    bool headStart = args.Contains("headstart");
+
+    var team = Enum.Parse<TeamColour>(teamArg, ignoreCase: true);
+    Console.WriteLine($"Running {games} games: {team} ({offense}/{defense}) vs itself, IDENTICAL loadout both sides{(headStart ? " (headstart)" : " (fresh start)")}...\n");
+
+    int p1Wins = 0, p2Wins = 0, draws = 0, timeouts = 0;
+    long totalTicks = 0;
+    for (int i = 0; i < games; i++)
+    {
+        var (state, engine) = CreateGame(headStart);
+        AssignLoadout(state.Player1, 1, team, offense, defense);
+        AssignLoadout(state.Player2, 2, team, offense, defense);
+        var p1 = new HeuristicBotAdapter(1);
+        var p2 = new HeuristicBotAdapter(2);
+        bool trace = args.Contains("trace") && i == 0;
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            p1.Update(engine);
+            p2.Update(engine);
+            if (trace && state.CurrentTick % 30 == 0)
+            {
+                var p1u = state.Units.Count(u => u.Side == 1);
+                var p2u = state.Units.Count(u => u.Side == 2);
+                Console.WriteLine($"t={state.CurrentTick,6} sec={state.CurrentTick/30,4} " +
+                    $"P1[$={state.Player1.Money,7:F1} inc={state.Player1.Income,6:F1} inv={state.Player1.InvestmentCount} hp%={100.0*state.Player1.CastleHealth/state.Player1.CastleMaxHealth,5:F1} units={p1u,3}] " +
+                    $"P2[$={state.Player2.Money,7:F1} inc={state.Player2.Income,6:F1} inv={state.Player2.InvestmentCount} hp%={100.0*state.Player2.CastleHealth/state.Player2.CastleMaxHealth,5:F1} units={p2u,3}]");
+            }
+        }
+        totalTicks += state.CurrentTick;
+        if (state.IsTimeLimit) timeouts++;
+        if (state.WinnerSide == 1) p1Wins++;
+        else if (state.WinnerSide == 2) p2Wins++;
+        else draws++;
+    }
+    double avgSeconds = totalTicks / (double)games / 30.0;
+    Console.WriteLine($"P1 wins: {p1Wins}/{games} ({100.0 * p1Wins / games:F1}%)  P2 wins: {p2Wins}/{games} ({100.0 * p2Wins / games:F1}%)  draws: {draws}  timeouts: {timeouts}  avg length: {avgSeconds:F1}s");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "spam")
 {
     // Matches Marc's own model-evaluation setup: fixed-tier spam bots (spawn that tier

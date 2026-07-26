@@ -925,6 +925,90 @@ rising win-rate-vs-heuristic trend, that's genuine strategic improvement, not ju
 noise. **This will be reported alongside the checkpoint-vs-heuristic benchmark in
 every periodic status update from here on**, not tracked separately/silently.
 
+## Seat-bias root-cause investigation (2026-07-26): found the mechanism, fix not yet safe to ship
+
+Marc's priority: fix the P1/P2 seat bias at the engine root (not accommodate it in
+training), verified via a controlled mirror match (identical team+loadout both
+sides, HeuristicBot vs itself). Stopped v28 cleanly first (training + benchmark loop
++ all 14 arenas + orphaned watcher processes -- confirmed zero stray processes
+before starting).
+
+**Built the controlled test** (`mirror-fixed <team> <offense> <defense> [games]
+[headstart]` in `CastleDefense.BotArena`) since the existing `mirror` mode randomizes
+team/loadout independently per side, confounding team-balance noise with any real
+engine bias. `AssignLoadout` forces the identical team+offense+defense+signature on
+both P1 and P2.
+
+**Baseline (before any change), n=300/combo:**
+- White/nuke/wall: P1 40.3% / P2 58.7%
+- White/snipe/reinforcements: P1 95.3% / P2 4.7%
+- Blue/snipe/reinforcements: P1 85.0% / P2 15.0%
+
+**The bias is large but NOT uniform in direction or magnitude** -- it swings from a
+mild P2 favor (nuke/wall) to an extreme ~90/10 P1 favor (snipe/reinforcements,
+consistent across two different teams), ruling out a simple "P1 always wins more"
+explanation and pointing at something whose IMPACT depends on playstyle.
+
+**First candidate found and fixed (confirmed via `git log -p`, not guessed): `GetDistanceToEnemyCastle`**
+included `attacker.Width` in the Side-1 branch (accounting for a unit's body reaching
+the castle from its leading edge) but never mirrored the term onto the Side-2 branch
+-- the same commit touched both branches, an unmirrored oversight. Fixed, but
+**empirically had negligible effect** on the measured bias (re-ran the same 3 combos,
+numbers barely moved) -- real bug, but not the dominant mechanism.
+
+**Root mechanism found and CONCLUSIVELY PROVEN via direct experimentation:**
+`MoveAndFight()`'s single-pass loop applies combat damage AND movement immediately,
+in position-sorted iteration order. In a mutual-kill exchange within one tick,
+whichever unit is processed first lands its hit before the other (now at <=0 health)
+gets its own turn -- and iteration order correlates with side, since P1 units tend to
+sit at higher X once advanced into enemy territory (P1 moves toward increasing X).
+**Proof, not theory:** literally reversing the iteration order in a controlled test
+flipped the entire bias -- White/nuke/wall went from P1 40%/P2 59% to P1 8%/P2 91%;
+White/snipe/reinforcements went from P1 95%/P2 5% to P1 0%/P2 100%. This is airtight
+evidence of the mechanism.
+
+**Attempted the principled fix: true two-phase simultaneous resolution** (compute
+every unit's intended damage from start-of-tick state in one pass, apply all of it in
+a second pass, so no unit's fate this tick can depend on processing order) --
+implemented for combat damage AND castle damage. **Result: the bias reduced somewhat
+but did NOT converge to ~50/50** (still ~70-94% skewed, now toward P2 instead of P1).
+Investigated further and found a SECOND instance of the same class of bug: **movement
+updates (`unit.Position += ...`) were still applied immediately during the decide
+phase**, so a unit processed earlier in a tick could move into range and be detected
+by units processed later in the SAME tick, while the reverse could never happen --
+proven the same way (flipping decision-order with damage already deferred still
+flipped the outcome completely, e.g. White/nuke/wall swung from P2 82% back to P1
+93% on order alone). **Extended the fix to defer movement too** (decide every unit's
+new position from start-of-tick state, apply all positions simultaneously alongside
+damage).
+
+**This full fix introduced a serious NEW regression: games stopped resolving
+decisively.** Draw/timeout rates exploded to 250+/300 games (vs. 2-61/300 before) --
+armies appear to reach a stalemate rather than making contact reliably once movement
+is deferred this way, plausibly some kind of leapfrog/oscillation effect at the
+contact boundary that the original immediate-update model didn't have. **This is a
+worse problem than the bias itself** (broken decisiveness affects every single game,
+not just mirror-match fairness) and is not something to ship without real play-testing
+and tuning time.
+
+**Decision: reverted `GameEngine.cs` completely to its last-committed state** (`git
+checkout`), confirmed a clean rebuild. Kept the `mirror-fixed` diagnostic mode in
+`CastleDefense.BotArena` (pure test tooling, zero engine risk, valuable for whoever
+continues this investigation) but shipped **no change to the actual combat engine**
+this session -- the risk of a half-validated core-combat-resolution rewrite
+outweighs leaving the known, already-well-characterized seat bias in place for now.
+
+**Status for Marc: root cause is now fully understood and reproducible (order-
+dependent resolution of both combat damage and movement in `MoveAndFight`), but the
+correct fix needs more careful engineering and play-testing time than was available
+in this session** -- likely a genuine architecture change (proper simultaneous-tick
+semantics for movement specifically, without breaking the contact/engagement
+dynamics that currently work), not a quick patch. Recommend treating this as its own
+follow-up task with dedicated time, rather than rushing a fix under weekend time
+pressure given how easily an incomplete attempt introduced a worse (stalemate) bug.
+Given this, the training relaunch proceeds on the ORIGINAL engine (seat bias not yet
+fixed) -- see the sequencing note below.
+
 **What's fully autonomous vs. needs Marc's call:** steps 1, 2, 4, and 5 are fully
 executable without him (mechanical: stop processes cleanly, run the existing
 dashboard tooling, implement+validate two already-fully-specified changes, write it
