@@ -404,8 +404,21 @@ namespace CastleDefense.Engine
             // 1. Sort units by Position (X-coordinate) for ultra-fast spatial lookups
             _state.Units.Sort((a, b) => a.Position.CompareTo(b.Position));
 
-            // iterate backwards so we can remove dead units safely
-            for (int i = _state.Units.Count - 1; i >= 0; i--)
+            // ROOT-CAUSE FIX, re-applied 2026-07-26 for re-validation against asymmetric
+            // matchups (spam/models), not just the mirror-match test -- see
+            // TRAINING_CAMPAIGN_LOG.md's "Seat-bias root-cause investigation" section for
+            // the full history. Defers both combat damage AND movement so every unit's
+            // action this tick is decided from the identical start-of-tick state; nothing
+            // this tick can be affected by another unit's action earlier in the SAME tick,
+            // removing the order-dependent P1/P2 advantage (proven via reversing iteration
+            // order and watching a ~90/10 bias flip completely).
+            var pendingUnitDamage = new List<(Unit target, int amount, AttackType type, float force)>();
+            var pendingCastleDamage = new List<(PlayerState enemyPlayer, int damage)>();
+            var pendingMoves = new List<(Unit unit, float newPosition)>();
+            var toRemove = new List<Unit>();
+            int unitCountSnapshot = _state.Units.Count;
+
+            for (int i = 0; i < unitCountSnapshot; i++)
             {
                 var unit = _state.Units[i];
                 if (!_unitCache.ContainsKey(unit.DefinitionId)) continue;
@@ -428,16 +441,10 @@ namespace CastleDefense.Engine
                 // Decrement Attack Cooldown
                 if (unit.AttackCooldown > 0) unit.AttackCooldown -= (1000f / GameEngine.TICKS_PER_SECOND);
 
-                // Check for hard CC
-                if (isHardCcd)
-                {
-                    // Duplicate death logic here so we don't miss it
-                    if (unit.CurrentHealth <= 0)
-                    {
-                        _state.Units.RemoveAt(i);
-                    }
-                    continue; // Do not attack or move if hard CC'd
-                }
+                // Check for hard CC -- no death-check needed here: health can't have
+                // changed yet this tick (damage is deferred), so the single death-check
+                // pass after all damage is applied already covers hard-CC'd units too.
+                if (isHardCcd) continue;
 
                 // --- 2. Target Acquisition ---
                 // Pass the index 'i' so we can look left and right instantly
@@ -446,7 +453,7 @@ namespace CastleDefense.Engine
                 float distToCastle = GetDistanceToEnemyCastle(unit);
                 bool castleInRange = distToCastle <= def.Range;
 
-                // --- 3. Combat Logic ---
+                // --- 3. Combat Logic (decide only -- applied simultaneously after the loop) ---
                 if (enemies.Count > 0)
                 {
                     unit.CurrentSpeed = 0;
@@ -460,32 +467,56 @@ namespace CastleDefense.Engine
 
                         for (int e = 0; e < enemies.Count; e++)
                         {
-                            ApplyDamage(enemies[e], (int)(def.Damage * dmgMod), def.AttackType, impactForce);
+                            pendingUnitDamage.Add((enemies[e], (int)(def.Damage * dmgMod), def.AttackType, impactForce));
                         }
                     }
                 }
                 else if (castleInRange)
                 {
                     unit.CurrentSpeed = 0;
-                    if (unit.AttackCooldown <= 0) AttackCastle(unit, def);
+                    if (unit.AttackCooldown <= 0)
+                    {
+                        // Inlined from AttackCastle() so castle damage can be deferred
+                        // alongside unit damage -- same logic, same cooldown reset.
+                        unit.AttackCooldown = (1000f / def.AttackSpeed);
+                        var enemyPlayer = unit.Side == 1 ? _state.Player2 : _state.Player1;
+                        float castleDamage = def.Damage;
+                        if (def.AttackType == AttackType.Siege) castleDamage *= 2;
+                        foreach (var status in unit.Statuses)
+                            if (status.Name == "Rage") castleDamage *= status.Value;
+                        pendingCastleDamage.Add((enemyPlayer, (int)castleDamage));
+                    }
                 }
                 else
                 {
-                    // --- 4. Movement Logic ---
+                    // --- 4. Movement Logic (decided now, applied after the loop) ---
                     unit.CurrentSpeed = def.MoveSpeed * speedMod;
                     if (speedMod > 0)
                     {
                         float direction = (unit.Side == 1) ? 1f : -1f;
-                        unit.Position += (def.MoveSpeed * speedMod * direction);
+                        pendingMoves.Add((unit, unit.Position + (def.MoveSpeed * speedMod * direction)));
                     }
                 }
-
-                // --- 5. Death Check ---
-                if (unit.CurrentHealth <= 0)
-                {
-                    _state.Units.RemoveAt(i);
-                }
             }
+
+            // Apply all movement simultaneously -- no unit's target-acquisition this tick
+            // can be affected by another unit having already moved earlier in the pass.
+            foreach (var (unit, newPosition) in pendingMoves)
+                unit.Position = newPosition;
+
+            // Apply all combat damage simultaneously -- processing order can no longer
+            // change who successfully lands a hit.
+            foreach (var (target, amount, type, force) in pendingUnitDamage)
+                ApplyDamage(target, amount, type, force);
+            foreach (var (enemyPlayer, damage) in pendingCastleDamage)
+                DamageCastle(enemyPlayer, damage);
+
+            // --- 5. Death Check (once, after all this tick's damage has landed) ---
+            for (int i = 0; i < _state.Units.Count; i++)
+            {
+                if (_state.Units[i].CurrentHealth <= 0) toRemove.Add(_state.Units[i]);
+            }
+            foreach (var dead in toRemove) _state.Units.Remove(dead);
 
             // --- 6. Apply Knockback ---
             for (int i = _state.Units.Count - 1; i >= 0; i--)
@@ -588,7 +619,11 @@ namespace CastleDefense.Engine
             // If Player 2 (Right), enemy castle is at 200
             else
             {
-                float dist = attacker.Position - 200;
+                // Symmetric with the Side-1 branch above: a real, confirmed asymmetry
+                // (found via git log -p; the same commit added `attacker.Width` to the
+                // Side-1 branch but never mirrored it here) -- negligible measured effect
+                // on its own, but a genuine bug, kept fixed regardless.
+                float dist = (attacker.Position - attacker.Width) - 200;
                 return Math.Max(0f, dist);
             }
         }
