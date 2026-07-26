@@ -1222,6 +1222,83 @@ powershell -File pause_training.ps1     # pause -- safe to use the PC afterward
 powershell -File resume_training.ps1    # resume exactly where it left off
 ```
 
+## v29 progress check at ~10 hours / 344M steps (2026-07-26 12:26 EDT): the self-play divergence is BACK, seat-bias fix did not touch it
+
+Marc explicitly declined the self-play-timeout-rate instrumentation flagged in the
+previous entry ("game-design choice he'll handle later") -- not building it.
+
+**Headline finding: the exact "self-play winrate up / everything else down" pattern
+Marc originally flagged is happening again, on the corrected (seat-bias-fixed)
+engine.** This answers his standing question directly: **removing the seat bias did
+NOT fix the divergence.** Whatever mechanism drives it is independent of the engine
+bug -- almost certainly the self-play weighting/mechanism itself (classic self-play
+collapse: the policy specializes against a moving target nearly identical to itself,
+which produces real wins there but doesn't transfer, and may be actively displacing
+general skill via something like catastrophic forgetting).
+
+**Evidence (win rate vs fixed opponents, sampled at ~14M/~84M/~169M/~254M/~344M steps):**
+
+| Opponent | ~14M | ~84M | ~169M | ~254M | ~344M (latest) |
+|---|---|---|---|---|---|
+| Self-Play | ~55% | ~52%* | ~84% | ~80% | **83.8%** |
+| Heuristic Bot | ~15% | ~13% | ~9% | ~3% | **4.8%** |
+| v4 (league) | 22.6% | 29.9% | 22.6% | 9.2% | **10.2%** |
+| v7 (league) | 31.0% | 29.4% | 21.6% | 8.6% | **7.6%** |
+| v25 (league) | 52.1% | 49.3% | 45.4% | 28.4% | **34.2%** |
+| Spam T4 | 71.2% | 62.7% | 48.4% | 41.8% | **42.8%** |
+| Spam T7 | 82.1% | 85.1% | 81.0% | 46.0% | **33.4%** |
+| Anti-Spam | 31.7% | 37.6% | 20.2% | 22.2% | **26.2%** |
+| Random Dummy | 65.2% | 70.0% | 53.6% | 50.0% | **57.4%** |
+
+*Self-Play stayed flat/noisy through ~90M steps, then broke upward sharply right
+around the point everything else started its steepest decline (~100-110M steps).
+
+**Every non-self-play opponent declined, including trivial ones.** Random Dummy
+sitting at only 57% is the starkest tell -- a genuinely-improving policy should
+crush a literal random-action bot at 90%+, not hover near a coin flip. The
+checkpoint-vs-HeuristicBot benchmark log (below) shows the same shape independently.
+
+**Checkpoint-vs-HeuristicBot benchmark, full series (model_winrate_approx_pct):**
+19.3, 26, 29.3, 26.7, 22, 22, 18.7, 22.7, 16.7, 18, 17.3, 11.3, 11.3, 10, 18, 15.3,
+12, 15.3, 16, 12.7, 10.7, 10.7 -- rose for the first ~2-3 readings (~30-46M steps,
+peak 29.3%), then a sustained decline to a 10-18% floor for the remaining ~290M
+steps. Same shape as the per-opponent table above, measured independently.
+
+**Invests/game: genuinely healthy, no complaint here.** 1.3 (~14M) -> 1.0 (~50M) ->
+1.6 (~100M) -> 9.6 (~170M) -> 7.9 (~254M) -> **9.0 (latest, ~344M)** -- climbed into
+and now sits comfortably within/above the previously-verified 4.5-11 healthy
+reference range.
+
+**Sanity watchdog: PASSED, but the pass is stale and wouldn't have caught this.**
+It's a one-shot script -- fast check passed at 02:26 (Self-Play sample count=500,
+invests/game=0.68, correctly confirming the model wasn't null), slow check finished
+at 03:21 after only 2 benchmark readings (19.3%->26%, still in the rising phase) and
+then exited. The decline only became visible in later readings the watchdog was never
+going to see again. Worth remembering for future runs: this watchdog catches the v27-
+style "totally broken" failure mode, not a slower divergence that only shows up
+hours in.
+
+**Throughput:** ~344.3M steps / ~451,400 games over ~10h5m elapsed -> **~9,500
+steps/sec, ~746 games/min** -- notably below the previously-measured ~25,000-28,000
+steps/sec / ~1,700-2,000 games/min baseline for this architecture. Not investigated
+yet (competing CPU load from this session's own mirror-match/spam BotArena testing
+runs earlier is a plausible partial explanation, not confirmed). At this rate,
+reaching the 2B-step target would take **~48-49 more hours** from now.
+
+**Process health: all clean.** 14 arenas + 4 python worker processes + benchmark-loop
+powershell process running continuously since launch (02:20:58), zero errors or
+exceptions in `campaign_run.err.log` across the full ~10 hours (just the one known
+harmless ONNX-export deprecation warning).
+
+**Not yet decided: what to do about the divergence.** This is the same shape Marc
+flagged before the seat-bias detour, now confirmed to be a separate, real, and
+apparently worse-than-before mechanism (Heuristic win rate down to ~5%, previously
+never seen that low). Likely candidate: the 50%-Self-Play pool weighting is too
+aggressive relative to how much a moving-target opponent can teach without also
+eroding general skill. Reporting for Marc's call rather than changing the opponent
+mix unprompted -- this is exactly the kind of pool-composition decision he should
+make, not one to guess at autonomously.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
