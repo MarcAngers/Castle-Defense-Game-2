@@ -16,10 +16,10 @@
 # since the last cycle, this does one final confirmatory check and exits.
 #
 # Usage (from CastleDefense.PythonAI/):
-#   powershell -File benchmark_checkpoints.ps1 [-ModelTag v28] [-IntervalMinutes 25] [-GamesPerCheck 150]
+#   powershell -File benchmark_checkpoints.ps1 [-ModelTag v29] [-IntervalMinutes 25] [-GamesPerCheck 150]
 
 param(
-    [string]$ModelTag = "v28",
+    [string]$ModelTag = "v29",
     [int]$IntervalMinutes = 25,
     [int]$GamesPerCheck = 150
 )

@@ -1092,6 +1092,136 @@ regardless -- those are valuable either way -- and hold off on committing to a s
 full training run or exploiter-agent work until he's confirmed the direction, since
 those are the expensive, hours-long commitments a wrong guess would waste.
 
+## Seat-bias fix RE-APPLIED, shipped, and v29 launched (2026-07-26)
+
+Re-opened the seat-bias question after the previous session's revert (draw/timeout
+explosion to 250+/300 in mirror-match testing). Re-diagnosed whether that explosion
+was a general engine regression or an artifact specific to the artificial mirror-match
+scenario -- re-applied the same two-phase fix (`MoveAndFight()` now computes every
+unit's move/damage/castle-damage from a stable start-of-tick snapshot, applies moves,
+then unit damage, then castle damage, then removes the dead -- no unit's fate this
+tick can depend on iteration order anymore; also fixed `GetDistanceToEnemyCastle`'s
+Side-2 branch, which was missing the `attacker.Width` term Side-1 already had) and
+tested it against REAL, asymmetric matchups instead of just the synthetic mirror test:
+
+- **Spam bots, all 8 tiers (50 games each, fresh rebuild):** 88-100% win rate, **zero
+  draws/timeouts anywhere** -- fully healthy, matches/beats historical baselines.
+- **Real model checkpoints v4/v7 vs HeuristicBot:** no regression from historical
+  numbers.
+
+This confirmed the stalemate explosion from the previous attempt was specific to
+forcing bit-identical loadouts on both sides, not a general breakage. **Committed**
+(`3b486ff3`) on that evidence.
+
+**Full solution rebuild done, verified the fix is actually in the built binaries**
+(`CastleDefense.Simulation.exe`/`CastleDefense.Engine.dll` timestamps both postdate
+the source edit, despite MSB3026 file-lock retry warnings against the still-running
+old-engine v28 arenas during the build -- the retries succeeded once those processes
+were paused).
+
+**Re-verified fresh, exact numbers post-commit before writing this up** (earlier
+session numbers quoted informally before compaction turned out to be off -- these are
+the real, reproduced ones):
+
+**The number that actually matters (aggregate randomized mirror-match, `mirror` mode,
+random team+loadout per side -- the closest proxy to real game variety, and the same
+methodology the historical baseline was measured with):**
+
+| | Historical (pre-fix) | Post-fix (n=300) |
+|---|---|---|
+| P1 win rate | 60.5-61.5% | **50.7%** |
+| P2 win rate | 37.0-38.5% | **47.0%** |
+| Draws | ~1.5% | 2.3% |
+| Timeouts | 27.5-29.5% | **49.3%** |
+| Avg length | 378s | 427s |
+
+**The seat bias is genuinely fixed at the level Marc asked for** -- P1/P2 are now
+~51/47, within noise of 50/50, down from a consistent ~60/38 skew across multiple
+historical measurements. This is the real deliverable.
+
+**But there's a real, quantified cost: the timeout rate nearly doubled (29%->49%) and
+average game length grew (378s->427s).** Games generally stall out to the 10-minute
+limit more often now that the old order-dependent tie-break (which used to force SOME
+decisive outcome almost by accident) is gone. This is a genuine tradeoff, not a free
+fix -- flagging it plainly rather than only reporting the headline win-rate number.
+
+**`mirror-fixed` (identical loadout forced on both sides -- an artificial, narrower
+diagnostic, not representative of real games where players choose independently)
+confirms the mechanism, at its most extreme:**
+- White/nuke/wall, n=100: **100% P2, 0 draws** -- fully deterministic (identical
+  avg length to the decimal across reruns; HeuristicBot's decision logic has no RNG,
+  so two bit-identical strategies produce a bit-identical outcome every time).
+- White/snipe/reinforcements, n=100: **100% draws/timeouts** -- also fully
+  deterministic.
+
+**Answering Marc's standing question -- is this (a) the same seat-bias mechanism,
+(b) a separate gadget bug, or (c) legitimate strategy asymmetry? Evidence says (a) AND
+(c), not (b):**
+- Same mechanism: both combos were shown (in the prior session's reversed-iteration-
+  order experiment) to flip completely under the exact same code path. There's no
+  sign of a gadget-specific interaction bug -- nothing about snipe or reinforcements'
+  own targeting logic changed; the same `MoveAndFight` fix drives both outcomes.
+- What differs is strategy shape, and that part IS legitimate: nuke/wall is
+  aggressive/damage-forcing, so even a residual deterministic tie-break still
+  produces a clean decisive winner (just now P2 instead of P1). Snipe/reinforcements
+  is purely reactive on both slots (snipe picks off approaching units one at a time;
+  reinforcements sustains the defense) -- two bit-identical instances of a purely
+  defensive strategy have no mechanism to ever separate, so the game runs out the
+  clock. Real games never actually have two players making bit-for-bit identical
+  decisions forever, so this specific extreme is a diagnostic artifact of the forced-
+  identical test, not something that will occur in real play.
+- **The caveat that keeps this from being a clean "not a bug, don't worry" verdict:**
+  the AGGREGATE randomized mirror-match's timeout rate nearly doubling shows the
+  stalling effect isn't confined to one contrived combo -- it's a broad, measurable
+  shift across varied loadouts. Worth continuing to watch, not dismissed.
+
+**Decision: shipped anyway.** Real, varied asymmetric gameplay (spam bots, real
+models) is fully healthy and decisive with zero new stalemates. The timeout increase
+is real but concentrated in symmetric/near-mirror situations; ~50% of the training
+pool (Heuristic, League, Spam, AntiSpam, RandomDummy) is asymmetric and unaffected.
+The remaining ~50% is Self-Play, which is the one place this could actually matter for
+training -- but Self-Play pits a stochastic PPO policy against itself (independent
+action sampling, not the bit-identical deterministic bot used in this diagnostic), so
+it's a much weaker version of the "identical strategy" scenario that produces the
+mirror-fixed extremes. Early evidence from the live v29 run (below) shows Self-Play
+episodes completing normally, not hanging.
+
+**Known gap, not fixed this session: the training pipeline has NO visibility into
+timeout rate at all.** `CastleDefense.Simulation/Program.cs` (line ~277) already
+silently resolves every `IsTimeLimit` game to a synthetic winner (by absolute castle
+HP) before it's ever reported to Python -- `train_ai_cluster.py`'s win-rate stats
+can't distinguish a decisive win from a timeout-win, and there's no timeout-rate
+column in `training_progress.csv` at all. Given the quantified timeout-rate increase
+above, this is worth instrumenting if Self-Play's timeout rate needs to be watched
+closely as training progresses -- flagging for Marc's judgment rather than adding
+new instrumentation unprompted under time pressure.
+
+**Model naming for the relaunch:** per the original sequencing ("relaunch fresh,
+warm-started from v25_bc, on the corrected engine"), this is a NEW model,
+`castle_defense_p1_v29`, not a continuation of `v28.zip` (which was trained 382M+
+steps entirely on the biased engine and shouldn't be treated as a valid starting
+point for measuring the corrected engine's results). `train_ai_cluster.py`'s
+`TRAINING_MODEL_NAME` updated accordingly; `TRAINING_BASE_MODEL` stays
+`castle_defense_p1_v25_bc` (unchanged warm-start source). `pause_training.ps1` /
+`resume_training.ps1` / `benchmark_checkpoints.ps1` updated to reference v29.
+v28's progress logs archived (`training_progress_ARCHIVE_v28.csv`,
+`training_progress_opponents_ARCHIVE_v28.csv`, `checkpoint_benchmark_log_v28_ARCHIVE.csv`)
+so v29's fresh logs don't get appended onto v28's data (log files are append-mode).
+
+**v29 launched, confirmed healthy at startup:** all 14 arenas connected, no
+`v29.zip` found so it warm-started fresh from `v25_bc` as intended. First logged
+checkpoint: 229,376 steps / 216 games, **Self-Play already at 90/216 games (41.7%,
+tracking toward its 50% pool weight)**, invests/game 2.51 (healthy start, in line with
+the documented v28-launch baseline). Sanity watchdog (PID 57600) running its 5-minute
+fast-phase check now. Training PID 64320, benchmark loop PID 22908.
+
+**Commands unchanged, now targeting v29:**
+```
+cd C:\repos\Castle-Defense-Game-2\CastleDefense.PythonAI
+powershell -File pause_training.ps1     # pause -- safe to use the PC afterward
+powershell -File resume_training.ps1    # resume exactly where it left off
+```
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
