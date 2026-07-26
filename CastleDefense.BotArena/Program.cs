@@ -342,6 +342,13 @@ if (args.Length > 0 && args[0] == "model-diag")
     double maxLogitRangeSeen = 0;
     int wins = 0, losses = 0, draws = 0;
 
+    // P(invest) tracking, whenever action 9 is legal -- directly quantifies how far
+    // PPO's importance-sampling ratio would have to stretch to credit a forced invest
+    // sample (see the 2026-07-26 "why won't it learn to invest" investigation).
+    long investLegalDecisions = 0;
+    double investLogProbSum = 0;
+    double investProbMin = double.MaxValue, investProbMax = double.MinValue;
+
     Console.WriteLine($"[model-diag] {modelName}: {games} games vs a {pool.Count}-opponent mixed pool...\n");
 
     for (int i = 0; i < games; i++)
@@ -389,6 +396,15 @@ if (args.Length > 0 && args[0] == "model-diag")
                         if (p > 1e-12) entropy -= p * Math.Log(p);
                         if (logits[a] > bestScore) { bestScore = logits[a]; bestA = a; }
                     }
+                    if (mask[9] == 1)
+                    {
+                        double pInvest = expVals[9] / sumExp;
+                        double logP = pInvest > 1e-300 ? Math.Log(pInvest) : Math.Log(1e-300);
+                        investLogProbSum += logP;
+                        investProbMin = Math.Min(investProbMin, pInvest);
+                        investProbMax = Math.Max(investProbMax, pInvest);
+                        investLegalDecisions++;
+                    }
                     entropySum += entropy;
                     logLegalCountSum += Math.Log(legalCount);
                     totalDecisions++;
@@ -412,6 +428,15 @@ if (args.Length > 0 && args[0] == "model-diag")
     Console.WriteLine($"Decisions sampled: {totalDecisions}");
     Console.WriteLine($"Mean real-game entropy: {entropySum/totalDecisions:F3} nats  (mean max-possible given legal-action count: {logLegalCountSum/totalDecisions:F3} nats)");
     Console.WriteLine($"Max logit range (legal actions) seen in any single decision: {maxLogitRangeSeen:F1}");
+    if (investLegalDecisions > 0)
+    {
+        double geoMeanPInvest = Math.Exp(investLogProbSum / investLegalDecisions);
+        Console.WriteLine($"P(invest) when legal: geometric mean = {geoMeanPInvest:E3}  min = {investProbMin:E3}  max = {investProbMax:E3}  (n={investLegalDecisions} decisions where invest was a legal action)");
+    }
+    else
+    {
+        Console.WriteLine("(invest was never a legal action in any sampled decision)");
+    }
     Console.WriteLine("─── ACTION DISTRIBUTION (% of non-wait decisions) ────────────────");
     for (int a = 1; a < actionLabels.Length; a++)
     {

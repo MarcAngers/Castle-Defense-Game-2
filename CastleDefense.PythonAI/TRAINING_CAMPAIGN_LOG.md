@@ -1424,6 +1424,178 @@ counters at 0 on every resume -- this is a script-local counter, not the model's
 `num_timesteps` (which the checkpoint zip preserves correctly). Not a new issue,
 just re-verified under real use.
 
+## Why won't the model learn to invest? Deep dive on RL learnability (2026-07-26)
+
+Marc's framing: investing is, in his experience, always a dominant strategy, and he's
+seen 90%-forced-invest-exploration produce strong models before -- but that "doesn't
+teach the model anything, it's just artificially improving performance." He asked for
+a real investigation into why a reward signal this strong isn't cutting through the
+noise, not another pool-rebalance guess. v29 stayed paused; used the freed CPU for
+this.
+
+**Read the full reward function (`GameEngine.CalculateReward`) and the live
+GA-tuned `reward_params_5000.json`** (not just the class defaults):
+`WinReward=35164, InvestReward=2186, InvestDecay=930, AntiSpend=1113,
+SavingsWeight=0.085, CombatScale=0.509, GadgetUpgrade=1566, GadgetUse=28`.
+
+**Ruled out: the direct reward for investing is NOT weak, delayed, or penalized.**
+`if (myPlayer.Income - myPrevIncome > 0) reward += InvestReward + (11 - InvestmentCount) * InvestDecay`
+fires the SAME tick `Invest()` succeeds (`ApplyInvestmentStep()` updates Income
+synchronously, no delay). For the first investment this is `(2186 + 930*10)/1000 ≈
+11.49` -- roughly **1000x the -0.011/tick time penalty** and far larger than a single
+kill (`6*0.509/1000 ≈ 0.003`). The `AntiSpend` penalty explicitly excludes the invest
+tick itself (`myPrevIncome == myPlayer.Income` in its condition means it only
+penalizes spending on OTHER things while saving up -- it's pro-investment, not
+anti-). This is not a subtle or sparse signal; it's one of the single largest reward
+events in the whole function, and it doesn't need to wait for the eventual win.
+
+**Ruled out: discount horizon.** `gamma=0.9998` → effective horizon `1/(1-gamma) =
+5000` RL-steps. Each RL-step is 9 engine ticks (confirmed in
+`CastleDefense.Simulation/Program.cs`'s per-decision loop), and `MAX_TICKS=18,000`,
+so the LONGEST possible game is `18000/9 = 2000` RL-steps -- the discount horizon is
+2.5x the absolute maximum game length, and ~5-10x a typical game (~500-900 steps
+measured). There is no horizon problem: even pure sparse win/loss credit would
+propagate back across an entire game with room to spare. (This also means the
+direct invest reward above doesn't even need to rely on this -- it's immediate
+regardless.)
+
+**A real but secondary wrinkle: the N-step board-eval shaping term is close to a
+wash for the FIRST investment specifically.** `compute_nstep_shaping` looks
+`BOARD_SHAPING_LOOKAHEAD=30` steps (~9 seconds) ahead at `EvaluateBoard()`
+(weight ~21.3-21.7, barely annealed across the whole run) and adds `eval[t+30] -
+eval[t]` to that step's reward. `EvaluateBoard()`'s income term (weight 0.7, the
+LARGEST of six components) rises immediately and permanently on invest; the money
+term (weight 0.2406) drops sharply (money spent). Back-of-envelope with realistic
+first-invest numbers (income 2→~2.6, money ~18→~0): income-score contributes
+roughly **+0.039** (weighted), money-score roughly **-0.046** (weighted) -- net
+slightly negative for investment #1 specifically, before the compounding benefit of
+later, larger income jumps would plausibly flip this positive. Not the main effect
+(dwarfed by the direct `InvestReward`), but worth knowing this shaping term doesn't
+help early investing and may even add a small amount of noise against it.
+
+**Ruled out: observability of own economy.** `GetStateVector` includes
+`log10(Money)`, `log10(Income)`, and `log10(InvestmentPrice)` for the player's own
+side -- the model can clearly perceive its own economic state. (Correction to
+CLAUDE.md, which is stale here: it claims `InvestmentPrice` is NOT in the state
+vector and `InvestmentCount` is -- current code is the reverse: `InvestmentPrice`
+(log10) replaced raw `InvestmentCount` in a past commit, on the reasoning that count
+is derivable from `InvestmentPrice` + `Income`. Worth a docs fix separately.)
+
+**A real, structural observability gap, flagged but not the primary mechanism: the
+enemy's economy is deliberately hidden** (`GetStateVector`'s own comment: "we hide
+the enemy's money/income so the AI doesn't cheat"). The model can never directly
+perceive that an opponent is out-investing it -- only infer it indirectly from
+battlefield pressure over time. This makes "invest because my opponent is scaling"
+structurally harder to discover from observation alone, though it's a symmetric,
+long-standing design choice, not something that changed. Noted as a contributing
+consideration for candidate fixes (a reward-shaping term could use full-state
+economic comparison even though the observation can't, since reward computation has
+engine-level access regardless of what's shown to the policy).
+
+**THE decisive finding: PPO's own clipped-objective mechanics cannot learn a
+correctly-rewarded but near-zero-probability action from injected exploration
+samples, and this is measurably getting WORSE, not better, over training.** Extended
+`AIBrain`/`model-diag` to compute the real softmax **P(invest) whenever it's legal**,
+across real games, zero forced exploration:
+
+| Checkpoint | P(invest \| legal) geometric mean | min | max |
+|---|---|---|---|
+| v29 @ 261M steps | 5.5 × 10⁻⁵² | 2.0×10⁻⁵⁷ | 1.4×10⁻¹⁷ |
+| v29 @ 397M steps (latest) | **9.2 × 10⁻¹⁴³** | 5.2×10⁻¹⁵¹ | 4.0×10⁻³³ |
+
+(`v25_bc` never had a single legal-invest decision sampled in 100 games -- its money
+apparently never crosses the $18 threshold before games end, itself more evidence of
+how thoroughly non-economic its play is.)
+
+**This is not "small," it's numerically unreachable by ordinary gradient steps.**
+PPO's surrogate objective clips the importance ratio `π_new(a)/π_old(a)` to
+`[1-0.2, 1+0.2]` (MaskablePPO's default `clip_range`, unchanged in this config) --
+regardless of how large the advantage is, a single update can only move an action's
+probability by a bounded RELATIVE amount once the ratio leaves that band. Getting
+from `~1e-143` to anywhere relevant via repeated ~20%-per-update increases would need
+on the order of **1,800 consecutive positive updates** (`log(1e143)/log(1.2)`) --
+and critically, the measured trend across 261M→397M steps moved the WRONG way (91
+more orders of magnitude AWAY from relevance), meaning whatever pull the rare
+forced-invest-and-win samples exert is being overwhelmed, not just outpaced.
+
+**Why the pull is being overwhelmed: this compounds directly with the self-play
+finding from the previous entry.** Self-play is 50% of every batch and (per that
+investigation) fabricates an ~90%+ "win rate" for the current never-invest strategy
+via the P1-only forced-invest asymmetry. Raising the probability of an
+ALREADY-common action (spawnT1, wait) via a modest gradient nudge stays comfortably
+inside the clip band (its `π_old` is already large, so a small absolute change is a
+small ratio change) and applies with full force every update. Raising a
+near-zero-probability action's probability by the same absolute amount is a
+proportionally enormous ratio, and gets clipped hard. So the two forces are not
+symmetric: the (real, artifact-driven) pressure entrenching "don't invest" moves
+freely; the (real, correctly-rewarded) pressure toward "invest" is structurally
+throttled by the same mechanism, every single update, and the throttle gets tighter
+the smaller P(invest) already is. This is a self-reinforcing trap, not a one-time
+setback.
+
+**This also fully explains Marc's own historical observation about 90%-forced
+exploration.** At 90% forcing, nearly every legal opportunity IS an investment
+regardless of what the policy wants -- so the environment behaves as if scripted to
+invest, and the model learns good downstream PLAY given a scaled economy (unit
+composition/timing, since the trajectory itself is realistic and coherent) without
+the policy's own `P(invest)` ever needing to rise, because the environment supplies
+the choice regardless of the policy's preference. Strong resulting BEHAVIOR, but the
+POLICY never actually attached probability/credit to choosing it -- exactly Marc's
+own diagnosis ("artificially improving performance," not teaching). At 5% scattered
+forcing, the reverse problem: legal invest moments occur, but the same PPO-clip
+mechanic prevents any single success from moving the needle much, and coherent
+multi-invest trajectories (which would need several successive forced rolls to
+survive the model's own competing unit-spending, at ever-increasing cost) are rare
+enough that the model may functionally never experience the FULL winning economic
+trajectory end to end -- consistent with Marc's own suspicion in angle 2.
+
+**Secondary contributing factor: the entropy bonus doesn't protect specific rare
+actions.** `ent_coef` (0.02-0.03, annealing early in a run, at floor by 400M steps)
+regularizes TOTAL categorical entropy across all 14 actions. A action's own
+contribution to that total (`p*log(1/p)`) vanishes as `p→0`, so the entropy bonus
+provides essentially no resistance to one specific action's probability collapsing
+toward zero as long as entropy is "spent" elsewhere (here: spread across wait vs.
+spawnT1 vs. occasional T2/T3/repair/gadget, matching the measured ~0.35-0.42 nat
+entropy that's roughly flat across the run even as invest's probability craters
+another ~90 orders of magnitude). A scalar, whole-distribution entropy bonus is not
+well-suited to preventing this specific failure mode.
+
+**Full synthesis:** this is not a reward-design problem (the direct invest reward is
+large, immediate, and correctly signed) and not a discount-horizon problem (ample
+margin). It is a policy-gradient MECHANICS problem: PPO's clipped surrogate
+objective is structurally bad at learning from off-policy-injected samples of an
+action whose current probability is extremely low, and the self-play forced-invest
+asymmetry (previous entry) has been actively driving that probability toward zero
+for the entire run, faster than the rare correctly-rewarded forced samples can pull
+it back given the same clip constraint works against them specifically. The two
+findings are one connected story, not two separate bugs.
+
+**Candidate fixes identified, NONE implemented -- for Marc's decision, per his
+explicit instruction that careful analysis-before-action is now the default:**
+1. Fix the self-play forced-invest asymmetry (apply `INVEST_EXPLORE` to both
+   self-play sides, or disable it for self-play specifically) -- removes the
+   confounding push, doesn't by itself fix the clip-bottleneck for recovering
+   from `~1e-143`.
+2. Replace scattered 5% per-tick forcing with deliberately COHERENT invest-heavy
+   episodes (force a real multi-investment trajectory through to completion in a
+   fraction of episodes, rather than independent per-tick rolls) -- lets the model
+   experience the actual winning trajectory end to end, directly targeting Marc's
+   own angle-2 suspicion.
+3. A targeted intervention on the invest action's logit specifically (e.g. a floor
+   or periodic reset) so forced samples aren't starting from a numerically
+   unrecoverable probability -- more invasive, needs care.
+4. Loosen `clip_range` (or exempt forced-exploration samples from clipping
+   entirely, since they aren't genuinely on-policy samples anyway) so rare-but-good
+   actions can move faster.
+5. A potential-based reward term using the ENGINE's full-state economic comparison
+   (both sides' real income/investment, even though the observation hides the
+   enemy's) -- reward computation isn't limited by what the policy can see.
+6. An action-specific (not whole-distribution) minimum-probability floor or
+   auxiliary loss, rather than relying on the scalar entropy bonus.
+
+Not acted on. Reporting the mechanism and options; v29 remains paused pending Marc's
+call on which lever(s) to pull.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
