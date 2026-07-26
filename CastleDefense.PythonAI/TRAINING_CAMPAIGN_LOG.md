@@ -1683,6 +1683,78 @@ keep this clean break distinct from `v29`'s collapsed history, similar to why `v
 wasn't just a continuation of `v28`). Reporting test results and the restart
 recommendation to Marc before proceeding, per his explicit instruction.
 
+## v30 launched: fresh restart from v25_bc with both validated invest fixes (2026-07-26)
+
+Marc approved the restart-over-resume recommendation and gave the go-ahead
+autonomously. Launched `castle_defense_p1_v30` per the plan.
+
+**Setup:**
+- `train_ai_cluster.py`: `TRAINING_MODEL_NAME` → `castle_defense_p1_v30`,
+  `TRAINING_BASE_MODEL` unchanged (`castle_defense_p1_v25_bc`), full 2B-step budget
+  unchanged. Both invest fixes (self-play forcing symmetry, 15%-of-episodes
+  full-invest curriculum) are already in the committed `CastleDefense.Simulation`
+  binary from the earlier validation work -- no additional code changes needed here.
+- `pause_training.ps1` / `resume_training.ps1` / `benchmark_checkpoints.ps1` updated
+  to target v30.
+- v29's progress logs archived (`training_progress_ARCHIVE_v29.csv`,
+  `training_progress_opponents_ARCHIVE_v29.csv`, `checkpoint_benchmark_log_v29_ARCHIVE.csv`)
+  so v30 starts with clean logs.
+- Full solution rebuilt (`CastleDefenseGame2.sln`) to make sure `CastleDefense.Simulation`
+  and `CastleDefense.BotArena` both reflect the latest committed code.
+- **`benchmark_checkpoints.ps1` extended**: every cycle now also runs `model-diag` on
+  the snapshot (100 games, diverse pool, zero forced exploration) and logs
+  `invest_p_geomean`, `invest_legal_decisions`, `invest_chosen_pct` alongside the
+  existing HeuristicBot win-rate columns. **This is now the key metric to watch** --
+  the old `avg_invests_per_game` column in `training_progress.csv` is contaminated by
+  forced-exploration actions and is exactly what misled the last two sessions into
+  thinking investing was healthy. Trust `checkpoint_benchmark_log.csv`'s new columns
+  over that one going forward.
+- `sanity_watchdog.py` now also logs Self-Play's win rate at the fast-check mark
+  (informational, not a hard gate -- too few samples that early to be reliable) so a
+  recurrence of the asymmetry is visible immediately rather than only discovered
+  hours in.
+
+**Launched via `resume_training.ps1`** (correctly detected no `castle_defense_p1_v30.zip`
+existed, warm-started fresh from `v25_bc` as intended). All 14 arenas connected
+cleanly.
+
+**Early health checks, all foreground-polled directly (not left to wakeups),
+at ~5-6M steps:**
+- **Sanity watchdog: PASS.** Self-Play sample count saturated (500), invests/game
+  (contaminated metric) 1.09 -- confirms the model is genuinely driving its own
+  actions, no v27-style null-brain recurrence.
+- **Self-Play win rate holding at 56.6-58.8%** across 8 consecutive 500-game rolling
+  readings (4.6M-5.4M steps) -- right in the healthy ~50-58% range a fair mirror
+  match should show (matches the clean control test from the earlier investigation),
+  NOT climbing toward the ~80-90% the old one-sided forcing produced. **The self-play
+  symmetry fix is holding in the live run.**
+- **Real unforced P(invest), measured directly via `model-diag` on the live
+  `current_model.onnx` at ~5M steps: geometric mean 0.917 (91.7%)**, with the model
+  actually choosing to invest in **44 of 45** legal opportunities (97.8%) across 150
+  real games. This is even stronger than the isolated 15M-step validation test
+  (which reached 0.28) -- likely benefiting from the full 14-arena opponent mix
+  rather than the smaller test harness. **The invest-collapse fix is working
+  decisively in the live run, not just the isolated test.**
+
+**Process health:** 20 processes (14 arenas + training + benchmark loop + watchdog +
+shells), zero errors beyond the one known harmless ONNX-export deprecation warning.
+Logit range at ~12 (healthy, nowhere near the 500+ the collapsed v29 run reached) --
+consistent with a policy that hasn't (yet, and per the whole point of this fix,
+shouldn't) collapsed away from investing.
+
+**Watching for:** whether P(invest) and the checkpoint-vs-Heuristic benchmark keep
+improving together as training progresses (the original healthy pattern Marc always
+expected -- vs.-Heuristic rising WITH vs.-everything-else, not just vs.-self-play),
+per the standing directive to watch for any further degeneracy. Will report on this
+as more benchmark cycles land.
+
+**Commands, unchanged, now targeting v30:**
+```
+cd C:\repos\Castle-Defense-Game-2\CastleDefense.PythonAI
+powershell -File pause_training.ps1     # pause -- safe to use the PC afterward
+powershell -File resume_training.ps1    # resume exactly where it left off
+```
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*

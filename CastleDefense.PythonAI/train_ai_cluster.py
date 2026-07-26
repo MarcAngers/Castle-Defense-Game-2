@@ -47,7 +47,7 @@ BOARD_SHAPING_END       =   21.308428
 BOARD_SHAPING_ANNEAL    = 3_000_000
 BOARD_SHAPING_LOOKAHEAD = 30         # AI-steps ≈ 270 game ticks ≈ 9 s (covers ~3 income periods)
 
-TRAINING_MODEL_NAME = "castle_defense_p1_v29"  # saves checkpoints here
+TRAINING_MODEL_NAME = "castle_defense_p1_v30"  # saves checkpoints here
 # v28, not v27: the v27 run (2B steps, see TRAINING_CAMPAIGN_LOG.md) had every
 # intended fix applied (CUDA, GA reward params, invest-explore, HeuristicBot+self-play
 # league) EXCEPT one -- start_arenas() never passed the arenas their ONNX path, so

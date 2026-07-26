@@ -125,6 +125,25 @@ def latest_invests_per_game():
     return float(rows[-1]["avg_invests_per_game"])
 
 
+def latest_selfplay_winrate():
+    """
+    Informational only, not a hard-fail gate (too few samples this early to be
+    reliable). 2026-07-26 (v30): the self-play forced-invest asymmetry fix means
+    Self-Play's win rate should now hover near the ~50-58% a genuinely fair mirror
+    match shows (see TRAINING_CAMPAIGN_LOG.md's seat-bias and self-play-divergence
+    investigations) rather than the ~80-90% the old asymmetric forcing produced.
+    Logged for visibility so a recurrence is visible early, not gated on here --
+    the real test is the model-diag-based real-P(invest) check run separately.
+    """
+    if not os.path.exists(OPP_CSV):
+        return None
+    with open(OPP_CSV, newline="") as f:
+        rows = [r for r in csv.DictReader(f) if r["opponent"] == "Self-Play"]
+    if not rows:
+        return None
+    return float(rows[-1]["winrate"])
+
+
 def main():
     log("Sanity watchdog started.")
     log(f"Waiting {FAST_DELAY_SECONDS}s for the fast checks (self-play share, invests/game)...")
@@ -137,9 +156,13 @@ def main():
     counts = latest_opponent_counts()
     invests = latest_invests_per_game()
     selfplay_count = (counts or {}).get("Self-Play", 0)
+    selfplay_wr = latest_selfplay_winrate()
 
     log(f"Latest opponent sample counts: {counts}")
-    log(f"Latest invests/game: {invests}")
+    log(f"Latest invests/game: {invests} (NOTE: includes forced-exploration actions, "
+        f"not the real learned rate -- see model-diag for that)")
+    log(f"Latest Self-Play win rate: {selfplay_wr} (informational -- should trend near "
+        f"~50-58% with the self-play symmetry fix, not the ~80-90% seen before it)")
 
     fail_reasons = []
     if selfplay_count < MIN_SELFPLAY_COUNT:

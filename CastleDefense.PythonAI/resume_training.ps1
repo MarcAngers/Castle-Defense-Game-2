@@ -1,5 +1,5 @@
 # Resumes the RL training campaign after pause_training.ps1. train_ai_cluster.py
-# auto-detects castle_defense_p1_v29.zip (the periodic checkpoint) and resumes from
+# auto-detects castle_defense_p1_v30.zip (the periodic checkpoint) and resumes from
 # its exact saved step count / weights / optimizer state -- no special resume flag
 # needed, this just relaunches the same three detached processes pause_training.ps1
 # stopped. Safe to run repeatedly; if training is already running, PID checks below
@@ -16,11 +16,11 @@ $existingTrainingPid = if (Test-Path "$pyDir\campaign_run.pid") { Get-Content "$
 if ($existingTrainingPid -and (Get-Process -Id $existingTrainingPid -ErrorAction SilentlyContinue)) {
     Write-Output "Training already running (PID $existingTrainingPid) -- not relaunching."
 } else {
-    $checkpoint = Get-Item "$pyDir\castle_defense_p1_v29.zip" -ErrorAction SilentlyContinue
+    $checkpoint = Get-Item "$pyDir\castle_defense_p1_v30.zip" -ErrorAction SilentlyContinue
     if ($checkpoint) {
         Write-Output "Found checkpoint from $($checkpoint.LastWriteTime) -- training will resume from there."
     } else {
-        Write-Output "No castle_defense_p1_v29.zip found -- this will warm-start fresh from castle_defense_p1_v25_bc instead."
+        Write-Output "No castle_defense_p1_v30.zip found -- this will warm-start fresh from castle_defense_p1_v25_bc instead."
     }
     $proc = Start-Process -FilePath $pyExe -ArgumentList "-u", "train_ai_cluster.py" -WorkingDirectory $pyDir `
         -RedirectStandardOutput "$pyDir\campaign_run.log" -RedirectStandardError "$pyDir\campaign_run.err.log" `
@@ -34,7 +34,7 @@ $existingBenchPid = if (Test-Path "$pyDir\benchmark_loop.pid") { Get-Content "$p
 if ($existingBenchPid -and (Get-Process -Id $existingBenchPid -ErrorAction SilentlyContinue)) {
     Write-Output "Benchmark loop already running (PID $existingBenchPid) -- not relaunching."
 } else {
-    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$pyDir\benchmark_checkpoints.ps1", "-ModelTag", "v29", "-IntervalMinutes", "25", "-GamesPerCheck", "150" -WorkingDirectory $pyDir `
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$pyDir\benchmark_checkpoints.ps1", "-ModelTag", "v30", "-IntervalMinutes", "25", "-GamesPerCheck", "150" -WorkingDirectory $pyDir `
         -RedirectStandardOutput "$pyDir\benchmark_loop.log" -RedirectStandardError "$pyDir\benchmark_loop.err.log" `
         -WindowStyle Hidden -PassThru
     Write-Output "Launched benchmark loop. PID=$($proc.Id)"

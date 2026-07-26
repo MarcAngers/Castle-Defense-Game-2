@@ -58,5 +58,5 @@ if ($remaining -eq 0) {
 }
 
 Write-Output "Latest saved checkpoint:"
-Get-Item "$pyDir\castle_defense_p1_v29.zip" -ErrorAction SilentlyContinue | Select-Object Name, LastWriteTime, Length
+Get-Item "$pyDir\castle_defense_p1_v30.zip" -ErrorAction SilentlyContinue | Select-Object Name, LastWriteTime, Length
 Write-Output "`nRun resume_training.ps1 when ready to continue."
