@@ -1755,6 +1755,40 @@ powershell -File pause_training.ps1     # pause -- safe to use the PC afterward
 powershell -File resume_training.ps1    # resume exactly where it left off
 ```
 
+## v30 one-hour go/no-go check (2026-07-26): PASS on all three criteria, letting it run
+
+Marc's explicit framing: don't waste CPU hours on a run that isn't going anywhere --
+treat the first hour as a real kill-or-continue gate, not a status ping. Three
+named criteria, checked with two independent `checkpoint_benchmark_log.csv`
+readings (13.6M and 29.6M steps) plus the live rolling stats in
+`training_progress_opponents.csv`:
+
+**1. Is real unforced P(invest) actually rising off ~0?** Not just rising -- already
+saturated at the healthy end and holding: **0.991 at 13.6M steps, 0.982 at 29.6M
+steps**, both via `model-diag` (zero forced exploration). Chosen 100% of the time it
+was legal both readings (45/45, then 23/23). No sign of the old collapse anywhere
+near recurring.
+
+**2. Is the self-play asymmetry actually gone?** Self-Play win rate has stayed in a
+tight **52.6-58.8% band across 20+ consecutive 500-game rolling readings** spanning
+14M-31M steps -- squarely the healthy mirror-match range this campaign's earlier
+investigation established, nowhere close to the ~80-90% the old one-sided forcing
+produced. Confirmed stable, not just an early lucky window.
+
+**3. Checkpoint-vs-Heuristic trend direction:** **rising** -- 14.0% -> 26.7% model
+win rate between the two benchmark readings (13.6M -> 29.6M steps). The live rolling
+stat agrees independently: Heuristic Bot's tracked win rate against the trainee rose
+from ~13% (14-21M steps) to ~18-19% (30-31M steps) over the same window -- two
+different measurement methods pointing the same direction. This is the exact pattern
+Marc has always wanted and the previous two runs never showed this early: real
+progress against a fixed, competent opponent, not just self-play noise.
+
+**Verdict: PASS, clearly. Letting v30 continue.** None of the v28/v29 failure
+signatures are present -- P(invest) isn't stuck near zero, Self-Play isn't inflated,
+and vs.-Heuristic is moving the right direction alongside everything else rather
+than diverging from it. Process health unchanged: 20 processes, zero errors beyond
+the known harmless ONNX deprecation warning.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
