@@ -1789,6 +1789,65 @@ and vs.-Heuristic is moving the right direction alongside everything else rather
 than diverging from it. Process health unchanged: 20 processes, zero errors beyond
 the known harmless ONNX deprecation warning.
 
+## Pause/resume cycle + P(invest) trend resolved: selective investing, not re-collapse (2026-07-26)
+
+Marc paused v30 to free his CPU (`pause_training.ps1` -- checkpoint saved cleanly at
+83,951,616 steps, zero processes remained), then resumed later
+(`resume_training.ps1` -- confirmed "Resuming training: castle_defense_p1_v30.zip",
+not a restart; first post-resume update landed at 84,295,680 steps, correctly
+continuing). One known quirk reconfirmed: `training_progress.csv`'s own step
+counter resets to 0 on every resume (script-local, not the model's real
+`num_timesteps`) -- `checkpoint_benchmark_log.csv`'s `training_steps` column
+inherited this, so readings after a resume show a much smaller number than the
+model's true cumulative progress. Not a bug, just remember to add the pre-resume
+checkpoint's step count back in when reading that column across a pause boundary.
+
+**The open question from before the pause: P(invest)'s chosen% had dropped from
+100% to 9.2% over two readings, while real invests/game held at 2.72. Three more
+readings since (spanning the pause) resolve it decisively:**
+
+| Reading | invest_chosen_pct | P(invest) geomean | invest_legal_decisions | **real invests/game** |
+|---|---|---|---|---|
+| pre-pause | 9.2% | 3.66% | 993 | 2.72 |
+| post-resume #1 | 1.6% | 6.37% | 3,503 | **2.62** |
+| post-resume #2 | 0.3% | 0.93% | 10,678 | **2.61** |
+
+**The percentage-based metrics keep cratering, but the real functional metric
+(actual invests/game, measured directly via `invest-stats`, unforced) is rock
+solid: 2.72 -> 2.62 -> 2.61, across the pause boundary, no decline at all.** This
+resolves the mechanism cleanly: `invest_legal_decisions` is exploding (993 -> 10,678)
+because the model reaches its own steady ~2.6-investment target early/mid-game and
+then correctly, consistently chooses NOT to invest for the rest of a long game
+(spending on units/combat instead) -- every one of those later decisions still
+counts as "legal but declined" in the percentage stats, mechanically shrinking
+`invest_chosen_pct` and `P(invest) geomean` even though nothing about the model's
+real behavior is regressing. **This is genuine selective, functional investing, not
+the re-collapse failure signature** -- the failure signature would require
+invests/game ALSO trending toward zero, which it plainly isn't.
+
+**Lesson for reading this campaign's own new metric going forward:** trust
+`invest-stats`-measured real invests/game as the ground truth when
+`invest_chosen_pct`/`P(invest) geomean` looks alarming -- the percentage stats are
+denominator-sensitive in a way that mechanically produces exactly this shape
+(declining %, growing n) for a model that has learned WHEN to stop investing, not
+just whether to invest at all. Worth remembering this before treating a
+`invest_chosen_pct` drop alone as a kill signal in the future.
+
+**Self-Play win rate: still healthy**, 53.6-55.8% since resume -- the symmetry fix
+continues to hold, no ballooning at any point across the pause.
+
+**Checkpoint-vs-HeuristicBot: flat, not yet rising.** 16.7-18.7% model win rate
+across all readings so far (both pre- and post-pause), matched by the live rolling
+stat (11.8-13.4%, no clear direction). Not the v28/v29 active-decline pattern
+either, though -- HeuristicBot itself averages 5.11-5.37 invests/game to the
+model's 2.6, so there's a real, understood gap left to close as the model's economy
+matures further, not evidence of anything broken.
+
+**Verdict: NOT the failure signature. Letting v30 continue.** Real invests/game
+stable, self-play symmetric, no active decline vs. Heuristic (flat, with an
+understood reason it isn't rising yet). Process health: 20 processes, zero errors,
+114.9M cumulative steps as of this check.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
