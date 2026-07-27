@@ -1848,6 +1848,73 @@ stable, self-play symmetric, no active decline vs. Heuristic (flat, with an
 understood reason it isn't rising yet). Process health: 20 processes, zero errors,
 114.9M cumulative steps as of this check.
 
+## Overnight check at 494M steps (2026-07-27 10:50 EDT): plateaued, not climbing -- P(invest) has gone past v29's own collapse depth, though real behavior hasn't
+
+Morning status check per Marc's ask. Process healthy and alive (18 processes,
+zero errors beyond known harmless matplotlib/ONNX warnings), 493,731,840 cumulative
+steps, ~9,450 steps/sec sustained (~44 more hours to the 2B target).
+
+**The honest answer to the key question: no, win-rate-vs-Heuristic has not climbed
+overnight. It's plateaued, arguably drifted down slightly.** Full live rolling
+trend (`training_progress_opponents.csv`, Heuristic Bot): ~12-15% in the first
+30-60M steps, settling into a noisy ~7-14% band for the remaining ~350M steps, with
+many individual readings in the 6-10% range from ~130M steps onward. Not the sharp
+v28/v29-style collapse toward near-zero, but clearly not rising either -- if
+anything the center of the noise band has drifted down a couple points since the
+early hours.
+
+**P(invest) (the percentage-based `checkpoint_benchmark_log.csv` metric) has kept
+collapsing all night, past where v29 ever reached:** the full overnight series goes
+`3.72e-3 -> 8.0e-5 -> 5.5e-8 -> 1.3e-11 -> 4.5e-16 -> ... -> 2.4e-103 -> 4.0e-120 ->
+... -> 9.16e-187` (latest, 405M steps). `invest_chosen_pct` has been pinned at
+0-0.3% for the last 15+ readings. **9.16e-187 is a more extreme collapse than v29's
+own worst point (~1e-143)** by a large margin.
+
+**But real invests/game (measured directly via `invest-stats`, unforced) has stayed
+essentially flat the whole time: 2.72 -> 2.62 -> 2.61 -> 2.55, across nearly 400M
+steps and the pause/resume boundary.** So this is NOT the same failure mode as
+v28/v29 (which was a genuine behavioral collapse to 0.00 invests/game) -- the model
+has settled into a real, stable habit of investing ~2.5-2.7 times early/mid-game,
+then correctly declining for the remainder of the game, same interpretation as the
+previous entry, just now measured at a far more extreme numerical depth.
+
+**Updated read on what this means, given how much further it's collapsed:** the
+astronomical P(invest) depth is now a genuine structural concern in its own right,
+separate from whether current behavior looks fine. Per the earlier PPO-clip
+investigation, recovering ANY meaningful probability mass from ~1e-187 would need
+on the order of thousands of consecutive positive gradient updates (`log(1e187)/
+log(1.2) ~= 2360`) -- the model has likely now locked itself into a ~2.5-invest
+ceiling that it is structurally very unlikely to ever autonomously push past, even
+though HeuristicBot's own economy runs at 5.1-5.4 invests/game and the gap between
+those two numbers is the most plausible explanation for why vs.-Heuristic isn't
+climbing. **Working theory: the model found a real, stable, moderately-good
+strategy (invest ~2.5x, then fight) that beats weak/legacy opponents comfortably
+but is capped below what's needed to beat Heuristic's stronger economy, and the
+same self-reinforcing PPO-clip mechanic that ate the ORIGINAL zero-invest problem
+is now doing the same thing to a "invest exactly this many times, never more"
+plateau.**
+
+**Self-Play win rate: still excellent, unchanged.** 46.6-58.4% across literally the
+entire overnight run (4.7M-409M steps, both before and after the pause), centered
+right around 50-52%. The self-play symmetry fix has proven durable across nearly
+400M steps -- this specific mechanism is genuinely resolved.
+
+**Win rate by opponent type (live rolling, most recent readings):** `v25_bc` 58.0%
+(beats its own un-trained ancestor solidly), Random Dummy 64.6-64.8% (a healthy
+majority against a peer rush-shaped opponent per Marc's correction), `v25` 40.0-40.2%,
+Spam Bot T4 35.8% (a real, historically-tough matchup, still below par), `v7` 18.2%,
+`v4` 12.8% (both long-documented hard matchups), Heuristic Bot ~13-14% (current
+window). **The pattern is consistent with the plateau theory above:** comfortable
+against weak/legacy/non-scaling opponents, still weak specifically against the
+opponents known to run a real, larger economy (Heuristic, v4) -- exactly where the
+~2.5-invest ceiling would be expected to bite.
+
+**No new degeneracy beyond the P(invest) depth itself** -- action distribution,
+process health, and self-play symmetry all look clean. This isn't a repeat of the
+v27 (null-brain) or v28/v29 (zero real investing) failure signatures; it's a new,
+narrower kind of plateau worth its own follow-up once there's a clear go/no-go
+decision to make.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
