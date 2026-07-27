@@ -2030,6 +2030,109 @@ implemented; reporting for Marc's decision on next steps.
 New diagnostic tooling (`CastleDefense.BotArena`'s `curriculum-sim` mode) committed
 for future reference.
 
+## Validation methodology + cheap probes for the invest-collapse fixes (2026-07-27)
+
+Marc's core methodological concern, verbatim reasoning: investing didn't even peak
+until ~200M steps last run, so a naive "run 15M steps and check if P(invest) moved"
+test can pass while the real objective (win-rate-vs-Heuristic climbing) still fails
+at scale -- exactly what happened with v30's own 15M-step validation looking clean
+right before the full run plateaued. He asked for validation that's predictive of
+long-run outcomes, not just short-run liveness, and explicitly floated: a
+concentrated-pressure learnability probe, a direct credit-assignment/advantage
+check on existing checkpoints (no training needed), a mechanical gradient-response
+test once a floor exists, and a reward-gradient check for pool restructuring.
+
+**The validation plan, in order of cost (cheapest/most decisive first):**
+
+1. **Causal counterfactual A/B (zero training cost) -- built and run.** Force the
+   model to invest exactly ONCE, at its first legal opportunity, then let it play
+   its own natural (unforced) strategy for the rest of the game; compare real
+   discounted reward and win rate against playing fully naturally (which, given
+   P(invest)~0, means never investing). Uses the exact training reward function
+   (GA-tuned `reward_params_5000.json`), exact 9-ticks-per-decision cadence, and
+   gamma=0.9998 discounting -- this measures ground-truth outcome, not a model's
+   possibly-miscalibrated internal belief. New BotArena mode: `invest-counterfactual`.
+   **Greenlight/kill criterion:** a clear, consistent positive delta means investing
+   is genuinely good given how the model currently plays afterward (floor is a sound
+   bet); a flat or negative delta would mean the model's current downstream style
+   doesn't benefit from investing, and a floor would be pointless. **Cost: ~5 min,
+   200 games total, zero training steps.**
+
+2. **Value-function advantage probe (zero training cost) -- built and run.** Load
+   the actual trained checkpoint's critic and compute a TD-style advantage
+   (`reward + gamma*V(after) - V(before)`) directly on the transitions collected in
+   (1). Tests whether the ALREADY-TRAINED value function recognizes investing as
+   good, or whether the credit-assignment machinery itself is miscalibrated (in
+   which case a floor alone wouldn't be enough -- the critic would keep discouraging
+   rediscovered invest attempts even with more sampling). New script:
+   `analyze_invest_advantage.py`. **Greenlight/kill criterion:** consistently
+   positive advantage means the only blocker is sampling probability (floor should
+   work cleanly); near-zero/negative advantage would mean a floor needs to be paired
+   with a value-function fix too. **Cost: seconds, pure inference on existing data.**
+
+3. **(Not run, held in reserve) Concentrated-pressure short training probe.** All-
+   Heuristic (or heavily Heuristic-weighted) pool + a floor prototype, ~10-15M
+   steps, checking real invests/game (via `invest-stats`, not the contaminated
+   dashboard metric) for ANY upward movement past 2.5. This is the one experiment
+   that costs real training steps -- only worth running if (1)/(2) come back
+   ambiguous. **They didn't**, so this wasn't run. Keeping it documented as the
+   fallback if the eventual full-scale floor test looks murky.
+
+**Results:**
+
+**(1) Counterfactual A/B -- decisive, in both matchups:**
+
+| Opponent | Pool A (forced 1 invest, n=100) | Pool B (natural, n=100) | Delta |
+|---|---|---|---|
+| HeuristicBot (fresh start, no headstart) | WR 0.0%, return **+13.19** | WR 0.0%, return **-5.12** | **+18.31 return** |
+| Self-play mirror | WR **77.0%**, return **+329.65** | WR **57.0%**, return **+247.35** | **+20.0pp WR, +82.30 return** |
+
+Neither pool wins outright vs a fresh (no-headstart) real HeuristicBot within 100
+games -- that matchup is just hard at this difficulty -- but the REWARD trajectory
+is unambiguously, substantially better with a single investment. Against a
+self-play mirror the effect is dramatic and shows up in the outcome that matters
+most: **+20 percentage points of win rate from one extra investment early on.**
+
+**This directly refutes my own earlier theoretical worry that self-play (50% of the
+pool) gives little pressure toward investing more because it's "fair" once
+symmetric.** It's not just theoretically fair in aggregate -- *within* any single
+self-play game, whichever side invests more still wins more, same as any other
+matchup. Self-play should be a perfectly good source of learning pressure once
+exploration is restored; it doesn't obviously need Heuristic-heavy pool
+restructuring to supply that pressure.
+
+**(2) Value-function advantage probe -- also decisive:**
+
+| Opponent | n | mean advantage | % positive |
+|---|---|---|---|
+| Heuristic | 83 | **+6.43** | 77.1% |
+| Self-play | 94 | **+9.37** | 76.6% |
+| Overall | 177 | **+7.99** | 76.8% |
+
+**The already-trained critic agrees with the causal result** -- it assigns positive
+advantage to the vast majority of forced-invest transitions, in both matchups.
+Interestingly the self-play advantage is if anything slightly *higher* than
+Heuristic's, consistent with (1)'s finding -- another data point against needing to
+lean on pool restructuring specifically.
+
+**Synthesis: both cheap, zero-training-cost experiments agree, and neither shows
+any sign of a deeper problem.** The causal ground truth says investing helps
+substantially; the trained critic already believes this too. That means the ENTIRE
+blocker really is the confirmed numerical sampling lockout (P(invest) ~1e-187) --
+there's no hidden credit-assignment or reward-miscalibration problem working
+against a floor. This is about as clean a green light as a cheap probe can give:
+**a probability floor is a well-supported bet, not a blind one, and the evidence
+suggests it may not even need to be paired with pool restructuring** to start
+seeing real learning pressure toward more investing, since self-play alone already
+shows a strong, real incentive once sampling is restored.
+
+**Still not implemented -- reporting for Marc's decision on whether to proceed to
+building the floor** (and, per this evidence, whether pool restructuring is even
+still a priority, or whether to test the floor alone first for cleaner
+attribution). New tooling committed: `invest-counterfactual` and `curriculum-sim`
+(BotArena), `analyze_invest_advantage.py` (Python, loads the real SB3 checkpoint's
+critic directly).
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*

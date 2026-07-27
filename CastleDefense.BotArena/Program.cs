@@ -1456,6 +1456,122 @@ if (args.Length > 0 && args[0] == "curriculum-sim")
     return;
 }
 
+// 2026-07-27 causal probe (zero training cost -- pure simulation): does forcing
+// ONE real investment at the model's first legal opportunity, then letting it play
+// its own natural (unforced) strategy for the rest of the game, actually improve
+// outcomes versus playing fully naturally the whole time (which given P(invest)~0
+// means "never investing")? This sidesteps PPO/advantage-estimation entirely --
+// it's a direct A/B comparison of real discounted reward using the exact reward
+// function and cadence training uses (GA-tuned reward_params_5000.json, 9 engine
+// ticks per decision, gamma=0.9998 applied per decision). Also dumps the forced-
+// invest transitions (obs before/after, reward, done) to CSV for the companion
+// value-function probe (see analyze_invest_advantage.py).
+// Usage: invest-counterfactual <modelFragment> [games] [opponent] [dumpFile]
+if (args.Length > 0 && args[0] == "invest-counterfactual")
+{
+    string modelArg = args.Length > 1 ? args[1] : "v30";
+    int games = args.Length > 2 && int.TryParse(args[2], out var icg) ? icg : 100;
+    string oppArg = args.Length > 3 ? args[3] : "heuristic";
+    string dumpFile = args.Length > 4 ? args[4] : null;
+    const double GAMMA = 0.9998;
+    const int TICKS_PER_DECISION = 9;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    var match = Directory.GetFiles(dir, "*.onnx")
+        .Where(f => Path.GetFileNameWithoutExtension(f).Contains(modelArg, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+        .FirstOrDefault();
+    if (match == null) { Console.WriteLine($"No model matching '{modelArg}' found in {dir}."); return; }
+    string modelName = Path.GetFileNameWithoutExtension(match);
+
+    var rewardParamsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..",
+        "CastleDefense.Simulation", "bin", "Release", "net10.0", "reward_params_5000.json");
+    var rewardParams = RewardParams.LoadFromJson(Path.GetFullPath(rewardParamsPath));
+    Console.WriteLine($"[invest-counterfactual] {modelName} vs {oppArg}, {games} games/pool -- " +
+        $"Pool A forces ONE invest at the first legal opportunity then plays naturally; " +
+        $"Pool B plays fully naturally. Reward params: {(File.Exists(Path.GetFullPath(rewardParamsPath)) ? "GA-tuned (live)" : "DEFAULT -- reward_params_5000.json not found!")}\n");
+
+    StreamWriter dump = null;
+    if (dumpFile != null)
+    {
+        dump = new StreamWriter(dumpFile);
+        var header = "opponent,decision_reward,done";
+        for (int k = 0; k < 348; k++) header += $",before_{k}";
+        for (int k = 0; k < 348; k++) header += $",after_{k}";
+        dump.WriteLine(header);
+    }
+
+    (double avgReturn, double winRate, int n) RunPool(bool forceOnce)
+    {
+        var returns = new List<double>();
+        int wins = 0;
+        for (int i = 0; i < games; i++)
+        {
+            var (state2, _) = CreateGame(false);
+            var engine2 = new GameEngine(state2, rewardParams);
+            HeuristicBot heuristicOpp = oppArg == "heuristic" ? new HeuristicBot(2) : null;
+            AIBrain selfplayOpp = oppArg == "selfplay" ? new AIBrain(match) : null;
+            var brain = new AIBrain(match);
+
+            bool forked = false, forcedThisGame = false;
+            double discountedReturn = 0, discount = 1.0;
+
+            while (!state2.IsGameOver)
+            {
+                var obsBefore = state2.GetStateVector(1);
+                var mask = state2.GetActionMask(1);
+                int action = brain.GetBestAction(obsBefore, mask);
+                bool isForkTick = forceOnce && !forcedThisGame && mask[9] == 1;
+                if (isForkTick) { action = 9; forcedThisGame = true; }
+                if (isForkTick || (!forceOnce && !forked && mask[9] == 1)) forked = true; // Pool B: start counting from its own equivalent fork point too
+
+                int p2Action = 0;
+                if (oppArg == "selfplay")
+                    p2Action = selfplayOpp.GetBestAction(state2.GetStateVector(2), state2.GetActionMask(2));
+
+                double decisionReward = 0;
+                for (int t = 0; t < TICKS_PER_DECISION; t++)
+                {
+                    if (state2.IsGameOver) break;
+                    heuristicOpp?.Update(engine2);
+                    var stepResult = engine2.Step(t == 0 ? action : 0, p2Action, 0f);
+                    decisionReward += stepResult.P1Reward;
+                }
+
+                if (forked)
+                {
+                    discountedReturn += discount * decisionReward;
+                    discount *= GAMMA;
+                }
+
+                if (isForkTick && dump != null)
+                {
+                    var obsAfter = state2.GetStateVector(1);
+                    var row = $"{oppArg},{decisionReward:F6},{(state2.IsGameOver ? 1 : 0)}";
+                    row += "," + string.Join(",", obsBefore.Select(v => v.ToString("F6")));
+                    row += "," + string.Join(",", obsAfter.Select(v => v.ToString("F6")));
+                    dump.WriteLine(row);
+                }
+            }
+            if (state2.WinnerSide == 1) wins++;
+            returns.Add(discountedReturn);
+            brain.Dispose(); selfplayOpp?.Dispose();
+        }
+        return (returns.Average(), 100.0 * wins / games, games);
+    }
+
+    var poolA = RunPool(forceOnce: true);
+    var poolB = RunPool(forceOnce: false);
+    dump?.Dispose();
+
+    Console.WriteLine($"Pool A (forced ONE invest, then natural): win rate {poolA.winRate:F1}%  avg discounted return from fork point: {poolA.avgReturn:F2}  (n={poolA.n})");
+    Console.WriteLine($"Pool B (fully natural, i.e. never invests): win rate {poolB.winRate:F1}%  avg discounted return from fork point: {poolB.avgReturn:F2}  (n={poolB.n})");
+    Console.WriteLine($"Delta (A - B): win rate {poolA.winRate - poolB.winRate:+0.0;-0.0}pp  return {poolA.avgReturn - poolB.avgReturn:+0.00;-0.00}");
+    if (dumpFile != null) Console.WriteLine($"Dumped {games} forced-invest transitions to {dumpFile}");
+    return;
+}
+
 Console.WriteLine($"Running {gamesPerMatchup} games per matchup...\n");
 
 RunMatchup("vs DoNothing", side => new DoNothingBaseline());
