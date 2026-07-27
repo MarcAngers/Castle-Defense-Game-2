@@ -1915,6 +1915,121 @@ v27 (null-brain) or v28/v29 (zero real investing) failure signatures; it's a new
 narrower kind of plateau worth its own follow-up once there's a clear go/no-go
 decision to make.
 
+## v30 killed; deep-dive on the dashboard discrepancy and whether a probability floor would actually help (2026-07-27)
+
+Marc killed v30 (`pause_training.ps1` -- confirmed zero processes, checkpoint saved
+but not meant to be resumed). This entry is analysis only, nothing implemented, per
+his explicit instruction to understand the mechanism before building anything.
+
+**Marc's dashboard (`plot_training.py`) reads directly from `training_progress.csv`**
+-- confirmed by reading the plotting code: `avg_invests_per_game` and
+`overall_winrate` are literally the same columns already being tracked, not a
+separate measurement. Pulled the actual column values directly: `overall_winrate`
+oscillated in a **0.37-0.46 band for the entire ~419M-step run**, and
+`avg_invests_per_game` really is **~13.4-13.5** in the final rows. No discrepancy
+between what Marc's dashboard shows and what's in the CSV -- both describe the same
+ground truth.
+
+**Why `avg_invests_per_game` reads ~13.5 when real voluntary investing (`invest-stats`,
+zero forcing) is ~2.5-2.7 -- confirmed mechanism #1:** `invest_count =
+int(np.sum(action_arr == 9))` (train_ai_cluster.py) counts every successful invest
+action P1 took in a batch, **forced or voluntary, indistinguishably** -- `action_arr`
+stores whatever action ends up recorded, and `INVEST_EXPLORE`/curriculum forcing
+overwrites the action before it's ever recorded. This confirms Marc's hypothesis
+exactly: the dashboard number is contaminated by forced actions, same root issue
+already flagged for `checkpoint_benchmark_log.csv`'s deprecated columns.
+
+**But the arithmetic doesn't fully close, and it's worth being honest about that
+rather than overclaiming precision.** Built a new BotArena diagnostic
+(`curriculum-sim`) to directly measure what a real 90%-forced curriculum episode
+produces (matching `investCurriculumEpisode` exactly, including the self-play
+symmetry fix): vs HeuristicBot, **avg 1.85 real investments/game** (games end too
+fast under a weakened defense to accumulate much); vs a symmetric self-play mirror
+(both sides forced, matching the real fix), **avg 6.12** (max 9 -- confirmed the
+engine hard-caps `InvestmentCount` at 9, `if (player.InvestmentCount > 8) return
+false;` in `GameEngine.Invest()`, so the "runaway 70-invest snowball" I initially
+suspected is flatly impossible). Pool-weighting these (30% Heuristic, 50%
+self-play, ~20% other opponents estimated) and blending with the 85% of episodes
+that aren't curriculum (~2.7 voluntary) gives a back-of-envelope estimate around
+**~3**, not ~13.5. **There's a real, unquantified residual gap.**
+
+**Leading candidate for the residual gap: a batch/episode-boundary accounting
+artifact, not a further behavioral mechanism.** `batchEpisodes` (what becomes
+`len(episodes)` on the Python side) only records an episode when it actually
+*completes* within a batch's step window (confirmed:
+`batchEpisodes.Add((oppName, epWinner))` fires only inside the "episode just ended"
+branch). But `batchAction`/`action_arr` records every action taken during the
+batch's full 8192-step (~41-minutes-of-game-time) window, including from episodes
+still in progress at the batch boundary. Since curriculum episodes are
+disproportionately long-running (measured avg 376-413s, frequently hitting the
+600s cap), they're more likely than a typical short/decisive game to straddle a
+batch boundary -- meaning their accumulated invest actions get tallied into the
+numerator across a batch (or more) before the episode itself is ever credited to
+the denominator. This would systematically inflate the ratio beyond what a clean
+per-completed-episode count would show, and the direction/mechanism is right, but
+the exact magnitude hasn't been directly instrumented -- didn't want to spin up a
+new training run just to measure this given the explicit instruction to kill v30
+and free the CPU. Flagging as the most likely explanation, not a proven one.
+
+**None of this changes the core diagnosis, and this is the important point: every
+version of the accounting, from the crude ~13.5 to the more careful ~3 estimate,
+agrees on the same conclusion** -- training-time investing behavior is dominated by
+scripted/forced mechanisms, not organic policy choice, and the real, voluntary
+number (measured directly and repeatedly at 2.5-2.7 throughout, decoupled from all
+of this) is what actually describes the deployed policy's behavior.
+
+**`overall_winrate` pinned at ~40%: reconciled, and it's redundant confirmation of
+what the per-opponent breakdown already showed, not a new/separate signal.**
+`overall_winrate` is P1's win rate blended across the ENTIRE opponent pool (weights:
+Self-Play 50%, Heuristic 30%, League 8%, Spam 6%, AntiSpam 3%, RandomDummy 3%), all
+in one rolling-2000-game average. Self-Play is, near-tautologically, always going
+to average close to 50% regardless of skill level (it's a mirror match -- both
+sides ARE that skill level by construction), and it's HALF the pool. A rough
+weighted estimate using our own measured per-opponent numbers (self-play ~51%,
+Heuristic ~13.5%, weaker opponents 25-65% variously) lands at **~38-39%** -- squarely
+inside the observed 37-46% band. **A flat aggregate near 40% is the mathematically
+expected consequence of self-play sitting at its structural ~50% anchor (unmovable
+by construction) while Heuristic (30% weight) stays stuck low, not independent
+evidence of "no improvement anywhere."** It's the same finding as the per-opponent
+breakdown, computed a different way -- worth knowing so this metric isn't read as a
+new, separate red flag going forward.
+
+**Central question: would a probability floor actually fix this?**
+
+*What it would fix, with real confidence:* the specific numerical-lockout problem.
+Real P(invest) reached ~9e-187 -- recovering meaningfully from that via ordinary
+gradient steps needs on the order of ~2,360 consecutive positive updates under
+standard PPO clipping (`log(1e187)/log(1.2)`), which is not a realistic timescale.
+A floor would keep the model periodically SAMPLING genuine (not scripted) invest
+attempts across a wide variety of real game states indefinitely, which is currently
+structurally impossible. This part is well-evidenced and the floor is a sound,
+targeted answer to it.
+
+*What it would NOT guarantee, and the reasoning matters:* whether that restored
+exploration actually discovers that investing MORE (beyond the current ~2.5
+ceiling) is worthwhile. Self-play -- 50% of the pool -- is now fair (confirmed
+durable at ~50% the entire run), but a fair mirror match gives the same result
+regardless of whether BOTH sides invest 2.5 or 5 times, as long as they match each
+other -- so self-play alone supplies little pressure to climb past whatever
+ceiling both sides already share. The real incentive to invest more can only come
+from the asymmetric matchups (Heuristic 30%, real league models), where
+HeuristicBot's own strategy (proven independently, in its own tuning history) shows
+a bigger economy genuinely wins more. A floor re-enables the exploration that could
+discover this; it doesn't guarantee the discovery, though the direct invest reward
+(already confirmed large and immediate in the earlier reward-structure
+investigation) makes it a reasonably well-supported bet, not a blind one.
+
+**Recommendation for the discussion: a probability floor looks like the right
+targeted lever for the confirmed mechanism (numerical lockout), but it's worth
+validating cheaply (a short test, same discipline as the original invest-fix
+validation) before committing a full run to it** -- specifically checking that
+restored exploration actually starts finding invests-beyond-2.5 rewarding against
+Heuristic specifically, not just that P(invest) numerically rises again. Not
+implemented; reporting for Marc's decision on next steps.
+
+New diagnostic tooling (`CastleDefense.BotArena`'s `curriculum-sim` mode) committed
+for future reference.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*

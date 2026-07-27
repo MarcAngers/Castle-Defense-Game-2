@@ -1372,6 +1372,90 @@ if (args.Length > 0 && args[0] == "selfplay-sim")
     return;
 }
 
+// 2026-07-27 diagnostic: directly measures what a training "curriculum episode"
+// (CastleDefense.Simulation's investCurriculumEpisode, 90% forced invest whenever
+// legal for the whole episode) actually produces -- total real investments and game
+// length -- to reconcile the dashboard's ~13.5 avg_invests_per_game (which blends
+// ALL games, forced+voluntary) against the ~2.5-2.7 measured via invest-stats
+// (voluntary only, zero forcing). See TRAINING_CAMPAIGN_LOG.md.
+// Usage: curriculum-sim <modelFragment> [games] [opponent]  (opponent: heuristic|selfplay|spamN, default heuristic)
+if (args.Length > 0 && args[0] == "curriculum-sim")
+{
+    string modelArg = args.Length > 1 ? args[1] : "v30";
+    int games = args.Length > 2 && int.TryParse(args[2], out var cg) ? cg : 60;
+    string oppArg = args.Length > 3 ? args[3] : "heuristic";
+    const float CURRICULUM_FORCE = 0.90f;
+
+    var dir = FindLeagueModelsDir();
+    if (dir == null) { Console.WriteLine("No league_models folder found."); return; }
+    var match = Directory.GetFiles(dir, "*.onnx")
+        .Where(f => Path.GetFileNameWithoutExtension(f).Contains(modelArg, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+        .FirstOrDefault();
+    if (match == null) { Console.WriteLine($"No model matching '{modelArg}' found in {dir}."); return; }
+    string modelName = Path.GetFileNameWithoutExtension(match);
+
+    Console.WriteLine($"[curriculum-sim] {modelName} vs {oppArg}, {games} games -- P1 forced to invest {CURRICULUM_FORCE:P0} of legal opportunities for the WHOLE game (matching investCurriculumEpisode)...\n");
+
+    var brain = new AIBrain(match);
+    var invests = new List<int>();
+    var ticks = new List<int>();
+    int wins = 0, losses = 0, draws = 0, timeouts = 0;
+    AIBrain selfplayBrain = oppArg == "selfplay" ? new AIBrain(match) : null;
+
+    for (int i = 0; i < games; i++)
+    {
+        var (state, engine) = CreateGame(false);
+        IArenaOpponent opponent = oppArg switch
+        {
+            "selfplay" => null, // handled inline below via selfplayBrain
+            var s when s.StartsWith("spam") && int.TryParse(s.Replace("spam", ""), out var tier) => new TierSpamBaseline(2, tier),
+            _ => new HeuristicBotAdapter(2),
+        };
+
+        while (!state.IsGameOver)
+        {
+            engine.Tick();
+            if (state.CurrentTick % 3 == 0)
+            {
+                var sv = state.GetStateVector(1);
+                var mask = state.GetActionMask(1);
+                int action = brain.GetBestAction(sv, mask);
+                if (mask[9] == 1 && action != 9 && rng.NextDouble() < CURRICULUM_FORCE)
+                    action = 9;
+                if (action != 0) engine.ApplyAction(1, action);
+
+                if (oppArg == "selfplay")
+                {
+                    var sv2 = state.GetStateVector(2);
+                    var mask2 = state.GetActionMask(2);
+                    int action2 = selfplayBrain.GetBestAction(sv2, mask2);
+                    // Matches the real self-play symmetry fix: during a curriculum
+                    // episode, BOTH sides get the same forced-invest treatment.
+                    if (mask2[9] == 1 && action2 != 9 && rng.NextDouble() < CURRICULUM_FORCE)
+                        action2 = 9;
+                    if (action2 != 0) engine.ApplyAction(2, action2);
+                }
+            }
+            opponent?.Update(engine);
+        }
+        if (state.IsTimeLimit) timeouts++;
+        if (state.WinnerSide == 1) wins++;
+        else if (state.WinnerSide == 0) draws++;
+        else losses++;
+        invests.Add(state.Player1.InvestmentCount);
+        ticks.Add((int)state.CurrentTick);
+        (opponent as IDisposable)?.Dispose();
+    }
+    selfplayBrain?.Dispose();
+    brain.Dispose();
+
+    Console.WriteLine($"P1 wins: {wins}/{games} ({100.0*wins/games:F1}%)  losses: {losses}  draws: {draws}  timeouts: {timeouts}");
+    Console.WriteLine($"P1 real InvestmentCount per game: avg={invests.Average():F2}  min={invests.Min()}  max={invests.Max()}");
+    Console.WriteLine($"Avg game length: {ticks.Average()/30.0:F1}s  (max {ticks.Max()/30.0:F1}s)");
+    return;
+}
+
 Console.WriteLine($"Running {gamesPerMatchup} games per matchup...\n");
 
 RunMatchup("vs DoNothing", side => new DoNothingBaseline());
