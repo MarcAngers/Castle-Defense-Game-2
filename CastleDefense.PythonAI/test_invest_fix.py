@@ -47,16 +47,16 @@ BOARD_SHAPING_END       =   21.308428
 BOARD_SHAPING_ANNEAL    = 3_000_000
 BOARD_SHAPING_LOOKAHEAD = 30         # AI-steps ≈ 270 game ticks ≈ 9 s (covers ~3 income periods)
 
-# 2026-07-26 fast-validation harness (ad-hoc copy of train_ai_cluster.py, not part of
-# the real campaign): env-var overrides so this file can run two short, independent
-# tests (fresh-from-v25_bc, resume-from-collapsed-v29) without touching the real
-# model files or train_ai_cluster.py itself. Unset = falls back to the real defaults.
+# 2026-07-27 fast-validation harness (ad-hoc copy of train_ai_cluster.py, not part of
+# the real campaign): env-var overrides so this file can run short, independent
+# tests without touching the real model files or train_ai_cluster.py itself.
+# Unset = falls back to the real defaults.
 _TEST_MODEL_NAME  = os.environ.get("TEST_MODEL_NAME")
 _TEST_BASE_MODEL  = os.environ.get("TEST_BASE_MODEL")
 _TEST_ONNX_NAME   = os.environ.get("TEST_ONNX_NAME")
 _TEST_TOTAL_STEPS = os.environ.get("TEST_TOTAL_STEPS")
 
-TRAINING_MODEL_NAME = _TEST_MODEL_NAME or "castle_defense_p1_v29"  # saves checkpoints here
+TRAINING_MODEL_NAME = _TEST_MODEL_NAME or "castle_defense_p1_v30"  # saves checkpoints here
 # v28, not v27: the v27 run (2B steps, see TRAINING_CAMPAIGN_LOG.md) had every
 # intended fix applied (CUDA, GA reward params, invest-explore, HeuristicBot+self-play
 # league) EXCEPT one -- start_arenas() never passed the arenas their ONNX path, so
@@ -194,6 +194,83 @@ def is_degenerate_drop(logit_range, action0_rate, peak_range,
     collapse  = peak_range >= activate_threshold and logit_range < peak_range * drop_ratio
     dominated = action0_rate > action0_threshold
     return collapse or dominated
+
+
+# ─── Invest action-specific probability floor ─────────────────────────────────
+#
+# 2026-07-27: validated cheaply (TRAINING_CAMPAIGN_LOG.md, "Validation methodology
+# + cheap probes") that investing has a large, real, positive causal effect AND
+# the trained critic already agrees -- the entire blocker to v30 ever learning to
+# invest past its ~2.5-invest ceiling was that P(invest|legal) collapsed to
+# ~1e-187, far beyond what PPO's clipped surrogate objective can ever recover from
+# (recovering needs ~log(1e187)/log(1.2) ~= 2360 consecutive positive updates,
+# not realistic). This wraps `action_net` (the final Linear(512,14) layer that
+# produces raw action logits, shared by rollout log_prob computation, model.train(),
+# check_policy_health, AND export_current_model's ONNX export -- wrapping it here
+# is the single injection point that keeps all of those consistent) so the invest
+# action's logit can never fall more than INVEST_FLOOR_MAX_GAP below the best
+# legal action's logit, regardless of what the rest of the network learns.
+#
+# Applied to the RAW logit, before any legality masking -- when invest is actually
+# illegal (not enough money), the environment's action mask still zeroes its
+# probability downstream regardless of the floor, so this has no effect on illegal
+# ticks. It only guarantees a floor when investing is a real, legal choice.
+#
+# INVEST_FLOOR_MAX_GAP=5.0 was chosen from the natural early-training logit
+# spread this run's own history showed (logit `range` was ~10-19 across the first
+# ~70M steps of the previous run, before any collapse) -- a 5.0 gap corresponds to
+# roughly exp(-5)~=0.0067 (~0.7%) of the top action's relative weight in a simple
+# two-way approximation, comparable to ordinary early-training uncertainty, not a
+# large forced push. High enough that PPO sees genuine, frequent invest samples to
+# learn from; low enough that it doesn't dominate decisions or force constant
+# investing the way the old 90%-curriculum forcing did.
+INVEST_ACTION_IDX     = 9
+INVEST_FLOOR_MAX_GAP  = 5.0
+
+
+class FloorInvestActionNet(th.nn.Module):
+    """Wraps the policy's action_net; clamps the invest logit to at most
+    INVEST_FLOOR_MAX_GAP below the best legal-or-not logit this forward pass."""
+    def __init__(self, base_action_net, invest_idx=INVEST_ACTION_IDX, max_gap=INVEST_FLOOR_MAX_GAP):
+        super().__init__()
+        self.base = base_action_net
+        self.invest_idx = invest_idx
+        self.max_gap = max_gap
+
+    def forward(self, x):
+        logits = self.base(x)
+        floor = logits.max(dim=-1, keepdim=True).values.squeeze(-1) - self.max_gap
+        floored = logits.clone()
+        floored[..., self.invest_idx] = th.maximum(logits[..., self.invest_idx], floor)
+        return floored
+
+
+def apply_invest_floor(model):
+    """Idempotent -- safe to call after every load/create, including the
+    NaN-rollback and degenerate-policy-rollback reload paths, all of which
+    construct a fresh action_net that needs the wrap applied again."""
+    if not isinstance(model.policy.action_net, FloorInvestActionNet):
+        model.policy.action_net = FloorInvestActionNet(model.policy.action_net).to(model.device)
+    return model
+
+
+def save_model_unwrapped(model, path):
+    """MaskablePPO.load() reconstructs a fresh (unwrapped) policy from the saved
+    constructor args, then loads the saved state_dict onto it -- so a checkpoint
+    saved with action_net still wrapped as FloorInvestActionNet fails to reload
+    ("Missing key(s): action_net.weight ... Unexpected key(s): action_net.base.weight").
+    Temporarily unwrap immediately before saving so the on-disk state_dict always
+    has the plain action_net.{weight,bias} shape MaskablePPO.load() expects, then
+    re-wrap right after so training continues under the floor uninterrupted."""
+    wrapped = isinstance(model.policy.action_net, FloorInvestActionNet)
+    if wrapped:
+        base = model.policy.action_net.base
+        model.policy.action_net = base
+    try:
+        model.save(path)
+    finally:
+        if wrapped:
+            apply_invest_floor(model)
 
 
 # ─── ONNX export ──────────────────────────────────────────────────────────────
@@ -592,6 +669,9 @@ if __name__ == "__main__":
         model = MaskablePPO("MlpPolicy", init_env, verbose=1, device="cuda", **custom_hyperparams)
         is_fresh_start = True
 
+    apply_invest_floor(model)
+    print(f"[Invest floor] Active -- invest logit clamped to at most {INVEST_FLOOR_MAX_GAP} below the best logit whenever legal.")
+
     # ── SB3 internal setup (bypasses model.learn()) ──
     model.set_logger(configure(None, ["stdout"]))
     model._current_progress_remaining = 1.0
@@ -682,6 +762,7 @@ if __name__ == "__main__":
                       f"({bad_logprobs}/{bad_values}) — rolling back to last checkpoint...")
                 model = MaskablePPO.load(TRAINING_MODEL_NAME, device="cuda",
                                          custom_objects=custom_hyperparams, verbose=1)
+                apply_invest_floor(model)
                 model.rollout_buffer = make_rollout_buffer(model)
                 model.set_logger(configure(None, ["stdout"]))
                 export_current_model(model)
@@ -701,7 +782,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"[CRITICAL] model.train() crashed at update {update_n}: {e}")
                 emergency_path = TRAINING_MODEL_NAME + "_emergency"
-                model.save(emergency_path)
+                save_model_unwrapped(model, emergency_path)
                 print(f"[CRITICAL] Emergency checkpoint saved to {emergency_path}.zip")
                 raise
 
@@ -723,6 +804,7 @@ if __name__ == "__main__":
                       f"— rolling back to last checkpoint...")
                 model = MaskablePPO.load(TRAINING_MODEL_NAME, device="cuda",
                                          custom_objects=custom_hyperparams, verbose=1)
+                apply_invest_floor(model)
                 model.rollout_buffer = make_rollout_buffer(model)
                 model.set_logger(configure(None, ["stdout"]))
                 export_current_model(model)
@@ -748,6 +830,7 @@ if __name__ == "__main__":
                 if checkpoint_exists:
                     model = MaskablePPO.load(TRAINING_MODEL_NAME, device="cuda",
                                              custom_objects=custom_hyperparams, verbose=1)
+                    apply_invest_floor(model)
                     model.rollout_buffer = make_rollout_buffer(model)
                     model.set_logger(configure(None, ["stdout"]))
                     logit_range, action0_rate = check_policy_health(model)
@@ -784,7 +867,7 @@ if __name__ == "__main__":
                 if not is_degenerate_drop(logit_range, action0_rate, peak_logit_range, update_n):
                     print(f"[Update {update_n}] {model.num_timesteps:,} steps | "
                           f"saving checkpoint (range={logit_range:.2f}, action0={action0_rate:.0%})...")
-                    model.save(TRAINING_MODEL_NAME)
+                    save_model_unwrapped(model, TRAINING_MODEL_NAME)
                 else:
                     print(f"[Update {update_n}] Skipping checkpoint — degenerate policy "
                           f"(range={logit_range:.3f}, action0={action0_rate:.0%}), preserving last clean save.")
@@ -801,7 +884,7 @@ if __name__ == "__main__":
     # a potentially-corrupted end-of-run save. Resume next run from TRAINING_MODEL_NAME.
     last_path = TRAINING_MODEL_NAME + "_last"
     print(f"Saving final model to {last_path}.zip (this may take a moment)...")
-    model.save(last_path)
+    save_model_unwrapped(model, last_path)
     print(f"Done.")
     print(f"Last clean checkpoint remains at {TRAINING_MODEL_NAME}.zip")
     stop_arenas(arena_procs)

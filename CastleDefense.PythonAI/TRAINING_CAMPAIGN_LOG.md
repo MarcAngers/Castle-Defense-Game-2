@@ -2134,5 +2134,174 @@ attribution). New tooling committed: `invest-counterfactual` and `curriculum-sim
 critic directly).
 
 ---
+
+# ============================================================
+# HANDOFF STATE (2026-07-27) — READ THIS FIRST IN A NEW SESSION
+# ============================================================
+
+Session retired here for token-cost reasons. Everything below is what a cold
+session needs. **No training is running. Do not start a long run without reading
+the "Next step" section — the floor fix is NOT yet greenlit.**
+
+## Current state
+
+- **v30 is dead/killed** (Marc's call, plateaued). `castle_defense_p1_v30.zip` =
+  **502,677,504 steps**, intact, resumable — but not worth resuming (400M+ steps
+  of a never-invest tier-1-rush strategy we're trying to move away from).
+- **`castle_defense_p1_v30_floortest.zip` = 516,784,128 steps** — the
+  probability-floor validation checkpoint (v30 + ~14.1M steps with the floor
+  active). Verified it loads cleanly and is resumable.
+- **Zero training/arena/benchmark processes alive.** Machine is idle.
+- Everything committed; working tree clean.
+
+## 1. The probability floor — what was built
+
+**Where:** `train_ai_cluster.py`. `FloorInvestActionNet` wraps `policy.action_net`
+(the final `Linear(512,14)` producing raw action logits). Clamps the invest logit
+(index 9) so it can never sit more than `INVEST_FLOOR_MAX_GAP = 5.0` below the
+best logit in that forward pass.
+
+**Why that injection point:** `action_net` is the single shared path used by
+rollout log-probs, `model.train()`, `check_policy_health()`, and the ONNX export —
+wrapping there keeps all of them consistent automatically. Applied to the RAW
+logit, *before* legality masking, so when investing is illegal (can't afford it)
+the env's action mask still zeroes it regardless — the floor only ever matters when
+investing is a genuine legal choice.
+
+**Why 5.0:** matches the natural early-training logit spread this project saw
+(~10-19 range before any collapse). ~exp(-5) ≈ 0.7% relative weight — ordinary
+early-training uncertainty, not a forced push. Enough for PPO to see real invest
+samples; not enough to force constant investing like the old 90% curriculum did.
+
+**`apply_invest_floor(model)`** is idempotent and is called at every model
+load/create point, *including* the NaN-rollback and degenerate-policy-rollback
+paths (those construct a fresh `action_net` and would silently lose the floor).
+
+**IMPORTANT — `save_model_unwrapped(model, path)`:** `MaskablePPO.load()` rebuilds
+a plain policy then loads the state_dict onto it, so saving while wrapped produces
+`action_net.base.weight` keys and the checkpoint **fails to reload**
+(`Missing key(s): action_net.weight`). This hit us for real mid-session. All
+`model.save()` calls now go through `save_model_unwrapped`, which unwraps → saves →
+re-wraps. Verified: the floortest checkpoint reloads cleanly with
+`action_net` type `Linear`. **Any new save path must use this helper.**
+
+## 2. Floor validation result — MECHANICALLY CONFIRMED, BUT NOT GREENLIT
+
+Bounded test: resumed the collapsed v30 with the floor on, ~14.1M steps (target was
+20M; the app crash cut it short — but the result is usable and consistent).
+
+| | pre-floor v30 | floor @8M | floor @14.1M |
+|---|---|---|---|
+| P(invest) geomean | ~9e-187 | 6.5e-3 | **7.12e-3** |
+| max logit range | 400-800 | 27.3 | 160.8 |
+| **real invests/game** (unforced) | **2.55** | **2.26** | **2.18** |
+
+**(a) Mechanical fix: PASS, decisively.** P(invest) recovered from ~1e-187 to
+~7e-3 and **held there across 14.1M steps of live PPO training without being
+re-clipped back down** — that was the key anti-re-clipping question and it's
+answered. Direct softmax check on real collapsed states also confirmed the clamp
+lands exactly at the configured 5.0 gap.
+
+**(b) Behavioural payoff: NOT demonstrated.** Real unforced invests/game did **not**
+climb — 2.55 → 2.26 → 2.18, flat-to-slightly-down, nowhere near HeuristicBot's
+~5.2. So the floor reopens the door but, in 14M steps, the model has not walked
+through it.
+
+**Honest verdict: AMBIGUOUS — do NOT greenlight a 100M+ run on this.** Caveat in
+both directions: 14M steps is short, and Marc's own observation is that investing
+took ~200M steps to peak last run, so "no movement in 14M" is genuinely weak
+evidence either way. Per the standing methodology
+([[feedback_rl_validation_methodology]]), the correct next move is the **bounded
+concentrated-pressure fallback**, not a full run: floor ON + a Heuristic-heavy
+(or all-Heuristic) pool, ~10-20M steps, watching real `invest-stats` invests/game
+for *any* move above ~2.5. If it moves under maximum pressure → greenlight. If it
+still won't move when investing is the only way to win → the floor alone is
+insufficient and we go back to the drawing board (pool restructuring, or the
+clip-exemption idea still held in reserve).
+
+## 3. Crash post-mortem — system-wide resource starvation, not an app bug
+
+**Evidence:** Zero errors/exceptions/tracebacks/OOM/CUDA failures in the training
+log — it ends with clean `[Arena N] Connection closed.` lines, the signature of the
+Python process being *externally killed*, not crashing. Meanwhile the Windows
+Application event log shows **`steamwebhelper.exe` hung 4 separate times between
+13:19:24 and 13:20:54** ("stopped interacting with Windows and was closed") —
+i.e. an unrelated app was also being starved in the exact window the Claude app
+died and the checkpoint was written (13:20:01).
+
+**Conclusion:** the machine, not the app, was the failure point. 14 arenas + the
+trainer = 15 CPU-bound processes on 20 logical cores, plus GPU, plus 31.8 GB RAM
+under pressure. The Claude desktop app was collateral damage, not the cause.
+Nothing in the training pipeline itself misbehaved.
+
+## 4. THE GAP THAT ACTUALLY STRANDED MARC (fixed)
+
+Marc's report — "no way to stop the training except to kill it" — was a **real bug
+in `pause_training.ps1`, now fixed.**
+
+The old script found processes *only* via PID files (`campaign_run.pid` etc.),
+which are written **only by `resume_training.ps1`**. The floor test was launched
+directly (not via that script), so no PID file existed; worse, stale PID files from
+the *previous* run were still on disk pointing at long-dead PIDs, so the script
+reported "already stopped" and moved on. It would then kill the arenas by name —
+but **the Python trainer survived**, with no clean way to stop it. Exactly the
+trap Marc hit.
+
+**Fix:** `pause_training.ps1` now also sweeps by **command line**
+(`train_ai_cluster.py`, `test_invest_fix.py`, `plot_training.py`,
+`benchmark_checkpoints.ps1`), so it stops the run *however it was launched*. It
+excludes its own PID, scopes the "did it work" check to our processes only (a bare
+`Get-Process python` false-alarms on unrelated Python), and deletes stale PID files
+so they can't cause phantom "already stopped" next time. Tested standalone: safe
+no-op when nothing is running.
+
+## 5. APP-INDEPENDENT STOP COMMAND (for Marc, no Claude session needed)
+
+Open a normal PowerShell window and run:
+
+```
+cd C:\repos\Castle-Defense-Game-2\CastleDefense.PythonAI
+powershell -File pause_training.ps1
+```
+
+**Confirmed to have zero dependency on the Claude app or any agent session** — it's
+pure PowerShell process management (`Get-CimInstance` / `Get-Process` /
+`Stop-Process`), no Python, no network, no IPC. It works whether training was
+started by `resume_training.ps1`, by hand, or by an agent. Training checkpoints
+every 3 PPO updates (~35s of at-risk progress), so stopping this way loses almost
+nothing and `resume_training.ps1` picks up from the saved step count.
+
+Hard-stop fallback if anything ever survives the above (blunt, kills all arenas +
+any matching trainer):
+```
+Get-Process CastleDefense.Simulation -EA SilentlyContinue | Stop-Process -Force
+Get-CimInstance Win32_Process | ? { $_.CommandLine -like "*train_ai_cluster.py*" } |
+  % { Stop-Process -Id $_.ProcessId -Force }
+```
+
+## 6. RESOURCE CAP RECOMMENDATION for future long runs
+
+The 14-arena load contributed to the crash. For unattended multi-day runs on this
+machine (20 logical cores, 31.8 GB RAM), recommend:
+
+- **Drop `N_ENVS` from 14 → 10** in `train_ai_cluster.py`. Leaves ~8-9 logical
+  cores for the OS, the desktop app, and Marc's own work instead of ~4. Note prior
+  measurement: going 14→18 arenas gave *no* throughput gain, so this pipeline is
+  not arena-count-bound near this range — the expected throughput cost of 14→10 is
+  modest and likely well worth the stability.
+- Optionally set the arena processes to below-normal priority so the desktop always
+  wins contention (`Get-Process CastleDefense.Simulation | % { $_.PriorityClass =
+  'BelowNormal' }` after launch).
+- Don't foreground-poll a long run from the agent session; let it detach and check
+  in periodically.
+
+## Next step (for the fresh session)
+
+Run the **bounded concentrated-pressure test** described in §2 — floor ON,
+Heuristic-heavy pool, ~10-20M steps, `N_ENVS=10`, judged on real `invest-stats`
+invests/game moving above ~2.5. That is the go/no-go for the floor. **Do not launch
+a 100M+ run before it passes.**
+
+---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
