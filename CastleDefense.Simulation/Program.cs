@@ -124,6 +124,23 @@ namespace CastleDefense.Simulation
 
         static readonly Random _rand = new Random();
 
+        // Opponent-pool cumulative roll thresholds — overridable via env vars so a
+        // bounded validation test (see TRAINING_CAMPAIGN_LOG.md "concentrated-pressure
+        // test") can reweight the pool (e.g. Heuristic-heavy) without hand-editing and
+        // reverting this file. Defaults match the production values below exactly, so
+        // any launch that doesn't set these env vars (train_ai_cluster.py,
+        // resume_training.ps1, etc.) behaves bit-identically to before this change.
+        static double EnvThreshold(string name, double dflt)
+        {
+            var v = Environment.GetEnvironmentVariable(name);
+            return (v != null && double.TryParse(v, out var d)) ? d : dflt;
+        }
+        static readonly double CUM_RANDOM_DUMMY = EnvThreshold("POOL_CUM_RANDOM_DUMMY", 0.03);
+        static readonly double CUM_ANTISPAM     = EnvThreshold("POOL_CUM_ANTISPAM",     0.06);
+        static readonly double CUM_SPAM         = EnvThreshold("POOL_CUM_SPAM",         0.12);
+        static readonly double CUM_LEAGUE       = EnvThreshold("POOL_CUM_LEAGUE",       0.20);
+        static readonly double CUM_HEURISTIC    = EnvThreshold("POOL_CUM_HEURISTIC",    0.50);
+
         static void Main(string[] args)
         {
             Console.WriteLine("Initializing ML Environment Server...");
@@ -348,29 +365,29 @@ namespace CastleDefense.Simulation
                         // League needs at least one model on disk; both fall back to Random
                         // Dummy if unavailable.
                         double roll = _rand.NextDouble();
-                        if (roll < 0.03)
+                        if (roll < CUM_RANDOM_DUMMY)
                         {
                             oppKind = OpponentKind.RandomDummy;
                             oppName = "Random Dummy";
                         }
-                        else if (roll < 0.06)
+                        else if (roll < CUM_ANTISPAM)
                         {
                             oppKind = OpponentKind.AntiSpam;
                             oppName = "Anti-Spam Bot";
                         }
-                        else if (roll < 0.12)
+                        else if (roll < CUM_SPAM)
                         {
                             oppKind = OpponentKind.Spam;
                             oppName = $"Spam Bot T{spamTier}";
                         }
-                        else if (roll < 0.20 && leagueModels.Count > 0)
+                        else if (roll < CUM_LEAGUE && leagueModels.Count > 0)
                         {
                             var chosen = leagueModels[_rand.Next(leagueModels.Count)];
                             leagueBrain = chosen.brain;
                             oppKind     = OpponentKind.League;
                             oppName     = chosen.name;
                         }
-                        else if (roll < 0.50)
+                        else if (roll < CUM_HEURISTIC)
                         {
                             heuristicBot = new HeuristicBot(2);
                             oppKind = OpponentKind.Heuristic;

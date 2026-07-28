@@ -35,7 +35,9 @@ ARENA_EXE   = str(NET10_DIR / "CastleDefense.Simulation.exe")
 HOST      = '127.0.0.1'
 N_OBS     = 348    # observation vector size
 N_STEPS   = 8192   # steps collected per arena per update (matches n_steps hyperparameter)
-N_ENVS    = 14     # number of C# arenas
+N_ENVS    = int(os.environ.get("TEST_N_ENVS", 14))  # number of C# arenas; override for the
+                                                     # N_ENVS=10 machine-stability cap (see
+                                                     # TRAINING_CAMPAIGN_LOG.md HANDOFF STATE)
 STEP_SIZE = N_OBS * 4 + 14 + 1 + 4 + 4 + 1 + 1  # obs + mask + action + reward + board_eval + ep_start + winner
 FINAL_SIZE = N_OBS * 4 + 14 + 1                 # obs + mask + done
 
@@ -611,7 +613,12 @@ def make_rollout_buffer(model):
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    progress_log = "training_progress.csv"
+    # Default matches the real campaign's log filename -- override for any ad-hoc
+    # test run using this harness, since the unconditional os.remove() below would
+    # otherwise silently delete the live campaign's real training_progress.csv
+    # (this bit us almost for real: this file's default was never meant to be run
+    # concurrently with or between real campaign sessions).
+    progress_log = os.environ.get("TEST_PROGRESS_LOG", "training_progress.csv")
     for path in [progress_log, progress_log.replace(".csv", "_opponents.csv")]:
         if os.path.exists(path):
             os.remove(path)

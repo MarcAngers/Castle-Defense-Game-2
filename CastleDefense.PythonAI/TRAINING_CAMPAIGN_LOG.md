@@ -2303,5 +2303,116 @@ invests/game moving above ~2.5. That is the go/no-go for the floor. **Do not lau
 a 100M+ run before it passes.**
 
 ---
+
+# 2026-07-28 — bounded concentrated-pressure test launched (the HANDOFF's "Next step")
+
+Fresh session, read the HANDOFF STATE section + memory first per instructions. Per
+the standing methodology ([[feedback_rl_validation_methodology]]) and the HANDOFF's
+explicit next step, ran the **bounded concentrated-pressure test**, not a new long
+run: floor ON + Heuristic-heavy pool, judged on real `invest-stats` invests/game
+(ground truth), not the contaminated `training_progress.csv` figure or P(invest)
+itself.
+
+**Code changes made (all default-preserving — a normal launch with no new env vars
+set behaves bit-identically to before):**
+1. `CastleDefense.Simulation/Program.cs` — the opponent-pool roll thresholds
+   (`0.03/0.06/0.12/0.20/0.50` cumulative for RandomDummy/AntiSpam/Spam/League/
+   Heuristic) are now `CUM_RANDOM_DUMMY`/`CUM_ANTISPAM`/`CUM_SPAM`/`CUM_LEAGUE`/
+   `CUM_HEURISTIC`, each overridable via an env var of the same name
+   (`POOL_CUM_*`), defaulting to the exact production values. Rebuilt
+   (`dotnet build -c Release CastleDefense.Simulation`) so the arena exe picks
+   this up.
+2. `test_invest_fix.py` — added `TEST_N_ENVS` (was hardcoded 14) and
+   `TEST_PROGRESS_LOG` (was hardcoded `"training_progress.csv"`) env overrides.
+   **The progress-log one is a real near-miss worth flagging**: `__main__`
+   unconditionally `os.remove()`s that file at startup to start each test run's
+   log clean — with the hardcoded default this would have silently deleted the
+   live campaign's real, currently-uncommitted `training_progress.csv` /
+   `_opponents.csv` the moment this harness was run again for any test. Fixed by
+   defaulting to the same filename (no behavior change for the two prior tests
+   that already used it) but making it overridable so this run uses a
+   completely separate file.
+3. New `launch_heuristic_pressure_test.ps1` — a `resume_training.ps1`-style
+   detached launcher setting all the env vars below and starting
+   `test_invest_fix.py` hidden, logging to `heuristic_pressure_test.log`/
+   `.err.log`, PID to `heuristic_pressure_test.pid`. `pause_training.ps1`
+   already sweeps on `*test_invest_fix.py*` by command line, so no changes
+   needed there — confirmed this run is stoppable the standard app-independent
+   way.
+
+**Test configuration:**
+- `TEST_MODEL_NAME=castle_defense_p1_heuristic_pressure_test`,
+  `TEST_BASE_MODEL=castle_defense_p1_v25_bc`,
+  `TEST_ONNX_NAME=heuristic_pressure_test_model.onnx`,
+  `TEST_PROGRESS_LOG=training_progress_heuristic_pressure_test.csv` — all
+  distinct from every real-campaign filename, so this can never collide with or
+  overwrite `current_model.onnx`, `castle_defense_p1_v30*`, or the real
+  `training_progress*.csv`.
+- `TEST_N_ENVS=10` per the resource-cap rule
+  ([[project_training_stop_and_resources]]).
+- `TEST_TOTAL_STEPS=20000000` — the top of the HANDOFF's approved 10-20M bound,
+  to give the strongest possible signal within budget.
+- Pool: `POOL_CUM_RANDOM_DUMMY=0.02, POOL_CUM_ANTISPAM=0.04, POOL_CUM_SPAM=0.08,
+  POOL_CUM_LEAGUE=0.10, POOL_CUM_HEURISTIC=0.90` → Random Dummy 2%, Anti-Spam
+  2%, Spam 4%, League 2%, **Heuristic 80%**, Self-Play (remainder) 10% — vs.
+  production's Heuristic 30% / Self-Play ~50%. Deliberately maximizes exposure
+  to the one opponent in the pool that actually punishes not investing
+  (Heuristic scales its own economy), while keeping a small self-play/simple-bot
+  slice for play-style diversity.
+- **Base model: fresh warm-start from `v25_bc`, not a resume of
+  `v30`/`v30_floortest`** — a judgment call the task explicitly flagged as
+  needing a decision. Reasoning: `v30_floortest` already carries ~517M steps of
+  momentum toward the never-invest rush baked into the *rest* of the policy
+  (unit-spend habits, etc.), not just the invest logit itself that the floor
+  patches — that entrenchment is the most likely reason 14M more steps under
+  the floor alone produced zero movement in real invests/game. A fresh base
+  removes that confound and gives the Heuristic-heavy pressure its cleanest
+  possible shot; it's also the same starting point that produced this
+  project's one genuinely strong positive signal so far (the self-play-
+  asymmetry-fix validation: fresh `v25_bc` + forced exploration hit P(invest)
+  geomean 0.28, 56% real legal-opportunity invest rate over 15M steps — before
+  that promising short-run signal didn't survive to the full 500M-step v30
+  run, which is exactly why this is being re-tested rather than assumed).
+
+**Launched and verified healthy (foreground, not left unchecked) at the first
+checkpoint, update 3 / 245,760 steps:** all 10 arenas connected cleanly, zero
+errors/warnings beyond a pre-existing benign ONNX-export deprecation notice,
+checkpoint saved successfully (logit range 6.59, action0 rate 0% — not
+degenerate), and the realized opponent mix at this early sample already matches
+the design closely: Heuristic Bot 274/352 games (78%, target 80%), Self-Play
+40/352 (11%, target 10%). `training_progress_heuristic_pressure_test.csv`'s
+`avg_invests_per_game` column is the same contaminated metric flagged
+repeatedly in this log (includes forced curriculum invests) — **do not use it to
+judge this test**; the real judgment metric is `CastleDefense.BotArena.exe
+invest-stats` run against a snapshot of `heuristic_pressure_test_model.onnx`
+copied into `league_models/`, same as the HANDOFF specifies.
+
+**Not yet done, for whoever checks in next (this run is bounded to ~20-40
+minutes wall-clock, so likely done or nearly done by the time this is read):**
+1. Confirm the run reached `total_timesteps` or was stopped cleanly (check
+   `heuristic_pressure_test.log` tail and whether `heuristic_pressure_test.pid`'s
+   process is still alive).
+2. Copy `heuristic_pressure_test_model.onnx` into
+   `CastleDefense.Simulation/bin/Release/net10.0/league_models/` under a name
+   containing `heuristic_pressure_test`, then run
+   `CastleDefense.BotArena.exe invest-stats heuristic_pressure_test headstart 150`
+   for the real invests/game number (ground truth), and ideally `model-diag` too
+   for the P(invest)/entropy numbers for comparison against the prior floor-only
+   test's 7.12e-3 / 2.18.
+3. Judge per the HANDOFF's stated bar: real invests/game moving meaningfully
+   above ~2.5 → greenlight a full run combining the floor + a similarly
+   Heuristic-heavy pool. Still pinned near ~2.2-2.6 → the floor + pool-pressure
+   combination is insufficient even under maximum realistic pressure, and the
+   next move is back to the drawing board (the clip-exemption idea or a more
+   direct reward-shaping approach, both still held in reserve from the earlier
+   six-candidate list) — report either outcome honestly, per Marc's standing
+   instruction not to spend cycles without being sure they're worth it.
+4. No periodic benchmark loop (`benchmark_checkpoints.ps1`-style) was attached
+   to this run deliberately — it would add BotArena game-playing CPU load on
+   top of an already-N_ENVS=10-capped machine for a run only intended to last
+   tens of minutes; a single end-of-run `invest-stats`/`model-diag` check is
+   the cheaper, sufficient signal here.
+
+---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
