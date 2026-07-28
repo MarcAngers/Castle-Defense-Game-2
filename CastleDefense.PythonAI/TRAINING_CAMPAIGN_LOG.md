@@ -2522,6 +2522,83 @@ as before. `league_models/` still contains exactly its 15 curated files;
 gitignored the same way as `league_models/` — already covered by the repo's
 generic `bin/` ignore rule, no `.gitignore` changes needed).
 
+## Bounded concentrated-pressure test RESULT (2026-07-28) — real but modest movement, not decisive
+
+Run finished cleanly on its own: reached 20,070,400 / 20,000,000 timesteps
+(29,568 games), saved `castle_defense_p1_heuristic_pressure_test(.zip/_last.zip)`,
+`heuristic_pressure_test_model.onnx`, and
+`training_progress_heuristic_pressure_test(.csv/_opponents.csv)` — all confirmed
+present on disk. No leftover training/arena/BotArena processes (`pause_training.ps1`
+and a direct process check both came back clean).
+
+**Measured with the ground-truth tool (`invest-stats`, vs HeuristicBot,
+headstart) — NOT the contaminated `avg_invests_per_game` column:**
+
+| checkpoint | real invests/game | HeuristicBot's own (same games) |
+|---|---|---|
+| `v25_bc` (pre-fix base) | 1.85 (150 games) | 4.99 |
+| `v30_floortest_14M` (floor only, no pool change — re-measured today for a same-day apples-to-apples check) | 2.25 (150 games) | 5.27 |
+| **`heuristic_pressure_test_final` (floor + Heuristic-heavy pool, THIS test)** | **2.76 (150 games), 2.80 (300 games)** | 5.18-5.24 |
+
+The 300-game reading confirms the 150-game one (2.76 vs 2.80) — **this is a real,
+repeatable ~24-28% relative increase over the floor-only ~2.2-2.26 ceiling, not
+sampling noise**, and it clears the HANDOFF's stated bar ("any move above
+~2.5"). It is **not**, however, a climb anywhere close to HeuristicBot's own
+~5.2 — less than halfway there.
+
+**The floor held — and did far better than in isolation.** `model-diag`
+(vs a 12-opponent mixed pool, 150 games) on the final checkpoint:
+`P(invest) when legal: geometric mean = 9.997E-001` (essentially certain —
+up from the floor-only test's already-passing **7.12e-3**, itself up from
+pre-floor's ~9e-187) and max logit range only 15.2 (nowhere near the
+hundreds-scale range that signaled collapse before) — **no re-clipping, and
+the sampling-lockout problem this whole campaign has been chasing looks
+essentially solved under this configuration.** Only caveat: no periodic
+snapshots were taken mid-run (deliberate, to save CPU on a bounded test — see
+the earlier "Not done" note), so there's no P(invest) trend curve for this
+run the way the floor-only test had one at 8M/14.1M — only start (implicitly
+~7e-3 inherited from `v30_floortest`, since that's not this run's actual
+start point... **actually this run started fresh from `v25_bc`, which had
+never been floor-tested, so its true starting P(invest) is unmeasured — the
+end-state 0.9997 is the only real datapoint**) and end.
+
+**A more precise diagnosis than "floor insufficient" falls out of this:** if
+P(invest) is ~0.9997 whenever investing is legal, but real invests/game is
+still only 2.80, the bottleneck has moved. It's no longer "the policy won't
+choose to invest" (that's fixed) — it's that **legal invest opportunities are
+rare in the first place**: `model-diag` sampled 338,609 total decisions and
+found invest legal in only 68 of them (0.02%). The model isn't managing its
+money (spending on units vs. saving toward the next investment threshold) to
+create as many invest opportunities as HeuristicBot's economy does — a
+different, and more specific, problem than pure exploration/sampling.
+
+**Win rate vs HeuristicBot (300 games, headstart), for context:** this
+checkpoint wins 22.3% (Heuristic 77.7%) — worse than `v25_bc`'s 25.3% but
+better than `v30_floortest_14M`'s 16.0%. Not an overall improvement yet, but
+not a regression below the pre-floor base either, and unsurprising this early:
+Marc's own prior observation is that investing behavior didn't peak until
+~200M steps in the last full run, and this is only 20M steps into a
+completely fresh warm-start under a new pool.
+
+**Verdict: real, repeatable positive movement on both the metric that
+matters (real invests/game, +24-28%, confirmed at two sample sizes) and the
+underlying mechanism (P(invest) collapse looks solved, not just patched) —
+but NOT the decisive climb toward ~5.2 that would justify a blind full
+2B-step commitment.** Per the letter of the HANDOFF's stated bar this clears
+the "greenlight" threshold (it moved, and stayed moved, above ~2.5) — but the
+honest calibration is that 2.80 is early positive signal, not proof of
+convergence to Heuristic-level economics. Recommend: **don't jump straight to
+a full 2B-step run yet** — instead, given the floor+pool combination is now
+confirmed healthy and cheap to keep running, extend THIS SAME configuration
+for a further bounded stretch (e.g. another 50-100M steps, still far short of
+a full commitment) specifically watching whether real invests/game keeps
+climbing now that the sampling mechanism is solid, and/or investigate the
+newly-identified bottleneck directly (a cheap probe on money-management /
+spend-vs-save discipline, analogous to the counterfactual/critic probes used
+earlier in this campaign, rather than another blind training stretch) before
+committing full compute. This is a recommendation, not a decision — Marc's
+standing preference is that spending real compute cycles is his call.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
