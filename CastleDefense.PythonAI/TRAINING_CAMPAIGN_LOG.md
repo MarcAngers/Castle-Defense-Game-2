@@ -2480,6 +2480,48 @@ benchmark self-snapshots to NEVER be eligible as training opponents even
 transiently, that would need a separate folder plus updating
 `FindLeagueModelsDir()`'s callers, a bigger change not attempted here.
 
+## League/benchmark folders fully separated (2026-07-28, Marc's follow-up ask)
+
+The keep-10-globally fix above prevents unbounded growth but still let
+benchmark self-snapshots sit in the live training league for however long
+they exist before the next cleanup pass — Marc asked for the cleaner fix:
+benchmark snapshots should NEVER be eligible as training opponents, even
+transiently, since the curated `league_models/` set is deliberately
+hand-picked and validated.
+
+**Fix:** `benchmark_checkpoints.ps1` now writes its snapshots to a new sibling
+folder, `league_models_benchmark/`, instead of `league_models/`. Since
+`CastleDefense.Simulation/Program.cs`'s training-opponent-pool loader is
+hardcoded to the literal directory name `league_models` (non-recursive), it
+was already structurally incapable of ever seeing anything placed in a
+differently-named sibling — no changes needed there at all; moving the write
+target was sufficient by itself for the training side of the guarantee.
+
+The harder part was BotArena, whose `models`/`model-diag` modes (both used by
+the benchmark loop to test its own snapshot) resolve model names via
+`FindLeagueModelsDir()`, called at 13 separate callsites across
+`CastleDefense.BotArena/Program.cs`, all hardcoded to look for a directory
+literally named `league_models`. Rather than touching all 13 (each doing its
+own fragment-match `Directory.GetFiles(dir, "*.onnx")...Contains(fragment)`),
+added a single env var check at the top of `FindLeagueModelsDir()` itself:
+`BOTARENA_MODEL_DIR`, checked before the hardcoded candidates, returned
+directly if set and populated with `.onnx` files. `benchmark_checkpoints.ps1`
+sets this to `league_models_benchmark` before its `models`/`model-diag` calls,
+so every one of those 13 callsites transparently resolves from the new folder
+for that invocation, with zero other code changes and zero behavior change
+for any other BotArena invocation that doesn't set the env var (e.g. a manual
+`invest-stats` run from a terminal, as used below, is completely unaffected).
+
+**Verified directly, not just reasoned about:** copied a throwaway probe
+model into the new `league_models_benchmark/` folder, ran
+`BOTARENA_MODEL_DIR=...\league_models_benchmark BotArena.exe models headstart 1 test_probe`
+— resolved correctly from the new folder. Ran the same `models headstart 1 v25_bc`
+command with NO env var set — resolved from the real `league_models/` exactly
+as before. `league_models/` still contains exactly its 15 curated files;
+`league_models_benchmark/` starts empty (auto-created by the script,
+gitignored the same way as `league_models/` — already covered by the repo's
+generic `bin/` ignore rule, no `.gitignore` changes needed).
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*

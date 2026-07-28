@@ -185,8 +185,28 @@ void RunLoadoutSweep(Func<int, IArenaOpponent> opponentFactory, int gamesPerComb
 // Finds every league_models folder with .onnx files sitting in it (these are
 // gitignored local artifacts -- never committed -- so there's no single canonical
 // source path; just check the places a build has actually left them).
+//
+// 2026-07-28: honors BOTARENA_MODEL_DIR when set, checked before any of the
+// hardcoded candidates -- lets a caller point every fragment-lookup command
+// (models/model-diag/invest-stats/etc., all 13 of which resolve through this one
+// function) at a folder OTHER than the live training league, without having to
+// touch each callsite individually. Added so benchmark_checkpoints.ps1's own
+// self-comparison snapshots can live in a separate league_models_benchmark/
+// folder that CastleDefense.Simulation's training opponent-pool loader (which
+// only ever reads the literal "league_models" directory name, non-recursively)
+// never sees -- see TRAINING_CAMPAIGN_LOG.md, "league pool bloat" -- so an
+// unvalidated benchmark snapshot can never become a training opponent, even
+// transiently. No env var set = identical behavior to before this change.
 string? FindLeagueModelsDir()
 {
+    var overrideDir = Environment.GetEnvironmentVariable("BOTARENA_MODEL_DIR");
+    if (!string.IsNullOrEmpty(overrideDir))
+    {
+        var overrideFull = Path.GetFullPath(overrideDir);
+        if (Directory.Exists(overrideFull) && Directory.GetFiles(overrideFull, "*.onnx").Length > 0)
+            return overrideFull;
+    }
+
     var candidates = new[]
     {
         Path.Combine(AppContext.BaseDirectory, "league_models"),

@@ -2,14 +2,32 @@
 # (see TRAINING_CAMPAIGN_LOG.md). Runs independently of train_ai_cluster.py --
 # safe to start/stop/kill without touching the live training process.
 #
-# Each cycle: snapshots current_model.onnx into the training arenas' league_models
-# folder (BotArena's FindLeagueModelsDir() already looks there), runs BotArena's
-# "models" mode filtered to just that snapshot (HeuristicBot vs the snapshot,
-# alternating sides), ALSO runs "model-diag" (real unforced action distribution/
-# entropy/P(invest) against a diverse pool -- see the 2026-07-26 invest-collapse
-# investigation, TRAINING_CAMPAIGN_LOG.md) on the same snapshot, and appends a row
-# to checkpoint_benchmark_log.csv. Raw output from every check is also kept (one
+# Each cycle: snapshots current_model.onnx into $benchmarkDir (a folder DEDICATED
+# to this script -- see the 2026-07-28 fix below), points BotArena at that folder
+# via BOTARENA_MODEL_DIR, runs BotArena's "models" mode filtered to just that
+# snapshot (HeuristicBot vs the snapshot, alternating sides), ALSO runs
+# "model-diag" (real unforced action distribution/entropy/P(invest) against a
+# diverse pool -- see the 2026-07-26 invest-collapse investigation,
+# TRAINING_CAMPAIGN_LOG.md) on the same snapshot, and appends a row to
+# checkpoint_benchmark_log.csv. Raw output from every check is also kept (one
 # file per check) for full detail.
+#
+# 2026-07-28 fix: snapshots used to be written straight into the LIVE TRAINING
+# league (CastleDefense.Simulation/bin/Release/net10.0/league_models), the exact
+# folder CastleDefense.Simulation/Program.cs's training-opponent-pool loader
+# reads (every .onnx file, no filtering) -- so every one of this script's own
+# unvalidated self-checkpoints was, for however long it sat there, ALSO a live
+# training opponent. Confirmed 2026-07-28 that this had let 30 snapshots from
+# three retired campaigns (v28/v29/v30) silently accumulate and get sampled by
+# training arenas (see TRAINING_CAMPAIGN_LOG.md, "league pool bloat"). Per
+# Marc's explicit ask, snapshots now go to $benchmarkDir instead -- a folder
+# Program.cs's training loader (hardcoded to the literal "league_models" name,
+# non-recursive) never reads, so a benchmark snapshot can NEVER become a
+# training opponent, even transiently, regardless of any cleanup timing. This
+# script tells BotArena where to look via the BOTARENA_MODEL_DIR env var
+# (FindLeagueModelsDir() in CastleDefense.BotArena/Program.cs checks it first),
+# so the "models"/"model-diag" calls below still resolve $snapTag correctly
+# without BotArena ever touching the real league_models folder.
 #
 # 2026-07-26 (v30): added the model-diag / P(invest) columns. This is now the KEY
 # learning metric for this campaign -- the old "invests/game" figure from
@@ -37,13 +55,16 @@ param(
 
 $root         = "C:\repos\Castle-Defense-Game-2"
 $pyDir        = "$root\CastleDefense.PythonAI"
-$leagueDir    = "$root\CastleDefense.Simulation\bin\Release\net10.0\league_models"
+$benchmarkDir = "$root\CastleDefense.Simulation\bin\Release\net10.0\league_models_benchmark"
 $botArenaExe  = "$root\CastleDefense.BotArena\bin\Release\net10.0\CastleDefense.BotArena.exe"
 $currentOnnx  = "$pyDir\current_model.onnx"
 $logCsv       = "$pyDir\checkpoint_benchmark_log.csv"
 $progressCsv  = "$pyDir\training_progress.csv"
 $rawLogDir    = "$pyDir\checkpoint_benchmark_raw"
 $trainingPidFile = "$pyDir\campaign_run.pid"
+
+New-Item -ItemType Directory -Force -Path $benchmarkDir | Out-Null
+$env:BOTARENA_MODEL_DIR = $benchmarkDir
 
 New-Item -ItemType Directory -Force -Path $rawLogDir | Out-Null
 if (!(Test-Path $logCsv)) {
@@ -79,7 +100,7 @@ while ($true) {
     }
 
     $snapTag  = "${ModelTag}_snap_$ts"
-    $snapPath = Join-Path $leagueDir "$snapTag.onnx"
+    $snapPath = Join-Path $benchmarkDir "$snapTag.onnx"
     try {
         Copy-Item -Path $currentOnnx -Destination $snapPath -Force
     } catch {
@@ -122,22 +143,17 @@ while ($true) {
     "$ts,$steps,$GamesPerCheck,$heuristicWr,$modelWrApprox,$snapTag.onnx,$investGeomean,$investLegalN,$investChosenPct" | Out-File -FilePath $logCsv -Append -Encoding utf8
     Write-Output "$(Get-Date -Format o)  steps=$steps  heuristic_wr=$heuristicWr%  model_wr_approx=$modelWrApprox%  P(invest)geomean=$investGeomean  invest_chosen=$investChosenPct% (n=$investLegalN)"
 
-    # Keep only the most recent 10 snapshots in league_models -- these are cheap,
-    # frequent self-checkpoints, not meant to accumulate as permanent league anchors.
-    #
-    # 2026-07-28 fix: this used to filter by "${ModelTag}_snap_*.onnx" (only THIS
-    # campaign's own tag), so every time a campaign was retired and a new one
-    # started under a new ModelTag (v28 -> v29 -> v30 -> ...), the previous tag's
-    # 10 snapshots were never revisited by anything and sat there forever --
-    # confirmed 30 orphaned v28_snap_*/v29_snap_*/v30_snap_* files had
-    # accumulated in league_models, silently tripling the size of what's supposed
-    # to be a small curated "best models + spam bots" league (Marc's stated
-    # intent) and getting loaded as full in-memory ONNX opponents by every
-    # training arena regardless of relevance. Filtering across ALL tags here
-    # means the rolling keep-10 window is global, so an old campaign's snapshots
-    # get swept away automatically as soon as any newer campaign's benchmark loop
-    # runs, instead of requiring a manual cleanup like this session's.
-    Get-ChildItem $leagueDir -Filter "*_snap_*.onnx" -ErrorAction SilentlyContinue |
+    # Keep only the most recent 10 snapshots in $benchmarkDir -- these are cheap,
+    # frequent self-checkpoints, not meant to accumulate indefinitely even in
+    # their own dedicated folder. (Filtering across ALL ModelTags, not just this
+    # run's own -- a prior version of this cleanup matched only "${ModelTag}_
+    # snap_*.onnx" and let 30 files from three retired campaigns accumulate
+    # forever, since a new tag's cleanup never revisited an old tag's leftovers.
+    # This folder is no longer read by the training opponent-pool loader at all
+    # (see the 2026-07-28 header comment), so this cleanup is now purely about
+    # disk space, not training-pool purity -- but the global-window fix is kept
+    # since there's no reason to let it grow unbounded either.)
+    Get-ChildItem $benchmarkDir -Filter "*_snap_*.onnx" -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction SilentlyContinue
 
     # Stop condition: training process gone AND step count unchanged since last cycle
