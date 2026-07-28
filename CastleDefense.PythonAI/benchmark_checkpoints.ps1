@@ -124,7 +124,20 @@ while ($true) {
 
     # Keep only the most recent 10 snapshots in league_models -- these are cheap,
     # frequent self-checkpoints, not meant to accumulate as permanent league anchors.
-    Get-ChildItem $leagueDir -Filter "${ModelTag}_snap_*.onnx" -ErrorAction SilentlyContinue |
+    #
+    # 2026-07-28 fix: this used to filter by "${ModelTag}_snap_*.onnx" (only THIS
+    # campaign's own tag), so every time a campaign was retired and a new one
+    # started under a new ModelTag (v28 -> v29 -> v30 -> ...), the previous tag's
+    # 10 snapshots were never revisited by anything and sat there forever --
+    # confirmed 30 orphaned v28_snap_*/v29_snap_*/v30_snap_* files had
+    # accumulated in league_models, silently tripling the size of what's supposed
+    # to be a small curated "best models + spam bots" league (Marc's stated
+    # intent) and getting loaded as full in-memory ONNX opponents by every
+    # training arena regardless of relevance. Filtering across ALL tags here
+    # means the rolling keep-10 window is global, so an old campaign's snapshots
+    # get swept away automatically as soon as any newer campaign's benchmark loop
+    # runs, instead of requiring a manual cleanup like this session's.
+    Get-ChildItem $leagueDir -Filter "*_snap_*.onnx" -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction SilentlyContinue
 
     # Stop condition: training process gone AND step count unchanged since last cycle

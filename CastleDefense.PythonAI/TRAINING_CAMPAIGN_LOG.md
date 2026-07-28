@@ -2413,6 +2413,73 @@ minutes wall-clock, so likely done or nearly done by the time this is read):**
    tens of minutes; a single end-of-run `invest-stats`/`model-diag` check is
    the cheaper, sufficient signal here.
 
+## League pool bloat found and fixed mid-session (2026-07-28) — NOT intentional
+
+Marc flagged, before the bounded test above got far: every run keeps loading a
+pile of `v28_snap_*`/`v29_snap_*` files and worried they're near-identical
+weak opponents just accumulating and eating memory, contrary to his stated
+intent of a lean league (best models + spam bots only).
+
+**Confirmed: unintended accumulation, not by design.** `league_models/` (the
+folder `CastleDefense.Simulation/Program.cs` loads on startup via
+`Directory.GetFiles(leagueDir, "*.onnx")` — every `.onnx` file, no name
+filtering, no recursion, `AIBrain`-loaded into memory for the arena's entire
+process lifetime) had **46 files**: the 13 intentionally-curated checkpoints
+(v3/4/7/14/16/20/21/22/23/25/25_bc/27/27_last) plus **30 auto-generated
+timestamped snapshots** (10 each from the v28, v29, and v30 campaigns) plus
+the 2 floor-validation snapshots (`v30_floortest_8M/14M`).
+
+**Root cause:** `benchmark_checkpoints.ps1` copies `current_model.onnx` into
+this exact folder every cycle as `${ModelTag}_snap_$timestamp.onnx` (so its own
+`models`/`model-diag` BotArena calls can find it by name — that part is
+intentional and documented) and its own comment already states the correct
+intent: *"these are cheap, frequent self-checkpoints, not meant to accumulate
+as permanent league anchors."* The cleanup that was supposed to enforce that
+only matched `"${ModelTag}_snap_*.onnx"` — i.e. only THIS campaign's own tag.
+Every time a campaign was retired and the next one started under a new tag
+(v28 → v29 → v30), the previous tag's 10 snapshots were never touched by
+anything ever again. Three retired campaigns' worth silently piled up over four
+days, tripling the loaded league size with policies we already know are
+weak/collapsed variants of the same never-invest rush this whole campaign is
+trying to fix — and since `Directory.GetFiles` doesn't distinguish them from
+the curated checkpoints, the 8-20% "League" pool slice (in production; 2% in
+this bounded test) was drawing 65% of its picks from this junk rather than the
+intended best-models set. Real cost confirmed: each of the (14, or 10 for this
+test) arena processes loads every file in the folder as its own in-memory
+ONNX Runtime session — 46 sessions/arena instead of the intended 13-15.
+
+**Fixed, in order:**
+1. Archived (not deleted — reversible) the 30 orphaned snapshot files to
+   `league_models/archive_stale_auto_snapshots/` (not visible to
+   `Directory.GetFiles` at the top level, so the training loader no longer
+   sees them). Kept all 13 curated checkpoints and both `v30_floortest_*`
+   files exactly as Marc asked. Folder is now 15 files.
+2. `benchmark_checkpoints.ps1`'s cleanup filter widened from
+   `"${ModelTag}_snap_*.onnx"` to `"*_snap_*.onnx"` — now a global rolling
+   keep-10 window across every tag, so a retired campaign's snapshots get
+   swept away automatically the next time ANY benchmark loop runs, instead of
+   requiring another manual cleanup like this one.
+3. **The already-running bounded test (launched earlier this session) was
+   stopped and relaunched** via `pause_training.ps1` + `launch_heuristic_pressure_test.ps1`
+   — its arenas had already loaded the stale 46-model league into memory
+   before the archive step, and League-loading only happens once at arena
+   startup, so a restart was required for the fix to actually take effect. Lost
+   ~0 real progress (was only 245K/20M steps, ~1.2%, into the aborted first
+   attempt). **Verified on the relaunch**: League picks in the first two
+   checkpoints are exclusively `v27_last`, `v16`, `v21`, `v7` — the curated
+   set, zero snapshot noise — and Heuristic Bot share is tracking the intended
+   ~80% (187/241 games ≈ 78% at the second checkpoint). Healthy, no errors.
+
+**Not done (flagging, not fixing, since it's a design question for Marc, not
+a bug):** the deeper coupling — `benchmark_checkpoints.ps1` writes its
+self-comparison snapshots into the SAME folder the live training pool draws
+from, because that's also where `FindLeagueModelsDir()` looks for named
+models by convention — is still there. The keep-10 global window (fix #2)
+should keep this from silently growing unbounded again, but if Marc wants
+benchmark self-snapshots to NEVER be eligible as training opponents even
+transiently, that would need a separate folder plus updating
+`FindLeagueModelsDir()`'s callers, a bigger change not attempted here.
+
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
