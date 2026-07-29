@@ -87,9 +87,14 @@ This is the core shared library used by both the web game and the training simul
 **State vector (348 floats):**
 - Teams: 16 floats (one-hot for P1 + P2 team, 8 colors each)
 - Gadgets: one-hot for current offensive + defensive gadget tier
-- Castle stats: health, max health, log10(money), log10(income), investment count, repair count — for both players
+- Own castle stats: health, max health, log10(money), log10(income), **log10(InvestmentPrice)**, repair count
+- Enemy castle: health + max health only (money/income are deliberately hidden)
 - Own units: up to 50 × 3 floats (position [0=own castle, 1=enemy castle], HP%, tier/8)
 - Enemy units: same format
+
+`InvestmentPrice` replaced `InvestmentCount` (GameState.cs:116) — it's directly
+actionable for savings decisions, and `InvestmentCount` is derivable from it plus
+income. Gadget cooldown timers are still absent from the state.
 
 **Action space (14 discrete):**
 - 0: wait
@@ -102,7 +107,11 @@ This is the core shared library used by both the web game and the training simul
 
 Action masking blocks invalid actions (insufficient funds, gadget on cooldown, etc.).
 
-**Notable omissions from state:** gadget cooldown timers and current `InvestmentPrice` are not in the state vector.
+**Decision cadence differs between training and evaluation.** Training decides every
+**9 ticks** (`Simulation/Program.cs`, `for (int fi = 0; fi < 9; fi++)`). `AIModelOpponent`
+and every BotArena mode decide every **3 ticks**, using greedy argmax rather than
+sampling. Benchmark numbers for ONNX checkpoints are therefore measured at 3x the
+decision rate the policy trained at.
 
 ### Reward Function (`GameEngine.CalculateReward`)
 
@@ -130,3 +139,29 @@ The opponent's action frequency is throttled by `speed // base_speed` to simulat
 - `master_gadgets.csv` — gadget definitions with upgrade chains (e.g. `snipe → snipe_2 → snipe_3`), cooldowns, costs, and effect parameters.
 
 Both files live in `CastleDefense.Engine/Data/` and are copied to all output directories at build time.
+
+## Measurement pitfalls (read before trusting any benchmark number)
+
+A 2026-07-28 audit found two of the two instruments it examined were broken. Both are
+fixed, but the failure mode generalises: **code that produces a number once, which
+then gets pasted into a document and never re-derived, has no feedback loop and rots
+silently.** Treat any figure quoted in `TRAINING_CAMPAIGN_LOG.md` before that date
+with suspicion.
+
+- **Headstart hands out free investments.** `CreateGame(true)` → `PlayerState(timeSkip)`
+  calls `ApplyInvestmentStep()` `timeSkip` times, so both players start with
+  `InvestmentCount == timeSkip` before either acts. `timeSkip = Math.Max(rng.Next(-8,9), 0)`
+  ⇒ **E = 2.118**, SD 2.74. Always report invests as **earned (end − start)**, never as
+  the raw end-of-game count. `invest-stats` now does this; older numbers in the log do not.
+- **`EvaluateBoard()` is in the RL reward loop**, not just a diagnostic —
+  `Simulation/Program.cs:446` feeds it to `batchEval` for N-step potential-based reward
+  shaping. Changing `EvalWeight*` changes the training signal.
+- **Evaluator weights are fit to the deployed `(w·x)/sum(w)` form** by
+  `train_evaluator.py`. Do not reintroduce a no-intercept logistic on the raw [0,1]
+  features — it is unidentifiable and forces `sum(w) == 0`. See `audit_evaluator.py`.
+- **`calib_data.csv` has no `tick`/`game_id` column**, so autocorrelation thinning
+  cannot fire for it. The C# `--collect-calibration` exporter should emit both.
+- **The engine cannot be cloned.** `_scheduledEvents` holds `Action` closures
+  (GameEngine.cs:38) from 14 gadget-effect callsites; `_actionQueue` is a
+  `ConcurrentQueue<Action>`. Any search/lookahead work needs these converted to
+  data-based records first.

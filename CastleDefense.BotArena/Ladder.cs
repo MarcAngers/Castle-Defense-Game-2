@@ -1,0 +1,326 @@
+using CastleDefense.Engine;
+using CastleDefense.Engine.Bot;
+using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Models;
+
+namespace CastleDefense.BotArena
+{
+    /// <summary>
+    /// A trustworthy, reproducible benchmark ladder.
+    ///
+    /// WHY THIS EXISTS: a 2026-07-28 audit checked two of the numbers this project had
+    /// been steering by and found both wrong -- `invest-stats` was reporting free
+    /// headstart investments as if the policy had earned them, and the board evaluator's
+    /// weights came from an unidentifiable fit. Two out of two is a base rate, not bad
+    /// luck. Before committing to any new direction the project needs one benchmark it
+    /// can actually believe.
+    ///
+    /// FOUR PROPERTIES the older modes lacked:
+    ///
+    ///  1. COMMON RANDOM NUMBERS. Every contender plays the *same* pre-generated list of
+    ///     game setups (teams, loadouts, timeSkip, bonus cash) against the same opponents.
+    ///     Comparisons are paired, which removes almost all setup variance -- the dominant
+    ///     noise source. Independent random sampling per contender, as the old modes did,
+    ///     needs several times the games for the same resolution.
+    ///
+    ///  2. SIDE-SWAPPED. Every setup is played twice, once with the contender as P1 and
+    ///     once as P2. The campaign log spent two sessions chasing a real P1/P2 seat bias;
+    ///     this makes the ladder immune to whatever remains of it by construction.
+    ///
+    ///  3. EARNED INVESTS, NOT RAW. Starting InvestmentCount is recorded per game and
+    ///     subtracted. Under `headstart`, PlayerState(timeSkip) grants E[timeSkip] = 2.118
+    ///     free investments to BOTH sides before either acts; reporting the end-of-game
+    ///     count (as invest-stats did) reports mostly the time machine.
+    ///
+    ///  4. CONFIDENCE INTERVALS. Win rates carry a Wilson 95% interval. A bare percentage
+    ///     invites reading noise as signal, which is exactly what happened with the
+    ///     "2.76 vs 2.80 confirms it's real" reading.
+    ///
+    /// KNOWN LIMITATION -- not yet fully deterministic. The engine calls `new Random()`
+    /// internally (GameEngine.cs:183 for unit y-position, MeteorEffect, and the `weirdo`
+    /// unit which randomises all its stats), so identical setups can still diverge
+    /// mid-game. This harness controls the SETUP deterministically, which is the dominant
+    /// variance source; full determinism needs the seeded-RNG work tracked in the campaign
+    /// log. Until then, treat the CIs as honest but slightly optimistic.
+    ///
+    /// Usage:
+    ///   ladder [games] [--seed N] [--headstart|--nostart|--both] [--csv path]
+    ///          [--only substr]
+    /// </summary>
+    public static class Ladder
+    {
+        // One fully-specified game setup. Generated once from the seed, replayed by
+        // every contender so comparisons are paired.
+        private sealed class GameSpec
+        {
+            public int TimeSkip;
+            public bool BonusMoney;
+            public TeamColour TeamA, TeamB;
+            public string OffA, DefA, OffB, DefB;
+        }
+
+        private sealed class Record
+        {
+            public int Wins, Losses, Draws;
+            public double EarnedInvests, OppEarnedInvests, Ticks;
+            public int Games;
+
+            public double WinRate => Games > 0 ? (double)Wins / Games : 0;
+        }
+
+        private static readonly string[] OffenseOptions = { "nuke", "firebomb", "snipe", "freeze" };
+        private static readonly string[] DefenseOptions = { "heal", "reinforcements", "speed", "wall" };
+
+        /// <summary>
+        /// Wilson score interval — correct near 0 and 1, unlike the normal approximation,
+        /// which matters here because several matchups sit at 0-25% win rate.
+        /// </summary>
+        public static (double lo, double hi) WilsonInterval(int wins, int n, double z = 1.96)
+        {
+            if (n == 0) return (0, 0);
+            double p = (double)wins / n;
+            double d = 1 + z * z / n;
+            double centre = (p + z * z / (2.0 * n)) / d;
+            double half = z * Math.Sqrt(p * (1 - p) / n + z * z / (4.0 * n * n)) / d;
+            return (Math.Max(0, centre - half), Math.Min(1, centre + half));
+        }
+
+        private static List<GameSpec> BuildSpecs(int count, int seed, bool headstart)
+        {
+            var rng = new Random(seed);
+            var teams = (TeamColour[])Enum.GetValues(typeof(TeamColour));
+            var specs = new List<GameSpec>(count);
+            for (int i = 0; i < count; i++)
+            {
+                int ts = headstart ? Math.Max(rng.Next(-8, 9), 0) : 0;
+                specs.Add(new GameSpec
+                {
+                    TimeSkip = ts,
+                    // Mirrors CreateGame's 1-in-5 starting-cash coin flip, but drawn from
+                    // OUR seeded rng so the setup is reproducible.
+                    BonusMoney = ts > 0 && rng.Next(5) == 0,
+                    TeamA = teams[rng.Next(teams.Length)],
+                    TeamB = teams[rng.Next(teams.Length)],
+                    OffA = OffenseOptions[rng.Next(OffenseOptions.Length)],
+                    DefA = DefenseOptions[rng.Next(DefenseOptions.Length)],
+                    OffB = OffenseOptions[rng.Next(OffenseOptions.Length)],
+                    DefB = DefenseOptions[rng.Next(DefenseOptions.Length)],
+                });
+            }
+            return specs;
+        }
+
+        private static void ApplyLoadout(PlayerState p, int side, TeamColour team,
+                                         string offense, string defense, int timeSkip)
+        {
+            string upg = timeSkip > 5 ? "_3" : timeSkip > 3 ? "_2" : "";
+            p.Side = side;
+            p.Team = team;
+            p.SetLoadout(new[]
+            {
+                offense + upg,
+                defense + upg,
+                GameDataManager.GetSignatureGadgetIdForTeam(team) + upg,
+            });
+        }
+
+        /// <summary>
+        /// Builds a game from a spec. `contenderIsP1` decides which side of the spec the
+        /// contender occupies, so the same spec can be played both ways.
+        /// </summary>
+        private static (GameState state, GameEngine engine) CreateFromSpec(GameSpec s, bool contenderIsP1)
+        {
+            var state = new GameState();
+            state.Player1 = new PlayerState(s.TimeSkip);
+            state.Player2 = new PlayerState(s.TimeSkip);
+
+            var (t1, o1, d1) = contenderIsP1 ? (s.TeamA, s.OffA, s.DefA) : (s.TeamB, s.OffB, s.DefB);
+            var (t2, o2, d2) = contenderIsP1 ? (s.TeamB, s.OffB, s.DefB) : (s.TeamA, s.OffA, s.DefA);
+            ApplyLoadout(state.Player1, 1, t1, o1, d1, s.TimeSkip);
+            ApplyLoadout(state.Player2, 2, t2, o2, d2, s.TimeSkip);
+
+            if (s.BonusMoney)
+            {
+                state.Player1.Money = state.Player1.InvestmentPrice + state.Player1.Income;
+                state.Player2.Money = state.Player2.InvestmentPrice + state.Player2.Income;
+            }
+
+            state.CurrentTick = 30 * 30 * s.TimeSkip;
+            return (state, new GameEngine(state));
+        }
+
+        private static Record PlayMatchup(
+            Func<int, IArenaOpponent> makeContender,
+            Func<int, IArenaOpponent> makeOpponent,
+            List<GameSpec> specs)
+        {
+            var rec = new Record();
+            foreach (var spec in specs)
+            {
+                // Each spec played twice, sides swapped — removes any residual seat bias.
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    bool contenderIsP1 = pass == 0;
+                    int cSide = contenderIsP1 ? 1 : 2;
+                    var (state, engine) = CreateFromSpec(spec, contenderIsP1);
+
+                    var contender = makeContender(cSide);
+                    var opponent = makeOpponent(contenderIsP1 ? 2 : 1);
+
+                    var cPlayer = contenderIsP1 ? state.Player1 : state.Player2;
+                    var oPlayer = contenderIsP1 ? state.Player2 : state.Player1;
+                    int cStartInvests = cPlayer.InvestmentCount;
+                    int oStartInvests = oPlayer.InvestmentCount;
+                    long startTick = state.CurrentTick;
+
+                    while (!state.IsGameOver)
+                    {
+                        engine.Tick();
+                        // Update in board order so neither side gets a systematic
+                        // within-tick advantage from the harness itself.
+                        if (contenderIsP1) { contender.Update(engine); opponent.Update(engine); }
+                        else               { opponent.Update(engine); contender.Update(engine); }
+                    }
+
+                    if (state.WinnerSide == cSide) rec.Wins++;
+                    else if (state.WinnerSide == 0) rec.Draws++;
+                    else rec.Losses++;
+
+                    rec.EarnedInvests += cPlayer.InvestmentCount - cStartInvests;
+                    rec.OppEarnedInvests += oPlayer.InvestmentCount - oStartInvests;
+                    rec.Ticks += state.CurrentTick - startTick;
+                    rec.Games++;
+
+                    (contender as IDisposable)?.Dispose();
+                    (opponent as IDisposable)?.Dispose();
+                }
+            }
+            return rec;
+        }
+
+        public static void Run(string[] args, Func<string?> findLeagueModelsDir)
+        {
+            int games = 100;
+            int seed = 12345;
+            string mode = "both";
+            string csvPath = "ladder_results.csv";
+            string? only = null;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                switch (args[i])
+                {
+                    case "--seed" when i + 1 < args.Length: seed = int.Parse(args[++i]); break;
+                    case "--csv" when i + 1 < args.Length: csvPath = args[++i]; break;
+                    case "--only" when i + 1 < args.Length: only = args[++i]; break;
+                    case "--headstart": mode = "headstart"; break;
+                    case "--nostart": mode = "nostart"; break;
+                    case "--both": mode = "both"; break;
+                    default:
+                        if (int.TryParse(args[i], out var g)) games = g;
+                        break;
+                }
+            }
+
+            // ── Ladder opponents: fixed, deterministic, never changes between runs ──
+            // Deliberately excludes league models: the point is a STABLE yardstick, and a
+            // league folder whose contents drift makes runs incomparable over time. That
+            // drift already caused a real problem (see the 2026-07-28 "League pool bloat"
+            // entry in the campaign log).
+            var ladder = new List<(string name, Func<int, IArenaOpponent> make)>
+            {
+                ("DoNothing",     side => new DoNothingBaseline()),
+                ("Rusher",        side => new RusherBaseline(side)),
+                ("Investor",      side => new InvestorBaseline(side)),
+                ("BalancedHuman", side => new BalancedHumanBaseline(side)),
+                ("Tier1Spam",     side => new TierSpamBaseline(side, 1)),
+                ("Tier4Spam",     side => new TierSpamBaseline(side, 4)),
+                ("HeuristicBot",  side => new HeuristicBotAdapter(side)),
+            };
+
+            // ── Contenders: HeuristicBot as the reference, plus every ONNX checkpoint ──
+            var contenders = new List<(string name, Func<int, IArenaOpponent> make)>
+            {
+                ("HeuristicBot", side => new HeuristicBotAdapter(side)),
+            };
+
+            var dir = findLeagueModelsDir();
+            if (dir != null)
+            {
+                foreach (var f in Directory.GetFiles(dir, "*.onnx").OrderBy(x => x))
+                {
+                    string name = Path.GetFileNameWithoutExtension(f);
+                    string path = f;
+                    contenders.Add((name, side => new AIModelOpponent(side, path)));
+                }
+            }
+            else
+            {
+                Console.WriteLine("[ladder] No league_models folder found — running baselines only.");
+            }
+
+            if (only != null)
+                contenders = contenders
+                    .Where(c => c.name.Contains(only, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            var modes = mode == "both" ? new[] { "nostart", "headstart" } : new[] { mode };
+
+            using var csv = new StreamWriter(csvPath);
+            csv.WriteLine("mode,seed,contender,opponent,games,wins,losses,draws," +
+                          "win_rate,ci_lo,ci_hi,earned_invests,opp_earned_invests,avg_ticks");
+
+            foreach (var m in modes)
+            {
+                bool headstart = m == "headstart";
+                var specs = BuildSpecs(games, seed, headstart);
+
+                Console.WriteLine();
+                Console.WriteLine(new string('=', 100));
+                Console.WriteLine($"  LADDER [{m}]  seed={seed}  {games} setups x 2 sides = " +
+                                  $"{games * 2} games per matchup");
+                if (headstart)
+                    Console.WriteLine($"  (headstart grants both sides E[timeSkip]=2.118 free invests; " +
+                                      $"invests below are EARNED only)");
+                Console.WriteLine(new string('=', 100));
+
+                foreach (var (cName, cMake) in contenders)
+                {
+                    Console.WriteLine($"\n  {cName}");
+                    Console.WriteLine("    opponent                       win rate  earned inv   opp inv    avg s");
+                    Console.WriteLine("    " + new string('-', 70));
+
+                    int totWins = 0, totGames = 0;
+                    foreach (var (oName, oMake) in ladder)
+                    {
+                        var r = PlayMatchup(cMake, oMake, specs);
+                        var (lo, hi) = WilsonInterval(r.Wins, r.Games);
+                        totWins += r.Wins;
+                        totGames += r.Games;
+
+                        Console.WriteLine(
+                            $"    {oName,-16} {r.WinRate,7:P1} [{lo,6:P1},{hi,6:P1}]  " +
+                            $"{r.EarnedInvests / r.Games,10:F2} {r.OppEarnedInvests / r.Games,8:F2}  " +
+                            $"{r.Ticks / r.Games / 30.0,7:F1}");
+
+                        csv.WriteLine($"{m},{seed},{cName},{oName},{r.Games},{r.Wins},{r.Losses}," +
+                                      $"{r.Draws},{r.WinRate:F4},{lo:F4},{hi:F4}," +
+                                      $"{r.EarnedInvests / r.Games:F4}," +
+                                      $"{r.OppEarnedInvests / r.Games:F4}," +
+                                      $"{r.Ticks / r.Games:F1}");
+                        csv.Flush();
+                    }
+
+                    var (alo, ahi) = WilsonInterval(totWins, totGames);
+                    Console.WriteLine("    " + new string('-', 70));
+                    Console.WriteLine($"    {"OVERALL",-16} {(double)totWins / Math.Max(totGames, 1),7:P1} " +
+                                      $"[{alo,6:P1},{ahi,6:P1}]   ({totGames} games)");
+                }
+            }
+
+            Console.WriteLine($"\n[ladder] Wrote {csvPath}");
+            Console.WriteLine("[ladder] Same --seed reproduces the same setups, so two runs are " +
+                              "directly comparable.");
+        }
+    }
+}

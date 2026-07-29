@@ -183,15 +183,36 @@ namespace CastleDefense.Engine.Models
             return state.ToArray();
         }
 
-        // ── Evaluator weights — calibrated from 10k v23 self-play games ────────────
-        // Weights are normalised internally (sum need not equal 1.0).
-        // Army and Gadget keep a small floor so the evaluator stays sensitive to
-        // battle momentum and gadget state even when their predictive signal is weak.
-        public static float EvalWeightHp     = 0.2853f;
-        public static float EvalWeightIncome = 0.7f;
-        public static float EvalWeightMoney  = 0.2406f;
-        public static float EvalWeightArmy   = 0.0500f;  // floor: calibration gives 0.106 but 0.05 reduces noise
-        public static float EvalWeightGadget = 0.1500f;  // floor: calibration zeros this but gadgets matter
+        // ── Evaluator weights ─────────────────────────────────────────────────────
+        // Recalibrated 2026-07-28 (audit_evaluator.py, fit "D"). Weights are
+        // normalised internally, so the sum need not equal 1.0.
+        //
+        // WHY THESE CHANGED: the previous values came from train_evaluator.py, which
+        // fit a NO-INTERCEPT logistic on features that are all sigmoid outputs — every
+        // component equals 0.5 in an even position, so the model can only score an even
+        // game at 50% when sum(w) == 0. That forces a zero-sum split in which some
+        // coefficients must come out negative; the script then clamped negatives to zero
+        // (train_evaluator.py, `np.maximum(raw_w, 0.0)`), deleting half the solution.
+        // The resulting zeros meant "clamped negative", NOT "no predictive value" — and
+        // which components got zeroed moved around with the L2 strength, i.e. the fit was
+        // never identified. That is where "castle HP does not affect win probability"
+        // came from, and it is not a real property of this game.
+        //
+        // These weights are fit against the functional form EvaluateBoard() actually
+        // evaluates — p = (w·x) / sum(w), constrained to w >= 0 — rather than against a
+        // logistic that is never used at runtime. On held-in data they beat both the old
+        // values and the raw calibration output on accuracy and log-loss.
+        //
+        // Money/Army/Gadget/Repair land at zero here honestly: given HP and Income they
+        // add nothing *to a linear weighted average*. A logistic on the same six features
+        // does use all of them and calibrates ~11% better (log-loss 0.491 vs 0.551), so
+        // switching EvaluateBoard() to sigmoid(w·(x−0.5)) is a real available upgrade —
+        // deliberately not done here, since it changes live game behaviour.
+        public static float EvalWeightHp     = 0.2476f;
+        public static float EvalWeightIncome = 0.7524f;
+        public static float EvalWeightMoney  = 0.0000f;
+        public static float EvalWeightArmy   = 0.0000f;
+        public static float EvalWeightGadget = 0.0000f;
         public static float EvalWeightRepair = 0.0000f;
 
         /// <summary>

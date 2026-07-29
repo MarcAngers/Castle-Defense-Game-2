@@ -281,6 +281,16 @@ if (args.Length > 0 && args[0] == "models")
 // fairness convention as RunMatchup) and reports both sides' average final
 // InvestmentCount (PlayerState.InvestmentCount only ever increases, so its value at
 // game-over is exactly the total number of times that side invested that game).
+// Reproducible benchmark ladder — see Ladder.cs for why this exists and what it fixes
+// about the older measurement modes (paired setups, side-swapping, earned-not-raw
+// invests, confidence intervals).
+// Usage: ladder [games] [--seed N] [--headstart|--nostart|--both] [--csv path] [--only substr]
+if (args.Length > 0 && args[0] == "ladder")
+{
+    Ladder.Run(args, FindLeagueModelsDir);
+    return;
+}
+
 // Usage: invest-stats <modelFragment> [headstart] [games]
 if (args.Length > 0 && args[0] == "invest-stats")
 {
@@ -298,12 +308,27 @@ if (args.Length > 0 && args[0] == "invest-stats")
 
     var modelInvests = new List<int>();
     var botInvests = new List<int>();
+    // FREE-INVEST BASELINE (added 2026-07-28 audit): CreateGame(true) builds both
+    // players via PlayerState(timeSkip), which calls ApplyInvestmentStep() timeSkip
+    // times -- so under `headstart` BOTH sides begin the game with InvestmentCount
+    // already equal to timeSkip, for free, before either policy acts. timeSkip is
+    // Math.Max(rng.Next(-8,9), 0), i.e. E[timeSkip] = 36/17 = 2.118 with SD 2.74
+    // (SE of the mean over 150 games = 0.224). Reporting only the END-of-game
+    // InvestmentCount therefore reports mostly the time machine, not the policy:
+    // the historic "1.85 / 2.25 / 2.80 invests/game" readings sit almost entirely
+    // inside that free baseline, and its per-run sampling noise is comparable to
+    // the differences being claimed between checkpoints. Track the starting count
+    // so we can report invests the policy actually EARNED.
+    var modelStart = new List<int>();
+    var botStart = new List<int>();
     for (int i = 0; i < games; i++)
     {
         bool modelIsP1 = i % 2 == 0;
         var (state, engine) = CreateGame(headStart);
         var modelOpp = new AIModelOpponent(modelIsP1 ? 1 : 2, match);
         var bot = new HeuristicBotAdapter(modelIsP1 ? 2 : 1);
+        modelStart.Add(modelIsP1 ? state.Player1.InvestmentCount : state.Player2.InvestmentCount);
+        botStart.Add(modelIsP1 ? state.Player2.InvestmentCount : state.Player1.InvestmentCount);
         while (!state.IsGameOver)
         {
             engine.Tick();
@@ -315,8 +340,22 @@ if (args.Length > 0 && args[0] == "invest-stats")
         (modelOpp as IDisposable)?.Dispose();
     }
 
+    var modelEarned = modelInvests.Select((v, i) => v - modelStart[i]).ToList();
+    var botEarned = botInvests.Select((v, i) => v - botStart[i]).ToList();
+
+    static double StdErr(List<int> xs)
+    {
+        if (xs.Count < 2) return 0;
+        double m = xs.Average();
+        return Math.Sqrt(xs.Sum(x => (x - m) * (x - m)) / (xs.Count - 1.0) / xs.Count);
+    }
+
     Console.WriteLine($"{modelName}: avg invests/game = {modelInvests.Average():F2}  (min={modelInvests.Min()}, max={modelInvests.Max()})");
     Console.WriteLine($"HeuristicBot:      avg invests/game = {botInvests.Average():F2}  (min={botInvests.Min()}, max={botInvests.Max()})");
+    Console.WriteLine();
+    Console.WriteLine($"  -- free from time machine: model {modelStart.Average():F2}, bot {botStart.Average():F2}  (headstart={headStart}, expected 2.12 when on, 0.00 when off)");
+    Console.WriteLine($"  -- EARNED (end - start): {modelName} = {modelEarned.Average():F2} +/- {StdErr(modelEarned):F2} SE   |   HeuristicBot = {botEarned.Average():F2} +/- {StdErr(botEarned):F2} SE");
+    Console.WriteLine($"     ^ this is the number to compare across checkpoints; the raw avg above is dominated by the free baseline.");
     return;
 }
 

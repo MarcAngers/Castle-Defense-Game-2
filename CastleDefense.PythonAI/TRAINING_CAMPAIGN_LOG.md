@@ -2602,3 +2602,182 @@ standing preference is that spending real compute cycles is his call.
 ---
 *(Log continues below as the campaign progresses — periodic benchmark results,
 plateau diagnosis if one occurs, and any further tuning.)*
+
+# ============================================================
+# 2026-07-28 (session 2) — MEASUREMENT AUDIT: two instruments found broken
+# ============================================================
+
+Marc asked for a fresh evaluation of the campaign's direction. No training was run.
+Instead, two of the numbers this campaign has been steering by were checked against
+their source code, and **both turned out to be wrong**. Everything below is a
+correction to conclusions already recorded above — read this before trusting any
+headline figure in the earlier entries.
+
+## 1. `invest-stats` invests/game is contaminated by free headstart invests
+
+**The bug.** `invest-stats ... headstart` calls `CreateGame(true)`, which builds both
+players via `PlayerState(timeSkip)`. That constructor calls `ApplyInvestmentStep()`
+`timeSkip` times, so **both sides begin the game with `InvestmentCount` already equal
+to `timeSkip`, before either policy acts.** `invest-stats` then reports
+`InvestmentCount` at END of game (Program.cs:313) with no subtraction.
+
+`timeSkip = Math.Max(rng.Next(-8, 9), 0)` ⇒ **E[timeSkip] = 36/17 = 2.118**, SD 2.74,
+SE of the mean over 150 games = **0.224**.
+
+**Corrected headline table** (subtracting the ~2.12 free baseline):
+
+| checkpoint | as reported | free | **actually earned** |
+|---|---|---|---|
+| v25_bc | 1.85 | ~2.12 | ~0 |
+| v30_floortest_14M | 2.25 | ~2.12 | ~0.13 |
+| heuristic_pressure_test | 2.80 | ~2.12 | **~0.68** |
+| HeuristicBot | ~5.2 | ~2.12 | **~3.1** |
+
+**What this changes:**
+- The gap to HeuristicBot is **4.5x, not 1.9x**. "Less than halfway there" was wrong.
+- The noise floor is larger than assumed: the headstart RNG alone contributes ±0.22
+  per 150-game run. The 150-vs-300-game agreement (2.76 vs 2.80) confirms the
+  MEASUREMENT is repeatable, not that the policy improved — both draws sample the
+  same free-invest distribution.
+- The direction of the result **survives and is arguably stronger**: ~0 earned →
+  ~0.68 earned is a change in kind, not a 24% bump. The floor+pool combination did
+  do something real.
+
+**Also resolved: the 68 / 338,609 "invest legal in only 0.02% of decisions" figure.**
+No arithmetic error — `model-diag` uses `CreateGame(false)` (no headstart,
+`InvestmentCount=0`, `Money=0`) while `invest-stats` uses headstart. Both use 3-tick
+greedy argmax. So 0.02% describes COLD-START games only, and is unsurprising there:
+the cheapest unit costs $2-3 while the first invest costs $18. **It does not describe
+the headstart games the model is trained and benchmarked on.** The conclusion "the
+bottleneck has moved to money management" was drawn from the wrong game regime and
+should not be relied on.
+
+**Fix applied:** `invest-stats` now records starting `InvestmentCount` and reports
+EARNED invests (end − start) with a standard error, plus the free baseline as a
+visible sanity line. `verify_invest_metric.ps1` re-measures all three checkpoints at
+300 games, both with and without headstart. NOT YET RUN — needs a Windows build.
+
+## 2. The board evaluator's calibration was mis-specified; its weights were meaningless
+
+**The bug.** `train_evaluator.py` fit `LogisticRegression(fit_intercept=False)` on six
+features that are all sigmoid outputs — every component equals 0.5 in an even
+position. With no intercept the model can only score an even game at 50% when
+**sum(w) == 0**, forcing a zero-sum split in which some coefficients must be negative.
+The script then applied `np.maximum(raw_w, 0.0)` and normalised, **deleting the
+negative half of the solution.**
+
+Measured on the real data (263k mirrored samples, numpy GD):
+
+```
+B) unclamped     sum(w) = +0.042    <- confirms the forced degeneracy
+   HP 3.34  Income 4.77  Money 3.16  Army 0.79  Gadget -5.76  Repair -6.25
+A) after clamp   HP 0.277 Income 0.396 Money 0.262 Army 0.065 Gadget 0 Repair 0
+```
+
+**The zeros in `evaluator_weights.json` were clamped negative coefficients, not
+"this component has no predictive value."** A regularisation sweep confirms the fit
+was never identified: same data, same spec, only L2 varying, and the surviving set
+moves (Army drops out between 1e-4 and 1e-3; Income climbs 0.40→0.60; sum(w) drifts
+0.042→0.191). The committed `evaluator_weights.json` zeroes HP/Army/Repair; this
+session's reproduction zeroes Gadget/Repair. **Same script, same data, opposite
+answer — that non-reproducibility is the verdict.**
+
+**What the data actually says:**
+
+```
+                          acc    logloss     HP  Income  Money   Army  Gadget  Repair
+C) centered logistic   74.39%    0.4914   5.53    5.26   2.96   2.96    0.13    2.39
+D) deployed form       75.37%    0.5510   0.248   0.752  0      0       0       0
+   in-code before      74.88%    0.5706   0.200   0.491  0.169  0.035   0.105   0
+```
+
+Fit D matches the form `EvaluateBoard()` actually evaluates — `(w·x)/sum(w)`, `w >= 0`.
+Fit C is a correctly specified logistic on centered features; **castle HP comes out as
+the LARGEST term**, and all six components carry signal.
+
+**RETRACTION.** Earlier in this session the old weights were read as independent
+confirmation that this game is economy-dominated (income ~67% of win probability, HP
+~0%). That was reading an artifact. Economy is still the largest single factor under
+the deployed form (income 0.75 vs HP 0.25), but HP is nowhere near zero, and under the
+better-calibrated logistic HP slightly exceeds income. **The evaluator does not
+provide strong independent support for economy-dominance.**
+
+**Fixes applied:**
+- `GameState.cs` EvalWeight* → fit D (Hp 0.2476, Income 0.7524, rest 0.0), with the
+  full diagnosis in a comment so this can't silently regress.
+- `train_evaluator.py` rewritten: fits the deployed `(w·x)/sum(w)` form with
+  non-negativity enforced DURING optimisation (not clamped afterwards), and reports a
+  correctly specified centered logistic alongside for reference. `CURRENT_W` was also
+  stale (`[0.35,0.15,0.05,0.30,0.10,0.05]`, not matching shipped C# for several
+  rounds), so the "Current vs Learned" table was comparing against a phantom baseline.
+- `audit_evaluator.py` added — reproduces the diagnosis and the regularisation sweep.
+- Loud warning when a calibration CSV has no `tick` column. **`calib_data.csv` has no
+  `tick`/`game_id`**, so the autocorrelation thinning at line 122 never fires for it
+  and all 1.7M within-game frames go in raw, swamping the human-replay data. The real
+  fix is at the source: the C# `--collect-calibration` exporter should emit tick and
+  game_id.
+
+**IMPORTANT SIDE EFFECT: `EvaluateBoard()` is in the RL reward loop.**
+`Simulation/Program.cs:446` feeds it into `batchEval`, which Python uses for N-step
+potential-based reward shaping. Changing these weights **changes the training signal**
+(normalised: HP 0.20→0.248, Income 0.49→0.752, money/army/gadget→0). It does NOT
+affect HeuristicBot or the web game, neither of which calls it.
+
+## 3. Six pressures toward investing, all failing
+
+Worth recording plainly. The policy currently has **six** independent mechanisms
+pushing it to invest: `+3000` per income increase, early-invest bonuses
+(+800/+400/+150), savings-progress reward, the anti-spend penalty, the 90%
+`INVEST_CURRICULUM_FORCE` curriculum, and income-dominated potential shaping via
+`EvaluateBoard()`. It still converges on not investing. Six independent pressures all
+failing makes "PPO just needs better exploration" the less likely explanation.
+
+The structural reading: the cheapest unit costs $2-3 and the first invest costs $18,
+so saving requires **6-9 consecutive restraint decisions** at the 9-tick training
+cadence, while a $2 purchase is legal at nearly every one of them. That is a
+temporally-extended commitment problem (options/macro-actions), not an exploration
+problem — and a logit floor on action 9 cannot fix it, because the floor only acts at
+the moment investing is already legal.
+
+## 4. Cadence mismatch worth knowing
+
+Training decides every **9 ticks** (`Simulation/Program.cs`, `for (int fi = 0; fi < 9; fi++)`).
+`AIModelOpponent` and `model-diag` decide every **3 ticks**. Every BotArena number ever
+recorded for an ONNX checkpoint was measured at 3x the decision rate the policy was
+trained at. Not necessarily wrong — but it is not the training regime, and nothing in
+the log acknowledges the difference.
+
+## 5. Direction recommendation (for Marc's decision)
+
+Recorded so the reasoning survives: **search, staged, with measurement fixed first.**
+
+- **PPO**: 30 versions, multi-day runs, has never beaten a hand-written heuristic. The
+  reward function now carries ~10 hand-tuned shaping terms — the signature of a
+  learning signal being hand-carried. Its specific failure (above) is structural.
+- **Heuristic-only**: strongest agent by a wide margin, but bounded by the author's own
+  understanding of the game. That is the definition of not-superhuman.
+- **Search**: the historically reliable path to superhuman play, converts inference
+  compute directly into strength with no training loop, and plays above the quality of
+  its own evaluator. Decisively, it **subsumes** the other two rather than competing:
+  HeuristicBot becomes the rollout policy, and a learned value net can later replace
+  the hand evaluator (AlphaZero decomposition). It is the only option under which the
+  other two paths' work is not stranded.
+
+Blocker for search: the engine cannot be cloned. `_scheduledEvents` holds `Action`
+delegates (GameEngine.cs:38) created as lambdas at 14 gadget-effect callsites, closing
+over `engine`/`_def`/locals — closures cannot be deep-copied, and a cloned engine's
+pending effects would silently mutate the ORIGINAL state. `_actionQueue`
+(`ConcurrentQueue<Action>`) has the same problem. Fix = data-based `PendingEffect`
+records dispatched through a switch. Independently valuable: gives deterministic
+replay, and would have made `InferV1TimeMachineState`'s brute-force inference
+unnecessary.
+
+Recommended order: **(1) trustworthy benchmark harness → (2) engine refactor
+(data-based effects, Clone, seeded RNG) → (3) flat rollout search with HeuristicBot as
+rollout policy → (4) decide from data whether to deepen search or feed it a learned
+value net.**
+
+Step 1 is first because two of the two instruments examined this session were broken.
+That is a base rate, not a coincidence, and it means the project currently cannot tell
+whether a change helped.
+

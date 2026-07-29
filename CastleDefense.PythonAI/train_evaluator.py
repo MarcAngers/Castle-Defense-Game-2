@@ -1,10 +1,31 @@
 """
-Trains the board evaluator weights using logistic regression on game outcomes.
+Trains the board evaluator weights against real game outcomes.
 
 The six sigmoid component scores (hp, income, money, army, gadget, repair) computed
 by GameState.GetEvalComponents() are used as features.  The target label is whether P1
 won (1) or P2 won (0).  Perspective mirroring doubles the dataset and guarantees
 perfect 50/50 class balance without discarding any data.
+
+FIXED 2026-07-28 -- this script previously produced meaningless weights.
+  It fit `LogisticRegression(fit_intercept=False)` on features that are all sigmoid
+  outputs, so every component is 0.5 in an even position.  With no intercept the model
+  can only score an even game at 50% when sum(w) == 0, which forces a zero-sum split
+  where some coefficients must be negative.  The script then clamped negatives to zero
+  and normalised, deleting half the solution.  The zeros it reported meant "clamped
+  negative", not "no predictive value", and which components got zeroed drifted with
+  the L2 strength -- the fit was never identified.  That is the origin of the
+  "castle HP does not affect win probability" result in evaluator_weights.json.
+
+  Two changes fix it:
+    1. Fit the functional form that GameState.EvaluateBoard() ACTUALLY evaluates,
+       p = (w.x) / sum(w) with w >= 0, instead of a logistic that is never used at
+       runtime.  This is the default and produces the numbers to paste into C#.
+    2. Also report a correctly specified logistic on CENTERED features (x - 0.5),
+       where a zero intercept is the right assumption and signed weights are allowed.
+       It calibrates better than the deployed weighted-average form, so it is printed
+       as a reference for the possible EvaluateBoard() upgrade to sigmoid(w.(x-0.5)).
+
+  See audit_evaluator.py for the full diagnosis and the regularisation sweep.
 
 Usage (from CastleDefense.PythonAI/ with ai_env active):
     # One-shot: export from human replays, collect 2000 self-play games, train once
@@ -58,7 +79,12 @@ WEIGHTS_JSON = str(_SCRIPT_DIR / "evaluator_weights.json")
 CALIB_PNG    = str(_SCRIPT_DIR / "eval_calibration.png")
 
 FEATURES = ["hp_score", "income_score", "money_score", "army_score", "gadget_score", "repair_score"]
-CURRENT_W = [0.35, 0.15, 0.05, 0.30, 0.10, 0.05]
+
+# Must mirror the EvalWeight* fields in CastleDefense.Engine/Models/GameState.cs.
+# (This list had drifted out of sync for several calibration rounds, so the
+#  "Current vs Learned" table was comparing against weights that hadn't shipped
+#  in a long time. Keep it updated whenever the C# side changes.)
+CURRENT_W = [0.2476, 0.7524, 0.0000, 0.0000, 0.0000, 0.0000]
 
 FEATURE_LABELS = {
     "hp_score":     "Castle HP",
@@ -125,6 +151,15 @@ def load_features_labels(csv_path, subsample_ticks=30):
         if "game_id" in df.columns:
             last_ticks = df.groupby("game_id")["tick"].transform("max")
             df = df[df["tick"] != last_ticks]
+    else:
+        # calib_data.csv is written without tick/game_id columns, so none of the
+        # thinning above can fire and every frame of every game goes in raw. Frames
+        # within a game are highly autocorrelated, which inflates the effective
+        # sample size and over-weights whatever states long games spend time in.
+        print(f"[Train] WARNING: {os.path.basename(csv_path)} has no 'tick' column — "
+              f"cannot thin autocorrelated frames ({len(df):,} rows used raw).")
+        print("         Fix at the source: have the C# --collect-calibration exporter "
+              "emit tick and game_id.")
 
     X = df[FEATURES].values.astype(np.float64)
     y = (df["winner"] == 1).values.astype(np.float64)
@@ -143,19 +178,57 @@ def mirror_observations(X, y):
     return np.vstack([X, X_flip]), np.concatenate([y, y_flip])
 
 
-# ─── Logistic regression (numpy fallback) ────────────────────────────────────
+# ─── Fitting ──────────────────────────────────────────────────────────────────
 
 def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
 
 
-def fit_logistic_numpy(X, y, lr=0.05, n_iter=3000, l2=1e-3):
-    w = np.ones(len(FEATURES)) / len(FEATURES)
+def log_loss(p, y):
+    p = np.clip(p, 1e-9, 1.0 - 1e-9)
+    return float(-(y * np.log(p) + (1 - y) * np.log(1 - p)).mean())
+
+
+def fit_deployed(X, y, n_iter=6000, lr=3.0):
+    """
+    Fits p = (w . x) / sum(w) subject to w >= 0 — the exact form
+    GameState.EvaluateBoard() evaluates at runtime.
+
+    Projected gradient on log-loss. The objective is scale-invariant in w, so we
+    renormalise to sum 1 each step to keep the iteration well conditioned. Unlike
+    the old routine, non-negativity is a genuine constraint enforced throughout the
+    optimisation rather than a clamp applied to a finished (and differently shaped)
+    solution — so a zero here really does mean "adds nothing given the others".
+    """
+    k = X.shape[1]
+    w = np.ones(k) / k
+    n = len(y)
+    eps = 1e-9
     for _ in range(n_iter):
-        pred = sigmoid(X @ w)
-        grad = X.T @ (pred - y) / len(y) + l2 * w
-        w -= lr * grad
-        w = np.maximum(w, 0)
+        s = w.sum()
+        p = np.clip(X @ w / s, eps, 1.0 - eps)
+        dp = (p - y) / (p * (1.0 - p)) / n      # d(logloss)/dp
+        grad = X.T @ dp / s - (dp @ p) / s * np.ones(k)   # quotient rule
+        w = np.maximum(w - lr * grad, 0.0)
+        if w.sum() <= 0:
+            w = np.ones(k) / k
+        w /= w.sum()
+    return w
+
+
+def fit_centered_logistic(X, y, n_iter=4000, lr=2.0, l2=1e-6):
+    """
+    Correctly specified logistic: features centered on 0.5 so that an even position
+    maps to 0 and a zero intercept is the right assumption. Signed weights, no clamp.
+
+    Reference fit only — EvaluateBoard() does not use this form. Reported so the
+    calibration gain from switching to sigmoid(w.(x-0.5)) is visible.
+    """
+    Xc = X - 0.5
+    w = np.zeros(Xc.shape[1])
+    n = len(y)
+    for _ in range(n_iter):
+        w -= lr * (Xc.T @ (sigmoid(Xc @ w) - y) / n + l2 * w)
     return w
 
 
@@ -163,8 +236,9 @@ def fit_logistic_numpy(X, y, lr=0.05, n_iter=3000, l2=1e-3):
 
 def train(eval_csv=None, calib_csv=None):
     """
-    Loads available data, applies perspective mirroring, fits logistic regression.
-    Returns (X_raw, y_raw, probs_learned, learned_weights).
+    Loads available data, applies perspective mirroring, fits the deployed
+    weighted-average form (and a centered logistic for reference).
+    Returns (X, y, probs_learned, learned_weights, centered_weights).
     """
     frames = []
 
@@ -192,20 +266,26 @@ def train(eval_csv=None, calib_csv=None):
     X_all, y_all = mirror_observations(X_all, y_all)
     print(f"[Train] After mirroring: {len(X_all)} samples, {y_all.mean():.0%} P1 (perfectly balanced)")
 
-    if HAS_SKLEARN:
-        clf = LogisticRegression(fit_intercept=False, C=5.0, max_iter=2000, solver='lbfgs')
-        clf.fit(X_all, y_all)
-        raw_w = clf.coef_[0]
-        probs = clf.predict_proba(X_all)[:, 1]
-    else:
-        print("[Train] sklearn not found — using numpy gradient solver")
-        raw_w = fit_logistic_numpy(X_all, y_all)
-        probs = sigmoid(X_all @ raw_w)
+    # Primary fit: the form EvaluateBoard() actually evaluates.
+    learned_w = fit_deployed(X_all, y_all)
+    probs = X_all @ learned_w / learned_w.sum()
 
-    raw_w = np.maximum(raw_w, 0.0)
-    learned_w = raw_w / raw_w.sum() if raw_w.sum() > 0 else np.ones(len(FEATURES)) / len(FEATURES)
+    # Reference fit: correctly specified logistic on centered features.
+    centered_w = fit_centered_logistic(X_all, y_all)
+    probs_cent = sigmoid((X_all - 0.5) @ centered_w)
 
-    return X_all, y_all, probs, learned_w
+    print(f"\n[Train] deployed form  (w.x)/sum(w) : "
+          f"acc {(((probs >= 0.5) == y_all).mean()):.2%}  logloss {log_loss(probs, y_all):.4f}")
+    print(f"[Train] centered logistic (reference): "
+          f"acc {(((probs_cent >= 0.5) == y_all).mean()):.2%}  logloss {log_loss(probs_cent, y_all):.4f}")
+    if log_loss(probs_cent, y_all) < log_loss(probs, y_all) - 0.005:
+        print("        ^ the logistic calibrates better. Switching EvaluateBoard() to")
+        print("          sigmoid(w.(x-0.5)) with the centered weights is an available upgrade;")
+        print("          it changes live game behaviour, so it is not applied automatically.")
+        print("          centered weights: " +
+              "  ".join(f"{f.replace('_score',''):}={v:+.3f}" for f, v in zip(FEATURES, centered_w)))
+
+    return X_all, y_all, probs, learned_w, centered_w
 
 
 def print_results(learned_w, X, y, probs):
@@ -229,7 +309,12 @@ def print_results(learned_w, X, y, probs):
     print("  " + "-" * 60)
 
     with open(WEIGHTS_JSON, "w") as fh:
-        json.dump({f: float(lw) for f, lw in zip(FEATURES, learned_w)}, fh, indent=2)
+        json.dump({
+            "_form": "p = (w.x)/sum(w), w >= 0 -- matches GameState.EvaluateBoard()",
+            "_fit": "projected gradient on log-loss; non-negativity enforced during "
+                    "optimisation, not clamped afterwards",
+            **{f: float(lw) for f, lw in zip(FEATURES, learned_w)},
+        }, fh, indent=2)
     print(f"\n[Train] Weights saved: {WEIGHTS_JSON}")
 
     return learned_w
@@ -333,7 +418,7 @@ def main():
         # ── Train ─────────────────────────────────────────────────────────────
         eval_src  = EVAL_CSV  if os.path.exists(EVAL_CSV)  else None
         calib_src = CALIB_CSV if (not skip_calib and os.path.exists(CALIB_CSV)) else None
-        X, y, probs, learned_w = train(eval_src, calib_src)
+        X, y, probs, learned_w, centered_w = train(eval_src, calib_src)
         print_results(learned_w, X, y, probs)
         plot_calibration(X, y, probs, learned_w, CALIB_PNG)
 
