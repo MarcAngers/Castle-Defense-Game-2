@@ -35,6 +35,33 @@ namespace CastleDefense.Engine.Bot
         // trusted -- see HeuristicBot's own comment for that result.
         public float EnemyHpEvaluationSeconds { get; init; } = 27.04f; // how long to watch an ongoing push before judging its HP trend
         public float MinMeaningfulEnemyHpLossPctPerSecond { get; init; } = 0.314f; // rate, not a total -- multiplied by EnemyHpEvaluationSeconds to get the actual stall-vs-working cutoff
+        // WARNING (found 2026-07-30): this absolute threshold is ABOVE the starting castle
+        // HP. PlayerState() sets CastleHealth = CastleMaxHealth = 2000, and only Repair()
+        // ever raises MaxHealth (2000 -> 12000 on the first one). So against any opponent
+        // that never repairs -- which is 5 of the 6 ladder rungs, and every spam baseline --
+        // `enemy.CastleHealth <= 2676` is true from tick 0 to the end of the game, and
+        // killer instinct is therefore PERMANENTLY ON. That silently disables three
+        // separate savings mechanisms at once (the flow-based attack allowance, the gadget
+        // reserve, and the entire attack-disengage system, all of which killerInstinct
+        // bypasses by design), which is the most likely mechanical cause of the bot
+        // ceasing to invest past ~5. Under `headstart` the time machine applies repairs, so
+        // MaxHealth is 12000+ and the bug does NOT reproduce -- meaning this misfires in
+        // `nostart` runs only, which is exactly the kind of mode-dependent difference that
+        // survives a benchmark suite. The value itself came out of the 60-candidate
+        // paramsearch, so the sweep may simply have discovered "turn savings discipline off
+        // unless the enemy has repaired" and scored it well.
+        //
+        // NOW DEAD BY DEFAULT: PaceAttackSpendForInvestment defaults to true as of
+        // 2026-07-30, and it replaces this predicate with KillerInstinctSeconds. This
+        // field is only read on the flag-off path, which exists so PreInvestFlowCap can
+        // still reproduce the historical bot for regression checks.
+        //
+        // CONSEQUENCE FOR THE SWEEP: CastleDefense.BotArena's "paramsearch-attack" mode
+        // (RandomAttackSettings, Program.cs) still randomises this field over 500-10000.
+        // It is now a no-op knob in that sweep -- every candidate will score identically
+        // on it, which will read as "this parameter does not matter" rather than as
+        // "this parameter is not connected". Swap it for KillerInstinctSeconds before
+        // running that mode again, or the sweep burns its budget on a dead dimension.
         public int KillerInstinctHpThreshold { get; init; } = 2676; // absolute enemy castle HP -- below this, ignore savings discipline and go for the kill
         public float AttackSpendFraction { get; init; } = 0.91f; // non-reactive spending capped at this fraction of the income RATE (a flow limit, not a fraction of the money pile)
 
@@ -56,7 +83,155 @@ namespace CastleDefense.Engine.Bot
         // says there's a real deficit to bridge at all.
         public float ReactiveSpendEVMultiplier { get; init; } = 1.5f;
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // BEHAVIOURAL CHANGE FLAGS (2026-07-30 session)
+        //
+        // Each flag guards one candidate behaviour change, and each guarded branch is
+        // written so that flipping the flag off reduces to the exact arithmetic and
+        // control flow of whatever came before it. That is load-bearing, not tidiness:
+        // it lets the ladder run a variant and its own reference in the SAME BINARY (see
+        // the contender note in Ladder.cs), so an A/B needs no rebuild-and-diff and no
+        // unrelated edit can leak into the comparison. If you change an off-path branch,
+        // the reference silently stops being the old bot and the numbers mean nothing.
+        //
+        // ALL FOUR WERE MEASURED at two seeds x 600 games x 6 rungs x both modes
+        // (ladder, 2026-07-30). Exactly one was kept. Results recorded per flag below.
+        //
+        // Read this before adding a fifth: the five BASELINE rungs are saturated --
+        // the bot already scores 100/96/80/81/93 against them -- so they cannot resolve
+        // a few points either way, and the OVERALL column is dominated by them. The
+        // self-play rung is the instrument that actually has power (it is pinned at 50%
+        // by construction; the reference measured 49.3/49.5/50.2/51.9 across the four
+        // seed x mode cells, which is how we know the harness is calibrated). Judge
+        // candidate changes on the mirror and on earned_invests, not on OVERALL.
+        // ─────────────────────────────────────────────────────────────────────────
+
+        // (1) TESTED AND TABLED -- no measurable effect on the ladder, kept off.
+        // Firebomb leaves a persistent FireHazard that burns ANY unit standing in it,
+        // including ours, and the existing friendly-fire check asks an instantaneous
+        // question about a 6-second effect -- see the firebomb case in
+        // TryUseOffenseGadget for why it is wrong three separate ways. The fix is
+        // almost certainly CORRECT; it is the measurement that could not see it. Two
+        // reasons: firebomb is 1 of 4 offense options so it appears in only ~25% of
+        // games, and under the boom strategy our standing army is near-zero for most of
+        // a game, so allies are rarely near the blast in bot-vs-bot play at all. Marc
+        // observes this misfiring in HIS games, where he applies enough pressure that
+        // the bot is actually fielding an army. Result was flat-to-marginally-negative
+        // everywhere (mirror 49.0/48.4 vs the 49.3/49.5 reference), and there is a
+        // plausible offsetting cost: the stricter test makes the retarget find no safe
+        // position and skip the cast entirely, losing firebomb damage and its upgrade
+        // XP. DO NOT re-judge this on a normal ladder run -- it needs the loadout pinned
+        // to firebomb (an --offense override that overwrites the drawn loadout AFTER
+        // spec generation, so the rng stream and cross-run comparability are untouched).
+        public bool FirebombSweptFriendlyFireCheck { get; init; } = false;
+
+        // (2) KEPT -- this is committed default behaviour as of 2026-07-30.
+        // Stops non-reactive attack spending from starving the investment engine once it
+        // switches on at Income >= 50. Two independent mechanisms, both in this one flag
+        // (they were measured together and are documented separately at their sites: the
+        // killer-instinct redefinition in Decide(), the flow-pacing in SpendOnUnits).
+        //
+        // MEASURED: positive in all four seed x mode cells, both seeds, on the self-play
+        // rung -- nostart 54.1%/58.9% and headstart 50.4%/55.7%, against a reference
+        // measuring 49.3/49.5/50.2/51.9. Earned investments rose in the same games
+        // (nostart 5.07 -> 5.34, headstart 3.31 -> 3.56) and average mirror game length
+        // FELL from 436s to 385s: it invests more and closes faster, rather than
+        // stalling into longer games. Baseline rungs were unchanged, which is expected --
+        // those games end in 85-155 seconds, and at investment 5 the next price is ~1677
+        // against income ~60, so no behaviour whatsoever reaches investment 6 inside 85
+        // seconds. Only the long games can show this.
+        //
+        // The gap between the two modes is the diagnostic worth remembering. nostart
+        // gained ~+7.1 points, headstart only ~+2.0. Under headstart the time machine
+        // applies repairs, so CastleMaxHealth is 12000+ and the stuck-killer-instinct
+        // bug (see KillerInstinctHpThreshold's warning) never fired there -- only the
+        // flow-pacing half was active. The ~5-point difference between the modes IS that
+        // bug, measured.
+        public bool PaceAttackSpendForInvestment { get; init; } = true;
+        // Target pace for the next investment while a push is running: the bot reserves
+        // whatever income rate is needed to afford InvestmentPrice within this many
+        // seconds, and only the surplus above that funds the attack. Chosen so an
+        // investment still lands roughly every 45s mid-game rather than never.
+        public float InvestPaceTargetSeconds { get; init; } = 45f;
+        // Floor on the attack flow as a fraction of income, so a very expensive upcoming
+        // investment (the InvestmentCount 7/8 overrides price at 40,000/121,221) can't
+        // reduce offensive spending to literally zero for a minute at a time.
+        public float MinAttackFlowFraction { get; init; } = 0.15f;
+        // Replacement definition of killer instinct: how many seconds our units currently
+        // in contact with the enemy castle would need to finish it off. See the
+        // KillerInstinctHpThreshold comment for why the absolute-HP version is broken.
+        public float KillerInstinctSeconds { get; init; } = 12f;
+
+        // (3) TESTED AND TABLED -- rejected as built, worth a second attempt SPLIT UP.
+        // Income advantage as the signal to commit to a real attack. Win rate came back
+        // flat everywhere (mirror 49.1/50.5 vs the 49.3/49.5 reference), but earned
+        // investments dropped hard and consistently -- 4.59->3.85, 4.50->3.82,
+        // 4.19->3.61, 4.82->4.14 -- with game lengths collapsing to match (85->68s,
+        // 154->126s). It converts economy into earlier aggression at roughly break-even,
+        // which is the exact trade this bot is not supposed to make.
+        //
+        // The flaw is that this flag bundles TWO effects and only one of them is
+        // implicated. Opening the attack gate before Income >= 50 is what costs the
+        // investments; raising the burst allowance cap from 10s to 25s was never
+        // measured on its own and is not obviously bad -- a burst that arrives together
+        // is worth more than the same money trickled out one unit per decision, and it
+        // does not move the gate at all. A fair retest splits this into two flags and
+        // layers the cap-only half on top of PaceAttackSpendForInvestment.
+        public bool IncomeAdvantageAttack { get; init; } = false;
+        public float IncomeAdvantageRatio { get; init; } = 1.75f;   // our income / theirs
+        public float IncomeAdvantageMinIncome { get; init; } = 12f; // don't call 4-vs-2 an "advantage"
+        public float IncomeAdvantageAllowanceSeconds { get; init; } = 25f; // bank a bigger burst when ahead
+
+        // (4) TESTED AND TABLED at 12 seconds -- retest at a tighter trigger.
+        // Absolute survival override, independent of the investment race. The hole it
+        // closes is real and is documented at the survivalEmergency block in Decide()
+        // (investmentRunwayIsSafe degenerates to "time-to-death >= 2 seconds" once money
+        // reaches InvestmentPrice, and the reactive budget degenerates to $0 in the same
+        // situation). But at a 12-second trigger it measured as a consistent TRADE, not
+        // a gain, in both seeds: Investor +1.2/+3.4, Tier1Spam -1.0/-2.0, mirror
+        // -0.9/-2.4. Earned investments barely moved, so it is not costing economy --
+        // it is spending on defense in situations where the EV cap was right, i.e. the
+        // trigger is too generous. 6s and 8s are the obvious retests.
+        //
+        // Note also that the ladder is a poor instrument for this specific change: the
+        // bot wins 80-100% against every rung, so these opponents almost never produce
+        // the "outmatched, dying with a full wallet" state it exists to fix. Investor is
+        // the only rung that saves money and can build a real threat, and Investor is
+        // the one rung that improved -- which is weak evidence FOR the mechanism even
+        // though the aggregate says no. Judge a retest on Investor and the mirror.
+        public bool SurvivalInstinct { get; init; } = false;
+        public float SurvivalEmergencySeconds { get; init; } = 12f;
+
         public static readonly HeuristicBotSettings Default = new HeuristicBotSettings();
+
+        // ── Named presets for temporary ladder contenders ──
+        // Each layers ONE tabled change on top of current default behaviour, so a retest
+        // measures that change alone rather than re-litigating what is already committed.
+        //
+        // HOW TO USE: Ladder.cs deliberately registers a single default-settings
+        // HeuristicBot contender, because that list is the project's stable yardstick and
+        // permanent variants would make runs incomparable over time. To A/B a change,
+        // temporarily add a contender next to it --
+        //
+        //   ("Heuristic-PreInvest", side => new HeuristicBotAdapter(side, HeuristicBotSettings.PreInvestFlowCap)),
+        //
+        // -- run with `--only Heuristic` to skip the ONNX checkpoints, then remove the
+        // extra entry once the question is answered. Every contender plays the same
+        // pre-generated specs and the "HeuristicBot" ladder RUNG is also default-settings,
+        // so one run yields both a paired comparison against the reference and a direct
+        // head-to-head against it.
+        //
+        // PreInvestFlowCap is the historical bot as it stood before 2026-07-30 -- the
+        // regression guard for the one change that was kept. If a future edit makes the
+        // committed bot lose to THIS, the edit has undone the investment-pacing win.
+        public static readonly HeuristicBotSettings PreInvestFlowCap =
+            new HeuristicBotSettings { PaceAttackSpendForInvestment = false };
+        public static readonly HeuristicBotSettings FirebombFix =
+            new HeuristicBotSettings { FirebombSweptFriendlyFireCheck = true };
+        public static readonly HeuristicBotSettings IncomeEdge =
+            new HeuristicBotSettings { IncomeAdvantageAttack = true };
+        public static readonly HeuristicBotSettings SurvivalFirst =
+            new HeuristicBotSettings { SurvivalInstinct = true };
     }
 
     // Rule-based opponent. Drives a side entirely through GameEngine's public API
@@ -77,6 +252,8 @@ namespace CastleDefense.Engine.Bot
         public float LastTimeToInvestSeconds { get; private set; }
         public bool LastAttackDisengaged { get; private set; }
         public bool LastKillerInstinct { get; private set; }
+        public bool LastIncomeAdvantage { get; private set; }
+        public bool LastSurvivalEmergency { get; private set; }
 
         // Running per-game tally of every successful action actually taken, indexed by
         // the same 14-action ID space as GetActionMask/ApplyAction (0=wait unused here,
@@ -436,6 +613,45 @@ namespace CastleDefense.Engine.Bot
             float runwayDeficitSeconds = Math.Max(0f, timeToInvestSeconds - timeToDeathSeconds);
             double reactiveSpendBudget = runwayDeficitSeconds * me.Income * _settings.ReactiveSpendEVMultiplier;
 
+            // --- SURVIVAL INSTINCT ---
+            // Marc's report: "the bot dies with plenty of money when it is outmatched...
+            // it feels like it gives up as I'm attacking." That is a real logic hole, not
+            // a subjective impression, and it has two distinct halves -- both stemming
+            // from the fact that EVERY defensive decision above is expressed relative to
+            // the INVESTMENT RACE rather than to survival:
+            //
+            //  1. `investmentRunwayIsSafe` is `timeToDeath >= timeToInvest * 1.4 + 2`.
+            //     When money is already at or past InvestmentPrice, timeToInvest is ~0, so
+            //     the whole test collapses to `timeToDeath >= 2 seconds`. A bot three
+            //     seconds from losing its castle is therefore classified SAFE, inDanger is
+            //     false, no reactive defense fires at all -- and worse, the early-exit
+            //     invest check at the top of Decide() fires and hands the entire money pile
+            //     to an investment it will not live long enough to collect on.
+            //  2. `reactiveSpendBudget` is `max(0, timeToInvest - timeToDeath) * income`.
+            //     The same near-zero timeToInvest drives the deficit to zero, so even when
+            //     inDanger does manage to fire, the budget authorising defensive spending
+            //     is $0 and SpendOnUnits/wall/wave/goo/freeze all decline to spend a cent.
+            //
+            // Both are the EV framing working exactly as designed and being asked the
+            // wrong question. That framing ("is this defensive dollar worth the savings
+            // progress it costs?") is correct while the bot is choosing between economy
+            // and defense -- but below some absolute time-to-death there is no choice left
+            // to make. An investment is worth nothing to a dead castle, so at that point
+            // the marginal value of a defensive dollar is unbounded and no budget should
+            // gate it. This flag adds that floor, and nothing else: an absolute
+            // time-to-death trigger that forces danger handling on, uncaps reactive
+            // spending, and stops the bot from investing while it is being killed.
+            //
+            // Note this deliberately does NOT touch the one-purchase-per-decision pacing.
+            // The money does not go unspent because the bot buys too slowly (6 buys/sec
+            // over a 12-second window is 70+ units); it goes unspent because the budget was
+            // computed as zero. Relaxing the pacing would reintroduce the batch-buying
+            // divergence from human play that the SpendOnUnits comment documents fixing.
+            bool survivalEmergency = _settings.SurvivalInstinct
+                && timeToDeathSeconds <= _settings.SurvivalEmergencySeconds;
+            if (survivalEmergency) reactiveSpendBudget = me.Money;
+            LastSurvivalEmergency = survivalEmergency;
+
             // EXPERIMENT: castleHpPct < 0.9f dropped from this OR -- traced a v4 matchup
             // (trace v4, fine-grained log) where HP sat flat at exactly 90% (a stale,
             // non-recovering deficit from an earlier, now-resolved skirmish) while a
@@ -448,7 +664,12 @@ namespace CastleDefense.Engine.Bot
             // any GENUINE ongoing danger (it's a strictly more accurate, recency-aware
             // signal) -- testing whether the cruder accumulated-damage clause is now
             // pure liability rather than added safety. See [[project_ai_opponent_heuristic]].
-            bool inDanger = enemyIsClose && !investmentRunwayIsSafe;
+            // survivalEmergency ORs in rather than replacing the existing trigger: it is a
+            // strictly-additional floor. It needs no `enemyIsClose` companion because a
+            // short time-to-death already implies real damage is landing -- the observed
+            // estimator requires a measured HP drain and the projected one only counts
+            // enemies already inside contact range of our own castle.
+            bool inDanger = (enemyIsClose && !investmentRunwayIsSafe) || survivalEmergency;
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
@@ -473,9 +694,18 @@ namespace CastleDefense.Engine.Bot
             // gets first claim on the money via the normal repair/reactive-spend path below
             // -- this is Marc's framing directly: "if you can get away with an investment
             // before you need to upgrade your HP, take it."
-            if (investmentRunwayIsSafe && me.Money >= me.InvestmentPrice)
+            // Yielding the turn is conditional on the buy LANDING. Invest returns false
+            // for good once ARMAGEDDON has been bought, and it leaves InvestmentPrice
+            // untouched, so `money >= price` stays true forever after -- returning anyway
+            // would stall the bot completely for the rest of the game.
+            // `!survivalEmergency` is the survival-instinct half of this check (see the
+            // survivalEmergency block above): investmentRunwayIsSafe degenerates to
+            // "timeToDeath >= 2 seconds" once money has already reached InvestmentPrice,
+            // so without this guard the highest-priority action in the entire bot is to
+            // spend the whole pile on economy while the castle is seconds from falling.
+            if (investmentRunwayIsSafe && !survivalEmergency && me.Money >= me.InvestmentPrice && engine.Invest(_side))
             {
-                if (engine.Invest(_side)) ActionCounts[9]++;
+                ActionCounts[9]++;
                 return;
             }
 
@@ -559,9 +789,15 @@ namespace CastleDefense.Engine.Bot
             // spending idle money that investing wasn't using yet cost more win rate than
             // the extra HP bought back. Left as purely reactive (above) rather than
             // proactive -- see [[project_ai_opponent_heuristic]] for the full investigation.
-            if (me.Money >= me.InvestmentPrice)
+            // Conditional on success -- see the note on the other Invest callsite.
+            // Also blocked during a survival emergency, for the same reason as that
+            // callsite: this fallback has no runway check at all, so it is the LAST thing
+            // standing between a full money pile and an investment bought moments before
+            // the castle falls. Repair and reactive spending have already had their turn
+            // above by the time we reach here, so blocking this doesn't strand the money.
+            if (!survivalEmergency && me.Money >= me.InvestmentPrice && engine.Invest(_side))
             {
-                if (engine.Invest(_side)) ActionCounts[9]++;
+                ActionCounts[9]++;
                 return;
             }
 
@@ -715,19 +951,122 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
-            // Signal 3: killer instinct -- the enemy castle is low enough in
-            // absolute terms that finishing them off outweighs normal savings
+            // Signal 3: killer instinct -- finishing them off outweighs normal savings
             // discipline, overriding even a just-triggered disengage cooldown.
-            bool killerInstinct = enemy.CastleHealth <= _settings.KillerInstinctHpThreshold;
+            //
+            // The original formulation compares enemy castle HP against a fixed absolute
+            // number, which is broken in a way that only shows up once you check it
+            // against the starting state: the default (2676) is HIGHER than the 2000 HP
+            // every castle starts with, and only Repair() ever raises MaxHealth. Against
+            // an opponent that never repairs, this predicate is true on literally every
+            // decision of every game -- see the long warning on
+            // KillerInstinctHpThreshold. Killer instinct switched permanently on is not a
+            // small mistuning: it is a bypass around the flow allowance, the gadget
+            // reserve AND the disengage system simultaneously, i.e. all three of the
+            // mechanisms that exist to keep investing while attacking.
+            //
+            // Replace it with the question the flag was always trying to ask -- "can we
+            // actually finish this castle off from here?" -- expressed in the same
+            // time-to-X currency the rest of this file already reasons in. Sum the DPS
+            // our own units currently in contact with the enemy castle are applying, and
+            // ask how many seconds that would need to bring it down. This scales
+            // correctly with castle repairs, cannot be true before we have committed a
+            // real push, and reads directly as "we are N seconds from winning, stop
+            // saving and close it out."
+            bool killerInstinct;
+            if (_settings.PaceAttackSpendForInvestment)
+            {
+                float ownPushDps = EstimateOwnCastleDps(engine, myUnits, enemyUnits);
+                killerInstinct = ownPushDps > 0.01f
+                    && enemy.CastleHealth / ownPushDps <= _settings.KillerInstinctSeconds;
+            }
+            else
+            {
+                killerInstinct = enemy.CastleHealth <= _settings.KillerInstinctHpThreshold;
+            }
             LastKillerInstinct = killerInstinct;
 
             bool attackDisengaged = state.CurrentTick < _disengageUntilTick && !killerInstinct;
             LastAttackDisengaged = attackDisengaged;
 
-            if (!inDanger && me.Income >= 50 && !attackDisengaged)
+            // --- INCOME ADVANTAGE: the signal for WHEN to commit to an attack ---
+            // Marc's framing: the bot has a system to CALL OFF an attack (the enemy
+            // investing mid-push, or a stalled HP trend) and a system to keep saving
+            // DURING one (the flow allowance), but nothing that decides when to launch a
+            // substantial attack in the first place. The existing trigger is `me.Income
+            // >= 50`, which is a statement about our own economy in isolation -- it says
+            // nothing about whether we are actually ahead. Being rich is not the same as
+            // being ahead, and attacking while merely rich against an opponent who is
+            // richer is how a push gets counter-punched.
+            //
+            // An income lead is the cleanest read available on "the economic race is
+            // already won, so the compounding argument for holding back no longer
+            // applies." Two things follow from it: the attack gate can open before Income
+            // 50, and the burst we are willing to assemble can be larger.
+            //
+            // FAIRNESS NOTE: this reads enemy.Income, which the human player cannot see.
+            // That is not a new liberty -- signal 1 above already reads
+            // enemy.InvestmentCount, and Income is a pure deterministic function of
+            // InvestmentCount (PlayerState.ApplyInvestmentStep), so the two carry
+            // identical information. If hidden-information purity ever becomes a
+            // requirement, both need replacing together, and the honest substitute is
+            // already half-built: _observedEnemyUnitIds could accumulate the roster cost
+            // of every enemy unit ever seen, giving a lower bound on their spend rate.
+            //
+            // Deliberately does NOT relax the disengage system or inDanger. This decides
+            // when to START committing, not whether to keep going once committed -- the
+            // three existing signals still own that, and this is exactly the "gate the
+            // early pivot on detecting what the OPPONENT is doing, not on our own economy
+            // state alone" mechanism that the rejected-variant-2 writeup above called for
+            // and variant 3 only half-delivered (it read unit-tier diversity, which says
+            // nothing about the economy actually being raced).
+            bool hasIncomeAdvantage = _settings.IncomeAdvantageAttack
+                && me.Income >= _settings.IncomeAdvantageMinIncome
+                && me.Income >= enemy.Income * _settings.IncomeAdvantageRatio;
+            LastIncomeAdvantage = hasIncomeAdvantage;
+
+            if (!inDanger && (me.Income >= 50 || hasIncomeAdvantage) && !attackDisengaged)
             {
-                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct);
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct,
+                             hasIncomeAdvantage: hasIncomeAdvantage);
             }
+        }
+
+        // Sums the DPS our own units are currently applying to the ENEMY castle -- the
+        // mirror image of EstimateProjectedThreatDps, and gated by the same contact test
+        // (GameEngine.GetDistanceToEnemyCastle vs the unit's Range) that MoveAndFight
+        // uses before it will call AttackCastle, so only units actually landing hits on
+        // the castle count. Reads the live Unit's own stats rather than the roster
+        // definition because those already reflect any active buffs (rage, speed) the
+        // roster row does not know about.
+        //
+        // The second condition matters and is easy to miss: MoveAndFight attacks the
+        // castle in an `else if (castleInRange)` branch, i.e. ONLY when the unit has no
+        // enemy unit to fight. A unit standing at the enemy castle while trading with
+        // defenders is contributing zero castle damage, and counting it would make killer
+        // instinct fire during exactly the grinding stalemate where committing the last of
+        // the money is worst. Replicates FindTargetsFast's edge-to-edge contact test
+        // (centre distance minus both half-widths, against the attacker's Range);
+        // deliberately skips its flying/ranged exclusion, which would only ever make this
+        // estimate more conservative.
+        private float EstimateOwnCastleDps(GameEngine engine, List<Unit> myUnits, List<Unit> enemyUnits)
+        {
+            float dps = 0f;
+            foreach (var u in myUnits)
+            {
+                if (engine.GetDistanceToEnemyCastle(u) > u.Range) continue;
+
+                bool engagedWithUnits = false;
+                foreach (var e in enemyUnits)
+                {
+                    float edgeToEdge = Math.Abs(u.Position - e.Position) - (u.Width / 2f) - (e.Width / 2f);
+                    if (Math.Max(0f, edgeToEdge) <= u.Range) { engagedWithUnits = true; break; }
+                }
+                if (engagedWithUnits) continue;
+
+                dps += u.Damage * u.AttackSpeed;
+            }
+            return dps;
         }
 
         // Commits to repeatedly buying ONLY units of targetTier once affordable, mimicking
@@ -774,7 +1113,7 @@ namespace CastleDefense.Engine.Bot
         // (they just queue up waiting for a turn to attack).
         private const int MaxOwnUnitsOnField = 120;
 
-        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false, double reactiveSpendBudget = double.MaxValue)
+        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false, double reactiveSpendBudget = double.MaxValue, bool hasIncomeAdvantage = false)
         {
             LastUnitsPurchased = 0;
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
@@ -914,9 +1253,61 @@ namespace CastleDefense.Engine.Bot
                 // bank indefinitely while idle, which would turn this back into a
                 // stockpile-shaped mechanic instead of a flow-shaped one.
                 float decisionSeconds = DecisionIntervalTicks / 30f;
+
+                // The flow RATE funding the attack. Originally a flat fraction of income
+                // (AttackSpendFraction = 0.91 out of the paramsearch), which guarantees
+                // savings grow but says nothing about whether they grow fast enough to
+                // ever buy anything. That distinction is the whole problem Marc reports as
+                // "the bot stops prioritising investment around 5":
+                //
+                //   At InvestmentCount 5, Income is ~59.9 and the next InvestmentPrice is
+                //   Income * (5*4 + 8) = ~1677. Saving at the leftover 9% of income is
+                //   ~5.4/sec, so the next investment is ~310 seconds away -- longer than
+                //   most games last. The bot has not decided to stop investing; it has
+                //   set a savings rate at which the sixth investment is unreachable, and
+                //   the reason it bites at exactly 5 is that Income >= 50 (the gate on
+                //   this whole branch) first becomes true at InvestmentCount 5.
+                //
+                // So make the flow the RESIDUAL after investment, rather than investment
+                // the residual after the flow. Reserve the income rate needed to afford
+                // InvestmentPrice within InvestPaceTargetSeconds, and fund the attack from
+                // whatever is left. The attack now automatically throttles itself hardest
+                // right after an investment (when the next price is furthest away) and
+                // opens up as the target is approached, which is also just how a human
+                // paces a push.
+                //
+                // MinAttackFlowFraction floors it: the InvestmentCount 7/8 price overrides
+                // (40,000 and 121,221) are large enough to zero the residual outright, and
+                // an attack budget of exactly zero for a minute is its own failure mode.
+                //
+                // With the flag off, investPaceRate is 0 and this reduces to
+                // min(income * 0.91, income) = income * 0.91 -- the committed behavior,
+                // arithmetically unchanged.
+                double investPaceRate = 0;
+                if (_settings.PaceAttackSpendForInvestment && _settings.InvestPaceTargetSeconds > 0)
+                {
+                    double stillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
+                    investPaceRate = stillNeeded / _settings.InvestPaceTargetSeconds;
+                }
+                double attackFlowRate = Math.Min(
+                    me.Income * _settings.AttackSpendFraction,
+                    Math.Max(me.Income - investPaceRate,
+                             _settings.PaceAttackSpendForInvestment ? me.Income * _settings.MinAttackFlowFraction : 0));
+
+                // How much unspent allowance may bank before it stops accruing. Raised
+                // while we hold a clear income advantage: that is precisely the state in
+                // which a bigger, more concentrated push is affordable, and a burst that
+                // arrives together is worth far more than the same money trickled out one
+                // unit per decision (the rejected variant-2 experiment's real finding was
+                // that sustained concentrated aggression wins games -- what sank it was
+                // committing to a fixed TIER forever, not the concentration itself).
+                double capSeconds = hasIncomeAdvantage
+                    ? _settings.IncomeAdvantageAllowanceSeconds
+                    : AttackAllowanceCapSeconds;
+
                 _attackSpendAllowance = Math.Min(
-                    _attackSpendAllowance + me.Income * decisionSeconds * _settings.AttackSpendFraction,
-                    me.Income * AttackAllowanceCapSeconds * _settings.AttackSpendFraction);
+                    _attackSpendAllowance + attackFlowRate * decisionSeconds,
+                    attackFlowRate * capSeconds);
 
                 spendable = Math.Max(0, Math.Min(me.Money - gadgetReserve, _attackSpendAllowance));
             }
@@ -1283,9 +1674,38 @@ namespace CastleDefense.Engine.Bot
                     // trigger of any offense gadget. Same trap shape as reinforcements/wave/
                     // goo (see DeferForInvestment); defer it while that first foothold is
                     // still being built.
+                    // FRIENDLY FIRE (fixed 2026-07-30, gated on
+                    // FirebombSweptFriendlyFireCheck). Marc's report: "the bot constantly
+                    // burns its own units." The overlap test below is not missing -- it is
+                    // asking an instantaneous question about an effect that is anything
+                    // but instantaneous, and it is wrong in three separate ways at once:
+                    //
+                    //  1. NO DELAY LEAD ON ALLIES. The enemy positions fed to
+                    //     FindBestAoeTarget are already projected forward over def.Delay
+                    //     (48 ticks / 1.6s) -- our own are not. So the cast is aimed at
+                    //     where the enemy WILL be and cleared against where our army WAS.
+                    //  2. NO HAZARD LIFETIME. FirebombEffect spawns a FireHazard lasting
+                    //     def.HazardDuration (120 ticks / 4s, 180 / 6s at level 3) on top
+                    //     of the delay. It is not a blast, it is a burning strip of ground
+                    //     that sits there for 4-6 seconds -- and our units are marching
+                    //     forward through it the entire time. An ally 400px behind the
+                    //     target is "clear" by this test and walks straight into the fire
+                    //     a second later. FireHazard.ProcessEffect does not filter by
+                    //     Side, and the Burn it applies refreshes to 3s past leaving the
+                    //     zone, so a unit that merely transits the strip still burns.
+                    //  3. WRONG HITBOX. The hazard occupies [pos-Radius, pos+Radius] and
+                    //     overlap is tested against a unit's [Position, Position+Width]
+                    //     extent, not its centre point.
+                    //
+                    // Replace the point test with a SWEPT test: does any ally's path,
+                    // over the whole window the fire is actually on the ground, intersect
+                    // the burning strip? That is the question the cast needs answered.
                     if (DeferForInvestment(me)) break;
                     int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay);
-                    if (target.HasValue && myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius))
+                    bool targetBurnsAllies = target.HasValue && (_settings.FirebombSweptFriendlyFireCheck
+                        ? AllyWouldEnterHazard(myUnits, target.Value, radius, def)
+                        : myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius));
+                    if (targetBurnsAllies)
                     {
                         // Retarget used to pick whichever enemy was literally FARTHEST
                         // from our own army to dodge the overlap -- that's just the same
@@ -1296,10 +1716,13 @@ namespace CastleDefense.Engine.Bot
                         // instead; skip the cast if no such target exists rather than
                         // deliberately hitting whoever's safest-but-least-threatening.
                         var safe = enemyUnits
-                            .Where(u => !myUnits.Any(m => Math.Abs(m.Position - ProjectedPosition(u, def.Delay)) <= radius))
-                            .OrderBy(u => Math.Abs(ProjectedPosition(u, def.Delay) - myCastlePos))
+                            .Select(u => ProjectedPosition(u, def.Delay))
+                            .Where(p => _settings.FirebombSweptFriendlyFireCheck
+                                ? !AllyWouldEnterHazard(myUnits, p, radius, def)
+                                : !myUnits.Any(m => Math.Abs(m.Position - p) <= radius))
+                            .OrderBy(p => Math.Abs(p - myCastlePos))
                             .ToList();
-                        target = safe.Count > 0 ? (int)ProjectedPosition(safe[0], def.Delay) : (int?)null;
+                        target = safe.Count > 0 ? (int)safe[0] : (int?)null;
                     }
                     if (target.HasValue && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius)))
                         used = engine.UseGadget(_side, def.Id, target.Value);
@@ -1548,6 +1971,45 @@ namespace CastleDefense.Engine.Bot
             if (leadTicks <= 0 || u.CurrentSpeed <= 0) return u.Position;
             float direction = u.Side == 1 ? 1f : -1f;
             return u.Position + u.CurrentSpeed * leadTicks * direction;
+        }
+
+        // Would any of our own units be standing in a ground hazard centred on `centre`
+        // at ANY point during that hazard's life?
+        //
+        // A persistent hazard (firebomb's FireHazard, and goo's, though goo's heal makes
+        // its friendly overlap desirable rather than a hazard) is on the ground from
+        // def.Delay through def.Delay + def.HazardDuration. Over that window our units
+        // keep marching, so the correct test is whether an ally's swept PATH intersects
+        // the hazard's strip -- not whether an ally's centre point happens to sit inside
+        // it at the instant of the cast.
+        //
+        // Movement is linear at CurrentSpeed in the side's fixed direction, so sweeping
+        // just means taking the ally's projected position at both ends of the window and
+        // treating everything between as occupied. GameEngine zeroes CurrentSpeed for any
+        // unit in combat or attacking a castle, so an ally already locked in a fight
+        // correctly sweeps to a single point rather than being assumed to walk away.
+        //
+        // The strip is [centre - radius, centre + radius] (see FirebombEffect: Position =
+        // position - Radius, Width = Radius * 2) and a unit occupies [Position, Position
+        // + Width] (see FireHazard.ProcessEffect's overlap test), so the ally's extent is
+        // widened by its own Width to match how the engine actually resolves contact.
+        private static bool AllyWouldEnterHazard(List<Unit> myUnits, float centre, int radius, GadgetDefinition def)
+        {
+            float stripLeft = centre - radius;
+            float stripRight = centre + radius;
+
+            int windowStart = Math.Max(0, def.Delay);
+            int windowEnd = windowStart + Math.Max(0, def.HazardDuration);
+
+            foreach (var u in myUnits)
+            {
+                float a = ProjectedPosition(u, windowStart);
+                float b = ProjectedPosition(u, windowEnd);
+                float lo = Math.Min(a, b);
+                float hi = Math.Max(a, b) + u.Width;
+                if (hi >= stripLeft && lo <= stripRight) return true;
+            }
+            return false;
         }
 
         // Finds the best AOE launch position -- prefers a dense, high-power cluster
