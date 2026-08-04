@@ -763,6 +763,20 @@ namespace CastleDefense.Engine
                 var unit = _state.Units[i];
                 if (unit.PendingKnockback != 0)
                 {
+                    // A wall never moves. This is the ONE point where knockback is turned
+                    // into displacement, so enforcing it here covers every source at once
+                    // -- melee impacts, a wave sweeping through, a black hole collapsing --
+                    // including any added later, rather than relying on each callsite to
+                    // remember. The pending impulse is discarded, not banked, so it cannot
+                    // accumulate and lurch the wall the moment some future code path
+                    // exempts it. Walls also skip the "Knockback" hard-CC status below,
+                    // which only exists to model being staggered by the hit.
+                    if (unit.IsWall)
+                    {
+                        unit.PendingKnockback = 0f;
+                        continue;
+                    }
+
                     unit.Position += unit.PendingKnockback;
                     unit.PendingKnockback = 0f;
                     unit.Statuses.Add(new ActiveStatus("Knockback", _state.CurrentTick + GameEngine.TICKS_PER_SECOND, 0f));
@@ -1098,9 +1112,11 @@ namespace CastleDefense.Engine
 
             if (knockbackDist > 10f)
             {
-                // Walls can only be knocked back a tiny bit
-                if (target.DefinitionId.StartsWith("wall"))
-                    knockbackDist = 10f;
+                // (Walls used to be clamped to 10f here. They are now immovable outright,
+                // enforced where knockback is applied in MoveAndFight -- see the IsWall
+                // check there. Clamping again here would just be a second, weaker copy of
+                // the rule.)
+
                 // Tier 8 units can only be knocked back a small amount
                 if (target.Tier == 8)
                     knockbackDist = Math.Min(knockbackDist, 10f);

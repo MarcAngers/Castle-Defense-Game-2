@@ -1,4 +1,6 @@
-﻿namespace CastleDefense.Engine.Models
+﻿using System.Text.Json.Serialization;
+
+namespace CastleDefense.Engine.Models
 {
     public class Unit
     {
@@ -7,6 +9,17 @@
         public string DefinitionId { get; set; }
         public int Side { get; set; } // 1 (Left/P1) or 2 (Right/P2)
         public int Tier { get; set; }
+
+        /// <summary>
+        /// Walls ("wall", "wall_2", "wall_3") are immovable scenery rather than combatants.
+        /// The id prefix is the only thing that distinguishes them -- all three share a
+        /// UnitDefinition whose own Id is just "wall" -- and no roster unit starts with it.
+        ///
+        /// [JsonIgnore] because Unit goes over SignalR and into saved replays; a derived
+        /// flag the client can compute itself has no business changing either wire format.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsWall => DefinitionId != null && DefinitionId.StartsWith("wall");
 
         // --- DRAWING & HITBOX ---
         public int Width { get; set; }

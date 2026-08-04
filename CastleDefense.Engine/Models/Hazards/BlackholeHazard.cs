@@ -41,7 +41,13 @@
                         }
                     }
                     // --- 3. PULL THE UNIT IN ---
-                    else
+                    // Walls are immovable and are deliberately NOT pulled. Note this
+                    // writes Position directly rather than going through PendingKnockback,
+                    // so the immovability rule in MoveAndFight does not cover it and the
+                    // exemption has to be repeated here. Falling through to section 4
+                    // rather than skipping the unit is the point: a wall inside a black
+                    // hole still takes the damage-over-time, it just does not move.
+                    else if (!unit.IsWall)
                     {
                         if (unitCenter > hazardCenter)
                         {
@@ -97,13 +103,18 @@
                 if (unit.DefinitionId == "evilguy")
                     continue;
 
+                // Walls do not get flung when the black hole collapses. The queued impulse
+                // would be discarded in MoveAndFight anyway; skipping it here keeps the
+                // intent visible at the callsite.
+                if (unit.IsWall) continue;
+
                 // If they are inside the black hole when it vanishes...
                 if (unit.Position + unit.Width >= this.Position && unit.Position <= this.Position + this.Width)
                 {
                     // Push them violently AWAY from the center
                     float pushDirection = (unit.Side == 1) ? -1f : 1f;
 
-                    if (unit.Tier == 8 || unit.DefinitionId.StartsWith("wall"))
+                    if (unit.Tier == 8)
                         unit.PendingKnockback += (25 * pushDirection);
                     else
                         unit.PendingKnockback += (500 * pushDirection);
