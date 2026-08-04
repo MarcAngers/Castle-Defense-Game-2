@@ -73,6 +73,13 @@ checked:
   buys "cheapest affordable", which is always the tier-1 unit). Class still exists and is
   still referenced by other BotArena modes.
 
+- [ ] **`GameEngine.AttackCastle`** — zero callers; `MoveAndFight` inlined it so castle
+  damage could be deferred with unit damage. Delete it. It is not merely dead but a
+  *loaded gun*: it still contains the unguarded `1000f / def.AttackSpeed` that produced
+  `float.PositiveInfinity` for a wall (AttackSpeed 0) and crashed live games by making the
+  state unserialisable — fixed 2026-08-04 in the inlined copy only. Reinstating this
+  method reintroduces the bug.
+
 ## Left-edge / centre convention mismatch (found 2026-07-31)
 
 `Unit.Position` is the sprite's **left edge** — that is the renderer's convention

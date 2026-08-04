@@ -17,6 +17,16 @@ namespace CastleDefense.Engine
 
         // Config
         public const int MAP_WIDTH = 2000;
+
+        /// <summary>
+        /// The x of each castle's wall -- the line an attacker must reach to hit it, and
+        /// the edge of the corridor units actually fight over. Named so placement code
+        /// (WallEffect) references the same numbers this class measures against rather
+        /// than repeating the literals.
+        /// </summary>
+        public const int P1_CASTLE_WALL = 200;
+        public const int P2_CASTLE_WALL = MAP_WIDTH - 200;
+
         public const int TICKS_PER_SECOND = 30;
         public const int MAX_TICKS = 18_000;
         private const int INCOME_FREQUENCY = 30;
@@ -687,7 +697,22 @@ namespace CastleDefense.Engine
                 else if (castleInRange)
                 {
                     unit.CurrentSpeed = 0;
-                    if (unit.AttackCooldown <= 0)
+
+                    // `def.AttackSpeed > 0` mirrors the unit branch above, and is load
+                    // bearing rather than defensive: a wall has AttackSpeed 0, so without
+                    // it this computed 1000f/0 = float.PositiveInfinity and stored that on
+                    // the unit. Infinity has no JSON representation, so the next
+                    // SendAsync("GameStateUpdate", engine._state) in GameHostingService
+                    // threw ArgumentException, the game-loop catch-all dropped the game,
+                    // and the player got "The game ended unexpectedly."
+                    //
+                    // A wall could reach a castle at all because wall_3 is 450 wide and was
+                    // placed by its LEFT edge (see WallEffect), so targeting anywhere past
+                    // ~1350 pushed its right edge over P1's wall at x=1800. That placement
+                    // is fixed too, but the guard stays: a unit that cannot attack has no
+                    // business attacking a castle, and nothing should be able to write a
+                    // non-finite value into serialisable game state.
+                    if (unit.AttackCooldown <= 0 && def.AttackSpeed > 0)
                     {
                         // Inlined from AttackCastle() so castle damage can be deferred
                         // alongside unit damage -- same logic, same cooldown reset.
