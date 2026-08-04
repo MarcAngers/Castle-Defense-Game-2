@@ -24,6 +24,8 @@ namespace CastleDefense.Engine
 
         // Optimization: Fast Lookup Cache
         private Dictionary<string, UnitDefinition> _unitCache;
+        private float _maxUnitWidth;   // set by BuildCache
+
         private Dictionary<string, GadgetDefinition> _gadgetCache;
         private RewardParams _rewardParams;
 
@@ -32,6 +34,10 @@ namespace CastleDefense.Engine
         public event Action<string, int, int, Guid> OnGadgetAnimation;
         public event Action<int, GadgetDefinition> OnGadgetUpgraded;
 
+        // LEGACY closure-based scheduling. Being replaced by _scheduledEffects below —
+        // see PendingEffect.cs for why. Kept alive while the 13 gadget-effect files are
+        // migrated one at a time, so a half-finished migration still runs correctly.
+        // When the last ScheduleAction callsite is gone, delete this and ScheduleAction.
         private class ScheduledEvent
         {
             public int ExecuteAtTick { get; set; }
@@ -39,14 +45,113 @@ namespace CastleDefense.Engine
         }
         private List<ScheduledEvent> _scheduledEvents = new List<ScheduledEvent>();
 
-        public GameEngine(GameState state, RewardParams rewardParams = null)
+        // Data-based scheduling. Copyable, serialisable, and safe to clone.
+        private List<PendingEffect> _scheduledEffects = new List<PendingEffect>();
+
+        /// <summary>
+        /// The engine's own randomness. Added 2026-07-28 — previously every site that
+        /// needed a random number constructed its own `new Random()` inline, which is
+        /// unseedable, so two runs of an identical setup diverged mid-game and no
+        /// benchmark could be made reproducible. Everything gameplay-affecting should
+        /// draw from here so a seeded GameEngine replays exactly.
+        ///
+        /// Also a prerequisite for search/lookahead: rollouts have to be repeatable to
+        /// be comparable, and a cloned engine needs its own independent stream.
+        /// </summary>
+        // private set (rather than readonly) so Clone() can give the copy its OWN stream —
+        // a clone sharing the parent's Random would advance the parent's sequence every
+        // time a rollout drew a number, making the real game depend on how much searching
+        // happened to be done. That would be silent and very hard to track down.
+        public Random Rng { get; private set; }
+
+        /// <summary>
+        /// A SEPARATE seeded stream used only to mint Unit.InstanceId values.
+        ///
+        /// Kept apart from Rng on purpose. Unit ids previously came from Guid.NewGuid(),
+        /// which is unseeded — so two rollouts branched from the same position produced
+        /// units with different ids, and clone-check's determinism test failed even
+        /// though the actual gameplay was identical. Ids are never used to make a
+        /// decision (only for HashSet membership, snipe targeting and animation), so this
+        /// was cosmetic — but "cosmetic nondeterminism" is exactly the kind of thing that
+        /// makes a search implementation impossible to debug later.
+        ///
+        /// Drawing the 16 id bytes from Rng would have shifted every subsequent gameplay
+        /// draw and invalidated the existing ladder baseline. A dedicated stream keeps
+        /// the gameplay sequence byte-for-byte unchanged.
+        /// </summary>
+        private Random _idRng;
+
+        /// <summary>Deterministic replacement for Guid.NewGuid() for spawned units.</summary>
+        public Guid NextUnitId()
+        {
+            var bytes = new byte[16];
+            _idRng.NextBytes(bytes);
+            return new Guid(bytes);
+        }
+
+        // Offset so the id stream never mirrors the gameplay stream for a given seed.
+        private const int ID_SEED_OFFSET = 0x5EED;
+
+        public GameEngine(GameState state, RewardParams rewardParams = null, int? seed = null)
         {
             _state = state;
             _rewardParams = rewardParams ?? RewardParams.Default;
+            Rng = seed.HasValue ? new Random(seed.Value) : new Random();
+            _idRng = seed.HasValue ? new Random(seed.Value ^ ID_SEED_OFFSET) : new Random();
             BuildCache();
 
             _state.Player1.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
             _state.Player2.OnGadgetUpgraded += (side, def) => OnGadgetUpgraded?.Invoke(side, def);
+        }
+
+        /// <summary>Number of delayed gadget effects still queued. Diagnostics only.</summary>
+        public int PendingEffectCount => _scheduledEffects.Count;
+
+        /// <summary>
+        /// Produces an independent copy of this engine and its entire game state, safe to
+        /// advance with Tick()/ApplyAction() without touching the original.
+        ///
+        /// THIS IS WHAT THE PendingEffect REFACTOR WAS FOR. While delayed gadget effects
+        /// were closures, a clone was impossible in principle: the captured lambdas held
+        /// references to the original engine, so a cloned game's pending nuke would
+        /// detonate on the original board. As data records they are just a list copy.
+        ///
+        /// What is deliberately NOT carried over:
+        ///  - **Event subscribers** (OnGadgetAnimation / OnGadgetUpgraded, and the
+        ///    per-player equivalents cleared in PlayerState.Clone). A rollout must not
+        ///    fire real UI or training callbacks.
+        ///  - **Queued input actions** (_actionQueue). Those are live player clicks from
+        ///    GameHub; replaying them inside a hypothetical line makes no sense.
+        ///  - **The RNG stream.** The clone gets its own, seeded when you pass rngSeed.
+        ///    Pass one for reproducible rollouts; omit it for a throwaway snapshot.
+        ///
+        /// What IS shared, intentionally: the unit/gadget definition caches and
+        /// RewardParams. Those are immutable lookup data, so sharing avoids rebuilding
+        /// the caches on every clone — which matters when search clones thousands of
+        /// times per decision.
+        /// </summary>
+        public GameEngine Clone(int? rngSeed = null)
+        {
+            if (_scheduledEvents.Count > 0)
+            {
+                // Unreachable today (ScheduleAction has no callers), but a loud failure is
+                // far better than silently dropping effects or, worse, sharing closures
+                // that mutate the original game.
+                throw new InvalidOperationException(
+                    "Cannot clone an engine with legacy closure-based scheduled events pending. " +
+                    "Convert the offending gadget to ScheduleEffect/PendingEffect — see PendingEffect.cs.");
+            }
+
+            var copy = (GameEngine)MemberwiseClone();
+            copy._state = _state.Clone();
+            copy._scheduledEffects = new List<PendingEffect>(_scheduledEffects);
+            copy._scheduledEvents = new List<ScheduledEvent>();
+            copy._actionQueue = new ConcurrentQueue<Action>();
+            copy.OnGadgetAnimation = null;
+            copy.OnGadgetUpgraded = null;
+            copy.Rng = rngSeed.HasValue ? new Random(rngSeed.Value) : new Random();
+            copy._idRng = rngSeed.HasValue ? new Random(rngSeed.Value ^ ID_SEED_OFFSET) : new Random();
+            return copy;
         }
 
         // Re-subscribe to OnGadgetUpgraded after PlayerState objects are replaced
@@ -79,6 +184,34 @@ namespace CastleDefense.Engine
             _unitCache["wall"] = GameDataManager.WallDefinition(1);
             _unitCache["wall_2"] = GameDataManager.WallDefinition(2);
             _unitCache["wall_3"] = GameDataManager.WallDefinition(3);
+
+            // ARMAGEDDON is code-built rather than a master_gadgets.csv row (same pattern
+            // as the walls above). Keeping it out of GameDataManager.Gadgets is load
+            // bearing: GetStateVector one-hots every Offense and Defense gadget, so a new
+            // CSV row would change the 348-float observation length and invalidate every
+            // trained model, and it would also show up in the loadout picker.
+            _gadgetCache[ArmageddonEffect.GadgetId] = GameDataManager.ArmageddonDefinition();
+
+            // Widest unit that can exist, used to bound FindTargetsFast's backward scan.
+            // Derived rather than hardcoded: this was a literal 200f, which is the widest
+            // ROSTER unit but not the widest unit -- wall_3 is 75*6 = 450 (see
+            // GameDataManager.WallDefinition), so the scan could break before reaching a
+            // wall that was actually in contact. Computed after the wall entries are
+            // inserted above so they are included.
+            _maxUnitWidth = 0f;
+            foreach (var def in _unitCache.Values)
+                if (def.Width > _maxUnitWidth) _maxUnitWidth = def.Width;
+        }
+
+        /// <summary>
+        /// Looks up a gadget definition by id. Public so effects that chain into OTHER
+        /// gadgets (ArmageddonEffect fires meteor_3, nuke_3, wave_3, …) can read those
+        /// gadgets' real CSV values instead of hardcoding a second copy of the balance.
+        /// </summary>
+        public GadgetDefinition GetGadgetDefinition(string gadgetId)
+        {
+            if (gadgetId == null) return null;
+            return _gadgetCache.TryGetValue(gadgetId, out var def) ? def : null;
         }
 
         public void EnqueueAction(Action action)
@@ -103,6 +236,27 @@ namespace CastleDefense.Engine
             });
         }
 
+        /// <summary>
+        /// Queues a delayed gadget phase as data. Preferred over ScheduleAction — see
+        /// PendingEffect.cs. The caller supplies everything except the tick.
+        /// </summary>
+        public void ScheduleEffect(int delayInTicks, PendingEffect effect)
+        {
+            effect.ExecuteAtTick = (int)_state.CurrentTick + delayInTicks;
+            _scheduledEffects.Add(effect);
+        }
+
+        /// <summary>
+        /// Finds the effect implementation for a queued PendingEffect. Uses the same
+        /// definition cache UseGadget resolves through, so a scheduled phase always runs
+        /// against the identical GadgetDefinition instance that scheduled it.
+        /// </summary>
+        private IGadgetEffect ResolveScheduledEffect(string gadgetId)
+        {
+            if (gadgetId == null) return null;
+            return _gadgetCache.TryGetValue(gadgetId, out var def) ? def.GadgetEffect : null;
+        }
+
         public void TriggerGadgetAnimation(string gadgetId, int side, int position, Guid instanceId = new Guid())
         {
             OnGadgetAnimation?.Invoke(gadgetId, side, position, instanceId);
@@ -118,6 +272,20 @@ namespace CastleDefense.Engine
                 {
                     _scheduledEvents[i].Action.Invoke();
                     _scheduledEvents.RemoveAt(i);
+                }
+            }
+
+            // Same traversal shape as the legacy loop above, deliberately: iterate
+            // downward from the current count, fire, then remove at that index. Anything
+            // a firing effect schedules is appended past the starting index and so runs
+            // on a later tick rather than in this pass — matching the old behaviour.
+            for (int i = _scheduledEffects.Count - 1; i >= 0; i--)
+            {
+                if (_state.CurrentTick >= _scheduledEffects[i].ExecuteAtTick)
+                {
+                    var pending = _scheduledEffects[i];
+                    ResolveScheduledEffect(pending.GadgetId)?.ExecuteScheduled(this, in pending);
+                    _scheduledEffects.RemoveAt(i);
                 }
             }
 
@@ -180,10 +348,26 @@ namespace CastleDefense.Engine
                 }
             }
 
-            Random random = new Random();
+            Random random = Rng;   // was `new Random()` — see the Rng property above
             if (position == -1)
             {
-                position = (side == 1) ? 100 : MAP_WIDTH - 100;
+                // Both sides must start with their LEADING edge the same distance from the
+                // enemy castle wall, so a spawn is worth the same tempo whichever seat you
+                // are in. Leading edges are placed at x=100 and x=MAP_WIDTH-100, a mirror
+                // pair, giving both 1700px of ground to cover.
+                //
+                // Position is the sprite's LEFT edge (see GetDistanceToEnemyCastle), so a
+                // side-2 unit already leads with Position and needs no adjustment, while a
+                // side-1 unit leads with Position+Width and must be set back by its own
+                // width. Previously both were placed by their left edge at 100 / 1900,
+                // which left P1's leading edge Width pixels ahead of the mirror position
+                // and handed P1 a shorter walk on every single spawn.
+                //
+                // Keeping side 2 fixed and moving side 1 back is the deliberate choice of
+                // the LONGER of the two existing distances (1700, side 2's) so nothing
+                // gets faster. The visible consequence is that wide units now start partly
+                // off the left edge of the map, exactly as they already did off the right.
+                position = (side == 1) ? 100 - def.Width : MAP_WIDTH - 100;
             }
             if (yposition == -1)
             {
@@ -198,6 +382,7 @@ namespace CastleDefense.Engine
             var newUnit = new Unit
             {
                 // --- IDENTITY & UI ---
+                InstanceId = NextUnitId(),
                 DefinitionId = unitId,
                 Side = side,
                 Tier = def.Tier,
@@ -249,17 +434,45 @@ namespace CastleDefense.Engine
 
             if (side == 1) LastActionP1 = 9; else LastActionP2 = 9;
 
-            if (player.InvestmentCount > 8) return false;
+            // ARMAGEDDON is a one-time purchase, so the button is dead afterwards.
+            if (player.ArmageddonUsed) return false;
 
             // 2. Deduct cost
             player.Money -= player.InvestmentPrice;
 
-            // 3. Increase income and next investment price -- single source of truth is
+            // 3a. At the top of the ladder the invest button is ARMAGEDDON instead of an
+            // economy upgrade. Income and InvestmentPrice are left exactly where they are
+            // -- this purchase buys the end of the game, not more income. Both players can
+            // reach it independently; each gets their own cascade.
+            if (player.InvestmentCount >= PlayerState.ArmageddonInvestmentCount)
+            {
+                player.ArmageddonUsed = true;
+                TriggerArmageddon(side);
+                return true;
+            }
+
+            // 3b. Increase income and next investment price -- single source of truth is
             // PlayerState.ApplyInvestmentStep (also used by the timeSkip "time machine"
             // constructor, so the two can never desync again; see its own comment).
             player.ApplyInvestmentStep();
 
             return true;
+        }
+
+        /// <summary>
+        /// Kicks off the ARMAGEDDON cascade for <paramref name="side"/>.
+        ///
+        /// The whole cascade lives in ArmageddonEffect, reached through the same
+        /// _gadgetCache lookup every other gadget uses, so its recurring phases survive
+        /// Clone() as plain PendingEffect data like any other delayed effect.
+        /// </summary>
+        private void TriggerArmageddon(int side)
+        {
+            if (!_gadgetCache.TryGetValue(ArmageddonEffect.GadgetId, out var def)) return;
+
+            // Untargeted: the cascade picks its own positions. Passing the enemy castle
+            // only gives the opening screen-darken animation somewhere sensible to anchor.
+            def.GadgetEffect.Execute(this, side, side == 1 ? MAP_WIDTH : 0);
         }
 
         public bool Repair(int side)
@@ -494,7 +707,8 @@ namespace CastleDefense.Engine
                     if (speedMod > 0)
                     {
                         float direction = (unit.Side == 1) ? 1f : -1f;
-                        pendingMoves.Add((unit, unit.Position + (def.MoveSpeed * speedMod * direction)));
+                        float desired = unit.Position + (def.MoveSpeed * speedMod * direction);
+                        pendingMoves.Add((unit, ClampToContact(unit, i, def, desired)));
                     }
                 }
             }
@@ -533,13 +747,93 @@ namespace CastleDefense.Engine
             }
         }
 
+        /// <summary>
+        /// Trims a move so the unit comes to rest exactly where something stops it -- the
+        /// enemy castle wall, or the nearest enemy it could attack -- instead of stepping
+        /// past that point and settling whereever its final stride happened to land.
+        ///
+        /// Added 2026-07-31. Movement advances in whole strides of MoveSpeed and the unit
+        /// only halts on the tick AFTER it is already in contact, so its resting position
+        /// used to depend on its speed: against the wall at x=1800 a 9-speed tier 1 came to
+        /// rest at 1751 while a 14-speed tier 4 ended at 1758. A pileup of mixed tiers
+        /// therefore settled into several ranks a few pixels apart rather than one, and an
+        /// attacker arriving at it was only ever in contact with the front rank -- so a
+        /// swing into a stack of 24 mixed units hit 12, and because the ranks' sprites
+        /// overlap almost entirely, the rank that died was the one hidden behind the other.
+        /// That is the "phantom hit": a real swing, real damage, killing units the player
+        /// could not see. With this clamp every unit in a pileup shares one position and a
+        /// single swing hits all of them.
+        ///
+        /// Safe against two units closing head-on in the same tick, which both clamp
+        /// against the other's START-of-tick position: crossing over would need the closing
+        /// gap to exceed the mover's own width (else the two just overlap, preserving
+        /// order), and a stride that large would need a MoveSpeed several times the
+        /// roster's maximum of 14.
+        /// </summary>
+        private float ClampToContact(Unit unit, int myIndex, UnitDefinition def, float desired)
+        {
+            if (unit.Side == 1)
+            {
+                // Rightmost position that still leaves the unit short of the enemy wall.
+                float limit = MAP_WIDTH - 200 - def.Width;
+
+                // Sorted ascending by Position, so the first valid enemy ahead is the
+                // nearest, and its constraint (which does not involve its own width) is
+                // the tightest -- nothing further right can bind harder.
+                for (int i = myIndex + 1; i < _state.Units.Count; i++)
+                {
+                    var other = _state.Units[i];
+                    if (other.Position < unit.Position) continue;
+                    if (other.Side == unit.Side || other.CurrentHealth <= 0) continue;
+                    var otherDef = _unitCache[other.DefinitionId];
+                    if (otherDef.ArmorType == ArmorType.Flying && def.AttackType != AttackType.Ranged)
+                        continue;   // cannot be attacked by this unit, so does not stop it
+                    limit = Math.Min(limit, other.Position - def.Width - def.Range);
+                    break;
+                }
+                return Math.Min(desired, Math.Max(unit.Position, limit));
+            }
+            else
+            {
+                float limit = 200f;
+
+                // Mirror image, except the constraint DOES involve the target's width, and
+                // widths are not sorted -- so keep scanning until no unit further back
+                // could bind harder even if it were the widest in the game.
+                for (int i = myIndex - 1; i >= 0; i--)
+                {
+                    var other = _state.Units[i];
+                    if (other.Position + _maxUnitWidth + def.Range <= limit) break;
+                    if (other.Position > unit.Position) continue;
+                    if (other.Side == unit.Side || other.CurrentHealth <= 0) continue;
+                    var otherDef = _unitCache[other.DefinitionId];
+                    if (otherDef.ArmorType == ArmorType.Flying && def.AttackType != AttackType.Ranged)
+                        continue;
+                    limit = Math.Max(limit, other.Position + otherDef.Width + def.Range);
+                }
+                return Math.Max(desired, Math.Min(unit.Position, limit));
+            }
+        }
+
+        /// <summary>
+        /// Every enemy the attacker can reach this tick.
+        ///
+        /// Distances are measured sprite-edge to sprite-edge, which means treating
+        /// Position as the sprite's LEFT edge -- the renderer's convention, and the same
+        /// one GetDistanceToEnemyCastle follows. This used to read
+        /// `|a.Position - b.Position| - a.Width/2 - b.Width/2`, i.e. it took the two
+        /// positions to be CENTRES. That is exact when both units are the same width but
+        /// off by `(attackerWidth - targetWidth)/2` otherwise, and -- because the error is
+        /// signed -- it went the opposite way for each seat: a wide P1 attacker stopped
+        /// with a visible gap in front of a narrow P2 defender, while the same pairing
+        /// mirrored had the attacker's sprite swallow the defender. Same-width pairs are
+        /// unaffected by the fix; mismatched pairs now engage at the true sprite gap and
+        /// do so identically on both sides.
+        /// </summary>
         // Note: We now pass in 'myIndex' from the MoveAndFight loop!
         private List<Unit> FindTargetsFast(Unit attacker, int myIndex, UnitDefinition attackerDef)
         {
             List<Unit> validTargets = new List<Unit>();
-
-            // SAFETY BUFFER: Width of the largest units in the game
-            float maxEnemyWidthPad = 200f;
 
             // --- 1. Look RIGHT (Forward in the sorted list) ---
             for (int i = myIndex + 1; i < _state.Units.Count; i++)
@@ -550,11 +844,17 @@ namespace CastleDefense.Engine
                 if (attacker.Side == 1 && other.Position < attacker.Position) continue;
                 if (attacker.Side == 2 && other.Position > attacker.Position) continue;
 
-                float centerDist = Math.Abs(attacker.Position - other.Position);
+                // The list is sorted ascending by Position, so everything from here on
+                // lies at or to the right of the attacker: the gap runs from the
+                // attacker's RIGHT edge to the target's LEFT edge. Note it does not
+                // involve the target's width at all, so unlike the backward scan below
+                // this bound is exact and needs no safety pad -- and it grows
+                // monotonically down the list, so once it clears Range every later unit
+                // does too. A negative value means the sprites overlap.
+                float edgeToEdgeDist = other.Position - (attacker.Position + attackerDef.Width);
 
-                // OPTIMIZATION: If this unit's center is too far away, ALL subsequent units are too far! Break the loop.
-                if (centerDist - (attackerDef.Width / 2f) - maxEnemyWidthPad > attackerDef.Range)
-                    break;
+                // OPTIMIZATION: too far, and so is every subsequent unit. Break the loop.
+                if (edgeToEdgeDist > attackerDef.Range) break;
 
                 if (other.Side == attacker.Side) continue; // Friend
                 if (other.CurrentHealth <= 0) continue; // Dead (Extra safety check)
@@ -563,14 +863,7 @@ namespace CastleDefense.Engine
                 if (otherDef.ArmorType == ArmorType.Flying && attackerDef.AttackType != AttackType.Ranged)
                     continue;
 
-                // Original Hitbox Math
-                float edgeToEdgeDist = centerDist - (attackerDef.Width / 2f) - (otherDef.Width / 2f);
-                float actualDist = Math.Max(0f, edgeToEdgeDist);
-
-                if (actualDist <= attackerDef.Range)
-                {
-                    validTargets.Add(other);
-                }
+                validTargets.Add(other); // in range: the break above already proved it
             }
 
             // --- 2. Look LEFT (Backward in the sorted list) ---
@@ -582,10 +875,12 @@ namespace CastleDefense.Engine
                 if (attacker.Side == 1 && other.Position < attacker.Position) continue;
                 if (attacker.Side == 2 && other.Position > attacker.Position) continue;
 
-                float centerDist = Math.Abs(attacker.Position - other.Position);
-
-                // OPTIMIZATION: If this unit's center is too far away, ALL preceding units are too far! Break the loop.
-                if (centerDist - (attackerDef.Width / 2f) - maxEnemyWidthPad > attackerDef.Range)
+                // Mirror of the forward scan: everything from here back lies at or to the
+                // left of the attacker, so the gap runs from the target's RIGHT edge to
+                // the attacker's LEFT edge -- which does depend on the target's width.
+                // Positions are sorted but widths are not, so the break has to assume the
+                // widest unit that could still be out there.
+                if ((attacker.Position - other.Position) - _maxUnitWidth > attackerDef.Range)
                     break;
 
                 if (other.Side == attacker.Side) continue; // Friend
@@ -595,11 +890,9 @@ namespace CastleDefense.Engine
                 if (otherDef.ArmorType == ArmorType.Flying && attackerDef.AttackType != AttackType.Ranged)
                     continue;
 
-                // Original Hitbox Math
-                float edgeToEdgeDist = centerDist - (attackerDef.Width / 2f) - (otherDef.Width / 2f);
-                float actualDist = Math.Max(0f, edgeToEdgeDist);
+                float edgeToEdgeDist = attacker.Position - (other.Position + otherDef.Width);
 
-                if (actualDist <= attackerDef.Range)
+                if (edgeToEdgeDist <= attackerDef.Range)
                 {
                     validTargets.Add(other);
                 }
@@ -608,22 +901,44 @@ namespace CastleDefense.Engine
             return validTargets;
         }
 
+        /// <summary>
+        /// Gap between the attacker's LEADING edge and the enemy castle's wall.
+        ///
+        /// Position is the sprite's LEFT edge, not its centre -- that is the renderer's
+        /// convention (view.js drawUnit derives centreX as `position + width/2`, so the
+        /// sprite occupies [position, position + width]) and both branches below must
+        /// follow it. A side-1 unit therefore leads with `Position + Width` and a side-2
+        /// unit leads with `Position` alone.
+        ///
+        /// Fixed 2026-07-31: the side-2 branch used to read `(Position - Width) - 200`.
+        /// An earlier pass had mirrored the side-1 branch's `+ Width` by sign instead of
+        /// by geometry, which is only correct if Position means the centre. The cost was
+        /// that every P2 unit opened fire on P1's castle a full unit-width early --
+        /// measured at exactly 50 / 100 / 200px of extra standoff for 50 / 100 / 200-wide
+        /// units, against ~0px for P1 -- and that width-sized gap is also what let P2's
+        /// units shoot over P1's blockers: a defender could stand inside the gap while
+        /// still being too far from the attacker to be a melee target, so the attacker saw
+        /// no target and hit the wall through it. In 40 bot-vs-bot games, 74.6% of the
+        /// unit-attacks on P1's castle were fired over a defender standing in the way,
+        /// versus 0.0% against P2's castle. This fix alone took that to 0.9%, and the
+        /// FindTargetsFast edge-distance fix took it to 0.0% on both castles.
+        ///
+        /// Practical balance impact is below noise: over 400 HeuristicBot-vs-HeuristicBot
+        /// games with random non-mirrored loadouts, P1's win share moved 48.2% -> 48.5%.
+        /// A same-loadout mirror match is NOT a magnitude test -- see CLEANUP_BACKLOG.md.
+        /// </summary>
         public float GetDistanceToEnemyCastle(Unit attacker)
         {
-            // If Player 1 (Left), enemy castle is at MAP_WIDTH - 200
+            // If Player 1 (Left), enemy castle wall is at MAP_WIDTH - 200
             if (attacker.Side == 1)
             {
                 float dist = MAP_WIDTH - 200 - (attacker.Position + attacker.Width);
                 return Math.Max(0f, dist);
             }
-            // If Player 2 (Right), enemy castle is at 200
+            // If Player 2 (Right), enemy castle wall is at 200
             else
             {
-                // Symmetric with the Side-1 branch above: a real, confirmed asymmetry
-                // (found via git log -p; the same commit added `attacker.Width` to the
-                // Side-1 branch but never mirrored it here) -- negligible measured effect
-                // on its own, but a genuine bug, kept fixed regardless.
-                float dist = (attacker.Position - attacker.Width) - 200;
+                float dist = attacker.Position - 200;
                 return Math.Max(0f, dist);
             }
         }

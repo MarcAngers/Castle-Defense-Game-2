@@ -351,6 +351,34 @@ namespace CastleDefense.Engine.Data
             };
         }
 
+        /// <summary>
+        /// ARMAGEDDON's definition, built in code rather than loaded from
+        /// master_gadgets.csv and deliberately NOT added to <see cref="Gadgets"/>.
+        ///
+        /// It is not a gadget anyone equips — it is what the invest button turns into at
+        /// the top of the economy ladder — so it has no slot in a loadout, no cost of its
+        /// own (the invest price is the cost) and no upgrade chain. Adding a CSV row
+        /// instead would put it in the loadout picker and, worse, add a column to the
+        /// one-hot gadget block of GetStateVector, changing the 348-float observation
+        /// length that every trained model expects.
+        /// </summary>
+        public static GadgetDefinition ArmageddonDefinition()
+        {
+            return new GadgetDefinition
+            {
+                Id = ArmageddonEffect.GadgetId,
+                Name = "Armageddon",
+                Slot = GadgetSlot.Signature,
+                NextTierId = "",
+                Targeted = false,
+                Cost = 0,
+                UpgradeCost = 0,
+                CooldownMs = 0,
+                Description = "The end of the world. Everything, all at once, until someone loses.",
+                GadgetEffect = new ArmageddonEffect()
+            };
+        }
+
         public static TeamColour GetRandomTeam()
         {
             Array values = Enum.GetValues(typeof(TeamColour));

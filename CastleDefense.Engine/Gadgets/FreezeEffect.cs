@@ -19,11 +19,38 @@ namespace CastleDefense.Engine.Gadgets
             engine.AddGadgetXp(side, "freeze", 100);
 
             // Schedule the gadget effect to happen after the animation
-            engine.ScheduleAction(_def.Delay, () =>
+            engine.ScheduleEffect(_def.Delay, new PendingEffect
             {
-                // Find all enemy units currently on the board
-                var enemies = engine._state.Units.Where(u => u.Side != side).ToList();
+                GadgetId = _def.Id,
+                Phase = PhaseFreeze,
+                Side = side,
+                Position = position,
+            });
 
+            if (_def.Level == 3)
+            {
+                engine.ScheduleEffect(_def.Delay + _def.StatusDuration, new PendingEffect
+                {
+                    GadgetId = _def.Id,
+                    Phase = PhaseSlowFollowup,
+                    Side = side,
+                    Position = position,
+                });
+            }
+        }
+
+        private const int PhaseFreeze = 0;
+        private const int PhaseSlowFollowup = 1;
+
+        public void ExecuteScheduled(GameEngine engine, in PendingEffect e)
+        {
+            int side = e.Side;
+
+            // Find all enemy units currently on the board
+            var enemies = engine._state.Units.Where(u => u.Side != side).ToList();
+
+            if (e.Phase == PhaseFreeze)
+            {
                 foreach (var enemy in enemies)
                 {
                     engine.ApplyDamage(enemy, (int)_def.BaseValue, Models.AttackType.Melee, 0);
@@ -37,20 +64,13 @@ namespace CastleDefense.Engine.Gadgets
                         enemy.Statuses.Add(new ActiveStatus("Freeze", engine._state.CurrentTick + _def.StatusDuration, _def.PushForce));
                     }
                 }
-            });
-
-            if (_def.Level == 3)
+            }
+            else if (e.Phase == PhaseSlowFollowup)
             {
-                engine.ScheduleAction(_def.Delay + _def.StatusDuration, () =>
+                foreach (var enemy in enemies)
                 {
-                    // Find all enemy units currently on the board
-                    var enemies = engine._state.Units.Where(u => u.Side != side).ToList();
-
-                    foreach (var enemy in enemies)
-                    {
-                        enemy.Statuses.Add(new ActiveStatus("Slow", engine._state.CurrentTick + _def.StatusDuration, 0.25f));
-                    }
-                });
+                    enemy.Statuses.Add(new ActiveStatus("Slow", engine._state.CurrentTick + _def.StatusDuration, 0.25f));
+                }
             }
         }
     }

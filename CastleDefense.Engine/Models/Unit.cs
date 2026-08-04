@@ -42,5 +42,28 @@
         // --- ACTIVE EFFECTS ---
         // Stacking Status Effects (Poisoned + Frozen + Burning)
         public List<ActiveStatus> Statuses { get; set; } = new List<ActiveStatus>();
+
+        /// <summary>
+        /// Deep copy. Every field except <see cref="Statuses"/> is a value type or an
+        /// immutable string, so MemberwiseClone handles them and only the status list
+        /// needs its own copy.
+        ///
+        /// NOTE: InstanceId is deliberately PRESERVED, not regenerated. Scheduled effects
+        /// reference their target by InstanceId (see PendingEffect.TargetId), so a clone
+        /// whose units had fresh ids would drop every in-flight snipe. It also means unit
+        /// identity stays comparable between a rollout and the position it branched from.
+        ///
+        /// This is the field that a previous shallow copy got wrong: sharing Unit objects
+        /// between a shadow clone and the real game let the shadow bot's counterfactual
+        /// queries attach real Heal/Speed statuses to the live trajectory. See the notes
+        /// around CloneStateForShadow in CastleDefense.Simulation.
+        /// </summary>
+        public Unit Clone()
+        {
+            var copy = (Unit)MemberwiseClone();
+            copy.Statuses = new List<ActiveStatus>(Statuses.Count);
+            foreach (var s in Statuses) copy.Statuses.Add(s.Clone());
+            return copy;
+        }
     }
 }

@@ -13,5 +13,17 @@
 
         public abstract void ProcessEffect(GameState state);
         public virtual void OnExpire(GameState state) { }
+
+        /// <summary>
+        /// Polymorphic deep copy. MemberwiseClone preserves the runtime type, so a
+        /// FireHazard clones to a FireHazard without this base class needing to know the
+        /// subclass list — and every subclass today adds only behaviour (an overridden
+        /// ProcessEffect), no state, so copying the base fields copies everything.
+        ///
+        /// IF YOU ADD A REFERENCE-TYPED FIELD to Hazard or any subclass, override this.
+        /// A memberwise copy would share it between the clone and the original, which
+        /// silently corrupts search rollouts rather than failing loudly.
+        /// </summary>
+        public virtual Hazard Clone() => (Hazard)MemberwiseClone();
     }
 }

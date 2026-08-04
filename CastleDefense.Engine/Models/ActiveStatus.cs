@@ -16,5 +16,13 @@
             Side = side;
             SourceGadgetId = source;
         }
+
+        /// <summary>
+        /// Every field here is a value type or an immutable string, so a memberwise copy
+        /// is a complete deep copy. Using MemberwiseClone rather than listing fields by
+        /// hand is deliberate: a hand-written copy silently misses any field added later,
+        /// and silent incompleteness is exactly the failure mode cloning has to avoid.
+        /// </summary>
+        public ActiveStatus Clone() => (ActiveStatus)MemberwiseClone();
     }
 }

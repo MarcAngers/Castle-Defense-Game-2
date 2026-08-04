@@ -17,6 +17,24 @@ namespace CastleDefense.Engine.Models
         public double InvestmentPrice { get; set; }
         public int InvestmentCount { get; set; }
 
+        /// <summary>
+        /// The top of the economy ladder. At this InvestmentCount the invest button stops
+        /// being an economy upgrade and becomes ARMAGEDDON — see GameEngine.Invest.
+        /// </summary>
+        public const int ArmageddonInvestmentCount = 8;
+
+        /// <summary>
+        /// Set once ARMAGEDDON has been bought. It is a one-time purchase: invest is
+        /// permanently unavailable afterwards (mask[9] = 0, button reads "INVEST: MAX").
+        ///
+        /// Deliberately a separate flag rather than InvestmentCount == 9. Buying
+        /// ARMAGEDDON does NOT run ApplyInvestmentStep, so Income and InvestmentPrice
+        /// stay where they were — the money buys the end of the game, not more economy.
+        /// Bumping the count instead would silently move both, and would also shift
+        /// log10(InvestmentPrice) in the observation vector.
+        /// </summary>
+        public bool ArmageddonUsed { get; set; }
+
         // Base
         public int CastleHealth { get; set; }
         public int CastleMaxHealth { get; set; }
@@ -44,6 +62,32 @@ namespace CastleDefense.Engine.Models
             CastleMaxHealth = 2000;
             RepairPrice = 20;
             RepairCount = 0;
+        }
+
+        /// <summary>
+        /// Deep copy for engine cloning.
+        ///
+        /// THE SUBTLE PART IS THE EVENT. MemberwiseClone copies the OnGadgetUpgraded
+        /// delegate field along with everything else, which would leave the ORIGINAL
+        /// game's subscribers attached to the CLONE — so a speculative gadget upgrade
+        /// inside a search rollout would fire real UI notifications and real training
+        /// callbacks. It is cleared explicitly below. This is not hypothetical: the
+        /// engine already carries a RewirePlayerEvents() method because event wiring
+        /// has gone wrong here once before.
+        ///
+        /// The three GadgetDefinition references are intentionally SHARED, not copied —
+        /// definitions are process-wide singletons built once by GameDataManager and are
+        /// immutable during play.
+        /// </summary>
+        public PlayerState Clone()
+        {
+            var copy = (PlayerState)MemberwiseClone();
+            copy.OnGadgetUpgraded = null;
+            copy.UnitCharges = new Dictionary<string, int>(UnitCharges);
+            copy.CooldownTimers = new Dictionary<string, long>(CooldownTimers);
+            copy.GadgetXp = new Dictionary<string, int>(GadgetXp);
+            copy.GadgetCooldowns = new Dictionary<string, long>(GadgetCooldowns);
+            return copy;
         }
 
         // Constructor to give the AI training program a time machine into later game states
@@ -84,12 +128,12 @@ namespace CastleDefense.Engine.Models
             if (InvestmentCount == 7)
             {
                 Income = 750;
-                InvestmentPrice = 25000;
+                InvestmentPrice = 40000;
             }
             if (InvestmentCount == 8)
             {
                 Income = 2500;
-                InvestmentPrice = 100000;
+                InvestmentPrice = 121221;
             }
         }
 

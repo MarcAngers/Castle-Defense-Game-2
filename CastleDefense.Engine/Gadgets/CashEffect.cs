@@ -19,24 +19,47 @@ namespace CastleDefense.Engine.Gadgets
 
             if (_def.Level < 3)
             {
-                engine.ScheduleAction(_def.Delay, () =>
+                engine.ScheduleEffect(_def.Delay, new PendingEffect
                 {
-                    var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
-                    player.Money += _def.BaseValue;
+                    GadgetId = _def.Id,
+                    Phase = PhasePayout,
+                    Side = side,
+                    Position = position,
                 });
             } else
             {
                 for (int i = _def.Delay; i < _def.Delay + 80; i += 10)
                 {
-                    engine.ScheduleAction(i, () =>
+                    engine.ScheduleEffect(i, new PendingEffect
                     {
-                        engine.TriggerGadgetAnimation(_def.Id, side, position);
-
-                        var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
-                        player.Money += _def.BaseValue;
+                        GadgetId = _def.Id,
+                        Phase = PhasePayoutWithAnimation,
+                        Side = side,
+                        Position = position,
                     });
                 }
             }
+        }
+
+        private const int PhasePayout = 0;
+        // Level 3 fires eight staggered payouts, each re-triggering the animation. The
+        // old closure captured `i` implicitly via the loop body; as data each tick gets
+        // its own record, which is both clearer and copyable.
+        private const int PhasePayoutWithAnimation = 1;
+
+        public void ExecuteScheduled(GameEngine engine, in PendingEffect e)
+        {
+            if (e.Phase != PhasePayout && e.Phase != PhasePayoutWithAnimation) return;
+
+            int side = e.Side;
+
+            if (e.Phase == PhasePayoutWithAnimation)
+            {
+                engine.TriggerGadgetAnimation(_def.Id, side, e.Position);
+            }
+
+            var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
+            player.Money += _def.BaseValue;
         }
     }
 }

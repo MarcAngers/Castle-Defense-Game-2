@@ -27,7 +27,18 @@ namespace CastleDefense.Engine.Models
         {
         }
 
-        public GameState(TeamColour map)
+        public GameState(TeamColour map) : this(map, new Random())
+        {
+        }
+
+        /// <summary>
+        /// Seeded overload. Added 2026-07-28 so benchmarks can be reproducible: the map
+        /// roll below (shadow-map selection) is real gameplay-affecting randomness that
+        /// previously came from an unseedable `new Random()`, which made identical
+        /// benchmark setups diverge before the first tick. Pass a seeded Random to make
+        /// setup deterministic; the parameterless paths keep the old behaviour exactly.
+        /// </summary>
+        public GameState(TeamColour map, Random rng)
         {
             GameId = Guid.NewGuid();
             Units = new List<Unit>();
@@ -40,13 +51,13 @@ namespace CastleDefense.Engine.Models
 
             if (Map == TeamColour.Black)
             {
-                Random rand = new Random();
+                Random rand = rng;
 
                 // 50/50 for regular black map, or shadow version of a different map
                 if (rand.Next(2) == 0)
                 {
                     ShadowMap = true;
-                    Map = GameDataManager.GetRandomTeam();
+                    Map = RandomTeam(rng);
 
                     // 1/8 chance to still get the black map
                     if (Map == TeamColour.Black)
@@ -55,6 +66,39 @@ namespace CastleDefense.Engine.Models
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Deep copy of the whole board. Scalars and enums come across via
+        /// MemberwiseClone; the four reference members are copied explicitly.
+        ///
+        /// GameId is deliberately preserved — a clone is a hypothetical continuation of
+        /// the same game, not a new one, and keeping the id makes rollout traces
+        /// attributable back to the position they branched from.
+        /// </summary>
+        public GameState Clone()
+        {
+            var copy = (GameState)MemberwiseClone();
+            copy.Player1 = Player1?.Clone();
+            copy.Player2 = Player2?.Clone();
+
+            copy.Units = new List<Unit>(Units.Count);
+            foreach (var u in Units) copy.Units.Add(u.Clone());
+
+            copy.Hazards = new List<Hazard>(Hazards.Count);
+            foreach (var h in Hazards) copy.Hazards.Add(h.Clone());
+
+            return copy;
+        }
+
+        /// <summary>
+        /// Seeded equivalent of GameDataManager.GetRandomTeam(), which draws from
+        /// Random.Shared and therefore cannot be made reproducible.
+        /// </summary>
+        private static TeamColour RandomTeam(Random rng)
+        {
+            var values = (TeamColour[])Enum.GetValues(typeof(TeamColour));
+            return values[rng.Next(values.Length)];
         }
 
         /// <summary>
@@ -284,13 +328,64 @@ namespace CastleDefense.Engine.Models
             return (hpScore, incomeScore, moneyScore, armyScore, gadgetScore, repairScore);
         }
 
+        // ── Logistic evaluator weights (fit "C" from audit_evaluator.py, 2026-07-28) ──
+        // These are NOT normalised and must not be — in a logistic their magnitude sets
+        // how sharply the evaluation responds, not just the relative mix.
+        //
+        // WHY THE FORM CHANGED. The previous deployed evaluator was a linear weighted
+        // average, and fitting one honestly drove Money, Army, Gadget and Repair all to
+        // zero: given HP and Income, a *linear* combination gains nothing from them. That
+        // left an evaluator that could not see an enemy army approaching an undamaged
+        // castle — it read full HP plus rising income and concluded that saving was always
+        // correct. Rollout search built on it waited 87.4% of the time, saved through
+        // incoming attacks, and lost 95% of its games; 63.1% of its decisions were exact
+        // ties because only two slow-moving terms were live.
+        //
+        // A logistic on the same six features uses all of them and calibrates materially
+        // better (log-loss 0.4914 vs 0.5510). Army recovers a real weight, which is the
+        // "am I about to die" signal the whole thing was missing. Marc's own read of the
+        // game — spend only what you must to survive, then save, then overwhelm — needs
+        // exactly that term to be expressible.
+        //
+        // Weights are from a 263k-row subsample with a numpy solver; refit on the full
+        // dataset with train_evaluator.py when convenient.
+        public static float LogitWeightHp     = 5.53f;
+        public static float LogitWeightIncome = 5.26f;
+        public static float LogitWeightMoney  = 2.96f;
+        public static float LogitWeightArmy   = 2.96f;
+        public static float LogitWeightGadget = 0.13f;
+        public static float LogitWeightRepair = 2.39f;
+
         /// <summary>
-        /// Heuristic board evaluation from P1's perspective.
-        /// Returns a win-probability estimate in [0, 1] where 0.5 = even game.
-        /// Symmetric inputs produce exactly 0.5 at game start.
-        /// Update the EvalWeight* fields above after running train_evaluator.py.
+        /// Board evaluation from P1's perspective, as a win probability in [0, 1].
+        ///
+        /// Logistic over the six components, centred so that an even position (every
+        /// component 0.5) maps to exactly 0.5. Centring is what makes a zero intercept
+        /// correct here — the mis-specification that wrecked the original calibration was
+        /// fitting a no-intercept logistic to *uncentred* [0,1] features.
+        ///
+        /// NOTE: this feeds RL reward shaping as well as search
+        /// (Simulation/Program.cs:446 -> batchEval), so changing it changes training.
         /// </summary>
         public float EvaluateBoard()
+        {
+            var (hp, income, money, army, gadget, repair) = GetEvalComponents();
+            float z = LogitWeightHp     * (hp     - 0.5f)
+                    + LogitWeightIncome * (income - 0.5f)
+                    + LogitWeightMoney  * (money  - 0.5f)
+                    + LogitWeightArmy   * (army   - 0.5f)
+                    + LogitWeightGadget * (gadget - 0.5f)
+                    + LogitWeightRepair * (repair - 0.5f);
+            return 1f / (1f + MathF.Exp(-z));
+        }
+
+        /// <summary>
+        /// The previous linear weighted-average evaluator, kept for A/B comparison.
+        /// Retained deliberately: the switch to a logistic changes both search behaviour
+        /// and RL reward shaping, so being able to measure the old form against the new one
+        /// is worth more than a tidy deletion.
+        /// </summary>
+        public float EvaluateBoardLinear()
         {
             var (hp, income, money, army, gadget, repair) = GetEvalComponents();
             float total = EvalWeightHp + EvalWeightIncome + EvalWeightMoney
@@ -325,7 +420,9 @@ namespace CastleDefense.Engine.Models
                 }
             }
 
-            if (me.Money < me.InvestmentPrice)
+            // ARMAGEDDON is a one-time purchase and it is the last thing action 9 can ever
+            // buy, so the slot is dead for the rest of the game once it has been used.
+            if (me.Money < me.InvestmentPrice || me.ArmageddonUsed)
             {
                 mask[9] = 0;
             }
