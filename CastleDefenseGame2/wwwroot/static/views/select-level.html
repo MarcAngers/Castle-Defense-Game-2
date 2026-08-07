@@ -23,6 +23,11 @@
         <div class="level" id="7">7</div>
         <div class="level" id="8">8</div>
         <div class="level" id="antispam">AntiSpam</div>
+        <!-- Plain HeuristicBot, no rollout search on top. Singleplayer routes to
+             SetupSearchOpponent instead, so this is the ONLY way to play the bare bot
+             and see its own decisions unmediated. SetupPracticeOpponent already accepted
+             the "heuristic" spec before this tile existed; only the UI was missing. -->
+        <div class="level" id="heuristic">Heuristic</div>
     </div>
     <div id="model-picker" class="d-none">
         <h2>OR PLAY A SPECIFIC TRAINED MODEL:</h2>

@@ -1,4 +1,4 @@
-using CastleDefense.Engine;
+﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
@@ -36,16 +36,29 @@ namespace CastleDefense.BotArena
     ///     invites reading noise as signal, which is exactly what happened with the
     ///     "2.76 vs 2.80 confirms it's real" reading.
     ///
-    /// KNOWN LIMITATION -- not yet fully deterministic. The engine calls `new Random()`
-    /// internally (GameEngine.cs:183 for unit y-position, MeteorEffect, and the `weirdo`
-    /// unit which randomises all its stats), so identical setups can still diverge
-    /// mid-game. This harness controls the SETUP deterministically, which is the dominant
-    /// variance source; full determinism needs the seeded-RNG work tracked in the campaign
-    /// log. Until then, treat the CIs as honest but slightly optimistic.
+    /// DETERMINISM: as of the 2026-07-28 seeding pass this should be fully reproducible.
+    /// Three gameplay-affecting `new Random()` sites were replaced with a seeded stream —
+    /// GameEngine.Rng (unit y-position on spawn), MeteorEffect (stagger + spread), and the
+    /// GameState map/shadow-map roll. Each spec carries its own EngineSeed, so two
+    /// contenders playing the same spec get the same random stream and any difference in
+    /// outcome is attributable to their decisions.
+    ///
+    /// VERIFY THIS RATHER THAN TRUSTING IT: run the same seed twice and diff the CSVs.
+    /// They should be byte-identical. If they are not, an unseeded random source is still
+    /// in the loop and the confidence intervals below are optimistic. This is also the
+    /// regression test for the upcoming data-based-effects refactor — same seed before
+    /// and after should produce the same CSV.
     ///
     /// Usage:
     ///   ladder [games] [--seed N] [--headstart|--nostart|--both] [--csv path]
-    ///          [--only substr]
+    ///          [--only substr] [--offense id] [--defense id]
+    ///
+    /// --offense / --defense pin that loadout slot on BOTH sides, overwriting the drawn
+    /// value after spec generation so the rng stream is unaffected. Use it to measure a
+    /// change that touches a single gadget family: a gadget is 1 of 4 draws, so on a normal
+    /// run such a change is diluted into ~25% of games and comes back byte-identical on
+    /// most rungs — unmeasurable rather than neutral. Pinned and unpinned runs on the same
+    /// seed differ only in the pinned slot.
     /// </summary>
     public static class Ladder
     {
@@ -56,7 +69,12 @@ namespace CastleDefense.BotArena
             public int TimeSkip;
             public bool BonusMoney;
             public TeamColour TeamA, TeamB;
+            public TeamColour Map;
             public string OffA, DefA, OffB, DefB;
+            // Per-game engine seed, drawn from the ladder seed. Two contenders playing
+            // the same spec get the same engine stream, so any difference in outcome is
+            // attributable to their decisions rather than to luck.
+            public int EngineSeed;
         }
 
         private sealed class Record
@@ -101,10 +119,12 @@ namespace CastleDefense.BotArena
                     BonusMoney = ts > 0 && rng.Next(5) == 0,
                     TeamA = teams[rng.Next(teams.Length)],
                     TeamB = teams[rng.Next(teams.Length)],
+                    Map = teams[rng.Next(teams.Length)],
                     OffA = OffenseOptions[rng.Next(OffenseOptions.Length)],
                     DefA = DefenseOptions[rng.Next(DefenseOptions.Length)],
                     OffB = OffenseOptions[rng.Next(OffenseOptions.Length)],
                     DefB = DefenseOptions[rng.Next(DefenseOptions.Length)],
+                    EngineSeed = rng.Next(),
                 });
             }
             return specs;
@@ -130,7 +150,10 @@ namespace CastleDefense.BotArena
         /// </summary>
         private static (GameState state, GameEngine engine) CreateFromSpec(GameSpec s, bool contenderIsP1)
         {
-            var state = new GameState();
+            // Seeded GameState ctor: the map roll (shadow-map selection) is real
+            // gameplay-affecting randomness and has to be pinned too, or two contenders
+            // playing "the same" spec can end up on different maps.
+            var state = new GameState(s.Map, new Random(s.EngineSeed));
             state.Player1 = new PlayerState(s.TimeSkip);
             state.Player2 = new PlayerState(s.TimeSkip);
 
@@ -146,7 +169,7 @@ namespace CastleDefense.BotArena
             }
 
             state.CurrentTick = 30 * 30 * s.TimeSkip;
-            return (state, new GameEngine(state));
+            return (state, new GameEngine(state, null, s.EngineSeed));
         }
 
         private static Record PlayMatchup(
@@ -205,6 +228,16 @@ namespace CastleDefense.BotArena
             string mode = "both";
             string csvPath = "ladder_results.csv";
             string? only = null;
+            string? pinOffense = null;
+            string? pinDefense = null;
+            // Adds a second HeuristicBot contender running a named HeuristicBotSettings
+            // profile, so a candidate flag and the committed reference play the SAME
+            // pre-generated specs inside ONE run. That matters more than usual here: the
+            // mirror rung moves 3-5 points on seed alone (flag (9)'s own evidence -- the
+            // reference scored 44.83/47.67 nostart and 46.00/50.83 headstart across two
+            // seeds), so comparing two SEPARATE runs risks attributing seed noise to the
+            // flag. Paired inside one run, both contenders face identical setups.
+            string? variant = null;
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -213,6 +246,19 @@ namespace CastleDefense.BotArena
                     case "--seed" when i + 1 < args.Length: seed = int.Parse(args[++i]); break;
                     case "--csv" when i + 1 < args.Length: csvPath = args[++i]; break;
                     case "--only" when i + 1 < args.Length: only = args[++i]; break;
+                    case "--variant" when i + 1 < args.Length: variant = args[++i]; break;
+                    // Loadout pins. Applied AFTER BuildSpecs so the rng stream is untouched
+                    // and a pinned run stays directly comparable to an unpinned one on the
+                    // same seed -- everything except the pinned slot is the same game.
+                    //
+                    // WHY THIS EXISTS: several candidate changes touch ONE gadget family
+                    // (the firebomb friendly-fire fix, the freeze/blackhole early-stall
+                    // change). A gadget is 1 of 4 draws, so on a normal ladder those
+                    // changes are diluted into ~25% of games and come back byte-identical
+                    // on most rungs -- unmeasurable rather than neutral. Pinning the slot
+                    // makes the affected games 100% of the sample instead.
+                    case "--offense" when i + 1 < args.Length: pinOffense = args[++i]; break;
+                    case "--defense" when i + 1 < args.Length: pinDefense = args[++i]; break;
                     case "--headstart": mode = "headstart"; break;
                     case "--nostart": mode = "nostart"; break;
                     case "--both": mode = "both"; break;
@@ -227,14 +273,17 @@ namespace CastleDefense.BotArena
             // league folder whose contents drift makes runs incomparable over time. That
             // drift already caused a real problem (see the 2026-07-28 "League pool bloat"
             // entry in the campaign log).
+            // RusherBaseline is deliberately absent: it buys "cheapest affordable", which
+            // for every roster is the tier-1 unit, making it a duplicate of Tier1Spam.
+            // The first ladder run showed the two producing byte-identical results, so
+            // including both just doubles the cost of that rung for no information.
             var ladder = new List<(string name, Func<int, IArenaOpponent> make)>
             {
                 ("DoNothing",     side => new DoNothingBaseline()),
-                ("Rusher",        side => new RusherBaseline(side)),
-                ("Investor",      side => new InvestorBaseline(side)),
-                ("BalancedHuman", side => new BalancedHumanBaseline(side)),
                 ("Tier1Spam",     side => new TierSpamBaseline(side, 1)),
                 ("Tier4Spam",     side => new TierSpamBaseline(side, 4)),
+                ("Investor",      side => new InvestorBaseline(side)),
+                ("BalancedHuman", side => new BalancedHumanBaseline(side)),
                 ("HeuristicBot",  side => new HeuristicBotAdapter(side)),
             };
 
@@ -243,6 +292,23 @@ namespace CastleDefense.BotArena
             {
                 ("HeuristicBot", side => new HeuristicBotAdapter(side)),
             };
+
+            if (variant != null)
+            {
+                var fld = typeof(HeuristicBotSettings).GetField(variant,
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (fld == null)
+                {
+                    Console.WriteLine($"[ladder] No HeuristicBotSettings profile named '{variant}'. Available:");
+                    foreach (var f in typeof(HeuristicBotSettings).GetFields(
+                                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                        Console.WriteLine("    " + f.Name);
+                    return;
+                }
+                var profile = (HeuristicBotSettings)fld.GetValue(null)!;
+                contenders.Add(($"HeuristicBot+{variant}", side => new HeuristicBotAdapter(side, profile)));
+                Console.WriteLine($"[ladder] variant contender: HeuristicBot+{variant}");
+            }
 
             var dir = findLeagueModelsDir();
             if (dir != null)
@@ -274,6 +340,21 @@ namespace CastleDefense.BotArena
             {
                 bool headstart = m == "headstart";
                 var specs = BuildSpecs(games, seed, headstart);
+
+                // Overwrite the drawn loadout slot(s) AFTER generation -- see the --offense
+                // case above. BuildSpecs has already consumed its rng draws, so pinning
+                // changes only which gadget is equipped, never which teams/maps/timeSkips
+                // the run plays.
+                if (pinOffense != null || pinDefense != null)
+                {
+                    foreach (var s in specs)
+                    {
+                        if (pinOffense != null) { s.OffA = pinOffense; s.OffB = pinOffense; }
+                        if (pinDefense != null) { s.DefA = pinDefense; s.DefB = pinDefense; }
+                    }
+                    Console.WriteLine($"  [pinned loadout] offense={pinOffense ?? "(drawn)"}  " +
+                                      $"defense={pinDefense ?? "(drawn)"}");
+                }
 
                 Console.WriteLine();
                 Console.WriteLine(new string('=', 100));

@@ -48,7 +48,37 @@ checked:
 - [ ] **`model-diag`** — the P(invest)-when-legal statistic is computed over states where
   invest is legal, which in cold-start games was 68 samples out of 338,609. Small-sample
   behaviour of that geometric mean needs checking.
-- [ ] **`hunt`**, **`dashboard`**, **`trace`** — not examined at all.
+- [ ] **`hunt`** and **`trace`** — not examined at all. `dashboard` was partly audited on
+  2026-08-05: its protagonist was hardcoded to `HeuristicBotAdapter`, so it had been
+  describing an agent that is no longer what singleplayer ships. Now selectable via
+  `--bot search`. Its aggregation and HTML rendering are still unexamined.
+
+## Open performance problem
+
+- [ ] **`dashboard --bot search` runs at ~1 core on a 20-core box.** Two independent
+  sweeps of identical work took 25 min and 49 min, and sampled CPU sat at 0.44-0.90
+  cores while the machine was 94% idle and 22 threads were alive. The spam phase (one
+  search per game) parallelises fine and `search-test` parallelises fine; only the
+  MIRROR phase (two searches per game) stalls. Three things were tried on 2026-08-05:
+  dynamic partitioning instead of the range partitioner (no effect — the diagnosis was
+  wrong), flattening the work list so cells no longer run their games sequentially
+  (correct, kept), and server GC (roughly doubled throughput, kept — every rollout
+  clones the engine, so allocation pressure is enormous and workstation GC suspends all
+  threads per collection). Something still serialises it. There are no `lock`s in the
+  Engine and `Random.Shared` is thread-safe, so the next place to look is allocation
+  stalls under the clone path, or `Parallel.ForEach` failing to ramp its worker count.
+  Not urgent — the sweep does complete — but it caps how much mirror data is affordable.
+
+## Data hygiene
+
+- [ ] **11 abandoned games remain in `recordings/game_records.db`.** Marc rerolls until he
+  gets the matchup he wants, and the abandoned attempts record as losses in which P1
+  never acts. The `.replay` files were removed on 2026-08-05 (backed up to
+  `recordings/quarantine_no_p1_actions_20260805/`) but the database rows were not
+  touched, so any win-rate query straight off the DB reads **82.6% vs HeuristicBot when
+  the true figure is 91.9%**. Either delete those rows or add an `abandoned` flag — a
+  hand-maintained "exclude these ids" list is exactly the rot this file exists to stop.
+  Detector: `CastleDefense.PythonAI/inspect_replays.py` (read-only unless `--delete`).
 
 ## Fragile hand-maintained constants
 

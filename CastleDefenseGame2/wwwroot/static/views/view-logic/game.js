@@ -63,18 +63,14 @@ function updateUI(state) {
     const pState = connection.mySide == 1 ? state.player1 : state.player2;
     const money = document.getElementById('money');
     const income = document.getElementById('income');
-    const investment = document.getElementById('investment-price');
     const repair = document.getElementById('repair-price');
 
     money.innerHTML = Math.floor(pState.money);
     income.innerHTML = pState.income.toFixed(1);
-    investment.innerHTML = Math.ceil(pState.investmentPrice);
     repair.innerHTML = pState.repairPrice.toFixed(0);
 
     // -------- UPDATE SHOP --------
-    // --- Update Invest/Repair Affordability ---
-    const btnInvest = document.getElementById('btnInvest');
-    if (btnInvest) btnInvest.disabled = pState.money < pState.investmentPrice;
+    updateInvestButton(pState);
 
     const btnRepair = document.getElementById('btnRepair');
     if (btnRepair) btnRepair.disabled = pState.money < pState.repairPrice;
@@ -157,6 +153,33 @@ function updateUI(state) {
     updateGadgetButton('btnGadgetOffense', pState.offensiveGadget);
     updateGadgetButton('btnGadgetDefence', pState.defensiveGadget);
     updateGadgetButton('btnGadgetSignature', pState.signatureGadget);
+}
+
+// Mirrors PlayerState.ArmageddonInvestmentCount. At the top of the economy ladder the
+// invest button stops buying income and becomes the ARMAGEDDON purchase; once bought it
+// is spent for good and reads "INVEST: MAX".
+const ARMAGEDDON_INVESTMENT_COUNT = 8;
+
+function updateInvestButton(pState) {
+    const btn = document.getElementById('btnInvest');
+    const label = document.getElementById('invest-label');
+    const price = document.getElementById('investment-price');
+    if (!btn || !label || !price) return;
+
+    if (pState.armageddonUsed) {
+        label.innerHTML = 'INVEST';
+        price.innerHTML = 'MAX';
+        btn.disabled = true;
+        btn.classList.remove('armageddon-ready');
+        return;
+    }
+
+    const isArmageddon = pState.investmentCount >= ARMAGEDDON_INVESTMENT_COUNT;
+
+    label.innerHTML = isArmageddon ? 'ARMAGEDDON' : 'INVEST';
+    price.innerHTML = '$' + Math.ceil(pState.investmentPrice);
+    btn.disabled = pState.money < pState.investmentPrice;
+    btn.classList.toggle('armageddon-ready', isArmageddon);
 }
 
 function initShopUI(team) {

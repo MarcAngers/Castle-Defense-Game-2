@@ -52,7 +52,12 @@ export default async function initSelectLevel() {
         if (isPractice) {
             // A tier/AntiSpam tile overrides any model dropdown choice.
             modelSelect.value = '';
-            connection.selectedOpponent = selectedLevel === 'antispam' ? 'antispam' : `spam${selectedLevel}`;
+            // "heuristic" and "antispam" are exact specs SetupPracticeOpponent matches by
+            // name; everything else is a tier tile and becomes spamN.
+            connection.selectedOpponent =
+                (selectedLevel === 'antispam' || selectedLevel === 'heuristic')
+                    ? selectedLevel
+                    : `spam${selectedLevel}`;
         }
     };
 

@@ -356,6 +356,61 @@ namespace CastleDefense.Engine.Models
         public static float LogitWeightGadget = 0.13f;
         public static float LogitWeightRepair = 2.39f;
 
+        // ── Refit candidate, 2026-08-05 (fit_evaluator.py mix "B") ────────────────
+        // Fit on 800 HeuristicBot self-play + 400 SearchBot-vs-HeuristicBot games —
+        // the first calibration data on this project that contains HeuristicBot at
+        // all. Simulation's --collect-calibration pool is league ONNX brains plus
+        // Random/AntiSpam/Spam bots, and cannot include HeuristicBot because the pool
+        // is typed Func<GameState,int,int> while HeuristicBot drives the engine
+        // directly. So the deployed weights above were fit entirely on games between
+        // players HeuristicBot beats 83-100% of the time.
+        //
+        // Measured on HELD-OUT games (split by game_id, never by row):
+        //
+        //                      heur holdout        search holdout
+        //                      AUC    signal       AUC    signal
+        //   deployed          0.691   0.0568      0.827   0.0778
+        //   this refit        0.720   0.0863      0.842   0.0769
+        //
+        // 52% more signal on HeuristicBot positions. The direction moved rather than
+        // just the scale (cosine 0.908 with the deployed vector), which matters: search
+        // takes an argmax, and a pure rescaling would reorder nothing. Money roughly
+        // doubles in weight while Income and Army fall — consistent with an agent whose
+        // win condition is banking cash for the next investment.
+        //
+        // NOT ENABLED BY DEFAULT. EvaluateBoard() feeds RL reward shaping
+        // (Simulation/Program.cs:446), so switching it changes training as well as
+        // search. Gate the swap on a search-test A/B, not on calibration alone.
+        //
+        // CAVEAT worth keeping: on 112 recorded human games this refit ranks WORSE
+        // than the deployed weights (AUC 0.597 vs 0.653), while the broad-pool fit
+        // ranks best (0.685). That holdout has only ~145 losing frames, so the
+        // differences are within noise — but the direction is a warning that fitting
+        // tightly to HeuristicBot's manifold may generalise badly to human play.
+        public static float RefitWeightHp     = 4.2072f;
+        public static float RefitWeightIncome = 3.2847f;
+        public static float RefitWeightMoney  = 4.8438f;
+        public static float RefitWeightArmy   = 1.3432f;
+        public static float RefitWeightGadget = 0.3977f;
+        public static float RefitWeightRepair = 0.6353f;
+
+        /// <summary>
+        /// Same logistic form as <see cref="EvaluateBoard"/>, using the refit weights.
+        /// Kept as a separate method rather than a mutable weight set so that enabling
+        /// it for search cannot silently alter the training-facing evaluator.
+        /// </summary>
+        public float EvaluateBoardRefit()
+        {
+            var (hp, income, money, army, gadget, repair) = GetEvalComponents();
+            float z = RefitWeightHp     * (hp     - 0.5f)
+                    + RefitWeightIncome * (income - 0.5f)
+                    + RefitWeightMoney  * (money  - 0.5f)
+                    + RefitWeightArmy   * (army   - 0.5f)
+                    + RefitWeightGadget * (gadget - 0.5f)
+                    + RefitWeightRepair * (repair - 0.5f);
+            return 1f / (1f + MathF.Exp(-z));
+        }
+
         /// <summary>
         /// Board evaluation from P1's perspective, as a win probability in [0, 1].
         ///

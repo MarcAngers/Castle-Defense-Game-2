@@ -117,11 +117,20 @@ namespace CastleDefense.Api.Hubs
                 game._state.Player2.Team = GameDataManager.GetRandomTeam();
                 game._state.Player2.SetLoadout(new string[] { GameDataManager.GetRandomOGadgetId(), GameDataManager.GetRandomDGadgetId(), GameDataManager.GetSignatureGadgetIdForTeam(game._state.Player2.Team) });
 
-                // Singleplayer's opponent is the same tuned HeuristicBot used throughout
-                // this codebase's own benchmarking/recording analysis, not the deployed
-                // ONNX model -- "watch" is left untouched (still ONNX), only "sp" changes.
+                // Singleplayer's opponent is the rollout-search bot (2026-07-28): one-ply
+                // search over the real engine with HeuristicBot as its policy prior.
+                // HeuristicBot in turn beats every ONNX checkpoint this project trained.
+                // "watch" is left untouched (still ONNX); only "sp" changes.
+                //
+                // It beats HeuristicBot 75.0% [71.4, 78.3] (n=600, paired seeds, 2026-08-05)
+                // with ~99% of wins decisive. The "~90%" this comment claimed until then was
+                // never measured at n>20; the config actually shipping at the time measured
+                // 47-58%. See SetupSearchOpponent for the tuning and its evidence.
+                //
+                // P2's team and loadout are randomised just above, so each game presents a
+                // different matchup rather than a single memorisable script.
                 if (game._state.GameMode == "sp")
-                    _gameService.SetupHeuristicOpponent(gameId);
+                    _gameService.SetupSearchOpponent(gameId);
 
                 _gameService.StartGame(gameId);
             }

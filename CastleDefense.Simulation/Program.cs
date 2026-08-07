@@ -1,4 +1,4 @@
-using CastleDefense.Api.Data;
+﻿using CastleDefense.Api.Data;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
@@ -194,6 +194,14 @@ namespace CastleDefense.Simulation
                 // once a replay dir mixes spam-bot and model-opponent recordings.
                 string filter = args.Length > 2 ? args[2] : null;
                 TraceHumanReplays(args[1], filter);
+                return;
+            }
+
+            // Replay divergence: put the bot in the human's seat and log where it
+            // would have played differently. See Divergence.cs.
+            if (args.Length >= 3 && args[0] == "--divergence")
+            {
+                Divergence.Run(args[1], args[2], args.Skip(3).ToArray());
                 return;
             }
 

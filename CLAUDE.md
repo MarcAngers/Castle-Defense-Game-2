@@ -140,6 +140,12 @@ The opponent's action frequency is throttled by `speed // base_speed` to simulat
 
 Both files live in `CastleDefense.Engine/Data/` and are copied to all output directories at build time.
 
+## Cleanup backlog
+
+Deferred tidy-up work lives in `CLEANUP_BACKLOG.md` — stale comments, measurement tools
+not yet re-audited, hand-maintained constants that drift, and dead code awaiting removal.
+Add to that file rather than fixing opportunistically mid-task.
+
 ## Measurement pitfalls (read before trusting any benchmark number)
 
 A 2026-07-28 audit found two of the two instruments it examined were broken. Both are

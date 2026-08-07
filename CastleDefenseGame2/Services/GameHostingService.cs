@@ -30,6 +30,23 @@ namespace CastleDefense.Api.Services
         // that must persist tick-to-tick, so it needs its own per-game instance rather
         // than a stateless closure. See ExecuteAsync for how it's driven.
         private readonly ConcurrentDictionary<string, HeuristicBot> _heuristicOpponents = new();
+
+        // Singleplayer's opponent as of 2026-07-28: one-ply rollout search over the engine,
+        // with HeuristicBot as its policy prior. Measured at 92.5% [80.1, 97.4] vs
+        // HeuristicBot with every game ending decisively and an earned-investment lead of
+        // +0.55 (search-test --live, n=40). Same class the benchmark harness drives, so
+        // what gets played is exactly what gets measured — run `search-test --live` to
+        // reproduce the shipping configuration exactly.
+        //
+        // Driven identically to HeuristicBot below — every real tick, self-throttling on
+        // state.CurrentTick — because it manages its own decision cadence internally.
+        private readonly ConcurrentDictionary<string, RolloutSearchBot> _searchOpponents = new();
+
+        // Same thing driving side 1, for "Watch bots" (search vs HeuristicBot). Separate
+        // dictionary rather than one keyed by side, mirroring the existing
+        // _leagueOpponents / _leagueP1Opponents split, so a side-1 bot can never be
+        // installed into a game where a human holds side 1.
+        private readonly ConcurrentDictionary<string, RolloutSearchBot> _searchP1Opponents = new();
         // Human-readable description of what _leagueOpponents[gameId] actually is
         // ("spam4", "antispam", "model:castle_defense_p1_v21", "random") -- persisted to
         // the DB at game-end so recorded games can be mined later for "did the human
@@ -124,18 +141,50 @@ namespace CastleDefense.Api.Services
         // per Marc's request to watch this specific matchup play out and diagnose why
         // it's the bot's single worst one, mirroring the "system to watch the bots
         // play each other" he'd set up before.
+        /// <summary>
+        /// "Watch bots": P1 = the rollout-search bot, P2 = HeuristicBot.
+        ///
+        /// Changed 2026-07-28 from castle_defense_p1_v4 (ONNX) vs HeuristicBot. v4 was the
+        /// best ONNX checkpoint the project produced and still loses to HeuristicBot ~83%,
+        /// so that matchup showed a weak agent being beaten. Search wins ~85% at this
+        /// horizon with every game decisive, which is the matchup actually worth watching.
+        ///
+        /// Same configuration as singleplayer so what is observed here is what gets played.
+        /// </summary>
         public void SetupTrainingLeagueWatchMatch(string gameId)
         {
-            var v4 = _leagueModels.FirstOrDefault(m => m.name.Contains("v4", StringComparison.OrdinalIgnoreCase));
-            if (v4.brain != null)
-            {
-                _leagueP1Opponents[gameId] = state => v4.brain.GetBestAction(
-                    state.GetStateVector(1), state.GetActionMask(1));
-            }
+            _searchP1Opponents[gameId] = new RolloutSearchBot(
+                side: 1,
+                // Same tuned configuration as singleplayer — see SetupSearchOpponent
+                // for the measurements behind these three numbers.
+                decisionInterval: 15,
+                horizon: 300,
+                rolloutsPerAction: 1,
+                seed: Environment.TickCount ^ gameId.GetHashCode(),
+                usePrior: true,
+                overrideMargin: 0.10,
+                useMacro: true,
+                usePressMacro: true,
+                // THE SEARCH BLOCKS THE TICK LOOP, so this budget is a visible freeze, not
+                // spare capacity. A tick is 33ms; anything above that shows up as a stutter
+                // regardless of how much real time is left before the next decision. 120ms
+                // was chosen against the 333ms decision interval and was still four ticks
+                // of frozen game every ten — which is what "still noticeable" was.
+                //
+                // 30ms keeps each decision inside a single tick. With ~18 cores that is
+                // still ~540ms of CPU work per decision; the horizon just shortens under
+                // pressure instead of the game hitching.
+                // With asyncDecisions the search no longer blocks the tick loop, so this
+                // can go back up: it now bounds how STALE a decision may be, not how long
+                // the game freezes. 250ms is under one decision interval (333ms), so the
+                // bot still acts on schedule.
+                maxDecisionMs: 250,
+                // One live game has the whole machine. Leave 2 cores for the OS, the web
+                // server and the browser.
+                maxParallelism: Math.Max(1, Environment.ProcessorCount - 2),
+                asyncDecisions: true);
             _heuristicOpponents[gameId] = new HeuristicBot(2);
-            _opponentDescriptions[gameId] = v4.brain != null
-                ? $"leaguewatch:{v4.name}_vs_heuristic"
-                : "leaguewatch:v4_model_missing_vs_heuristic";
+            _opponentDescriptions[gameId] = "leaguewatch:search_vs_heuristic";
         }
 
         // Practice mode: same opponent-execution mechanism as Training League
@@ -197,6 +246,82 @@ namespace CastleDefense.Api.Services
         {
             _heuristicOpponents[gameId] = new HeuristicBot(2);
             _opponentDescriptions[gameId] = "heuristic";
+        }
+
+        /// <summary>
+        /// Singleplayer's opponent: rollout search with HeuristicBot as its policy prior.
+        ///
+        /// Parameters are the best measured configuration (search-test, 2026-07-28):
+        /// decide every 5 ticks matching HeuristicBot's own cadence, 1800-tick (60s)
+        /// rollout horizon, override margin 0.03, both macros on, linear evaluator.
+        ///
+        /// HORIZON IS THE COST KNOB, and the original figures here were WRONG. search-test
+        /// divided total wall clock by total decisions while running 18 games in parallel,
+        /// which understated single-game latency by ~18x. Real per-decision cost, taken
+        /// from per-game timings: horizon 1800 peaks near 490ms, 900 near 150ms, 300 near
+        /// 100ms. A 5-tick interval allows 167ms, so 1800 was roughly 3x over budget and
+        /// made the live game visibly sluggish.
+        ///
+        /// With rollouts properly parallelised (one Task per candidate) a decision costs
+        /// ~7ms, worst case ~14ms, against the 333ms a 10-tick interval allows. That is
+        /// roughly 45x headroom, so the 250ms cap never actually binds — `--live` produces
+        /// results identical to running with no cap at all.
+        ///
+        /// The seed is per-game so two games from the same position don't play identically,
+        /// while any single game stays internally reproducible for debugging.
+        /// </summary>
+        public void SetupSearchOpponent(string gameId)
+        {
+            _searchOpponents[gameId] = new RolloutSearchBot(
+                side: 2,
+                // TUNED 2026-08-05, replacing 10 / 900 / 0.03. Every figure below is
+                // n=600, paired seeds, vs the current HeuristicBot:
+                //
+                //   horizon  900 -> 300   47.0% -> 68.5%   the single largest factor
+                //   margin  0.03 -> 0.10  69.8% -> 75.0%
+                //   interval  10 -> 15    62.5% -> 68.5%
+                //
+                // Horizon 900 washes the candidate action out: HeuristicBot drives BOTH
+                // sides for 30 simulated seconds, so every branch converges to the same
+                // self-play continuation and the search is scoring noise. Do NOT drop the
+                // horizon below ~300 either — at 250 it falls to 30% and at 150 to 1%,
+                // because the rollout then ends before an investment can repay, so buying
+                // units always outscores investing and the bot never builds an economy.
+                //
+                // The high margin is not a tuning artefact. Search's PRIMITIVE moves are
+                // actively harmful (margin 0.0 scores 56.0% and earns 1.5 FEWER investments
+                // per game than HeuristicBot); its save-invest MACRO is the entire source of
+                // strength (disabling it scores 44.0% — worse than not searching at all). A
+                // high margin filters the former while still letting the latter through.
+                // Search now overrides on ~8% of decisions and out-invests HeuristicBot by
+                // +0.72 per game, which is what actually wins.
+                decisionInterval: 15,
+                horizon: 300,
+                rolloutsPerAction: 1,
+                seed: Environment.TickCount ^ gameId.GetHashCode(),
+                usePrior: true,
+                overrideMargin: 0.10,
+                useMacro: true,
+                usePressMacro: true,
+                // THE SEARCH BLOCKS THE TICK LOOP, so this budget is a visible freeze, not
+                // spare capacity. A tick is 33ms; anything above that shows up as a stutter
+                // regardless of how much real time is left before the next decision. 120ms
+                // was chosen against the 333ms decision interval and was still four ticks
+                // of frozen game every ten — which is what "still noticeable" was.
+                //
+                // 30ms keeps each decision inside a single tick. With ~18 cores that is
+                // still ~540ms of CPU work per decision; the horizon just shortens under
+                // pressure instead of the game hitching.
+                // With asyncDecisions the search no longer blocks the tick loop, so this
+                // can go back up: it now bounds how STALE a decision may be, not how long
+                // the game freezes. 250ms is under one decision interval (333ms), so the
+                // bot still acts on schedule.
+                maxDecisionMs: 250,
+                // One live game has the whole machine. Leave 2 cores for the OS, the web
+                // server and the browser.
+                maxParallelism: Math.Max(1, Environment.ProcessorCount - 2),
+                asyncDecisions: true);
+            _opponentDescriptions[gameId] = "search";
         }
 
         // Lets the practice-mode opponent picker show only opponents that actually
@@ -291,6 +416,22 @@ namespace CastleDefense.Api.Services
                     var engine = kvp.Value;
                     _recorders.TryGetValue(gameId, out var recorder);
 
+                    // ONE GAME MUST NOT BE ABLE TO KILL THE SERVER (added 2026-07-31 after a
+                    // live crash). This is a BackgroundService, and since .NET 6 an unhandled
+                    // exception in ExecuteAsync stops the HOST by default
+                    // (BackgroundServiceExceptionBehavior.StopHost). There was no try/catch
+                    // anywhere in this loop, so a single throw from any opponent's Update --
+                    // HeuristicBot, the search bot, an ONNX brain -- tore down the whole web
+                    // app for every connected player, and took the in-memory log with it, so
+                    // nothing survived to diagnose. That is exactly what happened: the process
+                    // vanished, the in-progress game was never recorded, and the Windows event
+                    // log had nothing.
+                    //
+                    // Catch per GAME, not per loop iteration, so a single bad game is dropped
+                    // and every other game keeps running. The stack trace is printed because
+                    // losing it is what made the original crash undiagnosable.
+                    try
+                    {
                     lock (engine)
                     {
                         engine.ResetLastActions();
@@ -319,13 +460,23 @@ namespace CastleDefense.Api.Services
 
                             // P2 AI / opponent
                             if ((engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
-                                engine._state.GameMode == "watch") && !_heuristicOpponents.ContainsKey(gameId))
+                                engine._state.GameMode == "watch")
+                                && !_heuristicOpponents.ContainsKey(gameId)
+                                && !_searchOpponents.ContainsKey(gameId))
                             {
-                                // Standard ONNX singleplayer bot -- "sp" games all have a
-                                // HeuristicBot opponent set up instead (see JoinGame/the
-                                // Update() call below), so this branch is effectively
-                                // "vai"/"watch"-only now; kept as the ONNX path for those
-                                // since neither one was asked to change.
+                                // Standard ONNX singleplayer bot. This branch must be
+                                // suppressed whenever ANOTHER opponent already drives side 2,
+                                // or two agents fight over the same player.
+                                //
+                                // BUG FIXED 2026-07-28: the guard only excluded
+                                // _heuristicOpponents. When singleplayer switched to the
+                                // search bot, sp games no longer registered a heuristic
+                                // opponent, so this ONNX path started running as well —
+                                // side 2 was driven by the ONNX model every 3 ticks AND by
+                                // the search bot every 5. The ONNX checkpoints earn ~0.0-0.4
+                                // investments and spam tier 1, which is exactly how the
+                                // opponent played. Any future opponent type needs adding to
+                                // this guard too.
                                 float[] aiState     = engine._state.GetStateVector(2);
                                 int[]   aiActionMask = engine._state.GetActionMask(2);
 
@@ -369,6 +520,23 @@ namespace CastleDefense.Api.Services
                             heuristicBot.Update(engine);
                         }
 
+                        // Rollout-search opponent (Singleplayer). Same contract as
+                        // HeuristicBot above: called every real tick, self-throttles on its
+                        // own decision interval. It internally CLONES this engine to run
+                        // rollouts, which is safe — clone-check verifies that advancing a
+                        // clone leaves the parent bit-identical.
+                        if (_searchOpponents.TryGetValue(gameId, out var searchBot))
+                        {
+                            searchBot.Update(engine);
+                        }
+
+                        // Side-1 search bot — "Watch bots" only. Same every-tick,
+                        // self-throttling contract.
+                        if (_searchP1Opponents.TryGetValue(gameId, out var searchBotP1))
+                        {
+                            searchBotP1.Update(engine);
+                        }
+
                         engine.Tick();
                         recorder?.RecordTick(engine.LastActionP1, engine.LastActionP2);
                     }
@@ -378,6 +546,8 @@ namespace CastleDefense.Api.Services
                         _leagueOpponents.TryRemove(gameId, out _);
                         _leagueP1Opponents.TryRemove(gameId, out _);
                         _heuristicOpponents.TryRemove(gameId, out _);
+                        _searchOpponents.TryRemove(gameId, out _);
+                        _searchP1Opponents.TryRemove(gameId, out _);
                         _opponentDescriptions.TryRemove(gameId, out var opponentDescription);
 
                         if (_recorders.TryRemove(gameId, out var finishedRecorder))
@@ -400,6 +570,32 @@ namespace CastleDefense.Api.Services
                     else
                     {
                         await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", engine._state);
+                    }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Print the FULL trace -- the whole point of this handler is that the
+                        // original crash left nothing behind to diagnose.
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"\n[GAME LOOP EXCEPTION] game={gameId} " +
+                                          $"mode={engine._state.GameMode} tick={engine._state.CurrentTick} " +
+                                          $"opponent={(_opponentDescriptions.TryGetValue(gameId, out var od) ? od : "?")}");
+                        Console.WriteLine(ex);
+                        Console.ResetColor();
+
+                        // Drop this game rather than retrying a state that is already broken:
+                        // it would just throw on every subsequent tick and flood the log.
+                        // Everything else keeps running, which is the point.
+                        _activeGames.TryRemove(gameId, out _);
+                        _leagueOpponents.TryRemove(gameId, out _);
+                        _leagueP1Opponents.TryRemove(gameId, out _);
+                        _heuristicOpponents.TryRemove(gameId, out _);
+                        _searchOpponents.TryRemove(gameId, out _);
+                        _searchP1Opponents.TryRemove(gameId, out _);
+                        _recorders.TryRemove(gameId, out _);
+                        _opponentDescriptions.TryRemove(gameId, out _);
+                        try { await _hubContext.Clients.Group(gameId).SendAsync("Error", "The game ended unexpectedly."); }
+                        catch { /* the client may already be gone; never let cleanup throw */ }
                     }
                 }
 

@@ -18,6 +18,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- SERVER GC. Every rollout clones the whole engine, so this project allocates
+         extremely hard. Under the default workstation GC every collection suspends all
+         managed threads and collects on one of them, which serialises the whole run: a
+         SearchBot-mirror dashboard sweep (two searches per game, so twice the allocation
+         rate) sat at 0.44 cores on an idle 20-core box with 22 threads alive and blocked.
+         search-test never showed this because it runs only one search per game.
+         Server GC gives each core its own heap and collects in parallel. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
 
 </Project>

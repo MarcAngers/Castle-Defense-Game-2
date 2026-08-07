@@ -37,6 +37,26 @@ button {
     filter: grayscale(100%) brightness(60%);
     cursor: not-allowed;
 }
+/* The invest button once the economy is maxed and it becomes the ARMAGEDDON purchase.
+   Deliberately loud — it is the only button in the game that ends the match. */
+.upgrade-btn.armageddon-ready {
+    background: #2b0000;
+    color: #ff3b1f;
+    border: 2px solid #ff3b1f;
+    font-weight: bold;
+    text-shadow: 0 0 6px #ff3b1f;
+    animation: armageddon-pulse 1.2s ease-in-out infinite;
+}
+.upgrade-btn.armageddon-ready:disabled {
+    /* Affordable-but-not-yet is still worth advertising, so keep the colour and just
+       dim it rather than letting the grayscale rule above flatten it out. */
+    filter: brightness(55%);
+    animation: none;
+}
+@keyframes armageddon-pulse {
+    0%, 100% { box-shadow: 0 0 4px #ff3b1f; }
+    50%      { box-shadow: 0 0 18px #ff3b1f; }
+}
 #character-bar {
     font-size: 0.7rem;
     position: fixed;

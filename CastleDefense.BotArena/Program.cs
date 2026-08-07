@@ -1,3 +1,4 @@
+﻿using System.Collections.Concurrent;
 using CastleDefense.BotArena;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
@@ -291,6 +292,42 @@ if (args.Length > 0 && args[0] == "ladder")
     return;
 }
 
+// Correctness test for GameEngine.Clone() — completeness, isolation, determinism.
+// Usage: clone-check [games] [--seed N] [--advance ticks]
+if (args.Length > 0 && args[0] == "clone-check")
+{
+    CloneCheck.Run(args);
+    return;
+}
+
+// Evaluator calibration data from games the CURRENT bots play. Diagnostic only —
+// writes data, fits nothing. See CalibCollect.cs for why Simulation's collector
+// cannot cover HeuristicBot.
+// Usage: calib-collect [games] [--seed N] [--out PATH] [--mode selfplay|search]
+// Marc's three win conditions played against each other, 3x3. Exists because every
+// other benchmark here measures against ONE opponent, which cannot evaluate a
+// rock/paper/scissors strategy. See StrategyMatrix.cs.
+// Usage: strategy-matrix [gamesPerCell] [--seed N] [--threads N]
+if (args.Length > 0 && args[0] == "strategy-matrix")
+{
+    StrategyMatrix.Run(args);
+    return;
+}
+
+if (args.Length > 0 && args[0] == "calib-collect")
+{
+    CalibCollect.Run(args);
+    return;
+}
+
+// Flat one-ply rollout search vs HeuristicBot, with throughput instrumentation.
+// Usage: search-test [games] [--seed N] [--interval T] [--horizon T] [--rollouts N] [--headstart]
+if (args.Length > 0 && args[0] == "search-test")
+{
+    SearchTest.Run(args);
+    return;
+}
+
 // Usage: invest-stats <modelFragment> [headstart] [games]
 if (args.Length > 0 && args[0] == "invest-stats")
 {
@@ -566,7 +603,38 @@ if (args.Length > 0 && args[0] == "dashboard")
     // in aggregate. Tier4 and the two hardest models (v4/v7) get extra games/cell since
     // they're the ones worth resolving at finer confidence; everything else gets a
     // lighter pass so the dashboard still covers the whole roster for comparison.
-    string outputDir = args.Length > 1 ? args[1] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard"));
+    string outputDir = args.Length > 1 && !args[1].StartsWith("--") ? args[1] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "dashboard"));
+
+    // WHICH BOT IS THE PROTAGONIST. Until 2026-08-05 this was hardcoded to HeuristicBot,
+    // so the balance dashboard described an agent that is no longer what singleplayer
+    // ships. "--bot search" runs the deployed RolloutSearchBot config instead
+    // (interval 15 / horizon 300 / margin 0.10).
+    //
+    // A search game costs ~200x a plain one, so the default 128-cell x 8-25-game sweep is
+    // far too expensive for it (~34 CPU-hours). --games-per-cell scales it down and
+    // --spam-only drops the ONNX opponents.
+    string botKind = "heuristic";
+    int gamesPerCellOverride = 0;
+    bool spamOnly = false;
+    // Games per cell for the SearchBot MIRROR. Separate from --games-per-cell because
+    // the mirror is the matchup worth spending the budget on: both seats play the agent
+    // that actually ships, so a team/gadget edge shows up as an edge rather than being
+    // swamped by the opponent being a spam bot. It is also the most expensive matchup
+    // (two searches per game), hence its own knob.
+    int mirrorGames = 0;
+    int[] spamTiers = null;
+    int dashThreads = Math.Max(1, Environment.ProcessorCount - 2);
+    for (int ai = 1; ai < args.Length; ai++)
+    {
+        if (args[ai] == "--bot" && ai + 1 < args.Length) botKind = args[++ai];
+        else if (args[ai] == "--games-per-cell" && ai + 1 < args.Length) gamesPerCellOverride = int.Parse(args[++ai]);
+        else if (args[ai] == "--spam-only") spamOnly = true;
+        else if (args[ai] == "--mirror-games" && ai + 1 < args.Length) mirrorGames = int.Parse(args[++ai]);
+        else if (args[ai] == "--spam-tiers" && ai + 1 < args.Length) spamTiers = args[++ai].Split(',').Select(int.Parse).ToArray();
+        else if (args[ai] == "--threads" && ai + 1 < args.Length) dashThreads = int.Parse(args[++ai]);
+    }
+    bool botIsSearch = botKind == "search";
+    Console.WriteLine($"Dashboard protagonist: {(botIsSearch ? "RolloutSearchBot (interval 15, horizon 300, margin 0.10)" : "HeuristicBot")}");
     Directory.CreateDirectory(outputDir);
     string csvPath = Path.Combine(outputDir, "results.csv");
     string jsonPath = Path.Combine(outputDir, "results.json");
@@ -577,12 +645,17 @@ if (args.Length > 0 && args[0] == "dashboard")
     var priorityModelFragments = new[] { "v4", "v7" };
 
     var opponentSpecs = new List<(string label, string kind, Func<int, IArenaOpponent> factory, bool headStart, int gamesPerCell)>();
-    for (int t = 1; t <= 8; t++)
+    foreach (int t in spamTiers ?? new[] { 1, 2, 3, 4, 5, 6, 7, 8 })
     {
         int tt = t;
-        int cellGames = tt == 4 ? 25 : 8;
+        int cellGames = gamesPerCellOverride > 0 ? gamesPerCellOverride : (tt == 4 ? 25 : 8);
         opponentSpecs.Add(($"Tier{tt}Spam", "spam", side => new TierSpamBaseline(side, tt), false, cellGames));
     }
+    if (mirrorGames > 0)
+        opponentSpecs.Add(("SearchMirror", "search",
+            side => new RolloutSearchOpponent(side, 15, 300, 1, 0, true, 0.10),
+            false, mirrorGames));
+
     var modelsDir = FindLeagueModelsDir();
     if (modelsDir != null)
     {
@@ -590,8 +663,9 @@ if (args.Length > 0 && args[0] == "dashboard")
         {
             var path = f;
             string name = Path.GetFileNameWithoutExtension(path);
+            if (spamOnly) continue;
             bool isPriority = priorityModelFragments.Any(p => name.Contains(p, StringComparison.OrdinalIgnoreCase));
-            int cellGames = isPriority ? 12 : 5;
+            int cellGames = gamesPerCellOverride > 0 ? gamesPerCellOverride : (isPriority ? 12 : 5);
             opponentSpecs.Add((name, "model", side => new AIModelOpponent(side, path), true, cellGames));
         }
     }
@@ -618,17 +692,54 @@ if (args.Length > 0 && args[0] == "dashboard")
         opponentKind[label] = kind;
         var byTeam = raw[label] = new Dictionary<TeamColour, Dictionary<string, List<string>>>();
 
+        // CELLS RUN IN PARALLEL. The loop was fully sequential until 2026-08-05, which
+        // was survivable at ~1ms per HeuristicBot game and is not once a search bot is
+        // the protagonist -- a search game costs ~12s single-threaded, and the mirror
+        // ~2x that, so the default sweep would take over half a day on one core.
+        //
+        // Each cell owns a pre-sized slot array indexed by game number, so no worker
+        // ever writes to another's memory and results stay in a deterministic order
+        // regardless of scheduling. Only the CSV writer and the progress counter are
+        // shared, and both are guarded.
+        var cells = new List<(TeamColour team, string offense, string defense, string[] slots, string[] csvLines)>();
         foreach (var team in allTeams)
         {
             var byCombo = byTeam[team] = new Dictionary<string, List<string>>();
             foreach (var offense in offenseOptions)
-            {
                 foreach (var defense in defenseOptions)
                 {
-                    string comboKey = $"{offense}|{defense}";
-                    var outcomes = byCombo[comboKey] = new List<string>();
+                    var slots = new string[cellGames];
+                    cells.Add((team, offense, defense, slots, new string[cellGames]));
+                    byCombo[$"{offense}|{defense}"] = new List<string>();
+                }
+        }
 
-                    for (int i = 0; i < cellGames; i++)
+        // DYNAMIC partitioning, not the default range partitioner. Parallel.ForEach over a
+        // List hands each worker a contiguous BLOCK of cells up front, which is fine only
+        // when cells cost the same. Mirror cells do not: a decisive game ends in ~40s of
+        // simulated time while a stalemate runs to the 600s tick cap with two searches
+        // running every tick, an order of magnitude dearer. A run was observed sitting at
+        // 0.57 cores for 12 minutes with most workers long finished, stuck behind the few
+        // that drew the expensive blocks. NoBuffering hands out one cell at a time, so a
+        // worker that draws a cheap cell immediately takes another.
+        // Parallelise over INDIVIDUAL GAMES, not cells. Distributing cells is not enough:
+        // each cell's games run in sequence, so a single cell that happens to draw several
+        // stalemates (two searches grinding to the 600s tick cap) becomes the long pole and
+        // the run finishes at one core no matter how the cells were handed out. That was
+        // measured twice -- 0.58 cores for 12+ minutes on a 94%-idle 20-core box, both with
+        // range and with dynamic cell partitioning. One work item per game, handed out one
+        // at a time, is what actually keeps every worker busy to the end.
+        var work = new List<(TeamColour team, string offense, string defense, string[] slots, string[] csvLines, int i)>();
+        foreach (var c in cells)
+            for (int gi = 0; gi < cellGames; gi++)
+                work.Add((c.team, c.offense, c.defense, c.slots, c.csvLines, gi));
+
+        Parallel.ForEach(Partitioner.Create(work, EnumerablePartitionerOptions.NoBuffering),
+                         new ParallelOptions { MaxDegreeOfParallelism = dashThreads }, item =>
+        {
+            var (team, offense, defense, slots, csvLines, i) = item;
+            {
+                {
                     {
                         // Alternate which physical side the bot occupies, matching
                         // RunMatchup's own convention ("cancel out any side asymmetry") --
@@ -647,7 +758,11 @@ if (args.Length > 0 && args[0] == "dashboard")
                         AssignLoadout(botPlayer, botSide, team, offense, defense);
                         AssignRandomLoadout(oppPlayer, oppSide);
 
-                        var bot = new HeuristicBotAdapter(botSide);
+                        IArenaOpponent bot = botIsSearch
+                            ? new RolloutSearchOpponent(botSide, 15, 300, 1,
+                                  HashCode.Combine(label, team, offense, defense, i),
+                                  true, 0.10)
+                            : new HeuristicBotAdapter(botSide);
                         var opponent = factory(oppSide);
                         while (!state.IsGameOver)
                         {
@@ -656,6 +771,7 @@ if (args.Length > 0 && args[0] == "dashboard")
                             opponent.Update(engine);
                         }
                         (opponent as IDisposable)?.Dispose();
+                        (bot as IDisposable)?.Dispose();
 
                         string outcome = state.WinnerSide == 0
                             ? (state.IsTimeLimit ? "timeout_draw" : "draw")
@@ -663,12 +779,22 @@ if (args.Length > 0 && args[0] == "dashboard")
                                 ? (state.IsTimeLimit ? "timeout_win" : "decisive_win")
                                 : (state.IsTimeLimit ? "timeout_loss" : "decisive_loss");
 
-                        csv.WriteLine($"{label},{kind},{team},{offense},{defense},{outcome},{state.CurrentTick},{(state.CurrentTick / 30.0):F1}");
-                        outcomes.Add(outcome);
-                        completed++;
+                        csvLines[i] = $"{label},{kind},{team},{offense},{defense},{outcome},{state.CurrentTick},{(state.CurrentTick / 30.0):F1}";
+                        slots[i] = outcome;
+                        Interlocked.Increment(ref completed);
                     }
                 }
             }
+        });
+
+        // Drain the per-cell slots back into the shared structures on ONE thread, in the
+        // original cell order, so results.csv and results.json are byte-identical run to
+        // run for a given seed rather than depending on how the pool happened to schedule.
+        foreach (var (team, offense, defense, slots, csvLines) in cells)
+        {
+            var outcomes = byTeam[team][$"{offense}|{defense}"];
+            foreach (var o in slots) if (o != null) outcomes.Add(o);
+            foreach (var line in csvLines) if (line != null) csv.WriteLine(line);
         }
         csv.Flush();
         Console.WriteLine($"[{sw.Elapsed:mm\\:ss}] {label,-26} done  ({completed}/{totalGames}, {100.0 * completed / totalGames:F1}%)");
@@ -771,7 +897,12 @@ if (args.Length > 0 && args[0] == "dashboard")
     if (File.Exists(templatePath))
     {
         string template = File.ReadAllText(templatePath);
-        string html = template.Replace("/*__DASHBOARD_DATA__*/", "const DASHBOARD_DATA = " + json + ";");
+        // The template is titled for HeuristicBot because that was the only protagonist
+        // until 2026-08-05. Retitle it to whichever bot actually played, so a saved copy
+        // of the HTML can never be mistaken for the other one's balance data.
+        string html = template.Replace("/*__DASHBOARD_DATA__*/", "const DASHBOARD_DATA = " + json + ";")
+                              .Replace("Heuristic Bot Dashboard",
+                                       botIsSearch ? "Search Bot Dashboard" : "Heuristic Bot Dashboard");
         File.WriteAllText(htmlPath, html);
         Console.WriteLine($"Wrote {htmlPath}");
     }
@@ -1183,6 +1314,65 @@ if (args.Length > 0 && args[0] == "trace")
         : state.IsTimeLimit ? $"P{state.WinnerSide} BY TIMEOUT (higher HP, castle never destroyed)"
         : $"P{state.WinnerSide} (castle destroyed)";
     Console.WriteLine($"\nWinner: {traceResult} at tick {state.CurrentTick}");
+    return;
+}
+
+// How long does each investment level ACTUALLY take? (2026-07-31)
+//
+// Feeds HeuristicBotSettings.InvestPaceTargetSeconds, which is currently a single static
+// 45s for every level. Marc's balance intent is that each investment takes longer than the
+// last, so one constant cannot fit them all -- at low levels 45s is far too generous and at
+// InvestmentCount 7 (price 40,000 vs income 750) it is far too tight, which is what forces
+// the MinAttackFlowFraction floor to catch and flatten the pacing into a dumb 15%.
+//
+// Analytically the zero-spend time is exact: price(n) = income(n) * (4n + 8), so
+// time = price/income = (4n + 8) seconds, independent of income. The two hardcoded price
+// overrides break that (40,000 at income 750 = 53.3s; 121,221 at 2,500 = 48.5s). This mode
+// measures the REAL figure against DoNothing -- no threats, no reactive spending -- so the
+// only gap versus theory is whatever the bot spends of its own accord.
+//
+// Usage: invest-timing [games]
+if (args.Length > 0 && args[0] == "invest-timing")
+{
+    int itGames = args.Skip(1).Select(a => int.TryParse(a, out var g) ? g : (int?)null).FirstOrDefault(g => g.HasValue) ?? 40;
+    var reachedAt = new Dictionary<int, List<double>>();
+
+    for (int i = 0; i < itGames; i++)
+    {
+        var (st, eng) = CreateGame(false);
+        var bot = new HeuristicBotAdapter(2);
+        var opp = new DoNothingBaseline();
+        int lastCount = st.Player2.InvestmentCount;
+
+        while (!st.IsGameOver)
+        {
+            eng.Tick();
+            opp.Update(eng);
+            bot.Update(eng);
+            int c = st.Player2.InvestmentCount;
+            if (c != lastCount)
+            {
+                if (!reachedAt.TryGetValue(c, out var l)) reachedAt[c] = l = new List<double>();
+                l.Add(st.CurrentTick / 30.0);
+                lastCount = c;
+            }
+        }
+    }
+
+    Console.WriteLine($"HeuristicBot vs DoNothing, {itGames} games -- seconds to reach each InvestmentCount\n");
+    Console.WriteLine("  inv   n games   mean s   median s    delta s   theory(4n+8)   ratio");
+    Console.WriteLine("  " + new string('-', 68));
+    double prevMean = 0;
+    foreach (var kv in reachedAt.OrderBy(k => k.Key))
+    {
+        var l = kv.Value.OrderBy(x => x).ToList();
+        double mean = l.Average(), med = l[l.Count / 2];
+        double delta = mean - prevMean;
+        int atLevel = kv.Key - 1;                 // the level we were AT while saving
+        double theory = kv.Key == 8 ? 40000.0 / 750.0 : (kv.Key == 9 ? 121221.0 / 2500.0 : 4.0 * atLevel + 8.0);
+        Console.WriteLine($"  {kv.Key,3} {l.Count,8} {mean,9:F1} {med,10:F1} {delta,10:F1} {theory,14:F1} {(theory > 0 ? delta / theory : 0),7:F2}");
+        prevMean = mean;
+    }
     return;
 }
 
