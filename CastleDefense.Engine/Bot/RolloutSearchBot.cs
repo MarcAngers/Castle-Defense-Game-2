@@ -357,6 +357,32 @@ namespace CastleDefense.Engine.Bot
         /// offensive spend block at HeuristicBot.cs:2284 while leaving the reactive
         /// in-danger path untouched). That is Marc's "spend only what you absolutely need
         /// to on defending and stalling", expressed with a setting that already exists.
+        ///
+        /// TUNING, AND A DELIBERATE DECISION NOT TO TAKE THE BEST NUMBER (2026-08-06).
+        /// Measured against a control run in the SAME build (n=600 each, paired setups):
+        ///
+        ///     arma margin   fires   win rate
+        ///       (off)        0.0%     73.8%
+        ///        0.10        0.5%     ~73.5%   <- SHIPPED
+        ///        0.00        7.3%     75.7%
+        ///
+        /// Margin 0.0 is the strongest: +1.9 points, and it wins 34 of the 57 games where
+        /// the two arms disagree. But McNemar puts that at p = 0.185 -- consistently
+        /// positive across every configuration tried, never negative, and never proven.
+        ///
+        /// It ships at 0.10 anyway, on Marc's call, for PLAYABILITY rather than strength.
+        /// At 7.3% the bot spends a large share of the game in defence-only banking, which
+        /// makes it a markedly less interactive opponent to play against. He would rather
+        /// have the behaviour present but rare than trade the feel of the game for ~2
+        /// unproven points. Do not "fix" this to 0.0 on the strength of the table above.
+        ///
+        /// ONE UNEXPLAINED THING, worth chasing before trusting the mechanism: at 7.3%
+        /// firing, earned investments moved only 6.82 -> 6.86. A macro whose stated purpose
+        /// is committing to the investment race should move that far more. The likely
+        /// reading is that it mostly fires when it CANNOT afford the investment and so
+        /// delegates to the defence-only bot -- meaning any real gain may come from playing
+        /// more defensively, not from racing the economy. If so, a simpler defence-only
+        /// macro would capture the same thing. Untested.
         /// </summary>
         public const int MacroArmageddon = 102;
 
