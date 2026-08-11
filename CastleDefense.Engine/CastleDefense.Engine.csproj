@@ -23,6 +23,11 @@
     <None Update="Data\master_roster.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Fitted human policy table played by HumanCloneBot. Regenerate via the
+         CastleDefense.Simulation "export-policy-table" mode after new games are recorded. -->
+    <None Update="Data\human_policy_table.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -284,6 +284,12 @@ namespace CastleDefense.BotArena
                 ("Tier4Spam",     side => new TierSpamBaseline(side, 4)),
                 ("Investor",      side => new InvestorBaseline(side)),
                 ("BalancedHuman", side => new BalancedHumanBaseline(side)),
+                // The only rung not derived from HeuristicBot or from a spam pattern: a
+                // behaviour clone fitted to Marc's recorded games. Added because every
+                // other rung, HeuristicBot most of all, is inside the family that
+                // RolloutSearchBot uses as its own prior AND rollout policy — so the
+                // ladder could reward better self-simulation and read it as strength.
+                ("HumanClone",    side => new HumanCloneBaseline(side)),
                 ("HeuristicBot",  side => new HeuristicBotAdapter(side)),
             };
 

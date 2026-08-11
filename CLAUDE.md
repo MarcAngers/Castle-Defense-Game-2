@@ -140,6 +140,84 @@ The opponent's action frequency is throttled by `speed // base_speed` to simulat
 
 Both files live in `CastleDefense.Engine/Data/` and are copied to all output directories at build time.
 
+## Measuring progress toward "a bot Marc cannot beat"
+
+Win rate vs HeuristicBot is **partly self-referential**: HeuristicBot is also
+RolloutSearchBot's policy prior AND its rollout policy for both sides, so that number
+can rise by getting better at exploiting the bot's own simulator. Two instruments
+exist to measure something HeuristicBot-exploitation cannot move.
+
+**Where the target actually is** (verified 2026-08-07 against `game_records.db`,
+excluding the 11 quarantined abandoned rerolls, whose rows are still in the DB):
+
+| matchup | record | rate | Elo gap |
+|---|---|---|---|
+| Marc vs HeuristicBot | 58W/5L | 92.1% | +424 |
+| Marc vs SearchBot | 43W/8L | 84.3% | +241 |
+| SearchBot vs HeuristicBot | — | 75.0% | +191 |
+
+These are transitive to within 8 Elo (424 vs 241+191=432), so the ladder is measuring
+one consistent strength axis. **The "11-0 vs SearchBot" figure is stale** — that was
+2026-07-30 against the old horizon-900 config. Against the shipped config Marc is 32-8.
+
+### 1. `--divergence` — behavioural similarity to Marc, no play required
+
+```
+CastleDefense.Simulation.exe --divergence <recordings/singleplayer> <out.csv> \
+    [--bot search|heuristic|clone|replay|none] [--interval N] [--half a|b] [--all]
+```
+
+Puts a bot in Marc's seat on his real replays and scores how differently it plays.
+~2 min for the full search run over 141 games. Appends one row to `<out>_summary.csv`
+per run for tracking. **Two headlines, and both must be read together:**
+
+- `action_mix_tvd` — does it do the same THINGS (0 = identical mix)
+- `timing_lift` — does it do them at the same MOMENTS (1.0 = no better than random
+  timing at that bot's own action volume)
+
+Current standings (holdout half, 70 games):
+
+| shadow | timing_lift | action_mix_tvd |
+|---|---|---|
+| `replay` (oracle) | 55.39 | 0.0000 |
+| `clone` | 3.39 | 0.0387 |
+| `heuristic` | 3.22 | 0.3143 |
+| `none` (control) | 0.00 | 0.1082 |
+
+**Always run `--bot replay` after touching Divergence.cs.** It replays Marc's own
+actions as the shadow policy and must score exactly 1.000 with zero divergence.
+`--bot none` is the floor control and must score exactly 0.
+
+### 2. `HumanClone` ladder rung — an opponent shaped like Marc
+
+```
+CastleDefense.Simulation.exe --export-policy-table <recordings/singleplayer> \
+    CastleDefense.Engine/Data/human_policy_table.csv
+```
+
+Fits a conditional action distribution over `(investment count 0-7) x (enemy units
+0 / 1-5 / 6+)` from Marc's games and writes it as a CSV that `HumanCloneBot` plays.
+Re-run after recording new games; it is the only ladder rung that owes nothing to
+HeuristicBot. HeuristicBot beats it 95.0% at n=300, and it earns 3.93 investments —
+so it plays a real economy rather than spamming. Deterministic: seeded off the
+engine's stream, so a ladder run at a given `--seed` is byte-reproducible.
+
+**It is a conditional average of Marc, not Marc.** It cannot read a window, bait a
+cooldown, or aim a gadget, and it is far weaker than he is. Its value is shape.
+
+### Why neural BC is not the rung (measured, not assumed)
+
+`--export-bc` records only ticks where the action id was non-zero, so it emits
+**zero wait examples** — 0 of 8,109. Marc actually waits on **98.5% of ticks**. Any
+policy fitted to that has never seen the wait label and will act on every decision,
+i.e. become a spam bot. It also means the "69.3% action accuracy" that pipeline last
+reported was measured on a label set with its majority class deleted. Fixing this
+needs the exporter to emit subsampled wait examples plus class weighting, and it is
+a prerequisite for BC being worth trying at all.
+
+`bc_pretrain.py`'s `find_recordings_root()` also still points at the `bin/` paths that
+caused the 2026-07-14 data loss — pass `--replay-dir` explicitly.
+
 ## Cleanup backlog
 
 Deferred tidy-up work lives in `CLEANUP_BACKLOG.md` — stale comments, measurement tools
@@ -167,7 +245,40 @@ with suspicion.
   features — it is unidentifiable and forces `sum(w) == 0`. See `audit_evaluator.py`.
 - **`calib_data.csv` has no `tick`/`game_id` column**, so autocorrelation thinning
   cannot fire for it. The C# `--collect-calibration` exporter should emit both.
-- **The engine cannot be cloned.** `_scheduledEvents` holds `Action` closures
-  (GameEngine.cs:38) from 14 gadget-effect callsites; `_actionQueue` is a
-  `ConcurrentQueue<Action>`. Any search/lookahead work needs these converted to
-  data-based records first.
+- **Agreement metrics reward ACTING OFTEN, and it inverted a real comparison.** A bot
+  firing a label in `p_b` of decisions and a human in `p_h` coincide in `p_h*p_b` of
+  them with completely unrelated timing, so a spraying bot banks recall for free.
+  Raw macro-F1 ranked HeuristicBot (acts in 33.6% of windows) *above* the fitted human
+  clone (8.4%) while the clone matched Marc's action mix 8x better. Divide by the
+  chance level at each bot's own action volume — that is what `timing_lift` is. The
+  same correction is what makes such a metric fair to a stochastic policy at all.
+- **Comparing two agents on different decision cadences is a phase trap.**
+  `--divergence` used to score the human's PRECEDING window against the bot's decision
+  at the current tick — conditioned on states that can never coincide. Marginal
+  statistics survived it (they only re-bin the same actions) so it looked fine; every
+  conditional statistic was meaningless. This is the second instance of this bug class
+  in the project. The fix that catches it is an ORACLE: score the human's own actions
+  as the shadow policy and require exactly 1.000.
+- **Replay reconstruction was not deterministic.** Rebuilding a game from a `.replay`
+  used an unseeded `new GameEngine(state)`, and the engine Rng drives unit y-position
+  on spawn, which changes combat targeting — two runs of the same binary over the same
+  replays disagreed on castle HP in 3 of 141 games. Now seeded from the game id
+  (`ReplayFile.BuildStart`). Anything else reconstructing replays must do the same.
+- **`.replay` never recorded gadget target positions**, only the discrete action id, so
+  every reconstruction re-aims casts with the engine's auto-target. `--trace-human` was
+  known to have this; `--divergence`, `--export-bc` and `--export-policy-table` all
+  **inherit it**. Consequence: Marc's gadget doctrine (freeze/blackhole at the enemy's
+  end) is invisible to every tool that reads replays, and a reconstructed trajectory
+  diverges from the real game at his first cast. `gadget_uses` in the DB has the id and
+  tick but still no position, so this cannot be repaired from existing recordings — the
+  recorder has to change first.
+- **12 of the 153 files in `recordings/singleplayer/` are league-watch bot-vs-bot
+  games.** Anything treating seat 1 as "the human" must exclude them
+  (`ReplayFile.SelectHumanGames` does, via `game_mode`). 141 are real human games.
+- **The engine CAN now be cloned** — this entry used to say it could not, and that is
+  stale. The PendingEffect refactor converted delayed gadget effects from `Action`
+  closures to data records, so `GameEngine.Clone(rngSeed)` produces an independent copy
+  (GameEngine.cs:143). It deliberately drops event subscribers, the queued input actions,
+  and the RNG stream; `_scheduledEvents` (the legacy closure list) still exists and Clone
+  THROWS if any are pending, but `ScheduleAction` has no callers. `RolloutSearchBot` and
+  `--divergence` both depend on this working; `CloneCheck.cs` in BotArena is the guard.

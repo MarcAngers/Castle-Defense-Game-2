@@ -11,6 +11,9 @@
     <None Include="..\CastleDefense.Engine\Data\master_roster.csv" Link="Data\master_roster.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\CastleDefense.Engine\Data\human_policy_table.csv" Link="Data\human_policy_table.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <PropertyGroup>

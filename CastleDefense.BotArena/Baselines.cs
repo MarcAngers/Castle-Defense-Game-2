@@ -1,4 +1,5 @@
 using CastleDefense.Engine;
+using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
@@ -139,6 +140,20 @@ namespace CastleDefense.BotArena
             }
             if (best != null) engine.SpawnUnit(_side, best.Id);
         }
+    }
+
+    // The one ladder rung that is not a spam bot, an Investor, or HeuristicBot in a hat.
+    // Plays a behaviour clone fitted to Marc's 141 recorded games — see
+    // CastleDefense.Engine.Bot.HumanCloneBot and PolicyTableExport for what the table can
+    // and cannot represent. Deliberately not strong; the point is that it spends money
+    // where a person spends it, so a change that helps here is not just better
+    // HeuristicBot-exploitation.
+    public class HumanCloneBaseline : IArenaOpponent
+    {
+        private readonly HumanCloneBot _bot;
+        public HumanCloneBaseline(int side) => _bot = new HumanCloneBot(side);
+        public void Update(GameEngine engine) => _bot.Update(engine);
+        public long[] ActionCounts => _bot.ActionCounts;
     }
 
     // A reasonably competent scripted human: buys good-value units, reacts to

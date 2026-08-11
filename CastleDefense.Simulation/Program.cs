@@ -205,6 +205,13 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            // Fits the human policy table that HumanCloneBot plays. See PolicyTableExport.
+            if (args.Length >= 3 && args[0] == "--export-policy-table")
+            {
+                PolicyTableExport.Run(args[1], args[2], args.Skip(3).ToArray());
+                return;
+            }
+
             if (args.Length >= 4 && args[0] == "--collect-calibration")
             {
                 int  nGames    = int.Parse(args[1]);

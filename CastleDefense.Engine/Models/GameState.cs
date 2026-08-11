@@ -249,9 +249,15 @@ namespace CastleDefense.Engine.Models
         //
         // Money/Army/Gadget/Repair land at zero here honestly: given HP and Income they
         // add nothing *to a linear weighted average*. A logistic on the same six features
-        // does use all of them and calibrates ~11% better (log-loss 0.491 vs 0.551), so
-        // switching EvaluateBoard() to sigmoid(w·(x−0.5)) is a real available upgrade —
-        // deliberately not done here, since it changes live game behaviour.
+        // does use all of them and calibrates ~11% better (log-loss 0.491 vs 0.551).
+        //
+        // THESE WEIGHTS ARE NOT DEPLOYED. The sigmoid switch this block used to describe
+        // as "a real available upgrade — deliberately not done here" WAS done, later the
+        // same day: EvaluateBoard() below is the logistic, over LogitWeight*, and it is
+        // what RolloutSearchBot and the RL reward shaping both call. Everything here feeds
+        // EvaluateBoardLinear() only, which is reachable solely via search-test's
+        // --linear-eval. Read the zeros as a fact about the retired linear form — search
+        // is NOT blind to army; LogitWeightArmy is 2.96.
         public static float EvalWeightHp     = 0.2476f;
         public static float EvalWeightIncome = 0.7524f;
         public static float EvalWeightMoney  = 0.0000f;
