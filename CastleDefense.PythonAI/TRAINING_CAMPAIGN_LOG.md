@@ -2781,3 +2781,379 @@ Step 1 is first because two of the two instruments examined this session were br
 That is a base rate, not a coincidence, and it means the project currently cannot tell
 whether a change helped.
 
+
+# ============================================================
+# 2026-08-07 — PROBE A: does a better rollout policy make the search stronger?
+# ============================================================
+
+Marc approved a staged plan whose Stage 0 was one cheap probe that could kill the
+whole direction in a day. This is that probe's result. **It came back negative, and
+the negative is structural rather than a tuning miss.** No training was run; total
+cost was about 90 minutes of CPU on one box, zero GPU.
+
+## The question
+
+`RolloutSearchBot` is a flat one-ply search: clone, apply a candidate action, let
+HeuristicBot drive BOTH sides to a fixed horizon, score the leaf. So it cannot
+discover a line HeuristicBot would not play out — the rollout policy IS the ceiling.
+The standard route past that ceiling is to distil the search into a fast policy and
+feed it back in as the rollout policy, then iterate. **That only compounds if a
+stronger rollout policy actually produces a stronger search.** Nobody had measured
+whether it does.
+
+## What was built
+
+`CastleDefense.Engine/Bot/RolloutPolicy.cs` — an `IRolloutPolicy` seam, a
+`RolloutPolicyKind` enum, and `SavingHeuristicBot`: HeuristicBot that (1) invests the
+instant it can afford to, (2) once past `commitFraction` of the way to the next
+investment, stops offensive spending and delegates to the existing defence-only
+profile, (3) otherwise plays normally. `RolloutSearchBot` takes `ownRolloutPolicy` /
+`oppRolloutPolicy`, both defaulting to `Heuristic` so every existing caller is
+unaffected. `search-test` gained `--rollout-policy`, `--opp-rollout-policy`,
+`--save-commit`, and `--csv` (per-game outcomes, so two arms on one seed can be
+paired for McNemar).
+
+**Both wiring checks passed before any measurement.** The control arm reproduces the
+pre-change run byte-for-byte (10970 decisions, 37,922,916 simulated ticks, 20.9%
+overrides, 5.70/5.30 invests at seed 999 n=20), and the treatment differs on every
+counter. Identical output across a config change would have meant the flag was dead.
+
+## The premise check failed first: the candidate policy is WEAKER
+
+Ladder, `--nostart`, seed 12345, 200 setups x 2 sides = 400 games/cell:
+
+| contender | vs HeuristicBot | earned invests |
+|---|---|---|
+| HeuristicBot (control) | 50.2% [45.4, 55.1] | 6.96 |
+| SavingHeuristic @1.00 | 48.5% | 6.91 |
+| SavingHeuristic @0.70 | 47.2% | 6.88 |
+| SavingHeuristic @0.50 | 46.0% | 6.92 |
+| SavingHeuristic @0.25 | 42.2% [37.5, 47.1] | 7.00 |
+
+Monotone DOWN in commitment strength. **A smoke run at n=50 showed this trend running
+the opposite way (38% -> 50%)** — worth remembering as a live demonstration that this
+benchmark's small-n noise exceeds the effects being chased.
+
+**EARNED INVESTS ARE FLAT ACROSS EVERY ARM (6.96 -> 7.00).** Scripting "commit to
+saving" does not make the bot invest more. HeuristicBot's existing
+`PaceAttackSpendForInvestment` already extracts nearly all of it; the commitment only
+makes it attack less, and less attacking is worth less than HeuristicBot's attacking.
+**This is the third independent sighting of the same thing**, after the Armageddon
+macro's unexplained 6.82 -> 6.86 at 7.3% firing and the `--no-macro` gap. It means the
+save-invest macro's large contribution (75.0% vs 44.0% with it disabled) is probably
+NOT coming from the economy, and the project does not currently know why its best
+macro works.
+
+## Probe A run as a dose-response instead
+
+A stronger rollout policy could not be bought cheaply, so the same question was asked
+on the axis available: if search is insensitive to an 8-point degradation of its
+rollout policy, the coupling route 1 depends on is weak regardless of direction.
+
+Shipped config (interval 15, horizon 300, margin 0.10), seed 4242, n=600 paired:
+
+| rollout policy | its own strength | search win rate | delta | McNemar p |
+|---|---|---|---|---|
+| HeuristicBot (control) | 50.2% | **74.8%** [71.2, 78.1] | — | — |
+| Saving @0.50 (own side) | 46.0% | 70.2% | −4.7 | **0.0042** |
+| Saving @0.25 (own side) | 42.2% | 73.0% | −1.8 | 0.27 |
+| Saving @0.25 (OPPONENT side) | — | 72.0% | −2.8 | 0.068 |
+
+Control reproduces the recorded shipped figure (74.8% vs 75.0% [71.4, 78.3]), so the
+instrument is calibrated.
+
+**THE RELATIONSHIP IS NON-MONOTONE.** The WEAKEST rollout policy (@0.25) produced a
+BETTER search than the middle one (@0.50): +2.8 points, b=33/c=50, p=0.078 on the
+direct paired comparison. If search strength were a function of rollout-policy
+strength the ordering would be preserved. It is not. Both perturbations cost
+something, but not in proportion to how much they degraded the rollout policy.
+
+**THE OVERRIDE RATE DOES NOT MOVE AT ALL: 8.21% / 8.28% / 8.16% / 8.23% across all
+four arms.** Nor do the macro-selection rates (save-macro 4.5 / 4.2 / 4.3 / 4.4%).
+This is the sharpest single number in the probe.
+
+## Mechanism, and why it generalises
+
+Search consumes only DIFFERENCES between candidate scores — both the argmax and the
+override test are comparisons. Changing the rollout policy shifts every candidate's
+leaf score in the same direction at once, so the ranking survives almost intact. An
+unchanged override rate under a materially changed rollout policy is exactly what that
+looks like.
+
+In Go or chess a better rollout policy also serves as a prior over a branching tree,
+so it changes which lines are REACHABLE. In a flat one-ply search there is no tree, so
+it only changes score levels, which then cancel in the comparison. **Distillation
+cannot work here as designed: feeding a better policy into the rollout moves all
+candidate scores together and leaves the argmax where it was. The loop has nothing to
+compound.**
+
+## What this does not prove
+
+The derivative was measured DOWNWARD, over an 8-point range, at n=600 (which resolves
+~3 points). A large upward asymmetry is not formally excluded. Two things argue
+against spending more on it: the dimension varied — save-versus-attack commitment —
+is precisely the dimension the macros act on and therefore the most favourable axis
+for coupling available; and the score-difference argument predicts insensitivity in
+both directions from structure, not from this sample.
+
+## Route 2's cheap probe, taken at the same time
+
+`--opp-rollout-policy saving` changes only the ENEMY model inside the rollout. It cost
+2.8 points (p=0.068). The candidate enemy model is weaker than HeuristicBot, so
+"search became optimistic about the enemy and played worse" fits — which is exactly
+the objection raised against using `HumanCloneBot` (which loses 95% to HeuristicBot)
+as the rollout's opponent model. Partial evidence, one model, but it points the same
+way: an opponent model that is correctly shaped but too weak makes search worse.
+
+## Direction implied
+
+What actually took this bot from ~50% to 75% was ADDING CANDIDATES — the macros — not
+improving rollouts. Candidates change the option set the argmax chooses from; rollout
+quality changes score levels that cancel. **The headroom is in the option space.**
+
+Before building anything there, the invest paradox above should be explained, because
+it says the project does not know why its best macro works.
+
+Code is committed to the working tree but NOT to git — Marc's call.
+
+# ============================================================
+# 2026-08-07 — STAGE 0: what the save-invest macro's value actually IS
+# ============================================================
+
+Follow-on from Probe A. Probe A closed the rollout policy as a lever; this asks what the
+one mechanism that DID work is actually doing, because the project's explanation for it
+turned out to be untested. All arms n=600, paired, seed 4242, shipped config
+(interval 15 / horizon 300 / margin 0.10), same build.
+
+## The decomposition
+
+| arm | win rate | macro firings/game | earned inv own/opp | units | spend |
+|---|---|---|---|---|---|
+| A1 shipped | **74.8%** [71.2, 78.1] | 25.18 | 6.93 / 6.12 | 224.8 | 31,276 |
+| A2 `--no-macro` | 63.7% [59.7, 67.4] | 0 | 6.63 / 6.23 | 210.5 | 31,251 |
+| A3 same macro, RANDOM timing @4.5% | 63.3% [59.4, 67.1] | 25.78 | 6.67 / 6.23 | 199.4 | 28,710 |
+| A4 macro every decision | 0.0% (0W/600L) | all | 5.46 / 5.31 | 0 | 0 |
+| B1 all three macros off | 63.7% | 0 | 6.75 / 6.22 | 221.1 | — |
+| B2 random, affordability-gated | 64.7% | 6.9 (1.2%) | 6.67 / 6.24 | 211.1 | — |
+
+Paired: A1 vs A2 −11.2% (b=88/c=21, p<0.0001). **A2 vs A3 −0.3% (b=36/c=34, p=0.905).**
+A1 vs A3 −11.5% (b=87/c=18, p<0.0001).
+
+## THE RESULT: the value is 100% in the SELECTION, 0% in the behaviour
+
+Search fires the save-invest macro ~25 times a game and it is worth +11.5 points. Fire
+the IDENTICAL macro the IDENTICAL number of times (25.78 vs 25.18) at random moments and
+it is worth nothing. The behaviour is inert without the timing.
+
+**The timing is not a writable rule.** Only 1.2% of decisions are ones where the
+investment is already affordable, but search fires the macro on 4.5% — so roughly
+three-quarters of its firings are on decisions where it CANNOT yet buy. It is choosing
+when to HOLD money, not when to spend it. Gating random firing on affordability (B2)
+recovers ~1 of the 11 points. This is also the post-hoc explanation for why Probe A's
+`SavingHeuristicBot` failed: it scripted the affordable case, which is the third that
+does not matter.
+
+**Both prior hypotheses died.** "Attacked less" is backwards — the macro arm buys MORE
+units than the no-macro arm (224.8 vs 210.5) at equal spend. "Invested more" is only a
+third of the story (+0.81 vs +0.40 differential). The macro banks at the right moments,
+compounds income, and funds MORE attacking later. It is sequencing, not a trade-off.
+
+A4 is the mechanism check: fire it always and the bot buys literally zero units and loses
+600 of 600, confirming the macro is survivable only because it is rare.
+
+## CORRECTION: the 44.0% is a MARGIN 0.01 NUMBER and was never labelled as one
+
+`--no-macro` at the shipped margin is 63.7%, not 44.0%, which tripped this session's own
+stated abort criterion. A first hypothesis (the Armageddon macro did not exist when 44.0%
+was measured) was WRONG — B1 turns off all three macros and still scores 63.7%. The
+actual reconciliation, re-measured in this build:
+
+| margin | overrides (on/off) | macros ON | macros OFF | macro worth |
+|---|---|---|---|---|
+| 0.01 | 26.2% / 17.8% | 68.5% (recorded 69.8%) | **43.8% (recorded 44.0%)** | +24.7 |
+| 0.10 shipped | 8.2% / 3.8% | 74.8% (recorded 75.0%) | 63.7% | +11.2 |
+
+Every recorded figure reproduces within noise. **The instrument is healthy** — the 44.0%
+just describes a configuration the bot does not ship with.
+
+**Consequence, and it inverts a standing claim.** At the shipped margin, search with NO
+macros beats HeuristicBot 63.7% against ~50% for HeuristicBot self-play. The primitives
+are NET POSITIVE there. "Search's primitive suggestions are net harmful" and "the macros
+are the entire source of strength" are both margin-0.01 statements. The correct general
+statement is the override-rate invariant: intervening rarely is good, intervening often is
+bad, whichever kind of move it intervenes with — the same invariant Probe A found the
+evaluator and the rollout policy obeying. The macro is worth +11.2 points at the shipped
+config, not +31.
+
+## Bug found and fixed: GameEngine.Clone shares mutable reference fields
+
+`Clone()` uses `MemberwiseClone()`, so every reference-type field is SHARED with the
+original until explicitly replaced. Diagnostic counters added as plain arrays were
+therefore incremented by all ~231x of search's rollout simulation: the first smoke run
+reported **92,686 units bought in an ~8,200-tick game**. Fixed (Clone now resets both
+arrays) and a comment added at the MemberwiseClone call. Caught only because the number
+was absurd on its face — a counter inflated 10% would have shipped. Worth auditing what
+else Clone does not reset; `CloneCheck.cs` guards state divergence but would not catch a
+diagnostic counter.
+
+## Where this points
+
+The lever is search's judgement about WHEN TO HOLD MONEY. It currently makes that call
+from a 300-tick truncated rollout scored by a 6-feature logistic — and horizon is a
+documented CLIFF (250 -> 30%, 200 -> 1.5%) precisely because below ~300 an investment does
+not repay inside the rollout. So the decision that carries all of the bot's margin is
+evaluated right at the edge where the estimator is known to break down. Play-to-completion
+evaluation of macro candidates aims exactly there, and is affordable because macro
+decisions are ~5% of decisions.
+
+Not started — Marc's call.
+
+# ============================================================
+# 2026-08-08 — STAGE 1a: how wrong is search's hold-money estimate?
+# ============================================================
+
+Stage 0 showed the save-invest macro's entire +11.2 points live in WHICH decisions it
+fires on, and that ~3/4 of firings are decisions where the investment is not yet
+affordable — search is choosing when to HOLD money. Stage 1a asks whether that choice is
+actually wrong, against play-to-completion ground truth. New BotArena mode `macro-truth`.
+No training. ~1 hour CPU total.
+
+## Two failed framings first, both instructive
+
+**Per-decision regret is NOT well-posed for a commitment macro**, and the data says so
+from both ends:
+
+| truth definition | mean truth gap | implication |
+|---|---|---|
+| hold until affordable, UNBOUNDED | 0.19 | one decision swings 0.62 win prob — not credible |
+| force ONE decision, real bot plays on | **0.0000** | the forced action is a no-op ~99% of the time |
+
+The unbounded version reproduces the A4 saturation failure inside the measurement (holds
+the purse to game end and dies with a full bank). The one-step version is a no-op because
+Stage 0 is right: only 1.2% of decisions are affordable, so "fire the macro" almost always
+means "hold", and holding once changes nothing. **The fix is a BOUNDED commitment window**
+(`--commit-ticks`): commit for W ticks or until the investment lands, then hand back to
+HeuristicBot — which is what the live bot does when the rollouts turn against saving.
+
+## The result: the decision is BIMODAL
+
+n=1219 sampled decisions, K=30 play-to-completion rollouts per branch, common random
+numbers, shipped config, seed 4242:
+
+| window | truth TIES (gap=0) | truth prefers macro | shallow chose macro | shallow regret | random floor | noise floor (K=15) |
+|---|---|---|---|---|---|---|
+| 75 ticks | **95.7%** | 2.2% | 4.3% | 0.01846 | 0.01995 | 0.00000 |
+| 225 ticks | **91.9%** | 4.0% | 4.3% | 0.02832 | 0.03480 | 0.00000 |
+| 600 ticks | **84.9%** | 4.7% | 4.3% | 0.03582 | 0.06960 | 0.00000 |
+
+**At ~92% of decisions the choice makes literally no difference** — all 30 playouts of both
+branches return identical outcomes. **At the remaining ~8% it is near game-deciding**
+(median gap 0, p90 gap 1.0). Almost nothing in between.
+
+**Search gets ~94% of decisions right and concentrates its errors on the decisive ones:
+mean gap when shallow is wrong is 0.38 against 0.07 overall, 5.5x.** That is why its
+regret (0.0283) sits close to a coin flip (0.0348) despite high accuracy.
+
+The stated Stage 1a bar (disagreement >= 15%) was the WRONG bar — it assumed a smooth
+distribution of stakes. Disagreement is 7.5%. The regret bar (>= 0.03) is met at the
+longer windows. Recorded plainly because the criterion was set in advance.
+
+## Affordability: ONE playout per branch is enough
+
+Regret of a bounded-commitment truth estimator at budget m (W=225), ties broken to prior:
+
+    m= 1  regret 0.00118   sign-errors  7 (0.6%)
+    m= 2  regret 0.00077   sign-errors  4 (0.3%)
+    m= 4  regret 0.00096   sign-errors  6 (0.5%)
+    m= 8  regret 0.00052   sign-errors  4 (0.3%)
+
+**HELD-OUT CHECK** (choose on seeds 1-15, score on independent seeds 16-30): estimator
+regret **0.00022** vs shallow **0.02860** — a **131x** gap, 2 sign flips in 1219. The sign
+is stable across independent futures, so this is not an artifact of scoring on the sample
+that chose.
+
+Because the gaps are 0 or 1 rather than finely graded, a single playout resolves them.
+In-game cost is therefore ~2 extra full-length rollouts per decision (~8,000 ticks against
+the current ~3,600), roughly **3x** — about 57ms per decision against the live game's 250ms
+async budget. **Shippable, not merely benchmarkable.** The earlier worry that deep
+evaluation would inherit the hold-forever pathology was right about the unbounded form and
+wrong about the bounded one.
+
+## THE CAVEAT THAT MATTERS
+
+**0.028 per decision does not convert to a win-rate prediction.** Decisions are not
+independent — changing one changes every subsequent state, and all of these states were
+generated by the SHIPPED bot's play. Change the decision rule and the state distribution
+shifts, so the estimator's measured accuracy is off-policy. This bounds the per-decision
+headroom and establishes the signal exists. Only Stage 1b measures games won.
+
+## Stage 1b, now concretely specified
+
+Replace the macro candidate's shallow leaf with a bounded-commitment play-to-completion
+rollout, m=2 (m=1 is enough on this evidence; 2 is cheap insurance), W=225 ticks, CRN, and
+evaluate the PRIOR BASELINE the same way — scoring one by truth and the other by truncated
+eval would compare two different estimators, the same class of error as the `--divergence`
+phase bug. Everything else keeps today's behaviour. Measured by `search-test` n=600 paired
+against the 74.8% control, McNemar, with worst-case decision latency reported.
+
+Not started — Marc's call.
+
+# ============================================================
+# 2026-08-08 — STAGE 1b: deep macro evaluation. NEGATIVE.
+# ============================================================
+
+Ran the estimator Stage 1a validated: bounded-commitment play-to-completion for the macro
+candidate AND the prior baseline, m=1, W=225, CRN, deep given authority over exactly the
+macro-vs-prior question. n=600 paired, seed 4242, shipped config, both arms same build.
+
+| arm | win rate | overrides | macro firings/game | earned inv |
+|---|---|---|---|---|
+| control | 74.8% (449/600) | 8.21% | 25.18 | 6.93 |
+| deep m=1 | 75.8% (455/600) | 7.31% | 21.16 | 6.86 |
+
+**+1.0 points, discordant b=38/c=44, McNemar p=0.58.** Fails the pre-registered bar
+(beat control at p<0.10). Latency 232.6 ms/decision average, **1629 ms worst case**,
+against the live game's 250 ms async budget — not shippable even had it won.
+
+## The lesson: per-decision regret did not predict policy strength
+
+Stage 1a measured a **131x** regret gap (held-out: 0.00022 vs 0.02860) and it bought
++1.0 points of win rate, indistinguishable from zero. The caveat recorded before the run
+("0.028/decision does not convert to a win-rate prediction; decisions are not independent
+and the states are off-policy") turned out to be the entire story rather than a footnote.
+**Treat per-decision regret as a necessary-but-not-sufficient screen from now on.**
+
+## Mechanism, and it is the same family as Probe A
+
+Both estimators — shallow and deep — use **HeuristicBot as the continuation policy**. The
+REAL continuation after the decision is the search bot. Extending the rollout from 300
+ticks to game end does not fix that mismatch, it **amplifies** it: the estimate becomes a
+more precise answer to a question about a game that is not the one being played. This is
+why more playouts would not help either — m controls variance, and the error here is bias.
+
+Probe A found search insensitive to rollout-policy STRENGTH; this finds it damaged by
+rollout-policy MISMATCH once the rollout is long enough for the mismatch to compound. Both
+say the rollout is a poor instrument for valuing a long-horizon commitment.
+
+## Behavioural read
+
+Deep vetoes (22.1/game) exceeded promotions (18.4/game): the "better" estimator made the
+bot fire the winning mechanism LESS (25.18 -> 21.16 macro firings, overrides 8.21% ->
+7.31%, earned invests 6.93 -> 6.86) and the win rate did not move. It changed the macro
+decision ~40 times a game to net effect zero — consistent with Stage 1a's finding that
+~92% of these decisions are ties, where intervening freely is harmless but pointless.
+
+## Where the search stands now — four levers, three closed
+
+| lever | verdict |
+|---|---|
+| leaf EVALUATOR | closed 2026-08-07, six directions, none beat deployed |
+| ROLLOUT POLICY | closed by Probe A — insensitive and non-monotone |
+| LEAF DEPTH / estimator quality | closed by Stage 1b — regret gap does not convert |
+| the OPTION SET itself | **open**, and 1-for-3 historically (save-invest wins; press measured worse; Armageddon unproven at p=0.185) |
+
+The shipped 74.8% configuration remains the best measured. Nothing was changed in it:
+`--deep-macro` is opt-in and the control reproduces byte-for-byte.
+
+Reusable from this arc: `macro-truth` mode, the deep-eval path, `--rollout-policy`,
+`--macro-random-rate`, per-game CSVs for paired testing, and purchase counters.

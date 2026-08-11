@@ -156,6 +156,22 @@ namespace CastleDefense.BotArena
         public long[] ActionCounts => _bot.ActionCounts;
     }
 
+    /// <summary>
+    /// HeuristicBot plus the scripted save-invest commitment (see SavingHeuristicBot).
+    ///
+    /// A ladder CONTENDER rather than a rung. Probe A only means anything if this policy is
+    /// genuinely stronger than HeuristicBot — a "stronger rollout policy" that is not
+    /// actually stronger tests nothing. The ladder is the instrument that answers that:
+    /// paired setups, side-swapped, with a confidence interval.
+    /// </summary>
+    public class SavingHeuristicBaseline : IArenaOpponent
+    {
+        private readonly SavingHeuristicBot _bot;
+        public SavingHeuristicBaseline(int side, double commitFraction = 0.5)
+            => _bot = new SavingHeuristicBot(side, commitFraction);
+        public void Update(GameEngine engine) => _bot.Update(engine);
+    }
+
     // A reasonably competent scripted human: buys good-value units, reacts to
     // incoming threats, invests opportunistically when flush and safe, and
     // fires gadgets on cooldown at sensible-ish targets. Meant to be the

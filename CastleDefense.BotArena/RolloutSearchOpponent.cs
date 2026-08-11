@@ -29,7 +29,15 @@ namespace CastleDefense.BotArena
                                      int pressPeakMinInvest = 6, int pressPeakMaxInvest = 7,
                                      bool pressWaveCommit = false,
                                      bool useArmageddonMacro = true,
-                                     double armageddonMargin = double.NaN)
+                                     double armageddonMargin = double.NaN,
+                                     RolloutPolicyKind ownRolloutPolicy = RolloutPolicyKind.Heuristic,
+                                     RolloutPolicyKind oppRolloutPolicy = RolloutPolicyKind.Heuristic,
+                                     double saveCommitFraction = 0.5,
+                                     double macroRandomRate = 0.0,
+                                     bool macroRandomAffordable = false,
+                                     bool deepMacroEval = false,
+                                     int deepPlayouts = 2,
+                                     int deepCommitTicks = 225)
             : base(side, decisionInterval, horizon, rolloutsPerAction, seed,
                    usePrior, overrideMargin, useMacro, usePressMacro,
                    maxDecisionMs, maxParallelism, asyncDecisions: false,
@@ -38,13 +46,25 @@ namespace CastleDefense.BotArena
                    pressPeakMargin: pressPeakMargin, pressOffPeakMargin: pressOffPeakMargin,
                    pressPeakMinInvest: pressPeakMinInvest, pressPeakMaxInvest: pressPeakMaxInvest,
                    pressWaveCommit: pressWaveCommit,
-                   useArmageddonMacro: useArmageddonMacro, armageddonMargin: armageddonMargin)
+                   useArmageddonMacro: useArmageddonMacro, armageddonMargin: armageddonMargin,
+                   ownRolloutPolicy: ownRolloutPolicy, oppRolloutPolicy: oppRolloutPolicy,
+                   saveCommitFraction: saveCommitFraction, macroRandomRate: macroRandomRate,
+                   macroRandomAffordable: macroRandomAffordable,
+                   deepMacroEval: deepMacroEval, deepPlayouts: deepPlayouts,
+                   deepCommitTicks: deepCommitTicks)
         {
         }
     }
 
     public static class SearchTest
     {
+        private static RolloutPolicyKind ParsePolicy(string s) => s.ToLowerInvariant() switch
+        {
+            "heuristic" => RolloutPolicyKind.Heuristic,
+            "saving" => RolloutPolicyKind.Saving,
+            _ => throw new ArgumentException($"unknown rollout policy '{s}' (heuristic|saving)"),
+        };
+
         public static void Run(string[] args)
         {
             int games = 20, seed = 20260728, interval = 15, horizon = 300, rollouts = 1;
@@ -55,6 +75,7 @@ namespace CastleDefense.BotArena
             // find WHICH part of a refit helps or hurts -- swapping the whole vector
             // confounds six changes into one number.
             string evalWeights = null;
+            string csvPath = null;
             int maxDecisionMs = 0;
             // Intra-decision parallelism (cores per decision). 1 keeps each benchmark game
             // single-threaded, because search-test already parallelises ACROSS games and
@@ -70,6 +91,19 @@ namespace CastleDefense.BotArena
             bool pressWaveCommit = false;
             bool useArma = true;
             double armaMargin = double.NaN;
+            // PROBE A. Which policy drives each side inside a rollout. Both default to
+            // Heuristic, which is the committed behaviour and therefore the control arm —
+            // run the control in the SAME build as the treatment, never against a number
+            // copied from an earlier session.
+            var ownRollout = RolloutPolicyKind.Heuristic;
+            var oppRollout = RolloutPolicyKind.Heuristic;
+            double saveCommit = 0.5;
+            // STAGE 0. Pair with --no-macro so the macro is fired ONLY by the coin flip;
+            // leaving it selectable as well would confound the two.
+            double macroRandomRate = 0.0;
+            bool macroRandomAffordable = false;
+            // STAGE 1b. Off by default -- the control arm must be the shipped bot.
+            bool deepMacro = false; int deepPlayouts = 2; int deepCommitTicks = 225;
             // Leave a couple of cores for the OS and the desktop. The 2026-07-27 crash
             // post-mortem traced a machine-wide stall to running 15 CPU-bound processes on
             // 20 logical cores, so don't saturate by default.
@@ -88,6 +122,14 @@ namespace CastleDefense.BotArena
                 else if (args[i] == "--press-offpeak-margin" && i + 1 < args.Length) pressOff = double.Parse(args[++i]);
                 else if (args[i] == "--press-window" && i + 1 < args.Length) { var pw = args[++i].Split('-'); pressLo = int.Parse(pw[0]); pressHi = int.Parse(pw[1]); }
                 else if (args[i] == "--eval-weights" && i + 1 < args.Length) evalWeights = args[++i];
+                else if (args[i] == "--rollout-policy" && i + 1 < args.Length) ownRollout = ParsePolicy(args[++i]);
+                else if (args[i] == "--opp-rollout-policy" && i + 1 < args.Length) oppRollout = ParsePolicy(args[++i]);
+                else if (args[i] == "--save-commit" && i + 1 < args.Length) saveCommit = double.Parse(args[++i]);
+                else if (args[i] == "--macro-random-rate" && i + 1 < args.Length) macroRandomRate = double.Parse(args[++i]);
+                else if (args[i] == "--macro-random-affordable") macroRandomAffordable = true;
+                else if (args[i] == "--deep-macro") deepMacro = true;
+                else if (args[i] == "--deep-playouts" && i + 1 < args.Length) deepPlayouts = int.Parse(args[++i]);
+                else if (args[i] == "--deep-commit-ticks" && i + 1 < args.Length) deepCommitTicks = int.Parse(args[++i]);
                 else if (args[i] == "--seed" && i + 1 < args.Length) seed = int.Parse(args[++i]);
                 else if (args[i] == "--interval" && i + 1 < args.Length) interval = int.Parse(args[++i]);
                 else if (args[i] == "--horizon" && i + 1 < args.Length) horizon = int.Parse(args[++i]);
@@ -120,6 +162,11 @@ namespace CastleDefense.BotArena
                     intraThreads = Math.Max(1, Environment.ProcessorCount - 2);
                 }
                 else if (args[i] == "--headstart") headstart = true;
+                // PER-GAME OUTCOMES, so two arms on the same --seed can be paired game by
+                // game. Setups are pre-generated from the seed, so row g is the SAME setup
+                // in both arms and McNemar applies to the discordant rows. The aggregate
+                // win rates alone cannot support that test.
+                else if (args[i] == "--csv" && i + 1 < args.Length) csvPath = args[++i];
                 else if (int.TryParse(args[i], out var g)) games = g;
             }
 
@@ -131,6 +178,14 @@ namespace CastleDefense.BotArena
                               $"maxDecisionMs={(maxDecisionMs > 0 ? maxDecisionMs.ToString() : "unlimited")}, " +
                               $"coresPerDecision={intraThreads}, " +
                               $"eval={(linearEval ? "LINEAR (pre-audit)" : refitEval ? "LOGISTIC REFIT (2026-08-05)" : "logistic (deployed)")}");
+            if (deepMacro)
+                Console.WriteLine($"              STAGE 1b: DEEP macro eval on -- {deepPlayouts} bounded play-to-completion " +
+                                  $"rollout(s)/branch, commit window {deepCommitTicks} ticks");
+            if (macroRandomRate > 0)
+                Console.WriteLine($"              STAGE 0: save-macro fired at RANDOM on {macroRandomRate:P1} of {(macroRandomAffordable ? "AFFORDABLE " : "")}decisions" +
+                                  $"{(useMacro ? "  *** WARNING: --no-macro not set, macro is ALSO selectable — arms are confounded ***" : " (selection deleted)")}");
+            Console.WriteLine($"              rollout policy: own={ownRollout}, opponent={oppRollout}" +
+                              $"{(ownRollout == RolloutPolicyKind.Saving || oppRollout == RolloutPolicyKind.Saving ? $", saveCommit={saveCommit}" : "")}");
             Console.WriteLine($"              {threads} threads on {Environment.ProcessorCount} logical cores\n");
 
             RolloutSearchOpponent.UseLinearEval = linearEval;
@@ -174,7 +229,10 @@ namespace CastleDefense.BotArena
             var results = new (bool win, bool draw, bool timeLimit, long gameTicks, long wallMs,
                                long decisions, long rollouts, long simTicks, double spread,
                                long flat, long wait, long overrides, long macro, long press, long arma,
-                               double earnedInv, double oppInv)[games];
+                               double earnedInv, double oppInv,
+                               // Stage 0: separates "invested more" from "attacked less".
+                               long units, long oppUnits, double spend, double oppSpend,
+                               long deepPromo, long deepVeto, long deepRollouts, long deepTicks)[games];
 
             var sw = Stopwatch.StartNew();
             int completed = 0;
@@ -211,7 +269,10 @@ namespace CastleDefense.BotArena
                                                          maxDecisionMs, intraThreads, macroMargin,
                                                          pressWave, pressMinTier, pressPeak, pressOff,
                                                          pressLo, pressHi, pressWaveCommit,
-                                                         useArma, armaMargin);
+                                                         useArma, armaMargin,
+                                                         ownRollout, oppRollout, saveCommit,
+                                                         macroRandomRate, macroRandomAffordable,
+                                                         deepMacro, deepPlayouts, deepCommitTicks);
                 var heuristic = new HeuristicBotAdapter(s.searchIsP1 ? 2 : 1);
 
                 var gameSw = Stopwatch.StartNew();
@@ -229,7 +290,10 @@ namespace CastleDefense.BotArena
                               searcher.ScoreSpreadSum, searcher.FlatDecisions, searcher.WaitDecisions,
                               searcher.Overrides, searcher.MacroChosen, searcher.PressChosen, searcher.ArmageddonChosen,
                               (s.searchIsP1 ? state.Player1 : state.Player2).InvestmentCount - searchStartInv,
-                              (s.searchIsP1 ? state.Player2 : state.Player1).InvestmentCount - oppStartInv);
+                              (s.searchIsP1 ? state.Player2 : state.Player1).InvestmentCount - oppStartInv,
+                              engine.UnitsPurchased[searchSide], engine.UnitsPurchased[searchSide == 1 ? 2 : 1],
+                              engine.MoneySpentOnUnits[searchSide], engine.MoneySpentOnUnits[searchSide == 1 ? 2 : 1],
+                              searcher.DeepPromotions, searcher.DeepVetoes, searcher.DeepRollouts, searcher.DeepSimTicks);
 
                 int done = Interlocked.Increment(ref completed);
                 if (done % Math.Max(1, games / 20) == 0)
@@ -268,6 +332,22 @@ namespace CastleDefense.BotArena
             }
             sw.Stop();
 
+            if (csvPath != null)
+            {
+                using var csv = new StreamWriter(csvPath);
+                csv.WriteLine("game,win,draw,time_limit,game_ticks,decisions,overrides,macro,press,arma," +
+                              "earned_inv,opp_inv,units,opp_units,spend,opp_spend");
+                for (int g = 0; g < games; g++)
+                {
+                    var r = results[g];
+                    csv.WriteLine($"{g},{(r.win ? 1 : 0)},{(r.draw ? 1 : 0)},{(r.timeLimit ? 1 : 0)}," +
+                                  $"{r.gameTicks},{r.decisions},{r.overrides},{r.macro},{r.press},{r.arma}," +
+                                  $"{r.earnedInv:F0},{r.oppInv:F0},{r.units},{r.oppUnits}," +
+                                  $"{r.spend:F1},{r.oppSpend:F1}");
+                }
+                Console.WriteLine($"\n  [search-test] wrote per-game outcomes to {csvPath}");
+            }
+
             int n = wins + losses + draws;
             var (lo, hi) = Ladder.WilsonInterval(wins, n);
             Console.WriteLine($"\n  win rate vs HeuristicBot : {(double)wins / n:P1} [{lo:P1}, {hi:P1}]  ({wins}W/{losses}L/{draws}D)");
@@ -301,6 +381,28 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"  chose save-macro    : {(double)totalMacro / Math.Max(1, totalDecisions):P1}");
             Console.WriteLine($"  chose press-macro   : {(double)totalPress / Math.Max(1, totalDecisions):P1}  (converting the economic lead into an attack)");
             Console.WriteLine($"  chose arma-macro    : {(double)totalArma / Math.Max(1, totalDecisions):P1}  (committing to the race to investment 8)");
+            Console.WriteLine();
+            // Stage 0 decomposition: an economic lead can be built by investing more OR by
+            // the opponent investing less, and a macro that only suppresses its own attacking
+            // shows up here rather than in the invest line.
+            double units = 0, oppUnits = 0, spend = 0, oppSpend = 0;
+            for (int g = 0; g < games; g++)
+            {
+                units += results[g].units; oppUnits += results[g].oppUnits;
+                spend += results[g].spend; oppSpend += results[g].oppSpend;
+            }
+            if (deepMacro)
+            {
+                double promo = 0, veto = 0, dr = 0, dt = 0;
+                for (int g = 0; g < games; g++)
+                { promo += results[g].deepPromo; veto += results[g].deepVeto; dr += results[g].deepRollouts; dt += results[g].deepTicks; }
+                Console.WriteLine($"  DEEP promotions/game: {promo / n:F1}  (deep fired the macro where shallow would not)");
+                Console.WriteLine($"  DEEP vetoes/game    : {veto / n:F1}  (shallow chose the macro, deep overruled)");
+                Console.WriteLine($"  deep rollouts/game  : {dr / n:F0}, {dt / Math.Max(1, dr):F0} ticks each");
+                Console.WriteLine();
+            }
+            Console.WriteLine($"  units bought/game   : {units / n:F1}  vs HeuristicBot's {oppUnits / n:F1}");
+            Console.WriteLine($"  spent on units/game : {spend / n:F0}  vs HeuristicBot's {oppSpend / n:F0}");
             Console.WriteLine();
             Console.WriteLine($"  earned invests/game : {totalEarnedInvests / n:F2}  vs HeuristicBot's {totalOppInvests / n:F2}");
             Console.WriteLine($"  (HeuristicBot manages ~4.1-5.1 earned in ladder play; Marc's winning line");

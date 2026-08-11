@@ -152,8 +152,20 @@ namespace CastleDefense.Engine
                     "Convert the offending gadget to ScheduleEffect/PendingEffect — see PendingEffect.cs.");
             }
 
+            // MemberwiseClone is SHALLOW: every reference-type field below is shared with the
+            // original until it is explicitly replaced. Anything mutable added to GameEngine
+            // must be reset here or the rollouts will silently write into the live game.
+            //
+            // This is not hypothetical. The UnitsPurchased/MoneySpentOnUnits counters were
+            // added on 2026-08-07 as plain arrays and immediately read 92,686 units bought in
+            // an ~8,200-tick game — search runs ~231x the real game in rollouts, and every one
+            // of them was incrementing the live counter through a shared array reference.
+            // Caught by a 20-game smoke test only because the number was absurd on its face; a
+            // counter that was merely inflated 10% would have shipped.
             var copy = (GameEngine)MemberwiseClone();
             copy._state = _state.Clone();
+            copy.UnitsPurchased = new long[3];
+            copy.MoneySpentOnUnits = new double[3];
             copy._scheduledEffects = new List<PendingEffect>(_scheduledEffects);
             copy._scheduledEvents = new List<ScheduledEvent>();
             copy._actionQueue = new ConcurrentQueue<Action>();
@@ -349,6 +361,21 @@ namespace CastleDefense.Engine
 
                 // 3. Deduct Cost
                 player.Money -= def.Cost;
+
+                // PURCHASE COUNTERS (diagnostic only, added 2026-08-07 for the Stage 0 macro
+                // decomposition). Incremented here rather than at the end of the method
+                // because this line IS the purchase -- the money is gone whatever happens to
+                // the unit afterwards. Deliberately excludes ignoreCost spawns, so gadget
+                // reinforcements are not counted as attack spending.
+                //
+                // Lives on GameEngine, not GameState: it must not enter GetStateVector, and
+                // rollout clones keeping their own counts is exactly what is wanted, since
+                // only the live game's spending is being measured.
+                if (side >= 1 && side <= 2)
+                {
+                    UnitsPurchased[side]++;
+                    MoneySpentOnUnits[side] += def.Cost;
+                }
 
                 // Track action ID for recording (tier maps directly to action ID 1-8)
                 if (def.Tier >= 1 && def.Tier <= 8)
@@ -1181,6 +1208,15 @@ namespace CastleDefense.Engine
         // ------------- RECORDING HOOKS ---------------
         public int LastActionP1 { get; private set; }
         public int LastActionP2 { get; private set; }
+
+        /// <summary>
+        /// Paid unit purchases per side, indexed 1/2 (index 0 unused). Diagnostic only —
+        /// nothing in the engine or the observation reads these. See SpawnUnit.
+        /// </summary>
+        public long[] UnitsPurchased { get; private set; } = new long[3];
+
+        /// <summary>Money spent on paid unit purchases per side, indexed 1/2.</summary>
+        public double[] MoneySpentOnUnits { get; private set; } = new double[3];
 
         public void ResetLastActions()
         {

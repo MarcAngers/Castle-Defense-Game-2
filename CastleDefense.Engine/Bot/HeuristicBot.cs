@@ -1348,7 +1348,7 @@ namespace CastleDefense.Engine.Bot
     // Rule-based opponent. Drives a side entirely through GameEngine's public API
     // (SpawnUnit / Invest / Repair / UseGadget) -- the same surface a human player
     // uses via the SignalR hub -- so it plays by the exact same rules a human does.
-    public class HeuristicBot
+    public class HeuristicBot : IRolloutPolicy
     {
         private readonly int _side;
         private readonly HeuristicBotSettings _settings;

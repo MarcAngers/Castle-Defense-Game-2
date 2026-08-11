@@ -297,6 +297,16 @@ namespace CastleDefense.BotArena
             var contenders = new List<(string name, Func<int, IArenaOpponent> make)>
             {
                 ("HeuristicBot", side => new HeuristicBotAdapter(side)),
+                // Probe A's candidate rollout policy, at four commitment levels. Present as
+                // contenders because the probe's premise is that this is STRONGER than
+                // HeuristicBot; if the rows below do not beat the HeuristicBot row, the
+                // probe is measuring nothing and must not be run. 1.00 is the mildest form
+                // (invest on sight, otherwise play normally); 0.25 stops attacking a quarter
+                // of the way to the next investment.
+                ("SavingHeuristic@1.00", side => new SavingHeuristicBaseline(side, 1.00)),
+                ("SavingHeuristic@0.70", side => new SavingHeuristicBaseline(side, 0.70)),
+                ("SavingHeuristic@0.50", side => new SavingHeuristicBaseline(side, 0.50)),
+                ("SavingHeuristic@0.25", side => new SavingHeuristicBaseline(side, 0.25)),
             };
 
             if (variant != null)

@@ -328,6 +328,14 @@ if (args.Length > 0 && args[0] == "search-test")
     return;
 }
 
+// Stage 1a: measures how much win probability search throws away on its hold-money
+// decisions, against play-to-completion ground truth. See MacroTruth.cs.
+if (args.Length > 0 && args[0] == "macro-truth")
+{
+    MacroTruth.Run(args);
+    return;
+}
+
 // Usage: invest-stats <modelFragment> [headstart] [games]
 if (args.Length > 0 && args[0] == "invest-stats")
 {

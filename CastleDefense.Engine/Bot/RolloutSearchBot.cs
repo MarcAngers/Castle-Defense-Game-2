@@ -94,6 +94,14 @@ namespace CastleDefense.Engine.Bot
         private readonly bool _usePrior;
         private readonly HeuristicBot _prior;
 
+        // Rollout policy per side. NOTE these do not touch _prior: the PRIOR is what plays
+        // the move when search declines to override, and changing it would confound "does a
+        // better rollout policy help the search" with "does a better bot play better moves".
+        // Probe A needs those two separated.
+        private readonly RolloutPolicyKind _ownRolloutPolicy;
+        private readonly RolloutPolicyKind _oppRolloutPolicy;
+        private readonly double _saveCommitFraction;
+
         /// <summary>
         /// Separate, usually LOWER override margin for the two macros.
         ///
@@ -112,6 +120,37 @@ namespace CastleDefense.Engine.Bot
         /// control costs 12.5 points and drives earned invests below HeuristicBot's own.
         /// Its MACRO suggestions are the entire source of strength: with the save-invest
         /// macro disabled the bot scores 44.0%, i.e. worse than not searching at all.
+        ///
+        /// CORRECTION (2026-08-07, Stage 0 decomposition, n=600 paired at seed 4242). The
+        /// 44.0% above is real and reproduces to 43.8% — but it is a MARGIN 0.01 number, and
+        /// nothing here ever said so. Both claims in the paragraph above are margin-specific,
+        /// and at the SHIPPED margin the second one inverts:
+        ///
+        ///     margin   overrides   macros ON   macros OFF   macro worth
+        ///      0.01    26.2/17.8%     68.5%       43.8%        +24.7
+        ///      0.10     8.2/ 3.8%     74.8%       63.7%        +11.2   <- SHIPPED
+        ///
+        /// At the shipped margin, search with NO macros at all still beats HeuristicBot
+        /// 63.7% against ~50% for HeuristicBot self-play. **The primitives are net positive
+        /// here; they are harmful only when over-applied.** The right statement is not
+        /// "primitives are harmful, macros are everything" but "search intervening rarely is
+        /// good, search intervening often is bad, whichever kind of move it intervenes with".
+        /// That is the same override-rate invariant Probe A found the evaluator and the
+        /// rollout policy both obeying.
+        ///
+        /// WHAT THE MACRO'S 11.2 POINTS ACTUALLY ARE (Stage 0, and this is the useful part).
+        /// Firing the IDENTICAL macro the identical number of times per game (25.78 vs 25.18)
+        /// at RANDOM moments instead of search-chosen ones is worth NOTHING: 63.3% against
+        /// the no-macro arm's 63.7%, McNemar p = 0.905. The behaviour is inert. All 11.2
+        /// points are in WHICH decisions it fires on.
+        ///
+        /// And that choice is not a rule. Only 1.2% of decisions are ones where the
+        /// investment is already affordable, while search fires the macro on 4.5% — so ~3/4
+        /// of its firings are on decisions where it CANNOT yet buy, i.e. it is choosing when
+        /// to HOLD money. Restricting random firing to affordable decisions recovers ~1 of
+        /// the 11 points. Two hypotheses died here: the macro does not win by attacking less
+        /// (it buys MORE units than the no-macro arm, 224.8 vs 210.5, at equal spend), and
+        /// "invested more" is only a third of it (+0.81 vs +0.40 earned-invest differential).
         ///
         /// A single margin cannot express "fire the economic plan readily, but ignore
         /// tactical noise". This one can. Setting both equal reproduces the old behaviour
@@ -253,6 +292,47 @@ namespace CastleDefense.Engine.Bot
 
         private readonly bool _useMacro;
 
+        /// <summary>
+        /// STAGE 0 DIAGNOSTIC (2026-08-07). Fires the save-invest macro on this share of
+        /// decisions AT RANDOM, before any search runs. 0 disables it.
+        ///
+        /// WHY IT EXISTS. The save-invest macro is worth ~31 points (75.0% with it, 44.0%
+        /// with `--no-macro`), and the standing explanation is that it builds an economic
+        /// lead — search does out-invest HeuristicBot by +0.81 earned investments. But a
+        /// SCRIPTED blanket saving rule with the same behaviour built a lead of only +0.06
+        /// (Probe A, SavingHeuristicBot), so the behaviour alone does not reproduce the
+        /// effect. That leaves two candidate explanations that imply opposite next moves:
+        ///
+        ///   SELECTION  — the value is in search choosing the ~4.5% of decisions where
+        ///                banking pays. Then sharpening the option selection is the lever.
+        ///   BEHAVIOUR  — the value is in the act of committing, and any firing pattern at
+        ///                the right rate captures it. Then selection is irrelevant and the
+        ///                lever is finding MORE behaviours worth committing to.
+        ///
+        /// Setting this to the macro's own measured firing rate WITH `--no-macro` (so the
+        /// macro is not also selectable) reproduces the behaviour at the right rate with the
+        /// selection deleted, which is the only construction I could find that separates the
+        /// two. Setting it to 1.0 gives the saturation arm.
+        ///
+        /// Deliberately does NOT increment Overrides: that counter means "search overrode
+        /// the prior", and a coin flip is not search. MacroChosen still counts it, so the
+        /// realised firing rate stays measurable — which is the check that this arm actually
+        /// matched the control's rate rather than merely being configured to.
+        /// </summary>
+        private readonly double _macroRandomRate;
+
+        /// <summary>Restricts random macro firing to decisions where the investment is
+        /// already affordable. See the gate in UpdateBlocking.</summary>
+        private readonly bool _macroRandomAffordable;
+
+        /// <summary>
+        /// Separate stream from <see cref="_rng"/> on purpose: _rng supplies the rollouts'
+        /// common random numbers, and drawing macro rolls from it would shift every
+        /// subsequent rollout seed, so this arm would differ from its own control by more
+        /// than the one thing under test.
+        /// </summary>
+        private readonly Random _macroRng;
+
         public long Overrides { get; private set; }
         public long MacroChosen { get; private set; }
         public long PressChosen { get; private set; }
@@ -282,8 +362,29 @@ namespace CastleDefense.Engine.Bot
                                      int pressPeakMinInvest = 6, int pressPeakMaxInvest = 7,
                                      bool pressWaveCommit = false,
                                      bool useArmageddonMacro = true,
-                                     double armageddonMargin = double.NaN)
+                                     double armageddonMargin = double.NaN,
+                                     RolloutPolicyKind ownRolloutPolicy = RolloutPolicyKind.Heuristic,
+                                     RolloutPolicyKind oppRolloutPolicy = RolloutPolicyKind.Heuristic,
+                                     double saveCommitFraction = 0.5,
+                                     double macroRandomRate = 0.0,
+                                     bool macroRandomAffordable = false,
+                                     bool deepMacroEval = false,
+                                     int deepPlayouts = 2,
+                                     int deepCommitTicks = 225)
         {
+            // Defaults keep the shipped path byte-for-byte unchanged: deep evaluation is
+            // opt-in, so the control arm in any A/B is the real committed bot.
+            _deepMacroEval = deepMacroEval;
+            _deepPlayouts = Math.Max(1, deepPlayouts);
+            _deepCommitTicks = Math.Max(1, deepCommitTicks);
+            _macroRandomRate = macroRandomRate;
+            _macroRandomAffordable = macroRandomAffordable;
+            _macroRng = new Random((seed == 0 ? 20260728 + side : seed) ^ 0x5A11);
+            // Default to Heuristic on both sides so every existing caller — the web game, the
+            // ladder, search-test's control arm — is byte-for-byte unaffected.
+            _ownRolloutPolicy = ownRolloutPolicy;
+            _oppRolloutPolicy = oppRolloutPolicy;
+            _saveCommitFraction = saveCommitFraction;
             // MUST be assigned before the press margins below, which fall back to it.
             // It was not, and _macroMargin read as 0.0, silently making the press macro
             // fire on any improvement at all -- caught only because a "restored" run
@@ -496,6 +597,26 @@ namespace CastleDefense.Engine.Bot
             var mask = state.GetActionMask(_side);
             var mePlayer = _side == 1 ? state.Player1 : state.Player2;
 
+            // Stage 0 diagnostic — see _macroRandomRate. Gated on the same ArmageddonUsed
+            // condition that makes the macro a candidate at all, so this arm cannot fire it
+            // in states where the real macro never could.
+            // AFFORDABILITY-MATCHED variant. A3 showed random firing captures none of the
+            // macro's value, but a random firing lands mostly on decisions where the
+            // investment is not affordable, where the macro degenerates to "do nothing".
+            // Gating the roll on affordability asks the sharper question: is search's
+            // selection anything MORE than "commit when you can afford it"? If this arm
+            // recovers the control's win rate, the selection is a rule and can be written
+            // down; if it does not, the selection is genuinely state-dependent.
+            bool randomGateOpen = !_macroRandomAffordable || mePlayer.Money >= mePlayer.InvestmentPrice;
+            if (_macroRandomRate > 0 && randomGateOpen && !mePlayer.ArmageddonUsed
+                && _macroRng.NextDouble() < _macroRandomRate)
+            {
+                Decisions++;
+                if (decideOnly) { _pendingChoice = MacroSaveInvest; return; }
+                Apply(engine, MacroSaveInvest);
+                return;
+            }
+
             // COMMON RANDOM NUMBERS. Every candidate action in this decision is evaluated
             // against the SAME set of random futures, so differences in score are
             // attributable to the action rather than to luck.
@@ -568,11 +689,66 @@ namespace CastleDefense.Engine.Bot
 
             bool override_ = bestAdjusted > priorScore;
 
+            if (OnMacroDecision != null && !decideOnly && scores.ContainsKey(MacroSaveInvest))
+            {
+                OnMacroDecision(engine, new MacroDecisionInfo
+                {
+                    Tick = state.CurrentTick,
+                    Side = _side,
+                    InvestmentCount = mePlayer.InvestmentCount,
+                    Money = mePlayer.Money,
+                    InvestmentPrice = mePlayer.InvestmentPrice,
+                    MacroScore = scores[MacroSaveInvest],
+                    PriorScore = priorScore,
+                    ChosenAction = override_ ? bestAction : PriorBaselineAction,
+                    Overrode = override_,
+                });
+            }
+
             if (decideOnly)
             {
                 if (override_) Overrides++;
                 _pendingChoice = override_ ? bestAction : DeferToPrior;
                 return;
+            }
+
+            // ── STAGE 1b, second stage ───────────────────────────────────────────────────
+            // The deep estimator has authority over exactly one question: macro or prior.
+            // It cannot promote or demote a primitive, so a mixed-estimator comparison never
+            // arises — the only two options it ranks are both scored by it.
+            if (_deepMacroEval && scores.ContainsKey(MacroSaveInvest))
+            {
+                double dm = 0, dp = 0;
+                for (int r = 0; r < _deepPlayouts; r++)
+                {
+                    // COMMON RANDOM NUMBERS across the two branches, same discipline as the
+                    // shallow search: one seed per playout, used for both.
+                    int s = _rng.Next();
+                    dm += DeepRollout(engine, macro: true, seed: s, clock);
+                    dp += DeepRollout(engine, macro: false, seed: s, clock);
+                }
+                dm /= _deepPlayouts; dp /= _deepPlayouts;
+
+                bool deepWantsMacro = dm - _macroMargin > dp;
+                bool shallowChoseMacro = override_ && bestAction == MacroSaveInvest;
+
+                if (deepWantsMacro)
+                {
+                    if (!shallowChoseMacro) DeepPromotions++;
+                    Overrides++;
+                    Apply(engine, MacroSaveInvest);
+                    return;
+                }
+                if (shallowChoseMacro)
+                {
+                    // Deep overruled the macro. Hand back to the prior rather than falling
+                    // through to the next-best primitive: the shallow ranking that produced
+                    // that primitive already lost to the macro, so promoting it now would be
+                    // acting on the estimator we just declined to trust.
+                    DeepVetoes++;
+                    _prior.Update(engine);
+                    return;
+                }
             }
 
             if (override_)
@@ -591,6 +767,125 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Sentinel for "let the prior play this decision" — the override baseline.</summary>
         private const int PriorBaselineAction = -1;
+
+        // ── STAGE 1b: deep evaluation of the hold-money decision ─────────────────────────
+        //
+        // Stage 0 established that the save-invest macro's whole +11.2 points are in WHICH
+        // decisions it fires on. Stage 1a measured that choice against play-to-completion
+        // ground truth (n=1219, K=30) and found:
+        //
+        //   - the decision is BIMODAL: ~92% of the time macro-vs-prior makes literally no
+        //     difference, ~8% of the time it is near game-deciding (p90 gap 1.0);
+        //   - search gets ~94% right but concentrates its errors on the decisive ones (mean
+        //     gap when wrong 0.38 vs 0.07 overall), leaving regret 0.0283/decision;
+        //   - a BOUNDED-COMMITMENT play-to-completion estimator reaches ~0 regret with a
+        //     SINGLE playout (held-out: 0.00022 vs 0.02860, a 131x gap), because the gaps
+        //     are 0-or-1 rather than finely graded.
+        //
+        // This runs that estimator. Two properties matter and neither is optional:
+        //
+        //  1. BOUNDED. Committing to saving with no bound holds the purse to game end and
+        //     dies with a full bank -- Stage 1a measured that framing implying a single
+        //     decision swings 0.62 win probability, which is not credible. The live macro is
+        //     re-priced every interval and abandoned; _deepCommitTicks models that.
+        //
+        //  2. BOTH SIDES OF THE COMPARISON GET IT. The prior baseline is re-evaluated deeply
+        //     too. Scoring the macro by truth and the prior by a truncated evaluator would
+        //     compare two different estimators -- the same error class as the --divergence
+        //     phase bug, which this project has now hit twice.
+        private readonly bool _deepMacroEval;
+        private readonly int _deepPlayouts;
+        private readonly int _deepCommitTicks;
+
+        /// <summary>Deep said fire the macro when the shallow search would not have.</summary>
+        public long DeepPromotions { get; private set; }
+        /// <summary>Shallow chose the macro and deep overruled it.</summary>
+        public long DeepVetoes { get; private set; }
+        public long DeepRollouts => System.Threading.Interlocked.Read(ref _deepRolloutCount);
+        private long _deepSimTicks;
+        public long DeepSimTicks => System.Threading.Interlocked.Read(ref _deepSimTicks);
+
+        /// <summary>
+        /// Plays one branch of the hold-money decision to a REAL terminal outcome under a
+        /// bounded saving commitment. Mirrors MacroTruth.PlayToEnd, which is the estimator
+        /// Stage 1a measured — deliberately, so what ships is what was validated.
+        /// </summary>
+        private double DeepRollout(GameEngine engine, bool macro, int seed,
+                                   System.Diagnostics.Stopwatch clock)
+        {
+            var clone = engine.Clone(rngSeed: seed);
+            var cs = clone._state;
+            System.Threading.Interlocked.Increment(ref _deepRolloutCount);
+
+            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction);
+            var theirs = RolloutPolicyFactory.Make(_oppRolloutPolicy, _side == 1 ? 2 : 1, _saveCommitFraction);
+            var me = _side == 1 ? cs.Player1 : cs.Player2;
+
+            long start = cs.CurrentTick;
+            bool stillSaving = macro;
+            int t = 0;
+            bool truncated = false;
+            while (!cs.IsGameOver)
+            {
+                // Same deadline discipline as the shallow rollout, masked to every 64th tick
+                // because ElapsedMilliseconds is not free. A deep rollout runs to game end,
+                // so without this the live game's budget would be unenforceable.
+                if (_maxDecisionMs > 0 && (t & 63) == 0 && clock.ElapsedMilliseconds >= _maxDecisionMs)
+                { truncated = true; break; }
+
+                clone.Tick();
+                t++;
+                if (stillSaving)
+                {
+                    if (me.Money >= me.InvestmentPrice) { clone.ApplyAction(_side, 9); stillSaving = false; }
+                    else if (cs.CurrentTick - start >= _deepCommitTicks) stillSaving = false;
+                }
+                else mine.Update(clone);
+                theirs.Update(clone);
+            }
+            System.Threading.Interlocked.Add(ref _deepSimTicks, t);
+
+            // Graceful degradation: if the budget cut the rollout short there is no terminal
+            // result, so fall back to the evaluator rather than returning a fabricated one.
+            if (truncated && !cs.IsGameOver)
+            {
+                float ev = UseLinearEval ? cs.EvaluateBoardLinear()
+                         : UseRefitEval ? cs.EvaluateBoardRefit()
+                                        : cs.EvaluateBoard();
+                return _side == 1 ? ev : 1.0 - ev;
+            }
+            if (cs.WinnerSide == 0) return 0.5;
+            return cs.WinnerSide == _side ? 1.0 : 0.0;
+        }
+
+        private long _deepRolloutCount;
+
+        /// <summary>
+        /// What the search believed at a decision where the save-invest macro was a
+        /// candidate. Diagnostic only — see <see cref="OnMacroDecision"/>.
+        /// </summary>
+        public sealed class MacroDecisionInfo
+        {
+            public long Tick;
+            public int Side;
+            public int InvestmentCount;
+            public double Money, InvestmentPrice;
+            /// <summary>Shallow (horizon-truncated, evaluator-scored) leaf values.</summary>
+            public double MacroScore, PriorScore;
+            public int ChosenAction;
+            public bool Overrode;
+        }
+
+        /// <summary>
+        /// Fires at every decision where the save-invest macro was a candidate, BEFORE the
+        /// chosen action is applied — so a listener can fork the engine from exactly the
+        /// state the search judged.
+        ///
+        /// Null by default and never set by the game or the ladder: Stage 1a needs the
+        /// search's own shallow beliefs to compare against ground truth, and re-deriving
+        /// them outside would be a second implementation that could drift from this one.
+        /// </summary>
+        public Action<GameEngine, MacroDecisionInfo> OnMacroDecision;
 
         /// <summary>
         /// Scores a batch of candidates IN PARALLEL.
@@ -735,12 +1030,18 @@ namespace CastleDefense.Engine.Bot
             // rollout's own HeuristicBot decides this turn as well.
             if (action > 0 && !macro && !press && !arma) clone.ApplyAction(_side, action);
 
-            // HeuristicBot as the rollout policy for BOTH sides — it is by a wide margin
-            // the strongest agent available, so it is the most informative continuation.
-            var mine = new HeuristicBot(_side);
+            // The rollout policy for both sides. HeuristicBot by default — it is by a wide
+            // margin the strongest agent available, so it is the most informative
+            // continuation — but SWAPPABLE, because it is also the ceiling: search cannot
+            // discover a line its rollout policy would not play out. See IRolloutPolicy.
+            //
+            // The two sides are separate settings on purpose. Raising OUR side tests whether
+            // a stronger rollout policy makes search stronger (Probe A); raising THEIRS is
+            // opponent modelling, a different question with a different payoff.
+            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction);
             // Defence-only stand-in used for the whole Armageddon rollout.
             var mineDefence = arma ? new HeuristicBot(_side, DefenceOnly) : null;
-            var theirs = new HeuristicBot(_side == 1 ? 2 : 1);
+            var theirs = RolloutPolicyFactory.Make(_oppRolloutPolicy, _side == 1 ? 2 : 1, _saveCommitFraction);
             var me = _side == 1 ? cs.Player1 : cs.Player2;
 
             // For the SAVE-AND-INVEST macro, our side buys nothing until it can afford the
