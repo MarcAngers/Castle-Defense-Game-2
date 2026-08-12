@@ -3157,3 +3157,681 @@ The shipped 74.8% configuration remains the best measured. Nothing was changed i
 
 Reusable from this arc: `macro-truth` mode, the deep-eval path, `--rollout-policy`,
 `--macro-random-rate`, per-game CSVs for paired testing, and purchase counters.
+
+# ============================================================
+# 2026-08-11 — CAPABILITY MAP: the bot's worst loadouts, and why
+# ============================================================
+
+Marc's brief: the bot-vs-bot loadout table is contaminated as BALANCE data, but read as
+a CAPABILITY map it localises what the bot cannot do. His hypothesis, to be tested and
+not assumed: the bot's worst loadouts are the ones demanding sequenced multi-decision
+execution, e.g. Blue's stall loop, with Blue+snipe+speed the worst measured cell.
+
+**The hypothesis is confirmed in kind and relocated in specifics.** The dominant term is
+not Blue and not snipe. It is **speed defence**, and it is the single largest capability
+deficit in the game. No new simulation was run — this is analysis of the 2026-08-05
+sweep plus the human record. Script: `CastleDefense.PythonAI/capability_gap.py`
+(re-runnable, caveats in its docstring, so this does not become another pasted number).
+
+## Method
+
+Bot and human numbers are on different scales (the bot's is vs a field of bots, Marc's is
+vs the bot), so they are compared on **within-agent deviation** — each agent's win rate
+with option L minus that same agent's own overall rate:
+
+    gap(L) = human_dev(L) - bot_dev(L)
+
+Human: 114 games (the 11 quarantined abandoned rerolls excluded via the quarantine
+folder's ids), Marc as P1 vs search or heuristic, 88.6% overall — which reproduces
+CLAUDE.md's 58W/5L + 43W/8L exactly, so the exclusion is right.
+Bot: the SearchMirror cells of `dashboard --bot search --mirror-games 12`, 1536 games,
+shipped config, `headStart: false`, base-tier gadgets. Overall 48.2%.
+
+## The result
+
+| option | bot | Marc | bot dev | Marc dev | GAP |
+|---|---|---|---|---|---|
+| **speed (def)** | 23.7% (n=384) | 85.4% (41/48) | −24.5 | −3.2 | **+21.4** |
+| **Blue (team)** | 29.7% (n=192) | 88.0% (22/25) | −18.6 | −0.6 | **+18.0** |
+| Orange (team) | 44.3% | 100% (12/12) | −4.0 | +11.4 | +15.4 |
+| Green (team) | 44.8% | 100% (9/9) | −3.5 | +11.4 | +14.9 |
+| snipe (off) | 43.0% (n=384) | 90.9% (30/33) | −5.3 | +2.3 | +7.6 |
+| Yellow (team) | 58.3% | 64.3% (9/14) | +10.1 | −24.3 | −34.4 |
+
+**Orange and Green are ceiling artefacts and must not be read.** Marc is at 88.6%, so
+his deviation cannot exceed +11.4, and both sit exactly there on 12 and 9 games. What
+makes the top two credible is that they are driven by the BOT's deviation, not his:
+his speed dev is −3.2 and his Blue dev is −0.6, i.e. neither option costs him anything
+much. The ceiling cannot manufacture those.
+
+**Tier confound, checked.** Marc's replays carry a time-machine headstart so his gadgets
+are often upgraded, and speed upgrades are not a small difference — base 1.5x/90 ticks,
+`speed_2` 2.0x/150, `speed_3` **10x**/300. Split by exact id: base 12/15 = 80.0%,
+`speed_2` 22/25 = 88.0%, `speed_3` 7/8 = 87.5%. The tier-matched gap is therefore
+**+15.9, not +21.4** (bot base speed 23.7% vs Marc base speed 80.0%), on n=15 with a
+Wilson CI of [55, 93]. Still the largest single gap; the noisiest end of it. Base speed
+does cost Marc something real (−8.6) — it is a weak-ish gadget for a human and a
+catastrophic one for the bot.
+
+## Marc's specific cell, and why the hypothesis needed relocating
+
+Blue|snipe|speed is indeed 0/12. But of the bot's **8 worst cells out of 128, seven
+contain speed**, across five different teams:
+
+    0.0%  Blue firebomb|speed     0.0%  Blue snipe|speed
+    0.0%  Orange firebomb|speed   0.0%  Red snipe|speed
+    8.3%  Black snipe|speed       8.3%  Blue freeze|speed
+    8.3%  Purple firebomb|speed   8.3%  Purple freeze|speed
+
+Speed is negative for **all eight teams** (Purple −55.6, Black −43.1, Red −39.6,
+Yellow −33.3, Blue −31.2, White −29.2, Orange −28.5, Green −1.4 against each team's own
+other three defences). Blue is additively bad on top of it; snipe is a distant third at
++7.6. So it is a speed effect with a Blue effect stacked on it, not a Blue+snipe effect.
+
+Green is the lone exception at −1.4, and that is not speed working for Green — Green's
+other three defences are the worst in the game (45.1%), so there is nothing to fall from.
+
+## THE MECHANISM, and it is exactly "sequenced execution"
+
+`master_gadgets.csv`: speed is `Targeted=0`, +1.5x movement to ALL allied units for 90
+ticks (3 s), $30, 5 s cooldown. **It sits in the Defense slot and has no defensive effect
+whatever.** It is an offensive tempo tool — its value is compressing a wave's arrival so
+the enemy cannot answer it piecemeal.
+
+`HeuristicBot.TryUseDefenseGadget` (HeuristicBot.cs:3337):
+
+```csharp
+case "speed":
+    if (myUnits.Any(u => !IsWall(u)) && BigSpendJustified(me, def, 0))
+        used = TryCast(...);
+```
+
+**It fires whenever any non-wall friendly unit exists and the money is there — that is
+"cast on cooldown".** It is by far the weakest condition of the four: heal gates on
+`avgHpPct < 0.85`, wall on `inDanger` plus an enemy actually being present,
+reinforcements on `DeferForInvestment`. Nothing in the speed branch looks at where the
+units are, how many there are, whether they are mid-field or still at the castle, or
+whether the 3-second window covers the approach. The bot buys a 3-second tempo burst and
+spends it on whatever happens to be standing around.
+
+**And search cannot repair this, for the reason Probe A already established.** Speed's
+value is a sequence — spawn a wave, wait, boost as it crosses — and the search's rollout
+policy is HeuristicBot, which fires speed on cooldown inside *every* candidate branch.
+The waste is common to all candidates, so it cancels in the comparison, and no leaf score
+difference ever points at it. This is the same score-differences-cancel mechanism that
+closed the rollout-policy lever, seen from the other side.
+
+## Why this matters more than it looks
+
+The acceptance test rolls loadouts randomly, so **the bot draws speed in one game in
+four**, and in those games it is playing at 23.7% against ~56.4% for its other three
+defences. Naively that is worth ~8 points of overall win rate — larger than anything
+else currently on the table, including the Armageddon margin.
+
+It is also squarely inside the ONE lever still open. A speed macro is an option-set
+change: a candidate that holds the cast until a wave is actually in transit. The option
+set is 1-for-3 historically, but the previous three were economic; this one has a
+measured deficit, an identified mechanism, and a clear firing rule to test against
+"cast on cooldown".
+
+**Not yet established, and worth one cheap run before building anything:** the sweep is
+fixed-loadout-vs-random-field, so speed's 23.7% has never been measured head-to-head
+(speed vs speed). Confirm the deficit survives a direct matchup before treating the 8
+points as real.
+
+# ============================================================
+# 2026-08-11 — ARMAGEDDON MARGIN AT n=2400: NEGATIVE. The +1.9 was noise.
+# ============================================================
+
+The 2026-08-10 goal statement drops playability as a constraint, which re-opens exactly
+one decision already in the tree: the Armageddon-commitment macro ships at margin 0.10
+(fires 0.5%) rather than 0.0 (fires 7.3%) because Marc traded ~2 unproven points for a
+more interactive opponent. A repo-wide grep found this is the ONLY playability-motivated
+compromise in the codebase, so it is the whole of what the goal change unlocks.
+
+It was recorded at n=600 as +1.9 points, 34 of 57 discordant, **p=0.185** — "positive
+everywhere, proven nowhere". Resolving that needs ~4x the discordant pairs.
+
+Both arms n=2400, paired setups, seed 4242, no headstart, same build, control =
+`--margin 0.10` (which resolves every margin to 0.10, exactly what ships), treatment
+adds `--arma-margin 0.0`.
+
+| arm | win rate | overrides | arma firings | save-macro | earned inv own/opp | units |
+|---|---|---|---|---|---|---|
+| control (0.10) | **75.42%** (1810/2400) | 7.9% | 0.4% | 4.4% | 6.88 / 6.02 | 217.8 |
+| treatment (0.0) | 74.38% (1785/2400) | 14.5% | 7.4% | 4.0% | 6.86 / 6.04 | 198.2 |
+
+**Paired delta −1.04 points. Discordant b=129 / c=104, McNemar p=0.116, exact binomial
+p=0.116. 95% CI on the paired difference [−2.29, +0.20].**
+
+## The verdict: the sacrifice was not a sacrifice
+
+The effect is not merely unproven, it has **changed sign** against 4x the data, and the
+confidence interval now essentially excludes the +1.9 that was recorded. Marc gave up
+nothing when he chose playability here. **Margin 0.10 is correct on strength grounds
+alone, and the code comment telling future sessions not to "fix" this to 0.0 should now
+say so for a second, stronger reason.**
+
+Instrument checks both passed before reading anything into it:
+- Control reproduces the recorded shipped figure: 75.42% against 74.8% / 75.0% recorded.
+- The flag is live, not dead — arma firing 0.4% → 7.4% (recorded 0.5% → 7.3%), and every
+  other counter moved too. Identical output would have meant a dead flag.
+- Discordant fraction is stable with n: 57/600 = 9.5%, 233/2400 = 9.7%. The n=600 sample
+  was simply small; nothing about the earlier measurement was broken.
+
+## Two things this reinforces
+
+**THE OVERRIDE-RATE INVARIANT, again.** Overrides 7.9% → 14.5% and the win rate falls.
+That is now the fifth independent sighting: degraded evaluators in either direction, the
+rollout policy, the deep estimator, and now the Armageddon margin all obey *intervening
+rarely is good, intervening often is bad, whichever kind of move it intervenes with*.
+Any future proposal that raises the override rate should be assumed harmful until it
+measures otherwise.
+
+**THE ARMAGEDDON MACRO STILL DOES NOT MOVE THE ECONOMY.** Earned invests 6.88 → 6.86
+while firing 18x more often. The code comment flagged this as "one unexplained thing"
+at 6.82 → 6.86; at n=2400 it is not unexplained noise, it is flat. A macro whose entire
+stated purpose is committing to the eight-investment race changes investments by −0.02
+and unit purchases by −19.6. **It is a defence-only-play macro that has been described
+as an economic one.** The strategy-matrix result that motivated it (Armageddon tops the
+dominance order) is not thereby refuted — but this macro is not delivering that strategy,
+and that gap is worth remembering before the option-set lever is spent on a variant of it.
+
+## Cost
+
+~1h50m CPU on one box, no GPU, no training. The shipped configuration is unchanged.
+
+# ============================================================
+# 2026-08-11 — ASYNC STALENESS COST: none measurable. Assumption confirmed.
+# ============================================================
+
+The live bot snapshots the engine, thinks on a background thread, and applies the answer
+when it is ready, so it always acts on a state some milliseconds old. The standing
+assumption was that this costs little because the game moves slowly. It had never been
+tested, and this project has a poor record with untested "seems fine" assumptions.
+
+**It tests clean, with 15-30x of margin.** No change to the shipped bot.
+
+## Instrument
+
+New `--stale-ticks D`: decide from the state at tick T, commit the answer at tick T+D,
+at most one decision in flight. Same structure as the live async path, but a
+deterministic tick delay instead of wall clock — the live path's delay is not
+reproducible, so it cannot be benchmarked directly. `Apply()` re-derives macro behaviour
+from the state the action lands in, exactly as live. One tick = 33 ms.
+
+`D=0` routes to the ORIGINAL code path rather than through the new one, deliberately:
+`UpdateStale` clones and draws from `_rng`, so running it at 0 would perturb the stream
+and the control would stop being the control.
+
+**WIRING CHECK, both directions:**
+- `D=0` in the new build is **byte-identical to the old build's control across all 600
+  games** — same outcome, ticks, decisions, overrides, macro firings, earned invests.
+- `D>0` arms differ substantially (37-53 discordant games each). The flag is not dead.
+
+## The real operating point, measured rather than assumed
+
+`search-test 20 --margin 0.10 --max-ms 250 --threads 1`, uncontended:
+**15.5 ms per decision average, 34 ms worst case — on ONE core.** The live game gives
+each decision `ProcessorCount - 2` = 18 cores and evaluates candidates in parallel, so
+real latency is strictly lower. Either way the operating point is **under one tick**.
+
+## Dose-response, n=600 paired per arm, seed 4242, no headstart, same build
+
+| D | ≈ ms | win rate | delta vs D=0 | b / c | p (exact) | 95% CI on delta |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 74.8% | — | — | — | — |
+| 1 | 33 | 77.3% | +2.50 | 37/52 | 0.137 | [−0.58, +5.58] |
+| 2 | 67 | 77.2% | +2.33 | 32/46 | 0.141 | [−0.55, +5.22] |
+| 4 | 133 | 74.8% | +0.00 | 42/42 | 1.000 | [−2.99, +2.99] |
+| 8 | 266 | 73.3% | −1.50 | 53/44 | 0.417 | [−4.72, +1.72] |
+| 15 | 499 | 74.7% | −0.17 | 45/44 | 1.000 | [−3.25, +2.92] |
+
+**Flat and non-monotone. Nothing reaches significance anywhere, including D=15 — a FULL
+decision interval of staleness, 15-30x the real operating point.**
+
+Every behavioural counter is flat too: overrides 7.8-8.4%, save-macro 4.3-4.5%, earned
+invests 6.77-7.04, units bought 215.1-226.7, decisions/game 543-561.
+
+Decisions per game does NOT fall at D=15, which is correct rather than suspicious: the
+commit and the next decision land on the same tick (`_next` is set when the decision
+STARTS), so cadence is preserved and only the staleness changes. That is also what the
+live async path does.
+
+## DO NOT CHASE THE +2.5 AT D=1
+
+D=1 and D=2 both sit near +2.4 at p≈0.14, which is tempting. **This session already
+watched exactly that pattern evaporate**: the Armageddon margin measured +1.9 at n=600
+with p=0.185 and came back **−1.04** at n=2400 with the sign reversed. Same n, same
+p-range, same shape. Treat a two-point effect at n=600 as unmeasured, and note that D=1
+and D=2 are near-identical policies so their agreement is not independent corroboration.
+
+## The honest limits of this result
+
+1. **Staleness is modelled as CONSTANT; live it is variable** and grows late-game as
+   candidate counts and unit counts rise. But the constant worst case at 15 ticks is
+   already free, so variation inside that range cannot matter much.
+2. **The opponent is HeuristicBot, which does not exploit reaction delay.** A human can
+   bait a cooldown, feint, or time a wave against a known lag; Marc plays that way and
+   HeuristicBot does not. This result bounds the cost against a non-exploiting opponent.
+   It does not prove latency is free against Marc — and against him it is the *acceptance
+   test*, not this benchmark, that would show it.
+
+## Verdict
+
+**There is no free win rate here.** The async design was a good call and stays. Cost:
+~85 min CPU. Reusable: `--stale-ticks`, which is also the only way to benchmark any
+future change to the decision-timing model.
+
+# ============================================================
+# 2026-08-11 — SEAT BIAS: a perfect mirror is decided by the engine, not the play
+# ============================================================
+
+Found while building the head-to-head defence duel, as its symmetry check. **The check
+failed, and what it found is larger than the thing it was checking.** Reported before the
+speed result because it governs how that result must be read.
+
+## The finding
+
+Same team, same offence gadget, same defence gadget, same signature, same bot on BOTH
+sides — a perfect mirror — should be a coin flip, and really should mostly DRAW.
+`mirror-fixed White nuke wall 100` (the project's own seat-fairness instrument, whose
+comment says "a truly fair engine should land at ~50/50 within noise") returns:
+
+    P1 wins: 0/100 (0.0%)   P2 wins: 100/100 (100.0%)   draws: 0
+
+Reproduced independently in the new `defence-duel` harness, and it is **deterministic and
+team-dependent**. HeuristicBot both sides, nuke/wall, n=40 per team, seats alternated:
+
+| team | mirror outcome |
+|---|---|
+| Black, Red, White | **P2 wins 100%** |
+| Purple, Yellow | **P1 wins 100%** |
+| Green | P2 wins 80% |
+| Orange | ~balanced (45/40) |
+| **Blue** | **40/40 DRAWS — the only team that behaves correctly** |
+
+Blue draws at 294.6s with zero tick-cap games, i.e. a genuine simultaneous finish. That is
+what all eight teams should look like. Seven of eight instead hand a deterministic win to
+one specific seat.
+
+**It is NOT within-tick poll order.** `--p2-first` reverses which bot is polled first each
+tick — the natural suspicion, since the second-polled bot sees the first one's action in
+the same tick — and the winner does not move: P2 still wins 20/20 on White. Whatever the
+cause is, it survives reversing the drive order, so it is engine-level (unit spawn
+geometry / combat targeting resolution) rather than harness-level.
+
+Games are genuinely distinct, so this is not one game repeated: `CreateGame` uses
+`new GameState()` → `new Random()` and `new GameEngine(state)` → unseeded RNG.
+
+## WHAT IT DOES NOT INVALIDATE, checked rather than assumed
+
+**The dashboard sweep is protected.** `botIsP1 = i % 2 == 0` with `cellGames = 12`, so
+every team x offence x defence cell is exactly 6 games on each seat and the seat term
+cancels *within the cell*, not merely in aggregate. Its comment already says a side
+asymmetry exists and that the sweep must alternate because of it. So the capability map's
+speed numbers stand.
+
+**The new `defence-duel` harness is protected** the same way, and demonstrably: wall vs
+wall on White returns exactly 50.0% (A as P1 0/50, A as P2 50/50). The alternation cancels
+a 100-point bias precisely, which is also why nothing downstream ever noticed.
+
+**`search-test` is protected** — `searchIsP1 = g % 2 == 0`.
+
+## WHAT IT DOES MEAN
+
+1. **Any bot-vs-bot measurement that does not balance seats is worthless on this engine**,
+   and the failure is silent because aggregate numbers look sane. This belongs with the
+   measurement pitfalls in CLAUDE.md.
+2. **Effective sample size in near-mirror configurations is far below n.** If the outcome
+   is fixed by (team, seat), the games carry no information about the thing under test.
+   Any A/B whose two arms are near-mirrors of each other should use a NON-mirror design —
+   which is why the speed mechanism probe below is `speed-no-cast vs wall` rather than
+   `speed-no-cast vs speed`.
+3. **The 2026-08-03 "Make unit geometry seat-symmetric" commit did not finish the job.**
+   Whether this is a bug worth fixing is a game-design question (balance work is deferred),
+   but it is certainly a measurement hazard worth knowing about.
+
+Not fixed. Diagnosing the engine-level cause is a separate piece of work and would change
+game behaviour, which is not something to do mid-measurement.
+
+# ============================================================
+# 2026-08-11 — SPEED CONFIRMED head-to-head; and the DEFENCE GADGET IS NET NEGATIVE
+# ============================================================
+
+Marc asked for the head-to-head confirmation of the capability map's speed finding, since
+the 23.7% came from a fixed-loadout-vs-random-field sweep. New BotArena mode
+`defence-duel`: same bot, same team, same offence gadget, same signature on both sides,
+differing ONLY in the defence gadget, sides alternated, paired setups.
+
+## Q1 — the speed deficit is REAL and worse than the field number
+
+SearchBot both sides, n=200 per arm, seed 4242:
+
+| matchup | A win% | decisive-only | draws |
+|---|---|---|---|
+| **speed vs heal** | **0.0%** (0W/103L) | 0.0% | 97 |
+| **speed vs wall** | **4.0%** (8W/122L) | 6.2% | 70 |
+| speed vs reinforcements | 31.0% | 35.4% | 25 |
+
+Speed won **zero of 200** against heal. Head-to-head with everything else held equal the
+deficit is larger than the sweep reported, not smaller. Confirmed.
+
+## Q2 — but the mechanism is NOT speed-specific
+
+| arm | A win% | A earned inv | A units |
+|---|---|---|---|
+| speed vs wall | 4.0% | 3.65 | 154.4 |
+| speed NEVER-CAST vs wall | 29.0% | 4.60 | 231.4 |
+| wall vs heal | 18.0% | 4.21 | 155.0 |
+| wall NEVER-CAST vs heal | 52.0% | 4.55 | 181.9 |
+
+Never casting speed is worth +25; never casting WALL — the bot's best defence — is worth
++34. **The control moved more than the treatment**, so "the bot misuses speed specifically"
+does not survive.
+
+## THE DUEL'S MAGNITUDES ARE NOT TRUSTWORTHY, AND THE TELL WAS b=0
+
+Both duel McNemars came back **b=0** (never-casting lost zero games that casting won,
+winning 50 and 68). A perfectly one-directional effect over 200 games is a harness
+signature, not a real effect. Three corroborating smells: 45-58% of games hit the 600s
+tick cap, draws ran 25-97 per arm, and the seat splits were extreme (wall vs heal: 0% as
+P1, 36% as P2). The duel is a NEAR-MIRROR — same team, same offence, same bot — which is
+exactly the configuration where [seat bias] collapses effective sample size.
+
+**So it was re-run on the calibrated instrument**, `search-test` vs HeuristicBot with
+random loadouts, n=600 paired, both arms same build:
+
+| arm | win rate | overrides | save-macro | earned inv | units | spend |
+|---|---|---|---|---|---|---|
+| control | 74.8% (449/600) | 8.2% | 4.5% | 6.93 | 224.8 | 31,276 |
+| `--no-def-gadget` | **80.7%** (484/600) | 5.8% | 2.1% | 7.47 | 262.7 | 45,248 |
+
+**+5.83 points, 95% CI [+2.24, +9.43], discordant b=43/c=78, exact p=0.0019.**
+
+WIRING CHECK: the control is **600/600 byte-identical** to the previous build's control
+arm, so the new flag perturbs nothing when off.
+
+**The duel got the SIGN right and the magnitude wrong by 4-6x** (+34 vs +5.8). Note b=43
+here, not 0 — that is what a real noisy effect looks like, and it is the contrast that
+makes the duel's b=0 diagnosable in hindsight. Use `defence-duel` for direction only.
+
+## What is established, and what is not
+
+**ESTABLISHED: the search bot's defensive-gadget policy is worth LESS THAN ZERO.** Simply
+never casting it is +5.8 points against HeuristicBot at p=0.002 — the largest single
+measured gain since the save-invest macro. The freed money goes into BOTH economy and army
+(invests 6.93 -> 7.47, units 224.8 -> 262.7, spend +45%).
+
+**NOT ESTABLISHED, and each needs its own run:**
+
+1. **Candidate-count confound.** Suppression removes action 12 from the search candidate
+   list AS WELL AS disabling the prior/rollout cast, and the override rate fell 8.2% ->
+   5.8%. Every lever in this project obeys "intervening less is better", so some of the
+   +5.8 may be the candidate removal rather than the gadget. **Control: suppress action 11
+   (offence gadget) instead and see whether that also gains ~6 points.**
+2. **Is it HeuristicBot's policy or the gadget?** Never-casting is a floor, not a ceiling —
+   a better casting rule could beat it. Test `DisableDefenseGadget` on HeuristicBot alone,
+   with no search involved, to get a pure-policy answer free of the candidate confound.
+3. **It is measured against HeuristicBot, which does not punish an absent wall.** Marc
+   does. A bot that never casts a defensive gadget may be far more exploitable by a human
+   than by this benchmark. This is the same limit as the staleness result and it matters
+   more here, because this one is a shipping candidate.
+
+## Consequence for the speed lead
+
+The speed-specific macro is no longer the obvious next move. Speed is 1 of 4 defence
+gadgets and never-casting helps wall MORE. The question has changed from "why can't the
+bot use speed" to "why is its defensive-gadget spending net negative at all", which is a
+bigger and cheaper target. Nothing shipped; `--no-def-gadget` is opt-in and the control
+reproduces byte-for-byte.
+
+# ============================================================
+# 2026-08-11 — ATTRIBUTION: it is the CASTING RULE, and search casts it better than never
+# ============================================================
+
+`--no-def-gadget` bought +5.83 points (p=0.0019) but did THREE things at once: removed
+action 12 from the search candidate list, and stopped the prior AND the rollout policy
+casting. The override rate fell 8.2% -> 5.8% alongside the gain, and every lever on this
+project obeys "intervening less is better" — so the gain might have been the candidate
+removal. Marc called the control. Split the flag, ran each part, n=600 paired, seed 4242,
+all arms same build.
+
+**Wiring checks passed first:** plain control and `--sup def-cand,def-cast` are both
+**60/60 byte-identical** to the runs they must reproduce, so splitting the flag changed
+nothing.
+
+| arm | action 12 a candidate? | prior/rollout casts? | win rate | delta | McNemar p |
+|---|---|---|---|---|---|
+| control | yes | yes | 74.8% | — | — |
+| `--no-def-gadget` | no | no | 80.7% | +5.83 | 0.0019 |
+| **`--sup def-cand`** | **no** | yes | 75.7% | **+0.83** | **0.405** |
+| **`--sup def-cast`** | yes | **no** | **83.0%** | **+8.17** | **0.00001** |
+| `--sup off-cand,off-cast` | offence | offence | 76.8% | +2.00 | 0.207 |
+
+## THE CANDIDATE-COUNT CONFOUND IS DEAD
+
+Removing action 12 from the candidate list ALONE buys **+0.83, p=0.405** — nothing. The
++5.83 was never about search intervening less. This also quietly bounds the
+intervene-rarely invariant: it is not so strong that pruning any candidate helps.
+
+## THE RESULT: HeuristicBot's defensive-gadget RULE is worth −8.2 points
+
+`--sup def-cast` stops the prior and the rollout casting the defence gadget but **leaves
+action 12 as a search candidate**, and it is the best arm measured: **83.0%, +8.17,
+p=0.00001**. It also beats the full suppression head to head — **+2.33 points, b=11/c=25,
+p=0.029** — and the only difference between those two arms is that search keeps the
+option.
+
+**So the gadget is not the problem; the rule is.** Search casting it selectively is better
+than casting it on HeuristicBot's schedule (+8.2) AND better than never casting it (+2.3).
+This is structurally the same finding as Stage 0's on the save-invest macro: the value is
+in WHEN, and a cast-on-cooldown rule destroys it. Two independent mechanisms in this bot
+now have that shape.
+
+Mechanism is money: earned invests 6.93 -> 7.49, units bought 224.8 -> 262.5, spend on
+units 31,276 -> 43,997. The money HeuristicBot was burning on defensive casts returns less
+than units and investments do.
+
+## Specificity: it is DEFENCE, not gadgets in general
+
+Suppressing the OFFENCE gadget the same way buys +2.00 at p=0.207 — directionally positive,
+unproven, and clearly smaller than defence's +8.17. The CI [−0.85, +4.85] does not exclude
+a modest real offence effect, so this is "much smaller", not "zero".
+
+## What this does to the speed lead
+
+**Superseded.** The capability map found speed at 23.7% and the duel confirmed it
+head-to-head (0/200 vs heal). But the deficit is not speed-specific: it is the defensive
+casting rule, which speed happens to expose worst because speed is the one defence gadget
+whose value is purely about timing. A speed-specific macro is the wrong shape; the target
+is the defensive casting rule as a whole.
+
+## Shipping candidate, with the caveat that matters
+
+`--sup def-cast` = 83.0% vs the shipped 74.8%, +8.2 points, p=0.00001. Largest single
+measured gain since the save-invest macro (+11.2). In Elo, 74.8% -> 83.0% is +191 -> +275,
+so **+84 Elo** — real, and still small against the ~674 Elo the acceptance test needs.
+
+**NOT YET MEASURED, and it gates shipping: how often does search actually cast the defence
+gadget in this arm?** It must be non-zero (that is the only difference from full
+suppression) but there is no counter for action-12 selection. Add one before shipping —
+if it is very rare the bot is close to "never defends with gadgets", which is a
+qualitatively different opponent to play against.
+
+**And the standing limit applies with extra force here because this is a shipping
+candidate: it is measured against HeuristicBot, which does not punish an absent wall.
+Marc does.** A bot that rarely casts a defensive gadget may be much more exploitable by a
+human than by this benchmark. The acceptance test is the only instrument that can answer
+that.
+
+Nothing shipped. All flags opt-in; control reproduces byte-for-byte.
+
+# ============================================================
+# 2026-08-12 — GADGET CASTING AUDIT: 6 of 16 fire on cooldown, and Marc's $20/s is already in the code
+# ============================================================
+
+Marc's brief after the def-cast result: find every gadget with cast-off-cooldown logic;
+work out the right income level to start deliberately spamming for UPGRADE XP (twice,
+L1->L2 and L2->L3); and stagger that spam so the three slots are never all on cooldown.
+
+## 1. The audit — every branch in the three TryUse* methods
+
+`BigSpendJustified(me, def, 0)` is the key: it is `cost < 0.8*money || income >= 50`, an
+**AFFORDABILITY test with no usefulness component**, and it is permanently true from
+investment 5 onward. Any branch gated only by it is cast-on-cooldown in practice.
+
+| gadget | gate | verdict |
+|---|---|---|
+| snipe, nuke, firebomb, meteor, poison, blackhole | real value comparison vs target cost | OK |
+| freeze | killValue / multiplier / buyTime / earlyStall | OK |
+| divine | castle HP < threshold, or inDanger + mass | OK |
+| heal | `avgHpPct < 0.85` + affordable | OK (shallow but real) |
+| rage | non-wall unit + (inDanger or enemy within 250px) + affordable | OK (shallow but real) |
+| **speed** | `∃ non-wall unit` + affordable | **CAST-ON-COOLDOWN** |
+| **reinforcements** | `!DeferForInvestment` + affordable | **CAST-ON-COOLDOWN** |
+| **cash** | **nothing at all** | **CAST-ON-COOLDOWN, and uncapped — see below** |
+| **wave** | `(inDanger && budget) \|\| affordable` | **partly cast-on-cooldown** |
+| **goo** | `healUseCase = units && enemies && affordable` | **partly cast-on-cooldown** |
+| **wall** | `!alreadyHaveWall && (inDanger \|\| (enemies>0 && affordable))` | **partly cast-on-cooldown** |
+
+The file's own comment at the `DeferForInvestment` definition names **reinforcements, wave
+and goo** as the unconditional ones. **It missed speed, cash and wall.** Speed is the one
+the capability map caught, and it is the worst of them because speed's entire value is
+timing.
+
+**`cash` is a special case and arguably a bug:** it has no condition AND passes
+`double.MaxValue` as `estimatedEnemyValue`, which makes `paysForItself` true inside
+`TryCast`, so it **bypasses the income-drain cap entirely** and spams from tick 0.
+`divine` bypasses the same way but has a genuine trigger, so only cash is unguarded on
+both axes.
+
+## 2. MARC'S RULE IS ALREADY IMPLEMENTED, AND IT DERIVES HIS EXACT NUMBER
+
+`TryCast` enforces a self-imposed minimum interval:
+
+    minSeconds = cost / (income * GadgetMaxIncomeDrainFraction),   k = 0.30
+
+so a gadget becomes castable **every cooldown** exactly when
+
+    income >= cost / (cooldown * k)
+
+For speed L1 that is `30 / (5 * 0.30)` = **$20/s — precisely the figure Marc gave from his
+own play, arrived at independently.** The spam-to-upgrade behaviour therefore already
+exists as an emergent consequence of the drain cap, and "what income should we start
+spamming at" is really "what should k be".
+
+Thresholds at the shipped k=0.30, against the income curve
+(inv 0-8 = 2, 3, 4, 8, 20, 60, 252, 750, 2500):
+
+| | income needed | reached at investment |
+|---|---|---|
+| L1 -> L2 | 4.2 (freeze) to 31.1 (goo); speed/rage 20.0 | **3-5** |
+| L2 -> L3 | 40.5 (freeze_2) to 466.7 (goo_2); speed_2 300.0 | **5-7** |
+
+Both phases are reachable in a normal game (the bot earns ~7 investments), so the
+mechanism is live, not theoretical.
+
+**Two defects in it as an upgrade mechanism:**
+
+1. **It is a rate limiter, not an intent — it does not know what an upgrade is.** At max
+   tier there is no `NextTierId`, so `AddGadgetXp` returns early and the XP is discarded,
+   but the cap still permits casting: speed_3 needs `3600/(10*0.30)` = $1200/s and income
+   at investment 8 is 2500, so the bot spams a maxed gadget at **$360/s for nothing**.
+2. **It conflates tactical casting with XP farming.** Below the threshold it still permits
+   a cast every `cost/(income*k)` seconds with no usefulness test at all — cast-on-a-timer
+   rather than cast-when-useful. That is what the +8.2-point def-cast result was removing.
+
+## 3. Staggering: NOT IMPLEMENTED
+
+`_lastGadgetCastTick` is keyed by gadget FAMILY, so it only rate-limits each gadget against
+itself. `Decide()` calls TryUseOffenseGadget -> TryUseDefenseGadget -> TryUseSignatureGadget
+in sequence within one decision, so **all three slots can and do fire on the same tick**,
+which is exactly the all-on-cooldown vulnerability Marc described. Nothing coordinates them.
+
+## Design implied (not yet built)
+
+Separate the two motives that the drain cap currently conflates:
+- **Tactical cast** — requires genuine usefulness; fixes the six weak gates above.
+- **Upgrade cast** — explicit and deliberate: only when `NextTierId != null`, only when
+  `income >= cost/(cooldown*k)`, never while in danger, and **staggered at least S seconds
+  from any other slot's cast** so one gadget is always available.
+
+Tunables to measure: k (probably different for L1->L2 and L2->L3, since the L2 costs are
+10-15x larger) and S. Nothing built or measured yet — reported first because finding that
+Marc's rule already exists changes what should be built.
+
+# ============================================================
+# 2026-08-12 — GADGET DOCTRINE + XP FARMING: negative, monotonically
+# ============================================================
+
+Implemented Marc's gadget doctrine (flags 21-27) and measured it on the ladder, 400
+setups x 2 sides, --nostart, seed 12345, paired against the default HeuristicBot in the
+same run. All flags default OFF and verified **60/60 byte-identical** to the committed
+bot before measuring.
+
+## A BUG OF MINE FIRST, because it invalidated the first read
+
+`TryUpgradeSpam` returns before the per-gadget switch, so it bypassed EVERY safety check
+in it -- including `survivesOwnBlast`, the guard added after Marc's "I've seen the bot kill
+itself with a nuke 3 times" report. NukeEffect damages BOTH castles by BaseValue/2
+(100/1500/12000 by level) and the XP casts were aimed at our OWN castle, which is also
+where our units stand.
+
+**The ladder's DoNothing rung caught it: 83.5% against an opponent that takes no actions.**
+Pinning the offence slot localised it in one run -- nuke 26.7%, freeze/snipe/firebomb all
+100.0%. Fixed by repeating the nuke guard on the spam path, aiming XP casts at the ENEMY
+castle, and refusing when any of our units are inside the blast radius.
+
+**Lesson: DoNothing is normally a formality that reads 100% and gets skipped. It was the
+only rung that could separate "this strategy is expensive" from "this code kills its own
+castle" -- and without it the first result would have been reported as the former.**
+
+## The k sweep, after the fix. MONOTONE, and the optimum is "do not do it"
+
+| arm | OVERALL | vs HeuristicBot | earned inv |
+|---|---|---|---|
+| reference (no spam) | **87.4%** | **48.2%** | **6.96** |
+| k = 0.04 | 87.3% | 47.7% | 6.94 |
+| k = 0.08 | 86.7% | 43.8% | 6.82 |
+| k = 0.15 | 86.5% | 43.2% | 6.56 |
+| k = 0.30 (= Marc's $20/s for speed) | 83.4% | 32.8% | 6.11 |
+| k = 0.30, defer at 25% of savings | 85.3% | 38.8% | 6.62 |
+
+**Perfectly monotone in k, and the earned-invest column tracks it exactly** (6.94 / 6.82 /
+6.56 / 6.11). k=0.04 is indistinguishable from the reference on all three columns, i.e.
+the best setting is the one where the mechanism never fires. The deferral lever moves the
+same way for the same reason.
+
+**The failure mode is economic: gadget tiers are being bought with investments.** Earned
+investment differential predicts win rate almost monotonically across ~20 configs in this
+project, and it is the exact quantity the save-invest macro exists to protect.
+
+## The casting doctrine, separately
+
+`GadgetDoctrineNoSpam` (AoeTradeRule + DivineShieldsUnits + RageOnSiege + BlackholeBuyTime
++ SiegePreCast, no XP farming): **86.9% overall vs 87.4%, but 43.8% vs 48.2% head-to-head.**
+Roughly flat overall, ~4 points down in direct play. Five bundled changes, so this could be
+one real win cancelled by one real loss; not yet decomposed. `SiegePreCast` and
+`AoeTradeRule` each touch 3 of 16 gadgets, so their ablations need `--offense`/`--defense`
+pinning or they arrive diluted to noise.
+
+## What this does and does not say
+
+It does NOT say Marc's technique is wrong. It says a THRESHOLD RULE is the wrong way to
+express it. Marc spams when he judges the cost irrelevant; k is a crude proxy that starts
+speed at investment 5, well before the economy stops mattering. **This is the third
+independent sighting of the same shape in this bot** -- the save-invest macro (Stage 0:
+100% of the value is in WHEN, 0% in the behaviour) and the defensive casting rule
+(`--sup def-cast`, +8.2 by letting search choose the moment instead of a rule). A
+timing-sensitive action expressed as a threshold loses.
+
+That also predicts the obvious next test: give the SEARCH bot the upgrade-spam option as a
+candidate rather than giving HeuristicBot a rule. Same relationship as def-cast, which is
+the one configuration where letting search pick the moment beat both the rule and never.
+
+Caveat: measured against ladder opponents, none of whom are Marc. The HumanClone rung
+degrades too (95.4% -> 86.1% at k=0.30), which is the closest available proxy, but gadget
+tiers may matter far more against a human who punishes a low-tier loadout.
+
+Nothing shipped. All flags remain default-off.

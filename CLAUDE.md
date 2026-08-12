@@ -152,13 +152,25 @@ excluding the 11 quarantined abandoned rerolls, whose rows are still in the DB):
 
 | matchup | record | rate | Elo gap |
 |---|---|---|---|
-| Marc vs HeuristicBot | 58W/5L | 92.1% | +424 |
-| Marc vs SearchBot | 43W/8L | 84.3% | +241 |
+| Marc vs HeuristicBot | 58W/5L | 92.1% | +426 |
+| Marc vs SearchBot | 43W/8L | 84.3% | **+292** |
 | SearchBot vs HeuristicBot | — | 75.0% | +191 |
 
-These are transitive to within 8 Elo (424 vs 241+191=432), so the ladder is measuring
-one consistent strength axis. **The "11-0 vs SearchBot" figure is stale** — that was
-2026-07-30 against the old horizon-900 config. Against the shipped config Marc is 32-8.
+**ARITHMETIC CORRECTED 2026-08-11.** The middle row read +241 and the transitivity claim
+read "within 8 Elo"; both were wrong. `400·log₁₀(43/8)` = +292 (+241 corresponds to
+80.0%, not 84.3%). The ladder is transitive to **~59 Elo** (426 vs 292+191 = 483) — still
+one consistent strength axis, but not the tight one previously claimed. The gap to close
+is ~290 Elo, not ~240.
+
+**The "11-0 vs SearchBot" figure is stale** — that was 2026-07-30 against the old
+horizon-900 config. Against the shipped config Marc is 32-8.
+
+**The acceptance bar is stricter than "large majority."** Ten games, pass if Marc wins 0
+or 1: at a true 20% he passes it 37.6% of the time, at 15% 54.4%, at 10% 73.6%, at 5%
+91.4%. Reliable passage needs Marc at ~10%, i.e. the bot ~+382 Elo above him — a ~674 Elo
+swing from today, against +191 for the whole search programme so far. Do not read a single
+ten-game run as a verdict in either direction. The test itself is the **Acceptance Test**
+main-menu button (`gameMode: "accept"`); see `FLAGSHIP_BASELINE.md`.
 
 ### 1. `--divergence` — behavioural similarity to Marc, no play required
 
@@ -232,6 +244,18 @@ then gets pasted into a document and never re-derived, has no feedback loop and 
 silently.** Treat any figure quoted in `TRAINING_CAMPAIGN_LOG.md` before that date
 with suspicion.
 
+- **A PERFECT MIRROR IS DECIDED BY THE SEAT, NOT THE PLAY.** Same team, same loadout, same
+  bot both sides should draw. `mirror-fixed White nuke wall 100` returns **P2 100/100**.
+  Measured per team (n=40 each, HeuristicBot, 2026-08-11): P2 always wins for Black/Red/
+  White, **P1 always wins for Purple/Yellow**, Green 80% P2, Orange balanced, and **Blue is
+  the only team that draws (40/40)** — which is what all of them should do. Reversing the
+  within-tick poll order (`defence-duel --p2-first`) does NOT flip it, so it is engine
+  geometry, not harness ordering. Consequences: (a) **any bot-vs-bot measurement that does
+  not balance seats is worthless**, and it fails silently because aggregate numbers look
+  sane; (b) in near-mirror configurations the effective sample size collapses, because the
+  outcome is fixed by (team, seat) and carries no information — use a NON-mirror design for
+  any A/B whose arms are near-mirrors. `dashboard` (6/6 per cell), `search-test` and
+  `defence-duel` all alternate and are safe.
 - **Headstart hands out free investments.** `CreateGame(true)` → `PlayerState(timeSkip)`
   calls `ApplyInvestmentStep()` `timeSkip` times, so both players start with
   `InvestmentCount == timeSkip` before either acts. `timeSkip = Math.Max(rng.Next(-8,9), 0)`
