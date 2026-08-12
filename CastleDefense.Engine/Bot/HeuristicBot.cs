@@ -156,6 +156,90 @@ namespace CastleDefense.Engine.Bot
         // 0 disables, restoring the committed pre-2026-07-31 gate (Income >= 50 alone).
         public int AttackGateMinInvestment { get; init; } = 6;
 
+        // MEASUREMENT ONLY -- never set this on a shipping bot. Blocks TryUseDefenseGadget
+        // entirely, so the defence slot is carried but never cast.
+        //
+        // WHY IT EXISTS (2026-08-11). The capability map found speed defence is the bot's
+        // single largest deficit (23.7% against ~56.4% for the other three defences), and
+        // the suspected cause is that TryUseDefenseGadget's "speed" branch fires on
+        // cooldown -- it checks only that a non-wall unit exists and the money is there,
+        // the weakest condition of the four. That diagnosis predicts something testable:
+        // if casting speed badly is WORSE than not casting it at all, this switch should
+        // RAISE the win rate. If it changes nothing, the cast is not what is costing and
+        // a speed macro has less headroom than it looks.
+        public bool DisableDefenseGadget { get; init; } = false;
+
+        // MEASUREMENT ONLY, and the SPECIFICITY CONTROL for the setting above. If
+        // suppressing the OFFENCE gadget buys about the same as suppressing the defence
+        // gadget, then the gain is "one less thing to spend money on" rather than anything
+        // about defensive play.
+        public bool DisableOffenseGadget { get; init; } = false;
+
+        // -- (21) GADGET DOCTRINE, 2026-08-12 (Marc's play notes) --------------------
+        // Audit found 6 of 16 gadget branches fire on cooldown -- gated only by
+        // BigSpendJustified, which is `cost < 0.8*money || income >= 50`, i.e. pure
+        // AFFORDABILITY with no usefulness test, and permanently true from investment 5.
+        // These flags replace those gates with the doctrine Marc actually plays.
+        // All default OFF so the committed bot stays byte-identical until each is measured.
+
+        // "My units are sieging the enemy castle." Deliberately requires TWO units, not
+        // one -- Marc's explicit ask, so the flag cannot flip on a single straggler and
+        // every gadget keyed to it is guaranteed a real target.
+        public int SiegeMinUnits { get; init; } = 2;
+
+        // (22) AOE FRIENDLY-FIRE TRADE. nuke/firebomb/blackhole damage ALLIES in the blast
+        // as well as enemies. The committed rule is "never cast if any ally is in radius",
+        // which is safe but refuses every good trade. Marc's rule is a comparison: cast
+        // when the enemy army caught is worth more than ours. The canonical good case is a
+        // defensive fight at OUR castle against a stream -- drop it at THEIR end, where the
+        // stream is dense and our units cannot reach in time.
+        public bool AoeTradeRule { get; init; } = false;
+        public double AoeTradeMargin { get; init; } = 1.0;   // enemyValue >= margin * allyValue
+
+        // (23) DIVINE SHIELDS UNITS, NOT THE CASTLE. The committed trigger is castle HP and
+        // inDanger, which is simply the wrong quantity -- DivineEffect shields UNITS. The
+        // correct trigger is "we have an army worth protecting and can afford it".
+        public bool DivineShieldsUnits { get; init; } = false;
+
+        // (24) RAGE ON SIEGE. A damage buff is at its best when units are already hitting
+        // the enemy castle, which the committed proximity trigger does not cover.
+        public bool RageOnSiege { get; init; } = false;
+
+        // (25) BLACKHOLE BUY-TIME. It already has freeze's earlyStall; it is missing
+        // freeze's buyTime (inDanger, within the reactive budget). Same gadget role.
+        public bool BlackholeBuyTime { get; init; } = false;
+
+        // (26) SIEGE PRE-CAST for poison/meteor/goo. These have a deployment Delay, so
+        // casting at the enemy castle while sieging pays even with NO enemy units on the
+        // field: the defender's answer spawns into the effect. Marc: "worst case you waste
+        // the gadget, but your units are getting free castle damage while this happens."
+        public bool SiegePreCast { get; init; } = false;
+
+        // (27) UPGRADE SPAM. Gadget tiers are bought with USES (100 XP per cast,
+        // UpgradeCost per tier), so deliberately spamming a cheap gadget once income makes
+        // its cost irrelevant is a real strategy -- Marc plays it. The income-drain cap in
+        // TryCast already produces this as a SIDE EFFECT: a gadget becomes castable every
+        // cooldown once income >= cost/(cooldown*k), and at the shipped k=0.30 that is
+        // exactly $20/s for speed, the number Marc gave independently. But as a rate
+        // limiter it has two defects -- it does not know what an upgrade IS, so it keeps
+        // spamming a MAXED gadget whose XP is discarded, and it conflates tactical casting
+        // with XP farming. This makes the intent explicit.
+        //
+        // TWO k values only, per Marc: one for L1->L2 and one for L2->L3. It is acceptable
+        // for an expensive L2 (speed_2 needs income 300 at k=0.30) to wait until
+        // investment 7.
+        public bool GadgetUpgradeSpam { get; init; } = false;
+        public double UpgradeSpamK1 { get; init; } = 0.30;   // level 1 -> 2
+        public double UpgradeSpamK2 { get; init; } = 0.30;   // level 2 -> 3
+        // Never cast two gadgets within this many seconds of each other while farming XP,
+        // so the three slots are never all on cooldown together -- Marc: "you always have
+        // 1 gadget up to defend yourself if the enemy decides to launch a big attack."
+        public double UpgradeSpamStaggerSeconds { get; init; } = 3.0;
+        // Defer XP farming while committed to the next investment. The save-invest macro is
+        // the search bot's single largest source of strength and must not be competed with;
+        // inside HeuristicBot the analogue is being this far toward the next price.
+        public double UpgradeSpamInvestCommitFraction { get; init; } = 0.60;
+
         // (14) REACTIVE FLOW CAP -- full argument at the implementation site in
         // SpendOnUnits. Bounds DEFENSIVE spending by the income rate, which nothing
         // currently does; the existing flow cap only governs the !inDanger attack branch,
@@ -1301,6 +1385,49 @@ namespace CastleDefense.Engine.Bot
         // attack or move is a bug, not a trade-off.
         public static readonly HeuristicBotSettings Divine =
             new HeuristicBotSettings { EagerDivine = true };
+
+        // -- (21)-(27) GADGET DOCTRINE, 2026-08-12 -----------------------------------
+        // The whole package from Marc's play notes. Register alongside the default
+        // contender in Ladder.cs to A/B it; the individual flags are separable so a
+        // positive result can be decomposed afterwards rather than shipped as one blob.
+        public static readonly HeuristicBotSettings GadgetDoctrine =
+            new HeuristicBotSettings
+            {
+                AoeTradeRule = true,
+                DivineShieldsUnits = true,
+                RageOnSiege = true,
+                BlackholeBuyTime = true,
+                SiegePreCast = true,
+                GadgetUpgradeSpam = true,
+            };
+        // Doctrine WITHOUT the XP farming, to separate "cast better" from "upgrade
+        // faster" -- they are independent claims and the k sweep only concerns the second.
+        public static readonly HeuristicBotSettings GadgetDoctrineNoSpam =
+            new HeuristicBotSettings
+            {
+                AoeTradeRule = true,
+                DivineShieldsUnits = true,
+                RageOnSiege = true,
+                BlackholeBuyTime = true,
+                SiegePreCast = true,
+            };
+        // XP farming ALONE, at the shipped k, for the same reason.
+        public static readonly HeuristicBotSettings UpgradeSpamOnly =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true };
+        // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
+        // costs 0.85 earned investments per game and loses 15 points head-to-head, so the
+        // failure mode is ECONOMIC. Lower k = stricter = start spamming later, at higher
+        // income. Sweeping downward is therefore the informative direction.
+        public static readonly HeuristicBotSettings UpgradeSpamK15 =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true, UpgradeSpamK1 = 0.15, UpgradeSpamK2 = 0.15 };
+        public static readonly HeuristicBotSettings UpgradeSpamK08 =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true, UpgradeSpamK1 = 0.08, UpgradeSpamK2 = 0.08 };
+        public static readonly HeuristicBotSettings UpgradeSpamK04 =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true, UpgradeSpamK1 = 0.04, UpgradeSpamK2 = 0.04 };
+        // Same k as shipped, but defer XP farming much earlier in the savings cycle -- the
+        // other lever on the same economic cost.
+        public static readonly HeuristicBotSettings UpgradeSpamDefer25 =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true, UpgradeSpamInvestCommitFraction = 0.25 };
         // REGRESSION GUARD for the wave-wipe purchase.
         public static readonly HeuristicBotSettings NoWiper =
             new HeuristicBotSettings { WiperOverRepair = false };
@@ -2880,6 +3007,109 @@ namespace CastleDefense.Engine.Bot
         // or a legitimate AoE target. Matches WallEffect's ids ("wall", "wall_2", "wall_3").
         private static bool IsWall(Unit u) => u.DefinitionId.StartsWith("wall");
 
+        /// <summary>
+        /// How many of our units are actually attacking the enemy castle, using the
+        /// ENGINE's own definition of in-range (GetDistanceToEnemyCastle vs the unit's
+        /// Range) rather than a hand-picked distance, so this cannot drift from what the
+        /// combat step does. Walls excluded -- they never advance.
+        /// </summary>
+        private int SiegeUnitCount(GameEngine engine, List<Unit> myUnits, List<UnitDefinition> myRoster)
+        {
+            int n = 0;
+            foreach (var u in myUnits)
+            {
+                if (IsWall(u)) continue;
+                var d = myRoster?.FirstOrDefault(x => x.Id == u.DefinitionId);
+                if (engine.GetDistanceToEnemyCastle(u) <= (d?.Range ?? 0f)) n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Friendly-fire TRADE test for the three gadgets that damage both sides in the
+        /// blast (nuke, firebomb, blackhole). True when the cast is worth taking: the enemy
+        /// value caught is at least AoeTradeMargin times our own.
+        ///
+        /// Replaces "no ally may be in radius", which is safe but refuses every good trade
+        /// -- including the one Marc names as the whole point of these gadgets: our army
+        /// holding at OUR castle while the enemy streams in, blast dropped at THEIR end
+        /// where the stream is dense and our units cannot arrive in time.
+        /// </summary>
+        private bool AoeTradeOk(GameEngine engine, List<Unit> myUnits, List<Unit> enemyUnits,
+                                float target, int radius)
+        {
+            double allyValue = EstimateEnemyValueNear(engine, myUnits, target, radius);
+            if (allyValue <= 0) return true;                       // nothing of ours caught
+            double enemyValue = EstimateEnemyValueNear(engine, enemyUnits, target, radius);
+            return enemyValue >= allyValue * _settings.AoeTradeMargin;
+        }
+
+        // Tick of our last cast of ANY gadget, for the upgrade-spam stagger. Distinct from
+        // _lastGadgetCastTick, which is per-family and only rate-limits a gadget against
+        // itself -- nothing in the committed bot stops all three slots firing on one tick.
+        private long _lastAnyGadgetCastTick = -1;
+
+        /// <summary>
+        /// Deliberate XP farming to reach the next gadget tier. See GadgetUpgradeSpam.
+        /// Returns true if it cast. Only ever ADDS casts the tactical gates would refuse;
+        /// it never suppresses one.
+        /// </summary>
+        private bool TryUpgradeSpam(GameEngine engine, PlayerState me, GadgetDefinition def,
+                                    int myCastlePos, List<Unit> myUnits, List<Unit> enemyUnits, bool inDanger)
+        {
+            if (!_settings.GadgetUpgradeSpam || def == null) return false;
+            // MAX TIER: AddGadgetXp returns early with no NextTierId, so every further cast
+            // buys literally nothing. The drain cap alone does not know this and happily
+            // spams a maxed gadget once income is high enough.
+            if (string.IsNullOrEmpty(def.NextTierId)) return false;
+            if (inDanger) return false;                       // fight first, farm later
+            if (me.Income <= 0.01 || def.Cost <= 0) return false;
+
+            // Defer while committed to the next investment.
+            if (me.InvestmentPrice > 0 &&
+                me.Money >= me.InvestmentPrice * _settings.UpgradeSpamInvestCommitFraction)
+                return false;
+
+            // Income must make the sustained spend irrelevant. An underscore in the id means
+            // this is the level-2 gadget, i.e. we are farming the 2->3 upgrade.
+            double cooldownSeconds = def.CooldownMs / 1000.0;
+            if (cooldownSeconds <= 0) return false;
+            double k = def.Id.Contains('_') ? _settings.UpgradeSpamK2 : _settings.UpgradeSpamK1;
+            if (k <= 0 || me.Income < def.Cost / (cooldownSeconds * k)) return false;
+
+            // STAGGER against every other slot, so one gadget is always available.
+            if (_lastAnyGadgetCastTick >= 0 &&
+                (engine._state.CurrentTick - _lastAnyGadgetCastTick) / 30.0 < _settings.UpgradeSpamStaggerSeconds)
+                return false;
+
+            // ── SELF-HARM GUARDS ────────────────────────────────────────────────────
+            // This path deliberately skips the per-gadget switch, which is where every
+            // safety check lives. That is a bypass, and the first version of it lost 73%
+            // of games to an opponent that does NOTHING: nuke damages BOTH castles by
+            // BaseValue/2 (100 / 1500 / 12000 by level), so farming XP with it simply
+            // killed the bot. Exactly the failure `survivesOwnBlast` exists to prevent --
+            // reintroduced by routing around the case that holds it.
+            //
+            // Anything added here that can hurt our own side needs its guard repeated, or
+            // the ladder's DoNothing rung will find it again.
+            string fam = def.Id.Split('_')[0].ToLowerInvariant();
+            if (fam == "nuke")
+            {
+                int selfBlast = (int)def.BaseValue / 2;
+                if (me.CastleHealth <= selfBlast * _settings.NukeSelfDamageMargin) return false;
+            }
+
+            // Aim AWAY from our own army. myCastlePos is the worst choice available: it is
+            // exactly where our units are, so an XP cast of firebomb or blackhole would
+            // farm the upgrade by killing our own board.
+            int enemyCastlePos = _side == 1 ? GameEngine.MAP_WIDTH - 200 : 200;
+            int xpTarget = enemyCastlePos;
+            if (myUnits.Any(u => Math.Abs(u.Position - xpTarget) <= Math.Max(150, def.Radius)))
+                return false;
+
+            return TryCast(engine, me, def, xpTarget, 0, enemyUnits, myCastlePos);
+        }
+
         // Tick of our last cast per gadget FAMILY ("meteor", "nuke", ...), for the
         // self-imposed cooldown in GadgetIncomeDrainCap. Keyed by family rather than by id
         // so an upgrade mid-game (meteor -> meteor_2 -> meteor_3) does not reset the clock.
@@ -2923,6 +3153,9 @@ namespace CastleDefense.Engine.Bot
 
             if (!engine.UseGadget(_side, def.Id, position)) return false;
             _lastGadgetCastTick[def.Id.Split('_')[0].ToLowerInvariant()] = engine._state.CurrentTick;
+            // Stagger clock covers TACTICAL casts too -- the point is that the three slots
+            // are never all on cooldown at once, whatever put them there.
+            _lastAnyGadgetCastTick = engine._state.CurrentTick;
             return true;
         }
 
@@ -3060,8 +3293,11 @@ namespace CastleDefense.Engine.Bot
         // one happened to be equipped when this was written.
         private void TryUseOffenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger, double reactiveSpendBudget)
         {
+            if (_settings.DisableOffenseGadget) return;   // measurement switch, see the setting
             var def = me.OffensiveGadget;
             if (!IsReady(me, def)) return;
+            // BEFORE the no-enemies bail: XP farming does not need a target.
+            if (TryUpgradeSpam(engine, me, def, myCastlePos, myUnits, enemyUnits, inDanger)) { ActionCounts[11]++; return; }
             if (enemyUnits.Count == 0) return; // nothing to hit -- don't burn the cooldown/cost for free
 
             string family = def.Id.Split('_')[0].ToLowerInvariant();
@@ -3223,8 +3459,17 @@ namespace CastleDefense.Engine.Bot
                     int? target = nukeable.Count > 0
                         ? FindBestAoeTarget(nukeable, radius, myCastlePos, def.Delay, clampToCastle: _settings.ClampProjectionToCastle)
                         : null;
+                    // FRIENDLY FIRE: committed rule is "no ally in radius", which never
+                    // trades. AoeTradeRule replaces it with Marc's comparison -- take the
+                    // cast when the enemy army caught outweighs ours. See AoeTradeOk.
+                    // MUST short-circuit on target first: the committed expression relied on
+                    // `target.HasValue &&` guarding target.Value, and hoisting it out of that
+                    // conjunction dereferenced a null on the very first no-cluster decision.
+                    bool nukeFriendlyOk = target.HasValue && (_settings.AoeTradeRule
+                        ? AoeTradeOk(engine, myUnits, nukeable, target.Value, radius)
+                        : !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius));
                     if (survivesOwnBlast && target.HasValue && nukeable.Count >= 2
-                        && !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius)
+                        && nukeFriendlyOk
                         && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, nukeable, target.Value, radius)))
                         used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, nukeable, target.Value, radius), enemyUnits, myCastlePos);
                     break;
@@ -3274,6 +3519,11 @@ namespace CastleDefense.Engine.Bot
                     bool targetBurnsAllies = target.HasValue && (_settings.FirebombSweptFriendlyFireCheck
                         ? AllyWouldEnterHazard(myUnits, target.Value, radius, def)
                         : myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius));
+                    // Under AoeTradeRule an ally in the fire is acceptable when the trade
+                    // is favourable, so only retarget if it is NOT.
+                    if (targetBurnsAllies && _settings.AoeTradeRule && target.HasValue
+                        && AoeTradeOk(engine, myUnits, enemyUnits, target.Value, radius))
+                        targetBurnsAllies = false;
                     if (targetBurnsAllies)
                     {
                         // Retarget used to pick whichever enemy was literally FARTHEST
@@ -3304,8 +3554,10 @@ namespace CastleDefense.Engine.Bot
         // The defense slot can be any of "heal" / "reinforcements" / "speed" / "wall".
         private void TryUseDefenseGadget(GameEngine engine, PlayerState me, List<Unit> myUnits, List<Unit> enemyUnits, int myCastlePos, bool inDanger, double reactiveSpendBudget)
         {
+            if (_settings.DisableDefenseGadget) return;   // measurement switch, see the setting
             var def = me.DefensiveGadget;
             if (!IsReady(me, def)) return;
+            if (TryUpgradeSpam(engine, me, def, myCastlePos, myUnits, enemyUnits, inDanger)) { ActionCounts[12]++; return; }
 
             string family = def.Id.Split('_')[0].ToLowerInvariant();
             bool used = false;
@@ -3390,8 +3642,17 @@ namespace CastleDefense.Engine.Bot
             var def = me.SignatureGadget;
             if (!IsReady(me, def)) return;
 
+            if (TryUpgradeSpam(engine, me, def, myCastlePos, myUnits, enemyUnits, inDanger)) { ActionCounts[13]++; return; }
+
             string family = def.Id.Split('_')[0].ToLowerInvariant();
             bool used = false;
+
+            // SIEGE FLAG (Marc, 2026-08-12). "At least two of my units are attacking the
+            // enemy castle" -- the shared precondition for rage, and for the poison/meteor/
+            // goo pre-cast. Two, not one, so it cannot flip on a lone straggler.
+            var myRoster = GameDataManager.Teams.FirstOrDefault(t => t.Color == me.Team)?.Roster;
+            int enemyCastlePosSig = _side == 1 ? GameEngine.MAP_WIDTH - 200 : 200;
+            bool sieging = SiegeUnitCount(engine, myUnits, myRoster) >= _settings.SiegeMinUnits;
 
             switch (family)
             {
@@ -3407,8 +3668,15 @@ namespace CastleDefense.Engine.Bot
                     // as an army. Same class of bug as freeze-on-a-wall; heal and goo are
                     // deliberately NOT given this guard, since healing a wall genuinely
                     // extends how long it tanks.
+                    // ON SIEGE (Marc, 2026-08-12): a damage buff is at its best when our
+                    // units are already hitting the enemy castle, which the proximity
+                    // clause below does not cover -- a castle is not an enemy UNIT, so a
+                    // besieging army with no defenders left near it reads as "nothing to
+                    // rage" exactly when raging is best.
                     if (myUnits.Any(u => !IsWall(u))
-                        && (inDanger || myUnits.Any(u => !IsWall(u) && enemyUnits.Any(e => Math.Abs(e.Position - u.Position) < 250)))
+                        && (inDanger
+                            || (_settings.RageOnSiege && sieging)
+                            || myUnits.Any(u => !IsWall(u) && enemyUnits.Any(e => Math.Abs(e.Position - u.Position) < 250)))
                         && BigSpendJustified(me, def, 0))
                         used = TryCast(engine, me, def, myCastlePos, 0, enemyUnits, myCastlePos);
                     break;
@@ -3434,7 +3702,19 @@ namespace CastleDefense.Engine.Bot
                     // See DivineEagerHpThreshold.
                     float divineHp = _settings.EagerDivine ? _settings.DivineEagerHpThreshold : 0.3f;
                     int divineMass = _settings.EagerDivine ? _settings.DivineEagerEnemyCount : 3;
-                    if (castleHpPct < divineHp || (inDanger && enemyUnits.Count >= divineMass))
+                    // CORRECTED 2026-08-12 (Marc): DivineEffect shields UNITS, not the
+                    // castle, so castle HP and inDanger are simply the wrong quantities to
+                    // trigger on -- the committed rule fires the gadget exactly when our
+                    // army is least likely to exist. The right trigger is "we have an army
+                    // worth protecting and can afford the cast". Passing 0 rather than
+                    // MaxValue also puts it back under the income-drain cap, so it is rate
+                    // limited by income like everything else instead of bypassing it.
+                    if (_settings.DivineShieldsUnits)
+                    {
+                        if (myUnits.Any(u => !IsWall(u)))
+                            used = TryCast(engine, me, def, myCastlePos, 0, enemyUnits, myCastlePos);
+                    }
+                    else if (castleHpPct < divineHp || (inDanger && enemyUnits.Count >= divineMass))
                         used = TryCast(engine, me, def, myCastlePos, double.MaxValue, enemyUnits, myCastlePos);
                     break;
 
@@ -3510,7 +3790,14 @@ namespace CastleDefense.Engine.Bot
                         // Also gated on the per-spend EV budget (Decide()'s
                         // reactiveSpendBudget) -- same reasoning as wall/wave/freeze.
                         bool slowUseCase = inDanger && def.Cost <= reactiveSpendBudget;
-                        if (DeferForInvestment(me) || (!healUseCase && !slowUseCase)) break;
+                        // SIEGE PRE-CAST -- same argument as meteor/poison above.
+                        bool gooSiege = _settings.SiegePreCast && sieging;
+                        if (DeferForInvestment(me) || (!healUseCase && !slowUseCase && !gooSiege)) break;
+                        if (gooSiege && !healUseCase && !slowUseCase)
+                        {
+                            used = TryCast(engine, me, def, enemyCastlePosSig, 0, enemyUnits, myCastlePos);
+                            break;
+                        }
                         int target = myUnits.Count > 0 ? (int)myUnits.Average(u => u.Position) : myCastlePos;
                         used = TryCast(engine, me, def, target, 0, enemyUnits, myCastlePos);
                         break;
@@ -3523,6 +3810,13 @@ namespace CastleDefense.Engine.Bot
                         int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius), myCastlePos, def.Delay, clampToCastle: _settings.ClampProjectionToCastle);
                         if (target.HasValue && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius))))
                             used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius)), enemyUnits, myCastlePos);
+                        // SIEGE PRE-CAST (Marc, 2026-08-12). These land after def.Delay, so
+                        // dropping one on the enemy castle while we are already sieging pays
+                        // even with NO enemy unit on the field: the defender's answer spawns
+                        // into the effect. Worst case the cast is wasted while our units take
+                        // the castle for free, which is not a bad trade.
+                        else if (_settings.SiegePreCast && sieging)
+                            used = TryCast(engine, me, def, enemyCastlePosSig, 0, enemyUnits, myCastlePos);
                         break;
                     }
 
@@ -3549,14 +3843,23 @@ namespace CastleDefense.Engine.Bot
                         int? target = FindBestAoeTarget(enemyUnits, radius, myCastlePos, def.Delay,
                                                         preferFarFromMyCastle: _settings.StallGadgetsEngageEarly,
                                                         clampToCastle: _settings.ClampProjectionToCastle);
-                        bool friendlyFire = target.HasValue && myUnits.Any(u => u.DefinitionId != "evilguy" && Math.Abs(u.Position - target.Value) <= radius);
+                        // evilguy is immune, so it never counts as caught either way.
+                        var catchable = myUnits.Where(u => u.DefinitionId != "evilguy").ToList();
+                        bool friendlyFire = target.HasValue && (_settings.AoeTradeRule
+                            ? !AoeTradeOk(engine, catchable, enemyUnits, target.Value, radius)
+                            : catchable.Any(u => Math.Abs(u.Position - target.Value) <= radius));
                         // Same early-engagement argument as freeze: a real force is worth
                         // stalling before it arrives, not only once it is already on us.
                         bool earlyStall = _settings.StallGadgetsEngageEarly
                             && enemyUnits.Count >= _settings.StallForceMinUnits
                             && def.Cost <= me.Money * _settings.StallGadgetMaxMoneyFraction;
+                        // BUY TIME (Marc, 2026-08-12): blackhole is a stall tool of the
+                        // same family as freeze, which already has this clause. Stalling an
+                        // arriving force is worth the cost on its own, independent of the
+                        // dollar value caught.
+                        bool bhBuyTime = _settings.BlackholeBuyTime && inDanger && def.Cost <= reactiveSpendBudget;
                         if (target.HasValue && !friendlyFire
-                            && (earlyStall || TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius))))
+                            && (earlyStall || bhBuyTime || TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius))))
                             used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius), enemyUnits, myCastlePos);
                         break;
                     }
