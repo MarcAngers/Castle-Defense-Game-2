@@ -328,6 +328,15 @@ if (args.Length > 0 && args[0] == "search-test")
     return;
 }
 
+// Head-to-head defence-gadget duel, plus the never-cast probe. Confirms (or kills) the
+// capability map's speed finding with everything but the defence gadget held equal.
+// See DefenceDuel.cs.
+if (args.Length > 0 && args[0] == "defence-duel")
+{
+    CastleDefense.BotArena.DefenceDuel.Run(args);
+    return;
+}
+
 // Stage 1a: measures how much win probability search throws away on its hold-money
 // decisions, against play-to-completion ground truth. See MacroTruth.cs.
 if (args.Length > 0 && args[0] == "macro-truth")

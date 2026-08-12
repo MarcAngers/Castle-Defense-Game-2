@@ -28,6 +28,25 @@ namespace CastleDefense.Engine.Bot
         void Update(GameEngine engine);
     }
 
+    /// <summary>
+    /// MEASUREMENT ONLY. Which parts of gadget usage to suppress, split so the +5.8 points
+    /// that suppressing the defence gadget bought (2026-08-11, n=600, p=0.0019) can be
+    /// attributed between "search stopped choosing it" and "the bot stopped casting it".
+    /// </summary>
+    [System.Flags]
+    public enum GadgetSuppression
+    {
+        None = 0,
+        /// <summary>Remove action 12 from the search candidate list only.</summary>
+        DefenceCandidate = 1,
+        /// <summary>Stop the prior and the rollout policy casting the defence gadget.</summary>
+        DefenceCasting = 2,
+        /// <summary>Remove action 11 from the search candidate list only.</summary>
+        OffenceCandidate = 4,
+        /// <summary>Stop the prior and the rollout policy casting the offence gadget.</summary>
+        OffenceCasting = 8,
+    }
+
     /// <summary>Which policy drives a side inside a rollout.</summary>
     public enum RolloutPolicyKind
     {
@@ -123,10 +142,19 @@ namespace CastleDefense.Engine.Bot
     /// <summary>Builds the policy driving one side of a rollout.</summary>
     public static class RolloutPolicyFactory
     {
-        public static IRolloutPolicy Make(RolloutPolicyKind kind, int side, double saveCommitFraction)
+        public static IRolloutPolicy Make(RolloutPolicyKind kind, int side, double saveCommitFraction,
+                                          bool disableDefenceGadget = false,
+                                          bool disableOffenceGadget = false)
             => kind switch
             {
                 RolloutPolicyKind.Saving => new SavingHeuristicBot(side, saveCommitFraction),
+                // Measurement switch only. A rollout that casts a gadget the live arm has
+                // been forbidden simulates the wrong continuation, so the suppression has
+                // to reach in here as well as into the prior and the candidate list.
+                _ when disableDefenceGadget || disableOffenceGadget =>
+                    new HeuristicBot(side, new HeuristicBotSettings {
+                        DisableDefenseGadget = disableDefenceGadget,
+                        DisableOffenseGadget = disableOffenceGadget }),
                 _ => new HeuristicBot(side),
             };
     }

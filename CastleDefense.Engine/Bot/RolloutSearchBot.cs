@@ -370,8 +370,20 @@ namespace CastleDefense.Engine.Bot
                                      bool macroRandomAffordable = false,
                                      bool deepMacroEval = false,
                                      int deepPlayouts = 2,
-                                     int deepCommitTicks = 225)
+                                     int deepCommitTicks = 225,
+                                     int staleTicks = 0,
+                                     bool suppressDefenceGadget = false,
+                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None)
         {
+            // 0 = decide and act on the same tick, which is what every recorded
+            // benchmark number describes. See UpdateStale.
+            _staleTicks = Math.Max(0, staleTicks);
+            // suppressDefenceGadget is the original all-in-one switch, kept so existing
+            // callers are unchanged; it means "candidate + casting", both for defence.
+            _suppress = gadgetSuppression
+                      | (suppressDefenceGadget
+                         ? GadgetSuppression.DefenceCandidate | GadgetSuppression.DefenceCasting
+                         : GadgetSuppression.None);
             // Defaults keep the shipped path byte-for-byte unchanged: deep evaluation is
             // opt-in, so the control arm in any A/B is the real committed bot.
             _deepMacroEval = deepMacroEval;
@@ -422,8 +434,34 @@ namespace CastleDefense.Engine.Bot
             _overrideMargin = overrideMargin;
             _useMacro = useMacro;
             _usePressMacro = usePressMacro;
-            _prior = new HeuristicBot(side);
+            // The prior must carry the same suppression as the candidate list, and so must
+            // the rollout policy (RolloutPolicyFactory reads _suppressDefenceGadget too) --
+            // otherwise the rollouts simulate a continuation that casts a gadget the live
+            // arm never will, and every candidate is scored against the wrong future.
+            _prior = (SuppressDefCasting || SuppressOffCasting)
+                ? new HeuristicBot(side, new HeuristicBotSettings {
+                    DisableDefenseGadget = SuppressDefCasting,
+                    DisableOffenseGadget = SuppressOffCasting })
+                : new HeuristicBot(side);
         }
+
+        /// <summary>
+        /// MEASUREMENT ONLY. Splits gadget suppression into its independent parts so the
+        /// +5.8 points that `--no-def-gadget` bought can be attributed.
+        ///
+        /// That switch did THREE things at once: removed action 12 from the search
+        /// candidate list, and disabled casting in the prior AND in the rollout policy.
+        /// The override rate fell 8.2% -> 5.8% alongside the gain, and every lever measured
+        /// on this project obeys "intervening less is better" — so the gain might be the
+        /// CANDIDATE REMOVAL rather than anything about defensive play. These flags
+        /// separate the two, and add the offence equivalents as a specificity control.
+        /// </summary>
+        private readonly GadgetSuppression _suppress;
+
+        private bool SuppressDefCandidate => (_suppress & GadgetSuppression.DefenceCandidate) != 0;
+        private bool SuppressDefCasting   => (_suppress & GadgetSuppression.DefenceCasting) != 0;
+        private bool SuppressOffCandidate => (_suppress & GadgetSuppression.OffenceCandidate) != 0;
+        private bool SuppressOffCasting   => (_suppress & GadgetSuppression.OffenceCasting) != 0;
 
         private readonly bool _usePressMacro;
 
@@ -467,23 +505,36 @@ namespace CastleDefense.Engine.Bot
         ///        0.10        0.5%     ~73.5%   <- SHIPPED
         ///        0.00        7.3%     75.7%
         ///
-        /// Margin 0.0 is the strongest: +1.9 points, and it wins 34 of the 57 games where
-        /// the two arms disagree. But McNemar puts that at p = 0.185 -- consistently
-        /// positive across every configuration tried, never negative, and never proven.
+        /// Margin 0.0 looked strongest at n=600: +1.9 points, winning 34 of the 57 games
+        /// where the two arms disagree, but McNemar p = 0.185 -- positive everywhere,
+        /// proven nowhere. It shipped at 0.10 anyway, on Marc's call, for PLAYABILITY:
+        /// at 7.3% firing the bot spends much of the game in defence-only banking and
+        /// becomes a markedly less interactive opponent.
         ///
-        /// It ships at 0.10 anyway, on Marc's call, for PLAYABILITY rather than strength.
-        /// At 7.3% the bot spends a large share of the game in defence-only banking, which
-        /// makes it a markedly less interactive opponent to play against. He would rather
-        /// have the behaviour present but rare than trade the feel of the game for ~2
-        /// unproven points. Do not "fix" this to 0.0 on the strength of the table above.
+        /// RE-MEASURED 2026-08-11 AT n=2400, AND THE EFFECT REVERSED. The 2026-08-10 goal
+        /// statement drops playability as a constraint, so this was re-run with enough
+        /// power to settle it (~4x the discordant pairs). Paired setups, seed 4242, no
+        /// headstart, same build:
         ///
-        /// ONE UNEXPLAINED THING, worth chasing before trusting the mechanism: at 7.3%
-        /// firing, earned investments moved only 6.82 -> 6.86. A macro whose stated purpose
-        /// is committing to the investment race should move that far more. The likely
-        /// reading is that it mostly fires when it CANNOT afford the investment and so
-        /// delegates to the defence-only bot -- meaning any real gain may come from playing
-        /// more defensively, not from racing the economy. If so, a simpler defence-only
-        /// macro would capture the same thing. Untested.
+        ///     arma margin   fires   overrides   win rate
+        ///        0.10        0.4%      7.9%      75.42%   <- SHIPPED
+        ///        0.00        7.4%     14.5%      74.38%
+        ///
+        /// Paired delta **-1.04 points**, discordant b=129/c=104, McNemar p=0.116,
+        /// 95% CI [-2.29, +0.20]. The +1.9 was small-sample noise; the interval now
+        /// essentially excludes it. **Do not "fix" this to 0.0 -- there were never two
+        /// points there to buy, and the playability choice cost nothing.**
+        ///
+        /// Note the override rate doubling alongside the loss: this is the same
+        /// intervene-rarely invariant that the evaluator, the rollout policy and the deep
+        /// estimator all obey.
+        ///
+        /// AND THE MACRO STILL DOES NOT MOVE THE ECONOMY. At 18x the firing rate, earned
+        /// investments went 6.88 -> 6.86 and units bought 217.8 -> 198.2. This was logged
+        /// as "one unexplained thing" at n=600 (6.82 -> 6.86); at n=2400 it is simply
+        /// flat. Whatever this macro is, it is a play-defensively macro, not the commitment
+        /// to the eight-investment race it is documented as. The strategy-matrix finding
+        /// that motivated it still stands -- this implementation just is not delivering it.
         /// </summary>
         public const int MacroArmageddon = 102;
 
@@ -542,7 +593,17 @@ namespace CastleDefense.Engine.Bot
 
         public void Update(GameEngine engine)
         {
-            if (!_asyncDecisions) { UpdateBlocking(engine); return; }
+            if (!_asyncDecisions)
+            {
+                // _staleTicks == 0 routes to the ORIGINAL path, untouched, so every
+                // existing benchmark number reproduces byte-for-byte. It is not merely
+                // equivalent — UpdateStale clones and draws from _rng, so running it at
+                // 0 would perturb the stream and the control would stop being the
+                // control.
+                if (_staleTicks > 0) { UpdateStale(engine); return; }
+                UpdateBlocking(engine);
+                return;
+            }
 
             var st = engine._state;
             if (st.IsGameOver) return;
@@ -565,6 +626,82 @@ namespace CastleDefense.Engine.Bot
                 _next = st.CurrentTick + _decisionInterval;
                 var snapshot = engine.Clone(rngSeed: _rng.Next());
                 _pending = System.Threading.Tasks.Task.Run(() => Decide(snapshot));
+            }
+        }
+
+        // ── ASYNC STALENESS, made measurable ─────────────────────────────────────────
+        //
+        // The live bot is asynchronous: it snapshots the engine, thinks on a background
+        // thread, and applies the answer whenever it is ready — so it always acts on a
+        // state some milliseconds old. The standing assumption has been that this costs
+        // little because the game moves slowly. That assumption has never been tested,
+        // and it cannot be tested by the live path, whose delay is wall-clock and
+        // therefore not reproducible.
+        //
+        // This models the SAME structure with a deterministic delay measured in ticks:
+        // decide from the state at tick T, commit the answer at tick T + _staleTicks.
+        // It reproduces the two properties of the live path that matter —
+        //
+        //   1. the action is chosen against a state that no longer exists, and
+        //      Apply() re-derives macro behaviour from the state it lands in, exactly
+        //      as the live bot does;
+        //   2. at most one decision is ever in flight, so if the delay exceeds the
+        //      decision interval the bot simply acts LESS OFTEN rather than queueing
+        //      stale answers behind each other.
+        //
+        // Converting a measurement here back to real time: one tick is 33 ms, so
+        // _staleTicks 1 ~ 33 ms of thinking, 8 ~ 250 ms (the live maxDecisionMs cap),
+        // 15 ~ one whole decision interval.
+        //
+        // MEASURED 2026-08-11, AND THE ASSUMPTION HOLDS WITH 15-30x OF MARGIN.
+        // n=600 paired per arm, seed 4242, no headstart, same build:
+        //
+        //     D    ms    win rate   delta   p (exact)
+        //     0     0     74.8%       --       --
+        //     1    33     77.3%     +2.50    0.137
+        //     2    67     77.2%     +2.33    0.141
+        //     4   133     74.8%     +0.00    1.000
+        //     8   266     73.3%     -1.50    0.417
+        //    15   499     74.7%     -0.17    1.000
+        //
+        // Flat and non-monotone; nothing significant anywhere, including a FULL decision
+        // interval of staleness. Real latency measured at 15.5 ms average / 34 ms worst
+        // on ONE core, and the live game gives each decision 18 -- so the operating point
+        // is under one tick, far left of anything that costs.
+        //
+        // DO NOT CHASE THE +2.5 AT D=1. The Armageddon margin showed +1.9 at n=600
+        // (p=0.185) and came back -1.04 at n=2400 with the sign reversed. Same n, same
+        // p-range. D=1 and D=2 are also near-identical policies, so their agreement is
+        // not independent corroboration.
+        //
+        // LIMIT: measured against HeuristicBot, which does not exploit reaction delay.
+        // A human can bait a cooldown or time a wave against known lag. This bounds the
+        // cost against a non-exploiting opponent only.
+        private readonly int _staleTicks;
+        private long _staleApplyAt = long.MaxValue;
+        private int _staleChoice = DeferToPrior;
+
+        private void UpdateStale(GameEngine engine)
+        {
+            var st = engine._state;
+            if (st.IsGameOver) return;
+
+            if (st.CurrentTick >= _staleApplyAt)
+            {
+                int chosen = _staleChoice;
+                _staleApplyAt = long.MaxValue;
+                if (chosen == DeferToPrior) _prior.Update(engine);
+                else Apply(engine, chosen);
+            }
+
+            if (_staleApplyAt == long.MaxValue && st.CurrentTick >= _next)
+            {
+                _next = st.CurrentTick + _decisionInterval;
+                // Clone for the same reason the async path does: the decision must be
+                // taken against a frozen copy, not against an engine that keeps moving.
+                var snapshot = engine.Clone(rngSeed: _rng.Next());
+                _staleChoice = Decide(snapshot);
+                _staleApplyAt = st.CurrentTick + _staleTicks;
             }
         }
 
@@ -645,7 +782,16 @@ namespace CastleDefense.Engine.Bot
             if (_usePressMacro && mePlayer.InvestmentCount >= 2) candidates.Add(MacroPressAdvantage);
             if (_useArmageddonMacro && !mePlayer.ArmageddonUsed) candidates.Add(MacroArmageddon);
             for (int a = 8; a >= 1; a--) if (mask[a] == 1) candidates.Add(a);
-            foreach (int a in new[] { 9, 10, 11, 12, 13 }) if (a < mask.Length && mask[a] == 1) candidates.Add(a);
+            foreach (int a in new[] { 9, 10, 11, 12, 13 })
+            {
+                // Action 12 is the defence gadget. _suppressDefenceGadget is a MEASUREMENT
+                // switch (see HeuristicBotSettings.DisableDefenseGadget) and must remove it
+                // here as well as from the priors -- otherwise search can still cast the
+                // gadget the probe is trying to withhold, and the arm measures nothing.
+                if (a == 12 && SuppressDefCandidate) continue;
+                if (a == 11 && SuppressOffCandidate) continue;
+                if (a < mask.Length && mask[a] == 1) candidates.Add(a);
+            }
 
             var scores = new Dictionary<int, double>();
             EvaluateBatch(engine, candidates, seeds, scores, clock);
@@ -817,7 +963,8 @@ namespace CastleDefense.Engine.Bot
             var cs = clone._state;
             System.Threading.Interlocked.Increment(ref _deepRolloutCount);
 
-            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction);
+            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction,
+                                                 SuppressDefCasting, SuppressOffCasting);
             var theirs = RolloutPolicyFactory.Make(_oppRolloutPolicy, _side == 1 ? 2 : 1, _saveCommitFraction);
             var me = _side == 1 ? cs.Player1 : cs.Player2;
 
@@ -1038,7 +1185,8 @@ namespace CastleDefense.Engine.Bot
             // The two sides are separate settings on purpose. Raising OUR side tests whether
             // a stronger rollout policy makes search stronger (Probe A); raising THEIRS is
             // opponent modelling, a different question with a different payoff.
-            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction);
+            var mine = RolloutPolicyFactory.Make(_ownRolloutPolicy, _side, _saveCommitFraction,
+                                                 SuppressDefCasting, SuppressOffCasting);
             // Defence-only stand-in used for the whole Armageddon rollout.
             var mineDefence = arma ? new HeuristicBot(_side, DefenceOnly) : null;
             var theirs = RolloutPolicyFactory.Make(_oppRolloutPolicy, _side == 1 ? 2 : 1, _saveCommitFraction);

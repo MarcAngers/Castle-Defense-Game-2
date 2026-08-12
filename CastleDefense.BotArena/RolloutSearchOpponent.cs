@@ -37,7 +37,10 @@ namespace CastleDefense.BotArena
                                      bool macroRandomAffordable = false,
                                      bool deepMacroEval = false,
                                      int deepPlayouts = 2,
-                                     int deepCommitTicks = 225)
+                                     int deepCommitTicks = 225,
+                                     int staleTicks = 0,
+                                     bool suppressDefenceGadget = false,
+                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None)
             : base(side, decisionInterval, horizon, rolloutsPerAction, seed,
                    usePrior, overrideMargin, useMacro, usePressMacro,
                    maxDecisionMs, maxParallelism, asyncDecisions: false,
@@ -51,7 +54,9 @@ namespace CastleDefense.BotArena
                    saveCommitFraction: saveCommitFraction, macroRandomRate: macroRandomRate,
                    macroRandomAffordable: macroRandomAffordable,
                    deepMacroEval: deepMacroEval, deepPlayouts: deepPlayouts,
-                   deepCommitTicks: deepCommitTicks)
+                   deepCommitTicks: deepCommitTicks, staleTicks: staleTicks,
+                   suppressDefenceGadget: suppressDefenceGadget,
+                   gadgetSuppression: gadgetSuppression)
         {
         }
     }
@@ -104,6 +109,22 @@ namespace CastleDefense.BotArena
             bool macroRandomAffordable = false;
             // STAGE 1b. Off by default -- the control arm must be the shipped bot.
             bool deepMacro = false; int deepPlayouts = 2; int deepCommitTicks = 225;
+            // ASYNC STALENESS. The live bot acts on state as old as its own thinking
+            // time; this benchmark has always decided and acted on the same tick, so
+            // every number it has ever produced describes a bot with no latency at all.
+            // 0 keeps that (and reproduces byte-for-byte). One tick is 33 ms.
+            int staleTicks = 0;
+            // Suppresses the search bot's defence gadget entirely (prior + rollout policy +
+            // action 12). Exists to check a defence-duel result against the CALIBRATED
+            // instrument: the duel said never-casting is worth +25 to +34 points, which is
+            // too large to believe from a near-mirror harness with a ~50% draw rate.
+            bool noDefGadget = false;
+            // CANDIDATE-COUNT CONTROL (2026-08-11). --no-def-gadget does three things at
+            // once; these name each part so the attribution can be measured:
+            //   --sup def-cand    action 12 leaves the candidate list, prior still casts
+            //   --sup def-cast    prior/rollout stop casting, action 12 still a candidate
+            //   --sup off-cand,off-cast   the same for the OFFENCE gadget (specificity)
+            var suppression = GadgetSuppression.None;
             // Leave a couple of cores for the OS and the desktop. The 2026-07-27 crash
             // post-mortem traced a machine-wide stall to running 15 CPU-bound processes on
             // 20 logical cores, so don't saturate by default.
@@ -127,6 +148,18 @@ namespace CastleDefense.BotArena
                 else if (args[i] == "--save-commit" && i + 1 < args.Length) saveCommit = double.Parse(args[++i]);
                 else if (args[i] == "--macro-random-rate" && i + 1 < args.Length) macroRandomRate = double.Parse(args[++i]);
                 else if (args[i] == "--macro-random-affordable") macroRandomAffordable = true;
+                else if (args[i] == "--stale-ticks" && i + 1 < args.Length) staleTicks = int.Parse(args[++i]);
+                else if (args[i] == "--no-def-gadget") noDefGadget = true;
+                else if (args[i] == "--sup" && i + 1 < args.Length)
+                    foreach (var part in args[++i].Split(','))
+                        suppression |= part.Trim().ToLowerInvariant() switch
+                        {
+                            "def-cand" => GadgetSuppression.DefenceCandidate,
+                            "def-cast" => GadgetSuppression.DefenceCasting,
+                            "off-cand" => GadgetSuppression.OffenceCandidate,
+                            "off-cast" => GadgetSuppression.OffenceCasting,
+                            var o => throw new ArgumentException($"unknown --sup part '{o}' (def-cand|def-cast|off-cand|off-cast)"),
+                        };
                 else if (args[i] == "--deep-macro") deepMacro = true;
                 else if (args[i] == "--deep-playouts" && i + 1 < args.Length) deepPlayouts = int.Parse(args[++i]);
                 else if (args[i] == "--deep-commit-ticks" && i + 1 < args.Length) deepCommitTicks = int.Parse(args[++i]);
@@ -178,6 +211,13 @@ namespace CastleDefense.BotArena
                               $"maxDecisionMs={(maxDecisionMs > 0 ? maxDecisionMs.ToString() : "unlimited")}, " +
                               $"coresPerDecision={intraThreads}, " +
                               $"eval={(linearEval ? "LINEAR (pre-audit)" : refitEval ? "LOGISTIC REFIT (2026-08-05)" : "logistic (deployed)")}");
+            if (suppression != GadgetSuppression.None)
+                Console.WriteLine($"              GADGET SUPPRESSION: {suppression}");
+            if (noDefGadget)
+                Console.WriteLine("              DEFENCE GADGET SUPPRESSED for the search bot (prior + rollout + action 12)");
+            if (staleTicks > 0)
+                Console.WriteLine($"              ASYNC STALENESS: decisions committed {staleTicks} tick(s) " +
+                                  $"({staleTicks * 33.3:F0} ms) after the state they were computed from");
             if (deepMacro)
                 Console.WriteLine($"              STAGE 1b: DEEP macro eval on -- {deepPlayouts} bounded play-to-completion " +
                                   $"rollout(s)/branch, commit window {deepCommitTicks} ticks");
@@ -272,7 +312,8 @@ namespace CastleDefense.BotArena
                                                          useArma, armaMargin,
                                                          ownRollout, oppRollout, saveCommit,
                                                          macroRandomRate, macroRandomAffordable,
-                                                         deepMacro, deepPlayouts, deepCommitTicks);
+                                                         deepMacro, deepPlayouts, deepCommitTicks,
+                                                         staleTicks, noDefGadget, suppression);
                 var heuristic = new HeuristicBotAdapter(s.searchIsP1 ? 2 : 1);
 
                 var gameSw = Stopwatch.StartNew();
