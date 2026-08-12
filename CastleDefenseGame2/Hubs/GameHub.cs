@@ -75,6 +75,69 @@ namespace CastleDefense.Api.Hubs
                 return;
             }
 
+            // ACCEPTANCE TEST (2026-08-11). The bar for "a bot Marc cannot beat":
+            // ten games, random loadouts on BOTH sides, no rerolling, passing if he
+            // wins zero or one. This mode exists so that test is a button rather
+            // than a protocol he has to remember to follow.
+            //
+            // WHY IT IS NOT JUST SINGLEPLAYER. In "sp" the human picks his own team
+            // and loadout, and picking is itself a skill the bot does not have — he
+            // knows which of his team/gadget combinations he plays well. Measuring
+            // against a self-selected loadout measures Marc-at-his-best against the
+            // bot at a random draw, which is not the stated goal. Here the server
+            // assigns BOTH sides, so neither player chooses.
+            //
+            // NO REROLL is enforced structurally: there is no selection screen to
+            // back out of, and the game is created and started in this one call.
+            // Abandoning a game mid-play is still possible and is on the honour
+            // system — but it lands in the DB as a row rather than silently
+            // vanishing, which is how the 11 quarantined rerolls were found.
+            //
+            // NO HEADSTART, deliberately. CreateGame leaves both PlayerStates at
+            // timeSkip 0, unlike Training League above which rolls one. A headstart
+            // hands both sides E=2.118 free investments with SD 2.74, and across a
+            // ten-game test that variance is comparable to the effect being
+            // measured. It is also the regime Marc actually plays and the regime
+            // every search-test number is quoted in.
+            //
+            // Human is P1 for the same reason: all 51 of his recorded games against
+            // the search bot are from seat 1, so keeping the seat fixed lets this
+            // test extend that record rather than start a new one.
+            if (game._state.GameMode == "accept")
+            {
+                lock (game)
+                {
+                    if (!string.IsNullOrEmpty(game._state.Player1.ConnectionId)) return;
+
+                    game._state.Player1.Side         = 1;
+                    game._state.Player1.ConnectionId = Context.ConnectionId;
+                    game._state.Player1.Team         = GameDataManager.GetRandomTeam();
+                    game._state.Player1.SetLoadout(new[] {
+                        GameDataManager.GetRandomOGadgetId(),
+                        GameDataManager.GetRandomDGadgetId(),
+                        GameDataManager.GetSignatureGadgetIdForTeam(game._state.Player1.Team) });
+
+                    game._state.Player2.Side         = 2;
+                    game._state.Player2.ConnectionId = "AI_BOT";
+                    game._state.Player2.Team         = GameDataManager.GetRandomTeam();
+                    game._state.Player2.SetLoadout(new[] {
+                        GameDataManager.GetRandomOGadgetId(),
+                        GameDataManager.GetRandomDGadgetId(),
+                        GameDataManager.GetSignatureGadgetIdForTeam(game._state.Player2.Team) });
+
+                    game.RewirePlayerEvents();
+                    // The flagship. Identical configuration to Singleplayer's — this
+                    // test must measure the bot that actually ships, so it shares
+                    // SetupSearchOpponent rather than pinning its own parameters.
+                    _gameService.SetupSearchOpponent(gameId);
+                }
+
+                await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
+                await Clients.Caller.SendAsync("GameJoined", 1, game._state);
+                _gameService.StartGame(gameId);
+                return;
+            }
+
             if (!Enum.TryParse(teamName, true, out TeamColour team))
             {
                 await Clients.Caller.SendAsync("Error", "Invalid team colour.");

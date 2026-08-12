@@ -555,7 +555,14 @@ namespace CastleDefense.Api.Services
                             bool isSingleplayer = engine._state.GameMode == "sp"
                                                || engine._state.GameMode == "vai"
                                                || engine._state.GameMode == "league"
-                                               || engine._state.GameMode == "practice";
+                                               || engine._state.GameMode == "practice"
+                                               // Acceptance-test games are one human vs one bot,
+                                               // so they belong with the singleplayer replays that
+                                               // --divergence and --export-policy-table read. They
+                                               // carry game_mode="accept" in the DB, which is what
+                                               // separates the ten-game test from the 51 ordinary
+                                               // sp games already recorded against the same bot.
+                                               || engine._state.GameMode == "accept";
                             bool isWatch = engine._state.GameMode == "watch";
                             string subdir = isSingleplayer ? "singleplayer" : "multiplayer";
                             if (!isWatch) finishedRecorder.Save(Path.Combine(_replayDir, subdir),

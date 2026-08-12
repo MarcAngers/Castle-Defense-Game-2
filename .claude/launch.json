@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "castle-defense-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "CastleDefenseGame2", "-c", "Release"],
+      "port": 5168
+    }
+  ]
+}

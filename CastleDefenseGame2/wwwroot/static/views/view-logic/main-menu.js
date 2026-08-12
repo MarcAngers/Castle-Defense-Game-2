@@ -20,8 +20,13 @@ export default async function initMainMenu() {
         connection.gameMode = 'mp';
         showScreen('select-team');
     };
+    // Acceptance Test. Replaced Training League (spectating v4 vs HeuristicBot) on
+    // 2026-08-11: watching two bots play was diagnostic, and the diagnostic that
+    // matters now is whether the flagship beats Marc. Straight into a game against
+    // the shipped search bot with server-assigned random teams and loadouts on both
+    // sides — no selection screens, so there is nothing to reroll.
     btnLeague.onclick = async () => {
-        connection.gameMode = 'league';
+        connection.gameMode = 'accept';
         await connection.createGame();
     };
     btnPractice.onclick = () => {

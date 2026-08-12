@@ -1,4 +1,5 @@
 import { showScreen } from './router.js';
+import loader from './asset-loader.js';
 
 class GameConnection {
     constructor() {
@@ -30,8 +31,11 @@ class GameConnection {
         this.connection.on("GameJoined", (side, state) => {
             this.mySide = side;
             this.latestState = state;
-            // League mode skips loadout selection, so read the server-assigned gadgets from state
-            if (this.gameMode === 'league') {
+            // League and Acceptance Test both skip loadout selection, so read the
+            // server-assigned gadgets from state. This is not cosmetic: game.js binds
+            // the three gadget buttons and their targeting to selectedLoadout, so
+            // without it the human's gadgets are unusable in acceptance games.
+            if (this.gameMode === 'league' || this.gameMode === 'accept') {
                 const p = side === 1 ? state.player1 : state.player2;
                 const og = p.offensiveGadget;
                 const dg = p.defensiveGadget;
@@ -41,8 +45,20 @@ class GameConnection {
                     dg?.id ?? dg?.Id,
                     sg?.id ?? sg?.Id,
                 ];
+                // TeamColour serialises as its NUMERIC enum value, not a name, so the
+                // old string check never matched and every server-assigned game
+                // silently reported the player's team as "white". Harmless in the
+                // game screen — that reads loader.assets.teamList[state.playerN.team]
+                // directly — but unit-info.js and game-browser.js both style
+                // themselves from selectedTeam, so they showed the wrong roster.
+                //
+                // Resolved through the SAME teamList the game screen indexes rather
+                // than a copy of the enum order here: a hand-maintained duplicate of
+                // that ordering is precisely the kind of constant that drifts.
                 const rawTeam = p.team ?? p.Team;
-                this.selectedTeam = typeof rawTeam === 'string' ? rawTeam.toLowerCase() : 'white';
+                this.selectedTeam =
+                    typeof rawTeam === 'string' ? rawTeam.toLowerCase()
+                    : (loader.assets.teamList[rawTeam] ?? 'white');
             }
         });
 
