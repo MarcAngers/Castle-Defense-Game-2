@@ -181,6 +181,7 @@ namespace CastleDefense.Engine.Bot
                     ? _pressPeakMargin
                     : _pressOffPeakMargin;
             }
+            if (action == MacroGadgetUpgrade) return _upgradeMargin;
             if (action == MacroArmageddon) return _armageddonMargin;
             return action == MacroSaveInvest ? _macroMargin : _overrideMargin;
         }
@@ -373,7 +374,9 @@ namespace CastleDefense.Engine.Bot
                                      int deepCommitTicks = 225,
                                      int staleTicks = 0,
                                      bool suppressDefenceGadget = false,
-                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None)
+                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None,
+                                     bool useUpgradeMacro = false,
+                                     double upgradeMargin = double.NaN)
         {
             // 0 = decide and act on the same tick, which is what every recorded
             // benchmark number describes. See UpdateStale.
@@ -407,6 +410,9 @@ namespace CastleDefense.Engine.Bot
             // because 0.0 is a meaningful setting (fire whenever it merely ties).
             _macroMargin = double.IsNaN(macroMargin) ? overrideMargin : macroMargin;
             _useArmageddonMacro = useArmageddonMacro;
+            _useUpgradeMacro = useUpgradeMacro;
+            _upgradeMargin = double.IsNaN(upgradeMargin) ? _macroMargin : upgradeMargin;
+            _upgradePrior = new HeuristicBot(side, UpgradeFarming);
             _armageddonMargin = double.IsNaN(armageddonMargin) ? _macroMargin : armageddonMargin;
             _defencePrior = new HeuristicBot(side, DefenceOnly);
             _pressWaveUnits = Math.Max(1, pressWaveUnits);
@@ -553,6 +559,52 @@ namespace CastleDefense.Engine.Bot
         private readonly HeuristicBot _defencePrior;
 
         public long ArmageddonChosen { get; private set; }
+
+        /// <summary>
+        /// Sentinel for the GADGET-UPGRADE macro: farm XP toward the next gadget tier.
+        ///
+        /// WHY IT IS A COMMITMENT AND NOT A ONE-SHOT CAST (2026-08-12). Gadget tiers are
+        /// bought with USES -- 100 XP per cast, UpgradeCost per tier -- and a single cast
+        /// buys 1/7th of a speed upgrade. **Gadget XP is not one of EvaluateBoard's six
+        /// features**, so a one-shot XP cast is strictly invisible-to-negative at the leaf:
+        /// search would see the money leave and nothing arrive, and would never choose it.
+        /// The rollout has to run the whole commitment so the upgrade actually LANDS inside
+        /// the horizon and the evaluator prices the stronger gadget's downstream effects.
+        /// Exactly the reasoning behind MacroSaveInvest and the Armageddon macro.
+        ///
+        /// WHY THIS EXISTS AT ALL. As a RULE inside HeuristicBot the same behaviour is
+        /// monotonically harmful: the k sweep (0.04/0.08/0.15/0.30) gave 87.3/86.7/86.5/83.4
+        /// overall with earned investments tracking it exactly (6.94/6.82/6.56/6.11), so the
+        /// optimum was the setting where it never fires -- gadget tiers were being bought
+        /// with investments. But that is the third time on this project that a
+        /// timing-sensitive action has failed as a threshold and worked when search picked
+        /// the moment (save-invest macro, Stage 0; defensive casting, --sup def-cast +8.2).
+        /// This tests whether the same holds here. If it does not, XP farming is closed.
+        /// </summary>
+        public const int MacroGadgetUpgrade = 103;
+
+        private readonly bool _useUpgradeMacro;
+        private readonly double _upgradeMargin;
+        public long UpgradeChosen { get; private set; }
+
+        /// <summary>HeuristicBot with XP farming ON, for the macro's own line only.</summary>
+        private static readonly HeuristicBotSettings UpgradeFarming =
+            new HeuristicBotSettings { GadgetUpgradeSpam = true };
+
+        /// <summary>Persistent farming bot for the LIVE path, same reason as _prior.</summary>
+        private readonly HeuristicBot _upgradePrior;
+
+        /// <summary>
+        /// Is any slot actually worth farming right now? Keeps the candidate out of the
+        /// list entirely when it could only ever be a no-op, so it does not dilute the
+        /// argmax or inflate the macro-selection diagnostics.
+        /// </summary>
+        private static bool UpgradeEligible(PlayerState me)
+        {
+            foreach (var d in new[] { me.OffensiveGadget, me.DefensiveGadget, me.SignatureGadget })
+                if (d != null && !string.IsNullOrEmpty(d.NextTierId) && me.Money >= d.Cost) return true;
+            return false;
+        }
 
         /// <summary>
         /// Hard wall-clock ceiling for one decision, in milliseconds. 0 disables it.
@@ -781,6 +833,7 @@ namespace CastleDefense.Engine.Bot
             if (_useMacro && !mePlayer.ArmageddonUsed) candidates.Add(MacroSaveInvest);
             if (_usePressMacro && mePlayer.InvestmentCount >= 2) candidates.Add(MacroPressAdvantage);
             if (_useArmageddonMacro && !mePlayer.ArmageddonUsed) candidates.Add(MacroArmageddon);
+            if (_useUpgradeMacro && UpgradeEligible(mePlayer)) candidates.Add(MacroGadgetUpgrade);
             for (int a = 8; a >= 1; a--) if (mask[a] == 1) candidates.Add(a);
             foreach (int a in new[] { 9, 10, 11, 12, 13 })
             {
@@ -1115,6 +1168,16 @@ namespace CastleDefense.Engine.Bot
                 return;
             }
 
+            if (action == MacroGadgetUpgrade)
+            {
+                UpgradeChosen++;
+                // One decision's worth of farming. Sustained farming happens by search
+                // re-selecting this every interval, exactly as MacroSaveInvest does --
+                // the commitment lives in the ROLLOUT, not in a latched flag here.
+                _upgradePrior.Update(engine);
+                return;
+            }
+
             if (action == MacroArmageddon)
             {
                 ArmageddonChosen++;
@@ -1172,6 +1235,7 @@ namespace CastleDefense.Engine.Bot
             bool macro = action == MacroSaveInvest;
             bool press = action == MacroPressAdvantage;
             bool arma = action == MacroArmageddon;
+            bool upgrade = action == MacroGadgetUpgrade;
 
             // action == -1 means "force nothing" — used for the prior baseline, where the
             // rollout's own HeuristicBot decides this turn as well.
@@ -1189,6 +1253,9 @@ namespace CastleDefense.Engine.Bot
                                                  SuppressDefCasting, SuppressOffCasting);
             // Defence-only stand-in used for the whole Armageddon rollout.
             var mineDefence = arma ? new HeuristicBot(_side, DefenceOnly) : null;
+            // Farms XP for the WHOLE horizon so the upgrade lands inside it and the leaf
+            // can price the upgraded gadget. A one-shot cast is invisible to the evaluator.
+            var mineFarming = upgrade ? new HeuristicBot(_side, UpgradeFarming) : null;
             var theirs = RolloutPolicyFactory.Make(_oppRolloutPolicy, _side == 1 ? 2 : 1, _saveCommitFraction);
             var me = _side == 1 ? cs.Player1 : cs.Player2;
 
@@ -1226,6 +1293,10 @@ namespace CastleDefense.Engine.Bot
                         clone.ApplyAction(_side, 9); // invest
                         stillSaving = false;
                     }
+                }
+                else if (upgrade)
+                {
+                    mineFarming.Update(clone);
                 }
                 else if (arma)
                 {

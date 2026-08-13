@@ -3835,3 +3835,100 @@ degrades too (95.4% -> 86.1% at k=0.30), which is the closest available proxy, b
 tiers may matter far more against a human who punishes a low-tier loadout.
 
 Nothing shipped. All flags remain default-off.
+
+# ============================================================
+# 2026-08-12 (later) — ABLATION: doctrine closed. XP FARMING AS A SEARCH CANDIDATE: POSITIVE.
+# ============================================================
+
+Two follow-ups Marc asked for before leaving: ablate the five casting changes with
+different numbers, and give the SEARCH bot upgrade-spam as a candidate rather than giving
+HeuristicBot a threshold rule.
+
+## 1. Casting doctrine ablation — closed, and cleanly
+
+Ladder, 400 setups x 2 sides, --nostart, seed 12345, each arm paired in-run against the
+default contender. Reference: 48.2% vs HeuristicBot, 87.4% overall, 6.96 earned inv.
+
+| arm | vs HeuristicBot | delta | earned inv |
+|---|---|---|---|
+| AoeTradeOnly (margin 1.0) | 46.8% | -1.4 | 6.91 |
+| AoeTrade15 | 47.1% | -1.1 | 6.92 |
+| AoeTrade20 | 47.4% | -0.8 | 6.93 |
+| AoeTrade30 | 46.9% | -1.3 | 6.94 |
+| DivineOnly | 47.4% | -0.8 | 6.86 |
+| RageSiegeOnly | 47.6% | -0.6 | 6.94 |
+| BlackholeBuyTimeOnly | 48.2% | **0.0** | 6.96 |
+| SiegePreCastOnly | 46.8% | -1.4 | 6.88 |
+| SiegeMin3 | 46.4% | -1.8 | 6.89 |
+
+**The deltas sum to -4.2 and the bundle measured -4.4: purely additive, no interaction.**
+There is no combination worth hunting for. Individually every CI overlaps the reference,
+so the evidence is the CONSISTENCY OF SIGN across four arms plus the additive bundle, not
+any single row.
+
+**The AoE margin sweep is flat from 1.0 to 3.0**, so the trade rule does not fail by taking
+bad trades -- the committed "never cast with an ally in radius" was already close to right.
+`SiegeMinUnits` 3 is worse than Marc's 2.
+
+**`BlackholeBuyTimeOnly` is UNTESTED, not neutral.** Identical to the reference on every
+column across 5,600 games -- win rate, overall, earned invests, even avg seconds 262.7.
+Identical output across a config change is this project's own bug signal. `bhBuyTime` sits
+behind `earlyStall ||` in the same disjunction and earlyStall is already true in most
+states with an enemy force present, so the clause probably never binds. Needs a byte-level
+check before anything is concluded about blackhole buy-time.
+
+## 2. XP farming as a SEARCH CANDIDATE: +1.17 points, p=0.015
+
+New macro `MacroGadgetUpgrade` (103). It is a COMMITMENT, not a one-shot cast, and that is
+forced by the evaluator: **gadget XP is not one of EvaluateBoard's six features**, so a
+single XP cast is invisible-to-negative at the leaf and search would never choose it. The
+rollout drives our side with a farming-enabled HeuristicBot for the whole horizon so the
+upgrade LANDS inside it and the leaf prices the upgraded gadget's downstream effects. Same
+reasoning as MacroSaveInvest and the Armageddon macro.
+
+n=600 paired first, then resolved at n=2400 against the existing control (verified
+600/600 byte-identical on shared setups, so only the treatment arm needed re-running):
+
+| arm | fires on | overrides | win rate | delta | b/c | p |
+|---|---|---|---|---|---|---|
+| control | -- | 8.2% | 74.8% | -- | -- | -- |
+| margin 0.10, n=600 | 0.4% | 8.4% | 76.3% | +1.50 | 11/20 | 0.150 |
+| margin 0.00, n=600 | 6.8% | 14.5% | 74.0% | -0.83 | 36/31 | 0.625 |
+| **margin 0.10, n=2400** | **0.3%** | 8.0% | **76.58%** | **+1.17** | **48/76** | **0.0150** |
+
+**CI [+0.26, +2.08]. The effect survived 4x the data.** Recorded plainly because this
+session's standing prior said it would not: the Armageddon macro showed +1.9 at n=600
+(p=0.185) and came back -1.04 with the sign reversed, and the staleness +2.5 at p=0.14 was
+noise. This one held. A small positive at n=600 is still not evidence -- but it is not
+automatically noise either, and the only way to tell is to run it.
+
+## THE HEADLINE: same behaviour, opposite sign, depending on who picks the moment
+
+    XP farming as a HeuristicBot THRESHOLD RULE   -4.0 points (monotone in k; optimum off)
+    XP farming as a SEARCH CANDIDATE             +1.17 points (p=0.015, fires 0.3%)
+
+This is the cleanest demonstration yet of a pattern now seen four times -- the save-invest
+macro (Stage 0: 100% of the value is in WHEN), the defensive casting rule (--sup def-cast,
++8.2), and now this -- because it is the SAME mechanism measured both ways in the same
+build. **A timing-sensitive action expressed as a threshold loses; expressed as an option
+search may take, it wins.** Marc's technique was right; the way it was first encoded was
+not.
+
+Margin 0.0 forcing it to 6.8% of decisions costs 2 points and doubles the override rate to
+14.5% -- the intervene-rarely invariant's sixth sighting. Rare and well-timed is the whole
+mechanism.
+
+## Limit worth recording
+
+The leaf evaluator has no gadget-tier feature. The commitment form means the upgrade lands
+inside the 300-tick horizon so its effects DO reach the leaf, but any value of holding a
+higher tier beyond that horizon is invisible. If gadget tiers pay off on a longer timescale
+than the horizon, no margin tuning finds it and the fix is a seventh evaluator feature, not
+a better macro.
+
+## State
+
+Shipped config unchanged; every flag opt-in. The two things that have now beaten the
+committed bot are `--sup def-cast` (+8.17, p=0.00001) and `--upgrade-macro` (+1.17,
+p=0.015), and **they have not been measured together** -- both change gadget behaviour and
+could easily overlap.

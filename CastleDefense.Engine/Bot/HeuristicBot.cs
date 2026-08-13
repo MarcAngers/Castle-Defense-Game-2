@@ -1414,6 +1414,40 @@ namespace CastleDefense.Engine.Bot
         // XP farming ALONE, at the shipped k, for the same reason.
         public static readonly HeuristicBotSettings UpgradeSpamOnly =
             new HeuristicBotSettings { GadgetUpgradeSpam = true };
+
+        // -- ABLATION of GadgetDoctrineNoSpam, 2026-08-12 ----------------------------
+        // The bundle measured 86.9% overall / 43.8% head-to-head against a 87.4% / 48.2%
+        // reference: roughly flat overall, ~4 points down in direct play. Five independent
+        // changes, so that could be one real win cancelled by one real loss. These isolate
+        // each, plus a margin sweep on the one tunable number in the set.
+        //
+        // POWER WARNING. A signature gadget follows the TEAM, so a change touching one
+        // signature family appears in ~1/8 of games; divine/rage/blackhole ablations are
+        // therefore diluted ~8x and only a large effect will clear the noise. AoeTrade
+        // (nuke + firebomb = 2 of 4 offence draws) and SiegePreCast (3 of 8 signatures)
+        // are the two well-powered arms. Read a null on the diluted ones as "unmeasured",
+        // not "neutral".
+        public static readonly HeuristicBotSettings AoeTradeOnly =
+            new HeuristicBotSettings { AoeTradeRule = true };
+        // Break-even on UNITS still loses on castles: nuke and firebomb chip both castles,
+        // so a 1.0 margin takes trades that are net negative overall. These demand better.
+        public static readonly HeuristicBotSettings AoeTrade15 =
+            new HeuristicBotSettings { AoeTradeRule = true, AoeTradeMargin = 1.5 };
+        public static readonly HeuristicBotSettings AoeTrade20 =
+            new HeuristicBotSettings { AoeTradeRule = true, AoeTradeMargin = 2.0 };
+        public static readonly HeuristicBotSettings AoeTrade30 =
+            new HeuristicBotSettings { AoeTradeRule = true, AoeTradeMargin = 3.0 };
+        public static readonly HeuristicBotSettings DivineOnly =
+            new HeuristicBotSettings { DivineShieldsUnits = true };
+        public static readonly HeuristicBotSettings RageSiegeOnly =
+            new HeuristicBotSettings { RageOnSiege = true };
+        public static readonly HeuristicBotSettings BlackholeBuyTimeOnly =
+            new HeuristicBotSettings { BlackholeBuyTime = true };
+        public static readonly HeuristicBotSettings SiegePreCastOnly =
+            new HeuristicBotSettings { SiegePreCast = true };
+        // Siege threshold itself. Marc specified 2; 3 asks whether a stricter flag pays.
+        public static readonly HeuristicBotSettings SiegeMin3 =
+            new HeuristicBotSettings { SiegePreCast = true, RageOnSiege = true, SiegeMinUnits = 3 };
         // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
         // costs 0.85 earned investments per game and loses 15 points head-to-head, so the
         // failure mode is ECONOMIC. Lower k = stricter = start spamming later, at higher

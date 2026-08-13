@@ -40,7 +40,9 @@ namespace CastleDefense.BotArena
                                      int deepCommitTicks = 225,
                                      int staleTicks = 0,
                                      bool suppressDefenceGadget = false,
-                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None)
+                                     GadgetSuppression gadgetSuppression = GadgetSuppression.None,
+                                     bool useUpgradeMacro = false,
+                                     double upgradeMargin = double.NaN)
             : base(side, decisionInterval, horizon, rolloutsPerAction, seed,
                    usePrior, overrideMargin, useMacro, usePressMacro,
                    maxDecisionMs, maxParallelism, asyncDecisions: false,
@@ -56,7 +58,8 @@ namespace CastleDefense.BotArena
                    deepMacroEval: deepMacroEval, deepPlayouts: deepPlayouts,
                    deepCommitTicks: deepCommitTicks, staleTicks: staleTicks,
                    suppressDefenceGadget: suppressDefenceGadget,
-                   gadgetSuppression: gadgetSuppression)
+                   gadgetSuppression: gadgetSuppression,
+                   useUpgradeMacro: useUpgradeMacro, upgradeMargin: upgradeMargin)
         {
         }
     }
@@ -125,6 +128,11 @@ namespace CastleDefense.BotArena
             //   --sup def-cast    prior/rollout stop casting, action 12 still a candidate
             //   --sup off-cand,off-cast   the same for the OFFENCE gadget (specificity)
             var suppression = GadgetSuppression.None;
+            // GADGET-UPGRADE MACRO. Off by default -- the control arm must stay the shipped
+            // bot. As a RULE inside HeuristicBot this behaviour was monotonically harmful;
+            // this asks whether search picking the moment rescues it, the way it did for
+            // the defensive casting rule.
+            bool useUpgradeMacro = false; double upgradeMargin = double.NaN;
             // Leave a couple of cores for the OS and the desktop. The 2026-07-27 crash
             // post-mortem traced a machine-wide stall to running 15 CPU-bound processes on
             // 20 logical cores, so don't saturate by default.
@@ -150,6 +158,8 @@ namespace CastleDefense.BotArena
                 else if (args[i] == "--macro-random-affordable") macroRandomAffordable = true;
                 else if (args[i] == "--stale-ticks" && i + 1 < args.Length) staleTicks = int.Parse(args[++i]);
                 else if (args[i] == "--no-def-gadget") noDefGadget = true;
+                else if (args[i] == "--upgrade-macro") useUpgradeMacro = true;
+                else if (args[i] == "--upgrade-margin" && i + 1 < args.Length) { upgradeMargin = double.Parse(args[++i]); useUpgradeMacro = true; }
                 else if (args[i] == "--sup" && i + 1 < args.Length)
                     foreach (var part in args[++i].Split(','))
                         suppression |= part.Trim().ToLowerInvariant() switch
@@ -211,6 +221,8 @@ namespace CastleDefense.BotArena
                               $"maxDecisionMs={(maxDecisionMs > 0 ? maxDecisionMs.ToString() : "unlimited")}, " +
                               $"coresPerDecision={intraThreads}, " +
                               $"eval={(linearEval ? "LINEAR (pre-audit)" : refitEval ? "LOGISTIC REFIT (2026-08-05)" : "logistic (deployed)")}");
+            if (useUpgradeMacro)
+                Console.WriteLine($"              GADGET-UPGRADE MACRO on, margin {(double.IsNaN(upgradeMargin) ? "= macro margin" : upgradeMargin.ToString())}");
             if (suppression != GadgetSuppression.None)
                 Console.WriteLine($"              GADGET SUPPRESSION: {suppression}");
             if (noDefGadget)
@@ -272,7 +284,7 @@ namespace CastleDefense.BotArena
                                double earnedInv, double oppInv,
                                // Stage 0: separates "invested more" from "attacked less".
                                long units, long oppUnits, double spend, double oppSpend,
-                               long deepPromo, long deepVeto, long deepRollouts, long deepTicks)[games];
+                               long deepPromo, long deepVeto, long deepRollouts, long deepTicks, long upgrade)[games];
 
             var sw = Stopwatch.StartNew();
             int completed = 0;
@@ -313,7 +325,8 @@ namespace CastleDefense.BotArena
                                                          ownRollout, oppRollout, saveCommit,
                                                          macroRandomRate, macroRandomAffordable,
                                                          deepMacro, deepPlayouts, deepCommitTicks,
-                                                         staleTicks, noDefGadget, suppression);
+                                                         staleTicks, noDefGadget, suppression,
+                                                         useUpgradeMacro, upgradeMargin);
                 var heuristic = new HeuristicBotAdapter(s.searchIsP1 ? 2 : 1);
 
                 var gameSw = Stopwatch.StartNew();
@@ -334,7 +347,8 @@ namespace CastleDefense.BotArena
                               (s.searchIsP1 ? state.Player2 : state.Player1).InvestmentCount - oppStartInv,
                               engine.UnitsPurchased[searchSide], engine.UnitsPurchased[searchSide == 1 ? 2 : 1],
                               engine.MoneySpentOnUnits[searchSide], engine.MoneySpentOnUnits[searchSide == 1 ? 2 : 1],
-                              searcher.DeepPromotions, searcher.DeepVetoes, searcher.DeepRollouts, searcher.DeepSimTicks);
+                              searcher.DeepPromotions, searcher.DeepVetoes, searcher.DeepRollouts, searcher.DeepSimTicks,
+                              searcher.UpgradeChosen);
 
                 int done = Interlocked.Increment(ref completed);
                 if (done % Math.Max(1, games / 20) == 0)
@@ -344,7 +358,7 @@ namespace CastleDefense.BotArena
             int wins = 0, losses = 0, draws = 0, timeLimitGames = 0, timeLimitWins = 0;
             long totalDecisions = 0, totalRollouts = 0, totalSimTicks = 0, totalGameTicks = 0;
             double totalSpread = 0; long totalFlat = 0, totalWait = 0, totalOverrides = 0, totalMacro = 0, totalPress = 0, totalArma = 0;
-            double totalEarnedInvests = 0, totalOppInvests = 0;
+            double totalEarnedInvests = 0, totalOppInvests = 0; long totalUpgrade = 0;
 
             for (int g = 0; g < games; g++)
             {
@@ -363,6 +377,7 @@ namespace CastleDefense.BotArena
                 totalMacro += r.macro;
                 totalPress += r.press;
                 totalArma += r.arma;
+                totalUpgrade += r.upgrade;
                 totalEarnedInvests += r.earnedInv;
                 totalOppInvests += r.oppInv;
 
@@ -422,6 +437,10 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"  chose save-macro    : {(double)totalMacro / Math.Max(1, totalDecisions):P1}");
             Console.WriteLine($"  chose press-macro   : {(double)totalPress / Math.Max(1, totalDecisions):P1}  (converting the economic lead into an attack)");
             Console.WriteLine($"  chose arma-macro    : {(double)totalArma / Math.Max(1, totalDecisions):P1}  (committing to the race to investment 8)");
+            // MUST be reported: a null result is ambiguous without it. A flat win rate with
+            // 0% selection means search DECLINED the option; a flat win rate with a real
+            // selection rate means it took it and it did not pay. Different conclusions.
+            Console.WriteLine($"  chose upgrade-macro : {(double)totalUpgrade / Math.Max(1, totalDecisions):P1}  (farming XP toward the next gadget tier)");
             Console.WriteLine();
             // Stage 0 decomposition: an economic lead can be built by investing more OR by
             // the opponent investing less, and a macro that only suppresses its own attacking
