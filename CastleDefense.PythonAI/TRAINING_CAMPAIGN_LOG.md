@@ -4013,3 +4013,58 @@ appending the gadget columns after it silently turned it into "does p2_sig_lvl e
 Introduced by this change and caught because 100% was absurd on its face. Now reads the
 winner FIELD by index. A positional assumption inside a diagnostic is exactly the kind of
 thing that reads plausible forever and is never re-derived.
+
+# ============================================================
+# 2026-08-12 — HUMAN RECORD ON GADGET LEVEL: Marc wins while being OUT-LEVELLED
+# ============================================================
+
+Marc's question after the self-play result: does the human record show the same thing --
+does he also win with lower-level gadgets? `human_gadget_level.py`, 114 games from
+`game_records.db` (11 quarantined rerolls excluded). Gadget ids there are captured from the
+live PlayerState at GAME OVER, so they are post-upgrade finals.
+
+The self-play mechanism made a sharp, falsifiable prediction here: if a high gadget level
+marks a player who has been SPENDING on gadgets, then HeuristicBot -- which casts 6 of its
+16 gadgets on cooldown -- should out-level Marc while losing to him. If instead Marc
+out-levelled the bot, the negative sign would be about the value of tiers rather than about
+how this bot acquires them, and the self-play conclusion would not transfer.
+
+## It replicates, on a completely independent dataset with a different agent
+
+| opponent | n | Marc avg lvl | bot avg lvl | diff | Marc win% |
+|---|---|---|---|---|---|
+| heuristic | 63 | 1.66 | 2.01 | **-0.34** | 92.1% |
+| search | 51 | 1.78 | 1.97 | **-0.18** | 84.3% |
+| **ALL** | **114** | **1.72** | **1.99** | **-0.27** | **88.6%** |
+
+**Marc finishes games BEHIND on gadget level against both bots, and wins 88.6% anyway.**
+He is behind in 68 of 114 games and ahead in only 13. Directionally he also wins MORE when
+further behind -- 91.2% [82, 96] when behind vs 84.6% [58, 96] when ahead -- though those
+intervals overlap and that split is not significant on 13 losses.
+
+Alongside the self-play numbers (the side ahead on level wins 37.8% of frames, coefficient
+-1.07 controlling for the deployed six) this is two independent populations, different
+agents, same sign. **Gadget level is a consequence variable, not a causal one.**
+
+## The confound worth naming, because it explains part of the effect
+
+In Marc's LOSSES both sides hold higher levels (2.05 / 2.21) and games run 272s against
+216s in his wins. Longer games permit more upgrades on both sides, so level and duration
+are entangled in the end-of-game snapshot in a way the per-frame self-play analysis was
+not. Some of "higher level in losses" is simply "losses take longer". That does not
+threaten the descriptive headline -- Marc is out-levelled in the games he WINS too, by
+-0.29 -- but it does mean the direction of causality in the human data is not settled by
+this cut.
+
+## What this settles and what it does not
+
+SETTLED: the earlier caveat that the negative coefficient might describe only HeuristicBot's
+cast-on-cooldown acquisition is now much weaker. Marc acquires levels by a completely
+different process and still ends up on the low side of a winning position. The evaluator
+recommendation stands: **do not add gadget level as a feature.**
+
+NOT SETTLED: whether a level-3 gadget acquired CHEAPLY is worth holding. Every observation
+in both datasets confounds "has a high tier" with "paid for a high tier". The clean test
+remains granting tiers at game start rather than farming them. Marc's per-family hypothesis
+(poison/divine level 3 huge, firebomb level 3 minor) is also still untested -- the self-play
+sample cleared n>=200 for only wall and nuke, and they disagreed in sign.
