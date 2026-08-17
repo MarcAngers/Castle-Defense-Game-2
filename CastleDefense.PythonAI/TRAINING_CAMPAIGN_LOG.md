@@ -3932,3 +3932,84 @@ Shipped config unchanged; every flag opt-in. The two things that have now beaten
 committed bot are `--sup def-cast` (+8.17, p=0.00001) and `--upgrade-macro` (+1.17,
 p=0.015), and **they have not been measured together** -- both change gadget behaviour and
 could easily overlap.
+
+# ============================================================
+# 2026-08-12 — GADGET LEVEL AS AN EVALUATOR FEATURE: it predicts LOSING
+# ============================================================
+
+Follow-on from the upgrade-macro result. Marc's reasoning: an upgrade needs 4-15 casts
+through their own cooldowns (speed alone is 7 x 5s = 1050 ticks), far outside the 300-tick
+rollout horizon, so a search macro was never going to see the payoff -- add gadget level to
+the evaluator instead. He asked for the headline "average level and its pertinence to win
+rate" first, plus per-gadget data to judge whether granularity is worth building.
+
+`CalibCollect` now emits slot family + level for both players; `gadget_level_value.py`
+does the analysis. 800 HeuristicBot self-play games, 208,665 frames.
+
+**THE QUESTION IS INCREMENTAL VALUE, NOT CORRELATION**, and that framing is the whole
+result. Gadget level rises with income, game length and board control, all already carried
+by the existing six features. Adding a redundant feature is exactly how the 2026-08-05
+refit went wrong -- it shifted MONEY's share of the weight vector and play collapsed from
+75% to 34%. So everything is measured as a delta on the deployed six, thinned to one frame
+per game per 300 ticks (frames within a game are enormously autocorrelated) and held out
+BY GAME, never by row.
+
+## Headline: it adds nothing, and its sign is backwards
+
+| model | logloss | acc | AUC |
+|---|---|---|---|
+| deployed six | 0.5752 | 65.96% | 0.7460 |
+| + average level differential | 0.5700 | 65.99% | 0.7487 |
+| **delta** | **-0.0052** | **+0.03%** | **+0.0027** |
+
+Nothing. And the fitted coefficient is **-1.07**, against hp +5.08, money +4.11,
+income +3.33 -- i.e. *being ahead on gadget level predicts LOSING*, controlling for the
+six. The raw uncontrolled numbers say the same thing even louder: **P1 wins 37.8% of
+frames where it leads on gadget level and 60.3% where it trails.**
+
+## Why, and it is the money-share argument again
+
+Gadget XP is earned by CASTING, and casting spends money that would otherwise buy units or
+investments. **A high gadget level is a marker of a player who has been spending on
+gadgets** -- precisely the behaviour the k sweep measured as costing 0.85 earned
+investments and 4 points. It is a CONSEQUENCE variable, not a causal one, in the same way
+money is: HP/income/army are things you causally want, while money and gadget level are
+residues of how you have been playing.
+
+This is the third time that distinction has explained a surprising evaluator result. It
+also predicts what would have happened had the feature simply been added on the reasoning
+alone: a negative weight teaching search to AVOID upgrading, plus a seventh term diluting
+every existing share -- the refit failure mode, reproduced deliberately.
+
+## Granularity: THIS DATA CANNOT ANSWER IT
+
+Only two families ever reach n>=200 frames where both sides hold the same family at
+different levels -- wall (259, +11.4%) and nuke (235, -13.8%) -- and they disagree in sign.
+Signature gadgets follow the TEAM and offence/defence are 1-of-4 draws, so both sides
+sharing a family AND differing in level is rare. Marc's hypothesis (poison/divine level 3
+matter hugely, firebomb level 3 does not) is untested, not refuted. Answering it needs a
+targeted collection with loadouts PINNED per family, not more of this sample.
+
+## THE CAVEAT THAT BOUNDS ALL OF THIS
+
+The data is **HeuristicBot self-play**, and HeuristicBot casts 6 of its 16 gadgets on
+cooldown. Its gadget levels therefore rise as a side effect of the exact behaviour already
+measured as harmful, so the negative coefficient may describe HOW THIS BOT ACQUIRES LEVELS
+rather than what holding a level is worth. A player who reaches level 3 efficiently --
+Marc, spending only when the cost is genuinely irrelevant -- could show the opposite sign.
+Testing that needs level acquired CHEAPLY, e.g. levels granted at game start rather than
+farmed, which is a different collection design.
+
+**So: do not add the feature.** Not because gadget tiers are worthless, but because on the
+only data available the feature carries no incremental signal and points the wrong way,
+and adding it would disturb the weight shares that the 2026-08-05 collapse showed are the
+fragile part.
+
+## Bug found and fixed in CalibCollect
+
+Its summary line reported "P1 win rate 100.0%" on a dataset that is actually 396/404. The
+check was `rows[g][0].EndsWith(",1")`, correct only while `winner` was the final column --
+appending the gadget columns after it silently turned it into "does p2_sig_lvl equal 1".
+Introduced by this change and caught because 100% was absurd on its face. Now reads the
+winner FIELD by index. A positional assumption inside a diagnostic is exactly the kind of
+thing that reads plausible forever and is never re-derived.

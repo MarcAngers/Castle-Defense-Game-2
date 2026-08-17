@@ -101,12 +101,41 @@ namespace CastleDefense.BotArena
                     : new HeuristicBotAdapter(1);
                 var p2 = new HeuristicBotAdapter(2);
 
-                var samples = new List<(long tick, (float Hp, float Income, float Money, float Army, float Gadget, float Repair) c)>();
+                // GADGET LEVEL (2026-08-12). The six deployed features do not include it,
+                // which is why the search bot could not price a gadget upgrade: the payoff
+                // needs 4-15 casts through their cooldowns -- speed alone is 7 x 5s = 1050
+                // ticks -- so it lands far outside the 300-tick rollout horizon and is
+                // invisible at the leaf.
+                //
+                // Emitted as SLOT id + level per player rather than one averaged number, so
+                // the same run answers both questions Marc asked: the headline "does average
+                // gadget level predict winning" AND "is per-gadget granularity worth it",
+                // without a second collection pass.
+                //
+                // Level is the id suffix: no suffix = 1, _2 = 2, _3 = 3.
+                static int Lvl(CastleDefense.Engine.Definitions.GadgetDefinition d)
+                    => d == null ? 0 : d.Id.EndsWith("_3") ? 3 : d.Id.EndsWith("_2") ? 2 : 1;
+                static string Fam(CastleDefense.Engine.Definitions.GadgetDefinition d)
+                    => d == null ? "" : d.Id.Split('_')[0].ToLowerInvariant();
+
+                var samples = new List<(long tick,
+                    (float Hp, float Income, float Money, float Army, float Gadget, float Repair) c,
+                    string offA, int offAL, string defA, int defAL, string sigA, int sigAL,
+                    string offB, int offBL, string defB, int defBL, string sigB, int sigBL)>();
 
                 while (!state.IsGameOver)
                 {
                     if (state.CurrentTick % sample == 0)
-                        samples.Add((state.CurrentTick, state.GetEvalComponents()));
+                    {
+                        var pa = state.Player1; var pb = state.Player2;
+                        samples.Add((state.CurrentTick, state.GetEvalComponents(),
+                            Fam(pa.OffensiveGadget), Lvl(pa.OffensiveGadget),
+                            Fam(pa.DefensiveGadget), Lvl(pa.DefensiveGadget),
+                            Fam(pa.SignatureGadget), Lvl(pa.SignatureGadget),
+                            Fam(pb.OffensiveGadget), Lvl(pb.OffensiveGadget),
+                            Fam(pb.DefensiveGadget), Lvl(pb.DefensiveGadget),
+                            Fam(pb.SignatureGadget), Lvl(pb.SignatureGadget)));
+                    }
 
                     engine.Tick();
                     if (p1 is RolloutSearchOpponent rs) rs.Update(engine);
@@ -121,8 +150,13 @@ namespace CastleDefense.BotArena
                     winner = state.Player1.CastleHealth >= state.Player2.CastleHealth ? 1 : 2;
 
                 var list = new List<string>(samples.Count);
-                foreach (var (tick, c) in samples)
-                    list.Add($"{g},{tick},{c.Hp:F4},{c.Income:F4},{c.Money:F4},{c.Army:F4},{c.Gadget:F4},{c.Repair:F4},{winner}");
+                foreach (var s2 in samples)
+                {
+                    var c = s2.c;
+                    list.Add($"{g},{s2.tick},{c.Hp:F4},{c.Income:F4},{c.Money:F4},{c.Army:F4},{c.Gadget:F4},{c.Repair:F4},{winner}," +
+                             $"{s2.offA},{s2.offAL},{s2.defA},{s2.defAL},{s2.sigA},{s2.sigAL}," +
+                             $"{s2.offB},{s2.offBL},{s2.defB},{s2.defBL},{s2.sigB},{s2.sigBL}");
+                }
                 rows[g] = list;
 
                 int done = Interlocked.Increment(ref completed);
@@ -131,14 +165,26 @@ namespace CastleDefense.BotArena
             });
 
             using var sw = new StreamWriter(outPath, append: false, Encoding.UTF8);
-            sw.WriteLine("game_id,tick,hp_score,income_score,money_score,army_score,gadget_score,repair_score,winner");
+            sw.WriteLine("game_id,tick,hp_score,income_score,money_score,army_score,gadget_score,repair_score,winner," +
+                         "p1_off,p1_off_lvl,p1_def,p1_def_lvl,p1_sig,p1_sig_lvl," +
+                         "p2_off,p2_off_lvl,p2_def,p2_def_lvl,p2_sig,p2_sig_lvl");
             long total = 0;
             for (int g = 0; g < games; g++)
                 foreach (var line in rows[g]) { sw.WriteLine(line); total++; }
 
             int p1w = 0;
             for (int g = 0; g < games; g++)
-                if (rows[g].Count > 0 && rows[g][0].EndsWith(",1")) p1w++;
+                // Read the winner FIELD, not the line's last character. This used to be
+                // EndsWith(",1"), which was correct only while winner happened to be the
+                // final column -- appending the gadget-level columns after it silently
+                // turned this into "does p2_sig_lvl equal 1", i.e. it reported 100% on a
+                // dataset that is actually 396/404. A positional assumption in a diagnostic
+                // is exactly the kind of thing that reads plausible and is never re-derived.
+                if (rows[g].Count > 0)
+                {
+                    var f = rows[g][0].Split(',');
+                    if (f.Length > 8 && f[8] == "1") p1w++;
+                }
 
             Console.WriteLine($"\n[calib-collect] {total:N0} rows from {games} games -> {outPath}");
             Console.WriteLine($"[calib-collect] P1 win rate {(double)p1w / games:P1} " +
