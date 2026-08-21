@@ -372,10 +372,11 @@ swings. Chumps needed per enemy swing: ×1 → 1.0, ×2 → 2.5, ×3 → 5.0, ×
 Defence is still the cheaper side and increasingly so: 0.04× the attacker's spend against one
 tier 8, 0.07× against five. Tier 7 is the hardest tier to hold.
 
-**A tier-4 escort at one per second breaks the tactic.** No chump rate up to 30/s holds an
-escorted tier-5, -6 or -7 force. And it genuinely escorts rather than just being a better
-attack: the escort stream ALONE is stopped by 8/8 teams at 15/s, and adding a single high-tier
-unit collapses that to 1/8.
+**A tier-4 escort at one per second all but breaks the tactic.** An escorted tier-5, -6 or -7
+force is still held at 30 chumps/s — but that is one spawn per TICK, the engine ceiling, and it
+holds for only 5–7 of 8 teams. At 15/s it is 0–1 of 8, and below that nothing holds. And the
+escort genuinely escorts rather than just being a better attack: the escort stream ALONE is
+stopped by 8/8 teams at 15/s, and adding a single high-tier unit collapses that to 1/8.
 
 ### Four methodology rules this harness established
 

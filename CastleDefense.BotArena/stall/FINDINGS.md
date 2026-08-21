@@ -150,9 +150,15 @@ tier to hold — it is fast enough to close and cheap enough to mass.
 | escorted T5/T6/T7 forces, teams held (of 8) | 5–7 | 0–1 | 0–1 | 0 | 0 | 0 |
 | escorted T8 forces | 8 | 4–6 | 0–1 | 0–2 | 0 | 0 |
 
-**No chump rate up to 30/s holds an escorted tier-5, -6 or -7 force.** Only tier-8 forces can
-be held, only at 30/s, and it costs ~$36,000 and ~20,000 bodies — at ×1 that is **1.26× the
+**Only the engine's maximum spawn rate still holds an escorted tier-5, -6 or -7 force**, and
+even then not reliably: 30/s is *one spawn per tick*, and it holds for 5–7 of 8 teams. At 15/s
+that falls to 0–1 of 8, and below 15/s nothing holds at any tier. Tier-8 forces hold more
+comfortably, but at 30/s the bill is ~$36,000 and ~20,000 bodies — at ×1 that is **1.26× the
 attacker's own spend**, the only configuration measured where blocking is a losing trade.
+
+An earlier draft of this file said no rate up to 30/s holds an escorted T5–T7 force. That was
+wrong — 30/s does hold, for most teams. The real claim is that the survivable region shrinks to
+a rate no human can produce.
 
 ### The escort really does escort — this is not just "a T4 stream is scary"
 
