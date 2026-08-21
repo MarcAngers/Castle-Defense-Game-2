@@ -80,6 +80,11 @@ namespace CastleDefense.BotArena
             public double ForceSpend;     // list price of the high-tier units alone
             public int BigUnitsAlive;
             public long ForceDiedTick = -1;
+            public int AnchorsAlive;
+            public long AnchorFirstTick = -1;   // when the first matched defender actually appeared
+            public int AnchorDelayedTicks;      // ticks spent unable to afford a due anchor
+            public int AnchorDelay;
+            public int AnchorMax;
 
             public float DeepestProgress; // 0 = spawn point, 1 = defender's wall
             public long FirstCastleHitTick = -1;
@@ -107,6 +112,13 @@ namespace CastleDefense.BotArena
             // The defender's answer to an escort: a mid-tier unit woven into the chump wave.
             // 0 = none. Charged normally, unlike the attacker's force.
             int    anchorGap  = int.Parse(Arg(args, "--anchor-gap", "150"));
+            // A MATCHED DEFENDER is an anchor held back until the chump line has stacked the
+            // attackers at a single contact point -- ClampToContact parks them all at the same
+            // x, and one swing hits every enemy in range, so a same-tier defender arriving late
+            // can strike the whole force at once. --anchor-max 1 makes it a single unit rather
+            // than a stream.
+            int    anchorDelay= int.Parse(Arg(args, "--anchor-delay", "0"));
+            int    anchorMax  = int.Parse(Arg(args, "--anchor-max", "0"));   // 0 = unlimited
             var    anchors    = IntList(Arg(args, "--anchors", "0"));
             var    intervals  = IntList(Arg(args, "--intervals", "3"));
             var    tiers      = IntList(Arg(args, "--tiers", "5,6,7,8"));
@@ -123,6 +135,8 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"  force sizes    : {string.Join(",", forces)} (spawned {forceGap / 30.0:F2}s apart)");
             Console.WriteLine($"  escorts        : {string.Join(",", escorts.Select(e => e == 0 ? "none" : $"T{e}"))}" +
                               $" (one every {escortGap / 30.0:F2}s while any high-tier unit lives)");
+            Console.WriteLine($"  anchor timing  : first at {anchorDelay / 30.0:F2}s" +
+                              (anchorMax > 0 ? $", at most {anchorMax}" : ", unlimited"));
             Console.WriteLine($"  anchors        : {string.Join(",", anchors.Select(a => a == 0 ? "none" : $"T{a}"))}" +
                               $" (defender spawns one every {anchorGap / 30.0:F2}s alongside the chumps)");
             Console.WriteLine($"  chump periods  : {string.Join(",", intervals)} ticks  " +
@@ -155,7 +169,8 @@ namespace CastleDefense.BotArena
                     // burn the horizon on an empty board.
                     if (force == 0 && escort == 0) { done += 1 + intervals.Length; continue; }
                     var spec = new Spec(atkTeam, blkTeam, tier, force, forceGap, escort, escortGap,
-                                        anchor, anchorGap, seat, hp, income, horizon, seed, protectAtk);
+                                        anchor, anchorGap, anchorDelay, anchorMax,
+                                        seat, hp, income, horizon, seed, protectAtk);
                     // interval 0 is the control arm: defender does absolutely nothing.
                     results.Add(RunOne(spec, 0));
                     foreach (var interval in intervals)
@@ -172,8 +187,9 @@ namespace CastleDefense.BotArena
 
         private readonly record struct Spec(
             TeamColour AtkTeam, TeamColour BlkTeam, int Tier, int Force, int ForceGap,
-            int Escort, int EscortGap, int Anchor, int AnchorGap, int AttackerSeat,
-            int Hp, double Income, long Horizon, int Seed, bool ProtectAttackerCastle);
+            int Escort, int EscortGap, int Anchor, int AnchorGap, int AnchorDelay, int AnchorMax,
+            int AttackerSeat, int Hp, double Income, long Horizon, int Seed,
+            bool ProtectAttackerCastle);
 
         private static Result RunOne(Spec s, int interval)
         {
@@ -208,6 +224,7 @@ namespace CastleDefense.BotArena
                 ForceSize = s.Force, EscortTier = s.Escort, EscortUnit = escDef?.Id ?? "-",
                 BlockerTeam = s.BlkTeam.ToString(), BlockerUnit = blkDef.Id,
                 AnchorTier = s.Anchor, AnchorUnit = ancDef?.Id ?? "-",
+                AnchorDelay = s.AnchorDelay, AnchorMax = s.AnchorMax,
                 Interval = interval, AttackerSeat = attackerSeat,
             };
 
@@ -217,6 +234,7 @@ namespace CastleDefense.BotArena
             // Their list price is accounted separately so the cost comparison still holds.
             var bigIds = new HashSet<Guid>();
             int spawnedBig = 0;
+            long nextAnchorTick = s.AnchorDelay;
 
             int defenderHpBefore = defender.CastleHealth;
             // Force 0 is the escort-only reference arm: there are no high-tier units to
@@ -268,13 +286,29 @@ namespace CastleDefense.BotArena
                 }
                 // The anchor rides along with the chump wave on its own slower cadence. It
                 // stops with the chumps when the threat is gone, for the same reason.
-                if (ancDef != null && threatPresent && state.CurrentTick % s.AnchorGap == 0)
+                if (ancDef != null && threatPresent
+                    && state.CurrentTick >= s.AnchorDelay
+                    && (s.AnchorMax <= 0 || res.AnchorsSpawned < s.AnchorMax))
                 {
-                    double before = defender.Money;
-                    if (engine.SpawnUnit(defenderSeat, ancDef.Id))
+                    // A due anchor stays due until it is actually bought. Without this a
+                    // tier-8 anchor (up to $23,000 against $5,000 of starting money) failed
+                    // its one scheduled attempt and never appeared -- the run then measured a
+                    // defence that was never on the field. Deliberately NOT catching up on
+                    // missed slots afterwards: the cadence is a rate, not a debt.
+                    if (state.CurrentTick >= nextAnchorTick)
                     {
-                        res.AnchorsSpawned++;
-                        res.AnchorSpend += before - defender.Money;
+                        double before = defender.Money;
+                        if (engine.SpawnUnit(defenderSeat, ancDef.Id))
+                        {
+                            res.AnchorsSpawned++;
+                            res.AnchorSpend += before - defender.Money;
+                            res.AnchorFirstTick = res.AnchorFirstTick < 0 ? state.CurrentTick : res.AnchorFirstTick;
+                            nextAnchorTick = state.CurrentTick + s.AnchorGap;
+                        }
+                        else
+                        {
+                            res.AnchorDelayedTicks++;   // could not afford it yet
+                        }
                     }
                 }
 
@@ -293,11 +327,16 @@ namespace CastleDefense.BotArena
 
                 // One pass over the board per tick -- membership tests against the live unit
                 // list would be O(n) each and the piles here reach thousands.
-                int liveBlockers = 0, liveBig = 0, liveAttackerUnits = 0;
+                int liveBlockers = 0, liveBig = 0, liveAttackerUnits = 0, liveAnchors = 0;
                 float deepest = res.DeepestProgress;
                 foreach (var u in state.Units)
                 {
-                    if (u.Side == defenderSeat) { liveBlockers++; continue; }
+                    if (u.Side == defenderSeat)
+                    {
+                        liveBlockers++;
+                        if (ancDef != null && u.DefinitionId == ancDef.Id) liveAnchors++;
+                        continue;
+                    }
                     liveAttackerUnits++;
                     if (!bigIds.Contains(u.InstanceId)) continue;
                     liveBig++;
@@ -308,6 +347,7 @@ namespace CastleDefense.BotArena
                 res.PeakBlockers = Math.Max(res.PeakBlockers, liveBlockers);
                 res.BlockersLost = res.BlockersSpawned - liveBlockers;
                 res.BigUnitsAlive = liveBig;
+                res.AnchorsAlive = liveAnchors;
                 threatPresent = liveAttackerUnits > 0 || spawnedBig < s.Force;
 
                 if (!escortOnly && forceAlive && liveBig == 0 && spawnedBig == s.Force)
@@ -391,6 +431,7 @@ namespace CastleDefense.BotArena
             using var w = new StreamWriter(path);
             w.WriteLine("attacker_team,tier,attacker_unit,force_size,escort_tier,escort_unit," +
                         "anchor_tier,anchor_unit,anchors_spawned,anchor_spend," +
+                        "anchor_delay,anchor_max,anchors_alive,anchor_first_tick,anchor_delayed_ticks," +
                         "blocker_team,blocker_unit,interval_ticks,attacker_seat,outcome,ticks,seconds," +
                         "beyond_game_limit,blockers_spawned,blockers_lost,blocker_spend,peak_blockers," +
                         "spend_at_force_death,escorts_spawned,attacker_spend,force_spend," +
@@ -398,6 +439,7 @@ namespace CastleDefense.BotArena
             foreach (var r in results)
                 w.WriteLine($"{r.AttackerTeam},{r.Tier},{r.AttackerUnit},{r.ForceSize},{r.EscortTier},{r.EscortUnit}," +
                             $"{r.AnchorTier},{r.AnchorUnit},{r.AnchorsSpawned},{r.AnchorSpend:F0}," +
+                            $"{r.AnchorDelay},{r.AnchorMax},{r.AnchorsAlive},{r.AnchorFirstTick},{r.AnchorDelayedTicks}," +
                             $"{r.BlockerTeam},{r.BlockerUnit},{r.Interval},{r.AttackerSeat},{r.Outcome},{r.Ticks},{r.Seconds:F2}," +
                             $"{r.BeyondGameLimit},{r.BlockersSpawned},{r.BlockersLost},{r.BlockerSpend:F0},{r.PeakBlockers}," +
                             $"{r.SpendAtForceDeath:F0},{r.EscortsSpawned},{r.AttackerSpend:F0},{r.ForceSpend:F0}," +

@@ -358,6 +358,89 @@ against a force that cost the attacker $4,578.
   0.11–0.14 for tier 5 (chumps kill it long before saturation) and 1.9–2.6 for tier 7 in numbers.
 - S is time-varying when escorts accumulate; the law assumes it constant over the window.
 
+---
+
+## Experiment 5 — matching the threat: a same-tier defender
+
+`duel_t5..8.csv` (256 runs: every team against every team, 1v1), `matched_t5..8.csv`
+(3,072 runs: force + chump line + one matched-tier defender sent in at 5s),
+`matched_delay_*.csv` (timing sweep). New flags: `--anchor-delay`, `--anchor-max`.
+
+**A harness bug this experiment exposed.** A tier-8 costs up to $23,000 and the defender starts
+with $5,000, so a one-shot scheduled spawn failed and was silently skipped — the first tier-8
+duel matrix was run with *no defender on the field* and came back 0/64. A due anchor now stays
+due until it is actually bought (tier 8 arrives at 2–4s once income covers it). Anything reading
+`anchors_spawned == 0` should treat the run as having had no matched defence.
+
+### The 1v1 matrix
+
+Same tier both sides, no chumps, both units walk out and meet. **"Defender wins" means the
+attack was neutralised, which includes mutual destruction** — and every mirror matchup
+(same team both sides) is a mutual kill, 0 survivors, which is the symmetry check.
+
+| tier | defender wins | of those, unit survives | mutual kill |
+|---|---|---|---|
+| T5 | 40/64 | 24 | 16 |
+| T6 | 41/64 | 23 | 18 |
+| T7 | 41/64 | 21 | 20 |
+| T8 | 46/64 | 18 | 28 |
+
+So roughly two thirds of matchups favour the defender, but about half of those wins cost the
+defending unit as well. Best and worst teams by tier:
+
+| tier | best defender | worst defender | best attacker |
+|---|---|---|---|
+| T5 | Purple 8/8 | Orange 1/8 | Purple (beats 7 defenders) |
+| T6 | Blue 8/8 | Orange 1/8 | Blue (7) |
+| T7 | Blue, Orange 8/8 | Green 1/8 | Orange (6) |
+| T8 | White 8/8 | Black, Purple 3/8 | White (6) |
+
+Full matrices are in the CSVs; this is the extract worth remembering.
+
+### Against a multi-unit force it is almost always the wrong buy
+
+Cheapest total defence $/s that holds all 8 teams, chumps alone vs chumps + one matched
+defender at 5s. **The matched defender is cheaper in only 4 of 24 cells.**
+
+| attack | chumps only | + matched | verdict |
+|---|---|---|---|
+| T7 ×5, no escort | $60.0/s | **$31.8/s** | matched, nearly halves it |
+| T7 ×3, no escort | $30.0/s | **$26.0/s** | matched |
+| T6 ×5, no escort | $20.0/s | **$15.0/s** | matched |
+| T5 ×1, escorted | $12.0/s | **$8.4/s** | matched |
+| T8 ×1, no escort | **$2.0/s** | $441.2/s | chumps, by 220× |
+| T8 ×3, escorted | **$60.0/s** | $172.3/s | chumps |
+| T7 ×1, escorted | **$60.0/s** | $112.3/s | chumps |
+
+**The survival law explains the pattern exactly.** A matched defender's value is *killing*, not
+blocking, and blocking is what is cheap. So it pays precisely where the chump bill is highest —
+many fast-swinging mid-high tier units — and is absurd where the chump bill is trivial. One tier
+8 swings once per 5.00s, so $2/s of chumps neutralises an $18,392 unit; answering it with another
+$18,392 unit is 220× worse.
+
+Cost as a share of what the attacker spent: a matched defender is 100% of the force price at ×1,
+33% at ×3, 20% at ×5. That is the only reason it ever wins — it gets cheaper relative to the
+attack as the attack grows, while the chump bill grows with it.
+
+### Timing is not the lever it looks like
+
+Sweeping when the defender is sent in (0s, 2s, 5s, 10s, 20s) against tier-7 forces:
+
+- **Unescorted: timing is irrelevant.** Every delay from 0s to 20s gives infinite survival at
+  every chump rate from 3/s up. The "wait for them to stack, then hit all of them" idea is not
+  needed — the mechanism works whenever the defender arrives.
+- **Escorted: no clean optimum, just noise.** Values bounce non-monotonically (×3 at 10 chumps/s:
+  inf, 47, inf, 44, inf across the five delays). Consistent with the expectation that escorts make
+  the timing fiddly, but the data does not support a best moment — it supports "this does not
+  reliably work at all".
+
+### Where this leaves the strategy
+
+Matching the threat is a **niche counter, not a staple**: worth buying against several mid-to-high
+tier attackers with no escort, where it can halve the bill, and actively wasteful against tier 8
+or against anything escorted. Everywhere else the chump line already does the job for a couple of
+dollars a second.
+
 ## Balance note that fell out of this: tier-4 spam dominates tier 8
 
 Against an undefended castle, a $20/s tier-4 stream does the job in comparable time to a
@@ -391,6 +474,12 @@ against a *defended* castle in a real game.
   confirmed exactly that for the defender's side of the same knob.
 - **No mixed defensive compositions beyond chumps + one anchor tier.** Two anchor tiers at once,
   or an anchor that changes tier as the attack develops, are untested.
+- **The 1v1 matrix is mirror-blind for the multi-unit runs.** Experiment 5's force runs all use
+  mirror teams, so they measure the mechanism, not the matchup. Combining the 1v1 matrix with the
+  force results — picking a defender team that beats the attacker's — is untested and is the
+  obvious next step.
+- **Only ONE matched defender was ever sent.** Two or three same-tier defenders against a ×5 force
+  were not tried, and the cost curve suggests that is where the interesting region is.
 
 ---
 
@@ -414,6 +503,14 @@ stall-test --teams all --seat 1 --tiers 5,6,7,8 --forces 1,3,5 --escorts 0,4 \
     --protect-attacker true --csv anchor_isolated.csv
 stall-test --teams all --seat 1 --tiers 6,7 --forces 3 --escorts 4 --anchors 0,3,4,5,6 \
     --intervals 1,2,3,5,8 --csv anchor_tier.csv
+
+# experiment 5 -- matching the threat (one command per tier; anchor tier must equal attacker tier)
+stall-test --teams all --seat 1 --tiers 7 --forces 1 --escorts 0 --anchors 7 \
+    --anchor-gap 1000000 --anchor-max 1 --anchor-delay 0 --blocker all \
+    --intervals 1 --csv duel_t7.csv
+stall-test --teams all --seat 1 --tiers 7 --forces 1,3,5 --escorts 0,4 --anchors 0,7 \
+    --anchor-max 1 --anchor-delay 150 --anchor-gap 1000000 \
+    --intervals 1,2,3,5,10,15,30 --protect-attacker true --csv matched_t7.csv
 
 # experiment 4 -- the survival curve behind the law
 stall-test --teams all --seat 1 --tiers 5,6,7,8 --forces 1,3,5 --escorts 0,4 \

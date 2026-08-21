@@ -617,6 +617,119 @@ def blocking_price_table():
             "<th>price each</th><th>cost per unit of blocking</th></tr></thead>"
             "<tbody>%s</tbody></table></div>" % body)
 
+
+# ================================================================ experiment 5
+def load5(name):
+    out = []
+    for r in csv.DictReader(open(os.path.join(BASE, name))):
+        r["tier"] = int(r["tier"]); r["f"] = int(r["force_size"]); r["e"] = int(r["escort_tier"])
+        r["a"] = int(r["anchor_tier"]); r["iv"] = int(r["interval_ticks"]); r["sec"] = float(r["seconds"])
+        r["alive"] = int(r["anchors_alive"])
+        r["tot"] = float(r["blocker_spend"]) + float(r["anchor_spend"])
+        r["ancS"] = float(r["anchor_spend"]); r["forceS"] = float(r["force_spend"])
+        r["surv"] = r["sec"] if r["outcome"] == "castle_destroyed" else INF
+        out.append(r)
+    return out
+
+DUEL = {t: [r for r in load5("duel_t%d.csv" % t) if r["iv"] == 0] for t in (5, 6, 7, 8)}
+MATCH = []
+for _t in (5, 6, 7, 8):
+    MATCH += load5("matched_t%d.csv" % _t)
+MIVS = sorted({r["iv"] for r in MATCH if r["iv"] > 0}, reverse=True)
+MIDX = {(r["attacker_team"], r["tier"], r["f"], r["e"], r["a"], r["iv"]): r for r in MATCH}
+
+def duel_matrix(t):
+    rows = DUEL[t]
+    ix = {(r["attacker_team"], r["blocker_team"]): r for r in rows}
+    head = "".join("<th>%s</th>" % a[:3] for a in TEAMS)
+    body = ""
+    for d in TEAMS:
+        cells = ""; w = 0
+        for a in TEAMS:
+            r = ix[(a, d)]
+            if r["outcome"] == "force_destroyed":
+                w += 1
+                k, lab = ("o-hold", "W") if r["alive"] > 0 else ("o-mixed", "=")
+            elif r["outcome"] == "castle_destroyed":
+                k, lab = "o-fell", "L"
+            else:
+                k, lab = "o-base", "&middot;"
+            cells += '<td class="%s">%s</td>' % (k, lab)
+        body += ('<tr><th class="rh">%s</th>%s<td class="num">%d</td></tr>' % (d, cells, w))
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th colspan="%d" class="grouphead">attacking team</th><th></th></tr>'
+            '<tr><th class="rh">defending</th>%s<th>wins</th></tr></thead>'
+            "<tbody>%s</tbody></table></div>" % (len(TEAMS), head, body))
+
+def duel_summary():
+    body = ""
+    for t in (5, 6, 7, 8):
+        rows = DUEL[t]
+        wins = [r for r in rows if r["outcome"] == "force_destroyed"]
+        alive = [r for r in wins if r["alive"] > 0]
+        bydef = {d: sum(1 for r in rows if r["blocker_team"] == d
+                        and r["outcome"] == "force_destroyed") for d in TEAMS}
+        byatk = {a: sum(1 for r in rows if r["attacker_team"] == a
+                        and r["outcome"] == "castle_destroyed") for a in TEAMS}
+        best = ", ".join(d for d in TEAMS if bydef[d] == max(bydef.values()))
+        worst = ", ".join(d for d in TEAMS if bydef[d] == min(bydef.values()))
+        batk = ", ".join(a for a in TEAMS if byatk[a] == max(byatk.values()))
+        body += ('<tr><th class="rh">T%d</th><td class="num">%d/64</td>'
+                 '<td class="num dim">%d</td><td class="o-mixed">%d</td>'
+                 '<td class="unit">%s</td><td class="unit">%s</td><td class="unit">%s</td></tr>'
+                 % (t, len(wins), len(alive), len(wins) - len(alive), best, worst, batk))
+    return ('<div class="scroll"><table><thead><tr><th class="rh">tier</th>'
+            "<th>attack neutralised</th><th>unit survives</th><th>mutual kill</th>"
+            "<th>best defender</th><th>worst defender</th><th>best attacker</th>"
+            "</tr></thead><tbody>%s</tbody></table></div>" % body)
+
+def matched_cost_table():
+    def cheapest(t, fo, e, a):
+        best = None
+        for i in [0] + MIVS:
+            cs = [MIDX[(x, t, fo, e, a, i)] for x in TEAMS]
+            if any(c["surv"] != INF for c in cs): continue
+            rt = cmed([c["tot"] / max(c["sec"], 1e-9) for c in cs])
+            if best is None or rt < best: best = rt
+        return best
+    body = ""
+    for t in (5, 6, 7, 8):
+        for fo in (1, 3, 5):
+            for e in (0, 4):
+                c0, c1 = cheapest(t, fo, e, 0), cheapest(t, fo, e, t)
+                win = (c1 is not None and (c0 is None or c1 < c0 * 0.98))
+                k = "o-hold" if win else "o-fell"
+                lead = '<th class="rh">T%d</th>' % t if (fo == 1 and e == 0) else '<th class="rh"></th>'
+                cls = ' class="grp"' if (fo == 1 and e == 0 and t > 5) else ""
+                body += ("<tr%s>%s<td class=\"unit\">&times;%d</td><td class=\"unit\">%s</td>"
+                         '<td class="num">%s</td><td class="num">%s</td>'
+                         '<td class="%s">%s</td></tr>'
+                         % (cls, lead, fo, "&mdash;" if e == 0 else "T4",
+                            ("$%.1f/s" % c0) if c0 else "never",
+                            ("$%.1f/s" % c1) if c1 else "never",
+                            k, "matched" if win else "chumps"))
+    return ('<div class="scroll"><table class="matrix"><thead><tr><th class="rh">tier</th>'
+            "<th>force</th><th>escort</th><th>chumps only</th><th>+ matched defender</th>"
+            "<th>better buy</th></tr></thead><tbody>%s</tbody></table></div>" % body)
+
+def matched_price_table():
+    body = ""
+    for t in (5, 6, 7, 8):
+        for fo in (1, 3, 5):
+            cs = [MIDX[(x, t, fo, 0, t, 3)] for x in TEAMS]
+            anc = cmed([c["ancS"] for c in cs]); atk = cmed([c["forceS"] for c in cs])
+            pct = 100.0 * anc / atk if atk else 0
+            k = "o-fell" if pct > 60 else "o-mixed" if pct > 25 else "o-hold"
+            lead = '<th class="rh">T%d</th>' % t if fo == 1 else '<th class="rh"></th>'
+            cls = ' class="grp"' if fo == 1 and t > 5 else ""
+            body += ("<tr%s>%s<td class=\"unit\">&times;%d</td>"
+                     '<td class="num dim">$%s</td><td class="num">$%s</td>'
+                     '<td class="%s">%.0f%%</td></tr>'
+                     % (cls, lead, fo, format(atk, ",.0f"), format(anc, ",.0f"), k, pct))
+    return ('<div class="scroll"><table><thead><tr><th class="rh">tier</th><th>force</th>'
+            "<th>attacker spent on the force</th><th>one matched defender</th>"
+            "<th>defender as share of force</th></tr></thead><tbody>%s</tbody></table></div>" % body)
+
 # ================================================================ page
 def td(v, cls=""):
     return f'<td class="{cls}">{v}</td>'
@@ -888,7 +1001,7 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
 <div class="wrap">
 
 <header class="top">
-  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 19,000+ scripted games</span></div>
+  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 22,000+ scripted games</span></div>
   <h1>One cheap body per enemy swing stops anything in the game.</h1>
   <p class="dek">Chump-blocking is not a damage race. It has a single threshold &mdash; the
   attacker&rsquo;s <em>attack period</em> &mdash; and against a lone unit it is close to free.
@@ -1414,8 +1527,93 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
   and is withdrawn.</p>
 </section>
 
+
+<div class="part">
+  <span class="lab">Part five</span>
+  <h2>Matching the threat</h2>
+  <p>The last option on the board: answer a tier-N attack with a tier-N defender of your own.
+  Against a lone attacker that is a straight duel, and the roster decides it. Against a force it
+  needs the chump line first &mdash; bodies stack the attackers at one contact point, and a
+  swing hits everything in range, so one matched unit can strike the whole force at once.</p>
+</div>
+
 <section>
-  <div class="shead"><span class="n">21</span><h2>Reproducing it</h2></div>
+  <div class="shead"><span class="n">21</span><h2>The 1v1 matrix</h2></div>
+  <div class="prose">
+    <p>Same tier both sides, no chumps, both units walk out and meet in the middle.
+    <strong>W</strong> = the defender killed it and lived, <strong>=</strong> = mutual
+    destruction, <strong>L</strong> = the attacker got through. Both W and = neutralise the
+    attack; they differ in whether you keep the unit.</p>
+  </div>
+  <h3>Tier 7</h3>
+  {duel_matrix(7)}
+  <h3 style="margin-top:26px">Tier 8</h3>
+  {duel_matrix(8)}
+  <p class="cap">Every mirror matchup on the diagonal is a mutual kill, which is the symmetry
+  check this harness should pass. Tiers 5 and 6 are in the raw CSVs; the summary below is the
+  part worth carrying.</p>
+  {duel_summary()}
+  <p class="cap">Roughly two thirds of matchups favour the defender &mdash; but about half of
+  those wins cost the defending unit too, so "matching" often means trading, not winning.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">22</span><h2>Against a force, it is usually the wrong buy</h2></div>
+  <div class="prose">
+    <p>One matched-tier defender sent in at 5 seconds, on top of the chump line. Cheapest total
+    defence that holds all eight teams, against chumps alone.</p>
+  </div>
+  {matched_cost_table()}
+  <p class="cap">Cheaper in <strong>4 of 24</strong> cells. Best case is five tier-7s with no
+  escort, where it nearly halves the bill &mdash; $60/s down to $31.8/s. Worst case is a single
+  tier 8, where chumps cost $2/s and the matched answer costs $441/s, <strong>220&times;
+  worse</strong>.</p>
+
+  <div class="callout">
+    <h3>The survival law predicts exactly this</h3>
+    <p>A matched defender's value is <em>killing</em>, and killing is the expensive way to buy
+    what blocking gives you cheaply. So it pays precisely where the chump bill is highest &mdash;
+    many fast-swinging mid-tier units &mdash; and is absurd where the bill is trivial. One tier 8
+    swings once per 5.00s, so $2/s of bodies neutralises an $18,392 unit; answering it with
+    another $18,392 unit is the single worst trade measured anywhere in this report.</p>
+  </div>
+  {matched_price_table()}
+  <p class="cap">And this is the only reason it ever wins: a matched defender is the whole price
+  of the force at &times;1 but a fifth of it at &times;5, while the chump bill climbs with the
+  force. It gets relatively cheaper exactly as the attack gets bigger.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">23</span><h2>Timing turns out not to be the lever</h2></div>
+  <div class="prose">
+    <p>The idea was to hold the defender back until the chumps had stacked the attackers, then
+    send it in for one swing across all of them. Sweeping that delay against tier-7 forces at
+    0, 2, 5, 10 and 20 seconds:</p>
+    <ul style="color:var(--ink-soft)">
+      <li><strong>Unescorted, timing is irrelevant.</strong> Every delay from 0s to 20s gives
+      infinite survival at every chump rate from 3/s up. The defence works whenever the unit
+      arrives &mdash; it does not need the stack.</li>
+      <li><strong>Escorted, there is no optimum, only noise.</strong> At &times;3 and 10 chumps/s
+      the five delays give &infin;, 47s, &infin;, 44s, &infin;. That is consistent with escorts
+      making the timing fiddly, but the data does not support a best moment so much as it fails
+      to support the tactic at all.</li>
+    </ul>
+    <p>So the mechanism is real but the finesse is not required, and where finesse would be
+    required it does not work anyway.</p>
+  </div>
+
+  <div class="callout">
+    <h3>A bug this experiment turned up</h3>
+    <p>A tier 8 costs up to $23,000 and the defender starts with $5,000, so a one-shot scheduled
+    spawn failed and was silently skipped &mdash; the first tier-8 duel matrix ran with no
+    defender on the field and returned 0/64. A due defender now stays due until it is actually
+    affordable (tier 8 arrives at 2&ndash;4s once income covers it). Worth remembering when
+    reading any run whose <code>anchors_spawned</code> is zero.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="n">24</span><h2>Reproducing it</h2></div>
   <div class="prose">
     <p>New BotArena mode, committed as <code>StallTest.cs</code>. Seeded throughout, so the
     same arguments give byte-identical output.</p>
@@ -1459,11 +1657,20 @@ CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 6,7 --forces 
 CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 5,6,7,8 \\
     --forces 1,3,5 --escorts 0,4 --anchors 0,5 --anchor-gap 150 \\
     --intervals 240,180,120,90,60,45,30,24,20,15,12,10,8,6,5,4,3,2,1 \\
-    --protect-attacker true --csv curve_full.csv</pre>
+    --protect-attacker true --csv curve_full.csv
+
+# PART FIVE -- matching the threat (sections 21-23). One command per tier: the
+# matched defender's tier must equal the attacker's, so they cannot be swept together.
+CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 7 --forces 1 \\
+    --escorts 0 --anchors 7 --anchor-gap 1000000 --anchor-max 1 --anchor-delay 0 \\
+    --blocker all --intervals 1 --csv duel_t7.csv
+CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 7 --forces 1,3,5 \\
+    --escorts 0,4 --anchors 0,7 --anchor-max 1 --anchor-delay 150 --anchor-gap 1000000 \\
+    --intervals 1,2,3,5,10,15,30 --protect-attacker true --csv matched_t7.csv</pre>
 </section>
 
 <footer>
-  Castle Defense engine &middot; measured 21 August 2026 &middot; 19,400 runs across four parts
+  Castle Defense engine &middot; measured 21 August 2026 &middot; 22,700 runs across five parts
   &middot; every cell is n&nbsp;=&nbsp;8 teams &middot; raw CSVs, this generator and a written
   record in <code>CastleDefense.BotArena/stall/</code>
 </footer>

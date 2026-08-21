@@ -350,7 +350,8 @@ CSVs and the report generator that rebuilds the published HTML from them. Delibe
 ```
 CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
     [--forces 0,1,..] [--force-gap 30] [--escorts 0,4] [--escort-gap 30]
-    [--anchors 0,5] [--anchor-gap 150] [--intervals 1,3,10,..]
+    [--anchors 0,5] [--anchor-gap 150] [--anchor-delay 0] [--anchor-max 0]
+    [--intervals 1,3,10,..]
     [--blocker mirror|all|<Team>] [--seat both|1|2]
     [--hp 23000] [--income 5000] [--protect-attacker true|false] [--csv out.csv]
 ```
@@ -358,7 +359,7 @@ CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
 The attacker gets a fixed force — N copies of one tier spawned `--force-gap` apart, optionally
 with a lower-tier escort streamed in behind — and nothing else ever. The defender either does
 nothing (the `interval 0` control) or feeds tier-1 bodies every N ticks. No gadgets, no
-investing, no repairs. 19,400 runs measured 2026-08-21.
+investing, no repairs. 22,700 runs measured 2026-08-21.
 
 **The stall threshold is the attacker's ATTACK PERIOD, not its DPS or HP.** `MoveAndFight` sets
 `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in range, so reaching the castle
@@ -384,6 +385,24 @@ a general upgrade. Against escorted forces it is the cheaper buy in 5 of 12 cell
 in the other 7; where it wins it roughly halves the bill ($60/s -> $32.5/s vs a single escorted
 tier 7 or 8). It also doubles as a blocker, so the two effects cannot be separated: a T5 every 5s
 with ZERO chumps already holds a single tier 8, because 5s IS the tier-8 swing period.
+
+**MATCHING THE THREAT (a same-tier defender) is a niche counter, not a staple.** New flags
+`--anchor-delay` / `--anchor-max` model it. 1v1, same tier both sides: the defender neutralises
+the attack in ~2/3 of the 64 team pairings per tier (T5 40, T6 41, T7 41, T8 46), but about HALF
+of those are mutual kills — matching often means trading, not winning, and every mirror pairing
+is a mutual kill. Best defenders: T5 Purple, T6 Blue, T7 Blue/Orange, T8 White, all 8/8; worst:
+T5/T6 Orange and T7 Green at 1/8.
+
+Against a multi-unit force with the chump line already holding, one matched defender is the
+cheaper buy in only **4 of 24** cells. It pays where the chump bill is highest (T7 x5 unescorted:
+$60/s -> $31.8/s) and is catastrophic where the bill is trivial (T8 x1: $2/s -> $441/s, 220x
+worse). The survival law explains it: a matched defender's value is KILLING, and killing is the
+expensive way to buy what blocking gives cheaply — so it only earns its price against many
+fast-swinging mid-tier units.
+
+**Timing is not the lever it looks like.** Unescorted, sending the defender at 0/2/5/10/20s all
+give infinite survival at >=3 chumps/s — it does not need the stack. Escorted, there is no
+optimum, only noise.
 
 ### THE SURVIVAL LAW — use this rather than the tables
 
@@ -434,6 +453,10 @@ tier 5, and it predicts the survival time much better than it predicts the exact
   `seconds` field records when the attacking FORCE died, which is short. Averaging that into a
   survival median makes defence look worse the more you spend — it produced a spurious negative
   marginal return before it was caught. Treat non-`castle_destroyed` rows as +infinity.
+- **A scheduled purchase the defender cannot afford must stay due, not be skipped.** A tier-8
+  matched defender costs up to $23,000 against $5,000 of starting money, so a one-shot schedule
+  failed silently and the first tier-8 duel matrix ran with no defender on the field (0/64).
+  Check `anchors_spawned` before trusting any run.
 - **The defence must keep buying while ANY enemy is present**, not merely while the high-tier
   units live. Gating it on the force alone let the defender stand idle against a surviving escort
   swarm, which inflated the escort's apparent strength by up to 120x and produced two withdrawn
