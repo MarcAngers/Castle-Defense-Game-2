@@ -67,7 +67,12 @@ namespace CastleDefense.BotArena
             public int BlockersLost;
             public double BlockerSpend;
             public int PeakBlockers;
+            /// <summary>TOTAL defender spend (chumps + anchors) when the last high-tier unit died.</summary>
             public double SpendAtForceDeath;
+            public int AnchorTier;        // 0 = no anchor
+            public string AnchorUnit = "-";
+            public int AnchorsSpawned;
+            public double AnchorSpend;
 
             // attacker side
             public int EscortsSpawned;
@@ -99,6 +104,10 @@ namespace CastleDefense.BotArena
             int    escortGap  = int.Parse(Arg(args, "--escort-gap", "30"));
             var    forces     = IntList(Arg(args, "--forces", "1"));
             var    escorts    = IntList(Arg(args, "--escorts", "0"));   // 0 = no escort
+            // The defender's answer to an escort: a mid-tier unit woven into the chump wave.
+            // 0 = none. Charged normally, unlike the attacker's force.
+            int    anchorGap  = int.Parse(Arg(args, "--anchor-gap", "150"));
+            var    anchors    = IntList(Arg(args, "--anchors", "0"));
             var    intervals  = IntList(Arg(args, "--intervals", "3"));
             var    tiers      = IntList(Arg(args, "--tiers", "5,6,7,8"));
 
@@ -114,6 +123,8 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"  force sizes    : {string.Join(",", forces)} (spawned {forceGap / 30.0:F2}s apart)");
             Console.WriteLine($"  escorts        : {string.Join(",", escorts.Select(e => e == 0 ? "none" : $"T{e}"))}" +
                               $" (one every {escortGap / 30.0:F2}s while any high-tier unit lives)");
+            Console.WriteLine($"  anchors        : {string.Join(",", anchors.Select(a => a == 0 ? "none" : $"T{a}"))}" +
+                              $" (defender spawns one every {anchorGap / 30.0:F2}s alongside the chumps)");
             Console.WriteLine($"  chump periods  : {string.Join(",", intervals)} ticks  " +
                               $"({string.Join(",", intervals.Select(i => $"{30.0 / i:F2}/s"))})");
             Console.WriteLine($"  attacker seat  : {string.Join(",", seats)}");
@@ -124,7 +135,7 @@ namespace CastleDefense.BotArena
             var results = new List<Result>();
             int nBlockerTeams = blockerArg == "all" ? AllTeams().Length : 1;
             int total = teams.Length * nBlockerTeams * tiers.Length * seats.Length
-                      * forces.Length * escorts.Length * (1 + intervals.Length);
+                      * forces.Length * escorts.Length * anchors.Length * (1 + intervals.Length);
             int done = 0;
 
             foreach (var atkTeam in teams)
@@ -137,13 +148,14 @@ namespace CastleDefense.BotArena
                 foreach (var tier in tiers)
                 foreach (var force in forces)
                 foreach (var escort in escorts)
+                foreach (var anchor in anchors)
                 foreach (var seat in seats)
                 {
                     // force 0 with no escort is nobody attacking at all -- skip rather than
                     // burn the horizon on an empty board.
                     if (force == 0 && escort == 0) { done += 1 + intervals.Length; continue; }
                     var spec = new Spec(atkTeam, blkTeam, tier, force, forceGap, escort, escortGap,
-                                        seat, hp, income, horizon, seed, protectAtk);
+                                        anchor, anchorGap, seat, hp, income, horizon, seed, protectAtk);
                     // interval 0 is the control arm: defender does absolutely nothing.
                     results.Add(RunOne(spec, 0));
                     foreach (var interval in intervals)
@@ -160,8 +172,8 @@ namespace CastleDefense.BotArena
 
         private readonly record struct Spec(
             TeamColour AtkTeam, TeamColour BlkTeam, int Tier, int Force, int ForceGap,
-            int Escort, int EscortGap, int AttackerSeat, int Hp, double Income,
-            long Horizon, int Seed, bool ProtectAttackerCastle);
+            int Escort, int EscortGap, int Anchor, int AnchorGap, int AttackerSeat,
+            int Hp, double Income, long Horizon, int Seed, bool ProtectAttackerCastle);
 
         private static Result RunOne(Spec s, int interval)
         {
@@ -188,12 +200,14 @@ namespace CastleDefense.BotArena
             var atkDef = Roster(s.AtkTeam)[s.Tier - 1];
             var escDef = s.Escort > 0 ? Roster(s.AtkTeam)[s.Escort - 1] : null;
             var blkDef = Roster(s.BlkTeam)[0];
+            var ancDef = s.Anchor > 0 ? Roster(s.BlkTeam)[s.Anchor - 1] : null;
 
             var res = new Result
             {
                 AttackerTeam = s.AtkTeam.ToString(), Tier = s.Tier, AttackerUnit = atkDef.Id,
                 ForceSize = s.Force, EscortTier = s.Escort, EscortUnit = escDef?.Id ?? "-",
                 BlockerTeam = s.BlkTeam.ToString(), BlockerUnit = blkDef.Id,
+                AnchorTier = s.Anchor, AnchorUnit = ancDef?.Id ?? "-",
                 Interval = interval, AttackerSeat = attackerSeat,
             };
 
@@ -245,6 +259,17 @@ namespace CastleDefense.BotArena
                         res.BlockerSpend += before - defender.Money;
                     }
                 }
+                // The anchor rides along with the chump wave on its own slower cadence. It
+                // stops with the chumps when the threat is gone, for the same reason.
+                if (ancDef != null && forceAlive && state.CurrentTick % s.AnchorGap == 0)
+                {
+                    double before = defender.Money;
+                    if (engine.SpawnUnit(defenderSeat, ancDef.Id))
+                    {
+                        res.AnchorsSpawned++;
+                        res.AnchorSpend += before - defender.Money;
+                    }
+                }
 
                 engine.Tick();
 
@@ -281,7 +306,7 @@ namespace CastleDefense.BotArena
                 {
                     forceAlive = false;
                     res.ForceDiedTick = state.CurrentTick;
-                    res.SpendAtForceDeath = res.BlockerSpend;
+                    res.SpendAtForceDeath = res.BlockerSpend + res.AnchorSpend;
                 }
 
                 if (defender.CastleHealth < defenderHpBefore && res.FirstCastleHitTick < 0)
@@ -357,12 +382,14 @@ namespace CastleDefense.BotArena
         {
             using var w = new StreamWriter(path);
             w.WriteLine("attacker_team,tier,attacker_unit,force_size,escort_tier,escort_unit," +
+                        "anchor_tier,anchor_unit,anchors_spawned,anchor_spend," +
                         "blocker_team,blocker_unit,interval_ticks,attacker_seat,outcome,ticks,seconds," +
                         "beyond_game_limit,blockers_spawned,blockers_lost,blocker_spend,peak_blockers," +
                         "spend_at_force_death,escorts_spawned,attacker_spend,force_spend," +
                         "big_units_alive,force_died_tick,deepest_progress,first_castle_hit_tick");
             foreach (var r in results)
                 w.WriteLine($"{r.AttackerTeam},{r.Tier},{r.AttackerUnit},{r.ForceSize},{r.EscortTier},{r.EscortUnit}," +
+                            $"{r.AnchorTier},{r.AnchorUnit},{r.AnchorsSpawned},{r.AnchorSpend:F0}," +
                             $"{r.BlockerTeam},{r.BlockerUnit},{r.Interval},{r.AttackerSeat},{r.Outcome},{r.Ticks},{r.Seconds:F2}," +
                             $"{r.BeyondGameLimit},{r.BlockersSpawned},{r.BlockersLost},{r.BlockerSpend:F0},{r.PeakBlockers}," +
                             $"{r.SpendAtForceDeath:F0},{r.EscortsSpawned},{r.AttackerSpend:F0},{r.ForceSpend:F0}," +
@@ -372,16 +399,18 @@ namespace CastleDefense.BotArena
 
         private static void PrintTables(List<Result> all, int[] intervals)
         {
-            Func<Result, (int, string, int, int, int, string)> key =
-                r => (r.AttackerSeat, r.AttackerTeam, r.Tier, r.ForceSize, r.EscortTier, r.BlockerTeam);
+            Func<Result, (int, string, int, int, int, int, string)> key =
+                r => (r.AttackerSeat, r.AttackerTeam, r.Tier, r.ForceSize, r.EscortTier,
+                      r.AnchorTier, r.BlockerTeam);
             var ctrl = all.Where(r => r.Interval == 0).ToDictionary(key);
             int firstSeat = all[0].AttackerSeat;
 
-            foreach (var combo in all.Select(r => (r.ForceSize, r.EscortTier)).Distinct()
-                                     .OrderBy(x => x.EscortTier).ThenBy(x => x.ForceSize))
+            foreach (var combo in all.Select(r => (r.ForceSize, r.EscortTier, r.AnchorTier)).Distinct()
+                                     .OrderBy(x => x.EscortTier).ThenBy(x => x.AnchorTier).ThenBy(x => x.ForceSize))
             {
                 string esc = combo.EscortTier == 0 ? "no escort" : $"+ T{combo.EscortTier} escort every second";
-                Console.WriteLine($"\n################ FORCE: {combo.ForceSize}x high-tier, {esc} ################");
+                string anc = combo.AnchorTier == 0 ? "chumps only" : $"chumps + T{combo.AnchorTier} anchor";
+                Console.WriteLine($"\n################ FORCE: {combo.ForceSize}x high-tier, {esc} | DEFENCE: {anc} ################");
                 foreach (var interval in intervals)
                 {
                     Console.WriteLine($"\n--- chumps every {interval} ticks ({30.0 / interval:F2}/s) ---");
@@ -389,12 +418,15 @@ namespace CastleDefense.BotArena
                                       $"{"no defence",11} {"with chumps",12} {"delay",10} " +
                                       $"{"atk cost",9} {"def cost",9} {"ratio",7} {"reach",6} {"outcome",-24}");
                     foreach (var r in all.Where(r => r.Interval == interval && r.ForceSize == combo.ForceSize
-                                                  && r.EscortTier == combo.EscortTier && r.AttackerSeat == firstSeat)
+                                                  && r.EscortTier == combo.EscortTier
+                                                  && r.AnchorTier == combo.AnchorTier
+                                                  && r.AttackerSeat == firstSeat)
                                          .OrderBy(r => r.AttackerTeam).ThenBy(r => r.Tier))
                     {
                         var c = ctrl[key(r)];
                         double delay = r.Seconds - c.Seconds;
-                        double defCost = r.ForceDiedTick >= 0 ? r.SpendAtForceDeath : r.BlockerSpend;
+                        double defCost = r.ForceDiedTick >= 0
+                            ? r.SpendAtForceDeath : r.BlockerSpend + r.AnchorSpend;
                         string delayStr = r.Outcome == "castle_destroyed" ? $"{delay,9:F1}s" : $"{"inf",10}";
                         string ratio = r.AttackerSpend > 0 ? $"{defCost / r.AttackerSpend,6:F2}x" : "-";
                         Console.WriteLine($"{r.AttackerTeam,-8} {r.Tier,-2} {r.AttackerUnit,-14} " +

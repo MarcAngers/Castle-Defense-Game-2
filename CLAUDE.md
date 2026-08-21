@@ -350,14 +350,15 @@ CSVs and the report generator that rebuilds the published HTML from them. Delibe
 ```
 CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
     [--forces 0,1,..] [--force-gap 30] [--escorts 0,4] [--escort-gap 30]
-    [--intervals 1,3,10,..] [--blocker mirror|all|<Team>] [--seat both|1|2]
+    [--anchors 0,5] [--anchor-gap 150] [--intervals 1,3,10,..]
+    [--blocker mirror|all|<Team>] [--seat both|1|2]
     [--hp 23000] [--income 5000] [--protect-attacker true|false] [--csv out.csv]
 ```
 
 The attacker gets a fixed force — N copies of one tier spawned `--force-gap` apart, optionally
 with a lower-tier escort streamed in behind — and nothing else ever. The defender either does
 nothing (the `interval 0` control) or feeds tier-1 bodies every N ticks. No gadgets, no
-investing, no repairs. 7,072 runs measured 2026-08-21.
+investing, no repairs. 11,200 runs measured 2026-08-21.
 
 **The stall threshold is the attacker's ATTACK PERIOD, not its DPS or HP.** `MoveAndFight` sets
 `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in range, so reaching the castle
@@ -377,6 +378,22 @@ force is still held at 30 chumps/s — but that is one spawn per TICK, the engin
 holds for only 5–7 of 8 teams. At 15/s it is 0–1 of 8, and below that nothing holds. And the
 escort genuinely escorts rather than just being a better attack: the escort stream ALONE is
 stopped by 8/8 teams at 15/s, and adding a single high-tier unit collapses that to 1/8.
+
+**The answer to the escort is an ANCHOR: a tier-5 woven into the chump wave every 5s** (~$12/s).
+Against escorted T5/T6/T7 forces chumps alone never hold all 8 teams at any rate; chumps + the
+anchor do, at 15-30/s. But it is a targeted tool, not a general upgrade:
+- Against escorted TIER 8 it is a net loss ($71.6/s vs $59.8/s, both holding at 30/s) — tier 8
+  swings so slowly that raw bodies already satisfy the threshold.
+- Against UNESCORTED forces it is usually wasted: plain chumps hold for $2-4/s in most cells and
+  the anchor's floor is $12-15/s. It only pays where the chump-only requirement had gone extreme
+  (T7 x5: $60/s -> $33/s).
+- **It doubles as a blocker**, which muddies attribution: a T5 every 5s with ZERO chumps already
+  holds a single tier 8 8/8, because 5s IS the tier-8 swing period. "Anchor + chumps" is not
+  cleanly "killer + blockers".
+- 5s was not optimal. Tier and cadence both matter and trade against the chump rate: against a
+  T6 x3 escorted force the cheapest holding defence is a T5 anchor every **2s** plus only 10
+  chumps/s ($44/s), beating the 5s version's 30 chumps/s ($62/s). Against tier 7 nothing escapes
+  needing 30 chumps/s, and the hole below 15/s stays open in every configuration tested.
 
 ### Four methodology rules this harness established
 

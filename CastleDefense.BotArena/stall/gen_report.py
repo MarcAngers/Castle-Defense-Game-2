@@ -315,6 +315,174 @@ def real_force_table():
             '<tr><th class="rh">escort</th><th>force</th>%s</tr></thead>'
             "<tbody>%s</tbody></table></div>" % (len(RIVS), head, body))
 
+
+# ================================================================ experiment 3
+def load3(name, gap=150):
+    rows = []
+    for r in csv.DictReader(open(os.path.join(BASE, name))):
+        r["tier"] = int(r["tier"]); r["f"] = int(r["force_size"]); r["e"] = int(r["escort_tier"])
+        r["a"] = int(r["anchor_tier"]); r["iv"] = int(r["interval_ticks"])
+        r["sec"] = float(r["seconds"]); r["gap"] = gap
+        r["chumpS"] = float(r["blocker_spend"]); r["ancS"] = float(r["anchor_spend"])
+        r["rate"] = (r["chumpS"] + r["ancS"]) / max(r["sec"], 1e-9)
+        rows.append(r)
+    return rows
+
+A     = load3("anchor_isolated.csv")
+ATIER = load3("anchor_tier.csv")
+AGAP  = []
+for _g in (60, 90, 150, 300, 600):
+    AGAP += load3("anchor_gap_%d.csv" % _g, _g)
+
+AIVS = sorted({r["iv"] for r in A if r["iv"] > 0}, reverse=True)
+AIDX = {(r["attacker_team"], r["tier"], r["f"], r["e"], r["a"], r["iv"]): r for r in A}
+
+def _held(cs):
+    return sum(1 for c in cs
+               if c["outcome"] in ("force_destroyed", "force_destroyed_horizon", "survived_horizon"))
+
+def anchor_matrix(e):
+    """Teams held, chumps-only vs chumps+anchor, interleaved so the lift is readable."""
+    head = "".join("<th>%s</th>" % rate(i) for i in AIVS)
+    body = ""
+    for t in (5, 6, 7, 8):
+        for f in (1, 3, 5):
+            for a in (0, 5):
+                cells = '<td class="%s">%s</td>' % (
+                    ("o-hold" if _held([AIDX[(x, t, f, e, a, 0)] for x in TEAMS]) == 8
+                     else "o-mixed" if _held([AIDX[(x, t, f, e, a, 0)] for x in TEAMS]) else "o-fell"),
+                    _held([AIDX[(x, t, f, e, a, 0)] for x in TEAMS]) or "&middot;")
+                for i in AIVS:
+                    n = _held([AIDX[(x, t, f, e, a, i)] for x in TEAMS])
+                    k = "o-hold" if n == 8 else "o-mixed" if n else "o-fell"
+                    cells += '<td class="%s">%s</td>' % (k, n if n else "&middot;")
+                lead = '<th class="rh">T%d &times;%d</th>' % (t, f) if a == 0 else '<th class="rh"></th>'
+                cls = ' class="grp"' if a == 0 else ""
+                lbl = "chumps only" if a == 0 else "+ T5 every 5s"
+                body += "<tr%s>%s<td class=\"unit\">%s</td>%s</tr>" % (cls, lead, lbl, cells)
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th></th><th class="o-base">none</th>'
+            '<th colspan="%d" class="grouphead">tier-1 chumps per second</th></tr>'
+            '<tr><th class="rh">attacker</th><th>defence</th><th class="o-base">&nbsp;</th>%s</tr>'
+            "</thead><tbody>%s</tbody></table></div>" % (len(AIVS), head, body))
+
+def _cheapest(t, f, e, a):
+    best = None
+    for i in [0] + AIVS:
+        cs = [AIDX[(x, t, f, e, a, i)] for x in TEAMS]
+        if _held(cs) != 8:
+            continue
+        rt = st.median([c["rate"] for c in cs])
+        if best is None or rt < best[1]:
+            best = (i, rt)
+    return best
+
+def anchor_cost_table(e):
+    body = ""
+    for t in (5, 6, 7, 8):
+        for f in (1, 3, 5):
+            r0 = _cheapest(t, f, e, 0)
+            r5 = _cheapest(t, f, e, 5)
+            def fmt(r):
+                if r is None:
+                    return '<td class="o-fell">never holds 8/8</td>'
+                lbl = "anchor only" if r[0] == 0 else "%s/s" % rate(r[0])
+                return '<td class="num">%s &rarr; $%.1f<span class="u">/s</span></td>' % (lbl, r[1])
+            if r0 and r5:
+                v, k = ("anchor", "o-hold") if r5[1] < r0[1] * 0.98 else \
+                       (("chumps", "o-mixed") if r0[1] < r5[1] * 0.98 else ("tie", "o-mixed"))
+            elif r5:
+                v, k = "anchor", "o-hold"
+            elif r0:
+                v, k = "chumps", "o-mixed"
+            else:
+                v, k = "neither", "o-fell"
+            body += ('<tr><th class="rh">T%d</th><td class="unit">&times;%d</td>%s%s'
+                     '<td class="%s">%s</td></tr>' % (t, f, fmt(r0), fmt(r5), k, v))
+    return ('<div class="scroll"><table><thead><tr><th class="rh">tier</th><th>force</th>'
+            "<th>cheapest chumps-only defence</th><th>cheapest with a T5 anchor</th>"
+            "<th>better buy</th></tr></thead><tbody>%s</tbody></table></div>" % body)
+
+def anchor_tier_table():
+    ivs = sorted({r["iv"] for r in ATIER if r["iv"] > 0}, reverse=True)
+    idx = {(r["attacker_team"], r["tier"], r["a"], r["iv"]): r for r in ATIER}
+    head = "".join("<th>%s</th>" % rate(i) for i in ivs)
+    body = ""
+    for t in (6, 7):
+        for a in (0, 3, 4, 5, 6):
+            cells = ""
+            for i in ivs:
+                n = _held([idx[(x, t, a, i)] for x in TEAMS])
+                k = "o-hold" if n == 8 else "o-mixed" if n else "o-fell"
+                cells += '<td class="%s">%s</td>' % (k, n if n else "&middot;")
+            cost = st.median([idx[(x, t, a, 1)]["rate"] for x in TEAMS])
+            lead = '<th class="rh">T%d</th>' % t if a == 0 else '<th class="rh"></th>'
+            cls = ' class="grp"' if a == 0 and t > 6 else ""
+            body += ("<tr%s>%s<td class=\"unit\">%s</td>%s"
+                     '<td class="num">$%.1f<span class="u">/s</span></td></tr>'
+                     % (cls, lead, "none" if a == 0 else "T%d anchor" % a, cells, cost))
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th></th>'
+            '<th colspan="%d" class="grouphead">tier-1 chumps per second</th><th></th></tr>'
+            '<tr><th class="rh">attacker</th><th>anchor</th>%s'
+            "<th>total $/s at 30/s</th></tr></thead><tbody>%s</tbody></table></div>"
+            % (len(ivs), head, body))
+
+def anchor_gap_table():
+    ivs = sorted({r["iv"] for r in AGAP if r["iv"] > 0}, reverse=True)
+    idx = {(r["attacker_team"], r["tier"], r["gap"], r["iv"]): r for r in AGAP}
+    head = "".join("<th>%s</th>" % rate(i) for i in ivs)
+    body = ""
+    for t in (6, 7):
+        for g in (60, 90, 150, 300, 600):
+            cells = ""
+            for i in ivs:
+                n = _held([idx[(x, t, g, i)] for x in TEAMS])
+                k = "o-hold" if n == 8 else "o-mixed" if n else "o-fell"
+                cells += '<td class="%s">%s</td>' % (k, n if n else "&middot;")
+            cost = st.median([idx[(x, t, g, 1)]["ancS"] / max(idx[(x, t, g, 1)]["sec"], 1e-9)
+                              for x in TEAMS])
+            lead = '<th class="rh">T%d</th>' % t if g == 60 else '<th class="rh"></th>'
+            cls = ' class="grp"' if g == 60 and t > 6 else ""
+            body += ("<tr%s>%s<td class=\"unit\">every %.1fs</td>%s"
+                     '<td class="num">$%.1f<span class="u">/s</span></td></tr>'
+                     % (cls, lead, g / 30.0, cells, cost))
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th></th>'
+            '<th colspan="%d" class="grouphead">tier-1 chumps per second</th><th></th></tr>'
+            '<tr><th class="rh">attacker</th><th>T5 anchor cadence</th>%s'
+            "<th>anchor $/s</th></tr></thead><tbody>%s</tbody></table></div>"
+            % (len(ivs), head, body))
+
+def anchor_optimum_table():
+    allrows = ATIER + AGAP
+    combos = sorted({(r["a"], r["gap"], r["iv"]) for r in allrows if r["iv"] > 0})
+    idx = {(r["attacker_team"], r["tier"], r["a"], r["gap"], r["iv"]): r for r in allrows}
+    body = ""
+    for t in (6, 7):
+        opts = []
+        for a, g, iv in combos:
+            ks = [(x, t, a, g, iv) for x in TEAMS]
+            if not all(k in idx for k in ks):
+                continue
+            cs = [idx[k] for k in ks]
+            if _held(cs) != 8:
+                continue
+            opts.append((st.median([c["rate"] for c in cs]), a, g, iv))
+        opts.sort()
+        for n, (rt, a, g, iv) in enumerate(opts[:3]):
+            lead = '<th class="rh">T%d &times;3</th>' % t if n == 0 else '<th class="rh"></th>'
+            cls = ' class="grp"' if n == 0 and t > 6 else ""
+            k = "o-hold" if n == 0 else ""
+            body += ("<tr%s>%s<td class=\"unit\">%s</td><td class=\"num dim\">%s</td>"
+                     '<td class="num">%s<span class="u">/s</span></td>'
+                     '<td class="%s">$%.1f<span class="u">/s</span></td></tr>'
+                     % (cls, lead, "none" if a == 0 else "T%d" % a,
+                        "&mdash;" if a == 0 else "%.1fs" % (g / 30.0), rate(iv), k, rt))
+    return ('<div class="scroll"><table><thead><tr><th class="rh">attacker</th>'
+            "<th>anchor tier</th><th>cadence</th><th>chumps</th>"
+            "<th>total defence</th></tr></thead><tbody>%s</tbody></table></div>" % body)
+
 # ================================================================ page
 def td(v, cls=""):
     return f'<td class="{cls}">{v}</td>'
@@ -586,12 +754,13 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
 <div class="wrap">
 
 <header class="top">
-  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 7,000+ scripted games</span></div>
+  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 11,000+ scripted games</span></div>
   <h1>One cheap body per enemy swing stops anything in the game.</h1>
   <p class="dek">Chump-blocking is not a damage race. It has a single threshold &mdash; the
   attacker&rsquo;s <em>attack period</em> &mdash; and against a lone unit it is close to free.
   Multiply the force and the price climbs faster than the force does. Add a tier-4 escort and
-  only the engine&rsquo;s maximum click rate can hold the line at all.</p>
+  only the engine&rsquo;s maximum click rate holds the line &mdash; until the defender weaves a
+  tier-5 anchor into the wave, which fixes it against every tier but the one you would expect.</p>
   <div class="meta">
     <span>23,000 HP both castles</span>
     <span>$5,000/s both incomes</span>
@@ -871,7 +1040,7 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
 </section>
 
 <section>
-  <div class="shead"><span class="n">11</span><h2>A tier-4 escort breaks the tactic</h2></div>
+  <div class="shead"><span class="n">11</span><h2>A tier-4 escort all but breaks the tactic</h2></div>
   <div class="prose">
     <p>Same forces, plus one tier-4 unit per second &mdash; a median $20/s of ongoing spend.</p>
   </div>
@@ -925,8 +1094,84 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
   before anyone acts on it.</p>
 </section>
 
+
+<div class="part">
+  <span class="lab">Part three</span>
+  <h2>The defender answers back</h2>
+  <p>If a cheap escort is what breaks the chump line, the obvious reply is to put something in
+  the line that can kill escorts. These runs keep the tier-1 stream exactly as before and weave
+  in one <strong>tier-5</strong> unit every <strong>five seconds</strong> &mdash; about $12/s of
+  extra spend &mdash; then ask whether that is enough, and whether it is worth paying for.</p>
+</div>
+
 <section>
-  <div class="shead"><span class="n">14</span><h2>Reproducing it</h2></div>
+  <div class="shead"><span class="n">14</span><h2>The anchor works, exactly where it was meant to</h2></div>
+  <div class="prose">
+    <p>Escorted forces first &mdash; the case that motivated it. Each attacker gets two rows: the
+    chump line alone, then the same line with the anchor woven in.</p>
+  </div>
+  {anchor_matrix(4)}
+  <p class="cap">Against escorted tier-5, -6 and -7 forces the chump line alone never holds all
+  eight teams at any rate. With the anchor it does. The lift is largest in the middle of the
+  range: at 10 chumps/s a tier-5 &times;1 force goes from 0/8 to 7/8.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">15</span><h2>But only sometimes worth paying for</h2></div>
+  <div class="prose">
+    <p>Cheapest total defender spend that holds all eight teams, in dollars per second so that
+    &ldquo;held forever&rdquo; and &ldquo;killed it&rdquo; are comparable.</p>
+  </div>
+  <h3>Against escorted forces</h3>
+  {anchor_cost_table(4)}
+  <p class="cap">Against escorted tier-8 forces the anchor is a <em>net loss</em>: both defences
+  hold at 30/s and the anchor just adds about $12/s for nothing. Tier 8 swings so slowly that raw
+  bodies already satisfy the threshold &mdash; it is tiers 5 to 7 that need killing power in the
+  line.</p>
+
+  <h3 style="margin-top:30px">Against unescorted forces</h3>
+  {anchor_cost_table(0)}
+  <p class="cap">Here the anchor is usually money wasted. Plain chumps hold for $2&ndash;4/s in
+  most cells and the anchor&rsquo;s floor is $12&ndash;15/s. It only pays where the chump-only
+  requirement had already gone extreme &mdash; against five tier 7s it roughly
+  <strong>halves</strong> the bill, $60/s down to $33/s.</p>
+
+  <div class="callout">
+    <h3>Careful: the anchor is also just a blocker</h3>
+    <p>A tier-5 every five seconds with <em>zero</em> chumps already holds a single tier 8 in 8/8
+    teams &mdash; because five seconds is exactly the tier-8 swing period, so the anchor on its own
+    satisfies the threshold from part one. It does the same against unescorted tier 5 at any size.
+    So this is not cleanly &ldquo;killers plus blockers&rdquo;: the anchor is doing both jobs, and
+    the two effects cannot be separated from these runs.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="n">16</span><h2>Five seconds was not the best cadence</h2></div>
+  <div class="prose">
+    <p>Both knobs on the anchor matter. Sweeping them against a &times;3 escorted force:</p>
+  </div>
+  <h3>Anchor tier</h3>
+  {anchor_tier_table()}
+  <p class="cap">Tier 5 is a real improvement on tier 4 and below, and tier 6 is much stronger
+  still &mdash; but it costs nearly double, and against a tier-7 attacker even a tier-6 anchor
+  only reaches 3/8 at 6 chumps/s.</p>
+
+  <h3 style="margin-top:30px">Anchor cadence</h3>
+  {anchor_gap_table()}
+  <p class="cap">Monotone in effect and roughly linear in cost. At one anchor every 2s the line
+  holds 8/8 from 6 chumps/s; at every 5s it needs the full 30/s; at every 20s it never gets there.</p>
+
+  <h3 style="margin-top:30px">Cheapest configuration that holds all eight teams</h3>
+  {anchor_optimum_table()}
+  <p class="cap">Against a tier-6 force a <em>faster</em> anchor buys a <em>cheaper</em> total
+  defence, because it lets the chump rate fall from 30/s to 10/s &mdash; $44/s against $62/s for
+  the five-second version. Against tier 7 nothing escapes needing the maximum chump rate, and the
+  hole below 15 chumps/s stays open in every configuration tested.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">17</span><h2>Reproducing it</h2></div>
   <div class="prose">
     <p>New BotArena mode, committed as <code>StallTest.cs</code>. Seeded throughout, so the
     same arguments give byte-identical output.</p>
@@ -955,11 +1200,20 @@ CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 5,6,7,8 \\
 # the superlinear threshold (section 09)
 CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 8 --forces 1,2,3,4,5 \\
     --intervals 10,12,15,16,18,20,21,22,24,25,26,28,30,32,35,38,40 \\
-    --csv t8_fine2.csv</pre>
+    --csv t8_fine2.csv
+
+# PART THREE -- the defender's anchor (sections 14-16)
+CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 5,6,7,8 \\
+    --forces 1,3,5 --escorts 0,4 --anchors 0,5 --anchor-gap 150 \\
+    --intervals 1,2,3,5,8,10,15,20,30 --protect-attacker true --csv anchor_isolated.csv
+
+# anchor tier and cadence (section 16)
+CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 6,7 --forces 3 \\
+    --escorts 4 --anchors 0,3,4,5,6 --intervals 1,2,3,5,8 --csv anchor_tier.csv</pre>
 </section>
 
 <footer>
-  Castle Defense engine &middot; measured 21 August 2026 &middot; 7,072 runs across both parts
+  Castle Defense engine &middot; measured 21 August 2026 &middot; 11,200 runs across three parts
   &middot; every cell is n&nbsp;=&nbsp;8 teams &middot; raw CSVs, this generator and a written
   record in <code>CastleDefense.BotArena/stall/</code>
 </footer>

@@ -1,7 +1,8 @@
 # Chump-blocking: measured findings
 
 Everything here comes from `CastleDefense.BotArena.exe stall-test` (source: `../StallTest.cs`).
-Raw CSVs sit next to this file. Measured 2026-08-21.
+Raw CSVs sit next to this file. Measured 2026-08-21. Three experiments: a single
+attacker, then attacking forces with escorts, then the defender's anchor answer.
 
 **Kept out of `bin/` deliberately.** `CLAUDE.md` records a 2026-07-14 data loss caused by a
 `bin/` cleanup; the arena writes there by default, so anything worth keeping is copied here.
@@ -185,6 +186,91 @@ tactic is named for.
 
 ---
 
+---
+
+## Experiment 3 — the defender's answer: a T5 anchor woven into the chump wave
+
+`anchor_isolated.csv` (3,840 runs), `anchor_tier.csv`, `anchor_gap_*.csv`. The defender keeps
+its tier-1 chump stream and additionally spawns one **tier-5** unit every **5 seconds**
+(`--anchors 5 --anchor-gap 150`). Anchors are charged normally, unlike the attacker's force,
+and they stop with the chumps when the threat is gone.
+
+### It works, and precisely where it was supposed to
+
+Against an **escorted** force, chumps alone never hold all 8 teams at any tested rate. Adding
+the anchor turns that from impossible into merely expensive:
+
+| escorted force | chumps alone | chumps + T5 every 5s |
+|---|---|---|
+| T5 ×1 / ×3 / ×5 | never holds 8/8 | holds at 15 / 30 / 15 chumps/s |
+| T6 ×1 / ×3 / ×5 | never holds 8/8 | holds at 30 chumps/s |
+| T7 ×1 / ×3 / ×5 | never holds 8/8 | holds at 30 chumps/s |
+| T8 ×1 / ×3 / ×5 | holds at 30/s, **$59.8/s** | holds at 30/s, **$71.6/s** |
+
+**Against escorted tier-8 forces the anchor is a net loss** — both configurations hold at 30/s
+and the anchor just adds $12/s for nothing. Tier 8 is slow enough that raw bodies already
+satisfy the swing threshold; it is tiers 5–7 that need killing power in the line.
+
+### Against an UNESCORTED force it is usually a waste of money
+
+Cheapest total defender spend that holds all 8 teams:
+
+| force | chumps alone | chumps + T5 anchor | verdict |
+|---|---|---|---|
+| T5 ×1 | 1/s = **$2.0/s** | anchor only = $14.7/s | chumps win |
+| T6 ×3 | 3.75/s = **$7.5/s** | 1/s = $15.8/s | chumps win |
+| T6 ×5 | 10/s = $20.0/s | 1/s = **$15.8/s** | anchor wins |
+| T7 ×3 | 15/s = $30.0/s | 6/s = **$24.9/s** | anchor wins |
+| T7 ×5 | 30/s = $60.0/s | 10/s = **$32.8/s** | anchor wins |
+| T8 ×1 | 1/s = **$2.0/s** | anchor only = $12.3/s | chumps win |
+
+The anchor's floor is ~$12–15/s, so it only pays where the chump-only requirement had already
+gone extreme. Against tier 7 in numbers it roughly **halves** the bill.
+
+### The anchor is also just a blocker, and that is half of why it works
+
+A tier-5 every 5 seconds with **zero chumps** already holds a single tier 8 in 8/8 teams — 5s is
+exactly the tier-8 swing period, so the anchor alone satisfies the experiment-1 threshold. It
+likewise holds unescorted T5 (any size) and T6 ×1 on its own. So "anchor + chumps" is not purely
+"killer + blockers"; the anchor is doing both jobs, and attribution between them is not clean.
+
+### Anchor tier and cadence both matter, and 5s was not optimal
+
+×3 force + T4 escort, teams held of 8:
+
+| anchor | 3.75/s | 6/s | 10/s | 15/s | 30/s | total $/s at 30 chumps/s |
+|---|---|---|---|---|---|---|
+| T6 attacker — none | · | · | · | · | 5 | 54.9 |
+| T4 anchor | · | · | · | 1 | 8 | 58.4 |
+| T5 anchor | 1 | 3 | 6 | 5 | 8 | 61.9 |
+| **T6 anchor** | **8** | 6 | 8 | 8 | 8 | 110.7 |
+| T7 attacker — none | · | · | · | 1 | 7 | 59.3 |
+| T5 anchor | · | · | · | 3 | 8 | 71.9 |
+| T6 anchor | · | 3 | 4 | 6 | 8 | 113.2 |
+
+Cadence is roughly linear in cost and monotone in effect (T5 anchor, T6 ×3 escorted): 2.0s holds
+8/8 from 6 chumps/s; 5.0s needs 30/s; 20.0s never gets there.
+
+**Cheapest total defence that holds all 8 teams**, searched over anchor tier × cadence × chump
+rate:
+
+| attacker | best configuration | total |
+|---|---|---|
+| T6 ×3 + escort | T5 anchor every **2.0s** + only **10** chumps/s | **$44.4/s** |
+| T7 ×3 + escort | T4 anchor every 5.0s + 30 chumps/s | **$63.4/s** |
+
+Against tier 6 a faster anchor buys a *cheaper* defence overall, because it lets the chump rate
+drop from 30/s to 10/s. Against tier 7 nothing escapes needing the maximum chump rate.
+
+### Caveats specific to this experiment
+
+- Anchor tier was swept only at ×3 force against tiers 6 and 7; cadence only for the T5 anchor
+  in that same cell. The optimum is likely to move with force size and attacker tier.
+- 30 chumps/s is one spawn per tick — the engine ceiling — so any row that only holds at 30/s
+  is not reachable by a human.
+- The anchor still cannot beat an escorted tier-7 force below 15 chumps/s in any configuration
+  tested. That hole is real and remains open.
+
 ## Balance note that fell out of this: tier-4 spam dominates tier 8
 
 Against an undefended castle, a $20/s tier-4 stream does the job in comparable time to a
@@ -214,7 +300,10 @@ against a *defended* castle in a real game.
 - **$5,000/s hides the real constraint.** Nothing is money-limited, so what binds here is
   click rate. The reachable region in a real game is roughly 0.25–2/s.
 - **Escort tier and cadence were not swept** — only tier 4 at 1/s, because that is what was
-  asked for. The `force 0` arm suggests tier and cadence matter a great deal.
+  asked for. The `force 0` arm suggests tier and cadence matter a great deal, and experiment 3
+  confirmed exactly that for the defender's side of the same knob.
+- **No mixed defensive compositions beyond chumps + one anchor tier.** Two anchor tiers at once,
+  or an anchor that changes tier as the attack develops, are untested.
 
 ---
 
@@ -231,6 +320,13 @@ stall-test --teams all --seat 1 --tiers 5,6,7,8 --forces 0,1,2,3,4,5 --escorts 0
     --intervals 1,2,3,5,10,15,20,30,45,60,90,120 --protect-attacker true
 stall-test --teams all --seat 1 --tiers 8 --forces 1,2,3,4,5 \
     --intervals 10,12,15,16,18,20,21,22,24,25,26,28,30,32,35,38,40
+
+# experiment 3 -- the defender anchor
+stall-test --teams all --seat 1 --tiers 5,6,7,8 --forces 1,3,5 --escorts 0,4 \
+    --anchors 0,5 --anchor-gap 150 --intervals 1,2,3,5,8,10,15,20,30 \
+    --protect-attacker true --csv anchor_isolated.csv
+stall-test --teams all --seat 1 --tiers 6,7 --forces 3 --escorts 4 --anchors 0,3,4,5,6 \
+    --intervals 1,2,3,5,8 --csv anchor_tier.csv
 ```
 
 `gen_report.py` in this folder rebuilds the published HTML report straight from the CSVs, so
