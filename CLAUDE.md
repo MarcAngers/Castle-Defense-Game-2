@@ -341,42 +341,68 @@ so the per-team summary cannot be read as applying to every loadout of that team
 makes this particular pairing an unusually honest instrument: the mirror Marc will play has
 no built-in seat edge to explain away a result.
 
-## Chump-blocking (stalling a big unit with tier-1 bodies)
+## Chump-blocking (stalling big units with tier-1 bodies)
+
+**The full written record is `CastleDefense.BotArena/stall/FINDINGS.md`**, next to the raw
+CSVs and the report generator that rebuilds the published HTML from them. Deliberately NOT in
+`bin/` — that path is what caused the 2026-07-14 data loss. What follows is the summary.
 
 ```
 CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
+    [--forces 0,1,..] [--force-gap 30] [--escorts 0,4] [--escort-gap 30]
     [--intervals 1,3,10,..] [--blocker mirror|all|<Team>] [--seat both|1|2]
     [--hp 23000] [--income 5000] [--protect-attacker true|false] [--csv out.csv]
 ```
 
-One attacker is spawned once and never reinforced; the defender either does nothing
-(the `interval 0` control) or feeds tier-1 bodies every N ticks and does nothing else.
-No gadgets, no investing, no repairs. Deterministic — same seed, byte-identical output.
+The attacker gets a fixed force — N copies of one tier spawned `--force-gap` apart, optionally
+with a lower-tier escort streamed in behind — and nothing else ever. The defender either does
+nothing (the `interval 0` control) or feeds tier-1 bodies every N ticks. No gadgets, no
+investing, no repairs. 7,072 runs measured 2026-08-21.
 
-**The stall threshold is exactly the attacker's ATTACK PERIOD, not its DPS or its HP.**
-`MoveAndFight` sets `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in
-range, so reaching the castle requires `FindTargetsFast` to come back empty: one body in
-contact is a hard stop, not a damage race. Every tier-8 unit in the game has AttackSpeed
-clamped to 0.20/s (5.00s per swing), and across all 8 teams **one chump per 5.00s holds
-to the 1200s horizon while one per 5.17s does not**. Measured price of delay, pooled over
-every cell where the castle still fell: **$2.00 per second**, i.e. 0.04% of a $5,000/s
-income.
+**The stall threshold is the attacker's ATTACK PERIOD, not its DPS or HP.** `MoveAndFight` sets
+`CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in range, so reaching the castle
+requires `FindTargetsFast` to come back empty: one body in contact is a hard stop, not a damage
+race. Every tier-8 unit has AttackSpeed clamped to 0.20/s, and across all 8 teams **one chump
+per 5.00s holds to the 1200s horizon while one per 5.17s does not**. Price of delay against a
+lone attacker: **$2.00/s**, 0.04% of the test income.
 
-**Run BOTH arms — the stream does two things at once.** `--protect-attacker true` makes
-the attacker's castle invulnerable, which isolates *blocking* from the *counter-attack*.
-With it false, the chumps kill the attacker and then walk on and raze its castle, winning
-outright in 8/8 teams at >= 6 chumps/s at every tier. Conflating the two arms reads the
-counter-attack as if it were stalling.
+**Force size costs superlinearly.** `ClampToContact` skips FRIENDLY units, so a force does not
+queue behind its own front member — all of it overlaps at one contact point and all of it
+swings. Chumps needed per enemy swing: ×1 → 1.0, ×2 → 2.5, ×3 → 5.0, ×4 → 6.25, ×5 → 15.0.
+Defence is still the cheaper side and increasingly so: 0.04× the attacker's spend against one
+tier 8, 0.07× against five. Tier 7 is the hardest tier to hold.
 
-**"Kill" and "neutralise" are different results and the tier decides which.** Killing a
-tier 8 takes 1,572-2,207 bodies over 74-1,058s, and the real game ends at 600s — so
-against tier 8 the tactic neutralises but does not kill. Against tier 5/6 it takes ~40-160
-bodies and kills comfortably inside a game.
+**A tier-4 escort at one per second breaks the tactic.** No chump rate up to 30/s holds an
+escorted tier-5, -6 or -7 force. And it genuinely escorts rather than just being a better
+attack: the escort stream ALONE is stopped by 8/8 teams at 15/s, and adding a single high-tier
+unit collapses that to 1/8.
 
-Incidental checks worth keeping: all 480 cells are identical between `--seat 1` and
-`--seat 2`, so the seat bias documented below does not reach this scenario (measured, not
-assumed); and at 23,000 HP a tier 8 is exactly a two-swing castle kill, because the
-one-shot protection in `DamageCastle` floors the first hit at 1 HP.
+### Four methodology rules this harness established
+
+- **n is 8, not the run count.** The engine RNG only sets unit y-position, which nothing in
+  combat reads — seeds 999 / 4242 / 12345 give 0 differing cells out of 80. Teams are the only
+  sample dimension.
+- **Run BOTH arms.** `--protect-attacker true` shields the attacker's castle and isolates
+  *blocking* from the *counter-attack*; with it false the chumps kill the force and then raze
+  its castle, winning outright in 8/8 teams at ≥6/s unescorted. Conflating the two reads the
+  counter-attack as if it were stalling.
+- **The response is NOT monotone in spawn rate near a threshold.** It depends on how the spawn
+  period lines up with the swing period — at ×5 the line holds 8/8 at 15 ticks, 6/8 at 12, and
+  8/8 again at 10. Quote the ROBUST threshold (slowest period where every faster period also
+  holds), never the slowest period that happens to hold.
+- **Seats were checked, not assumed**: 0/480 cells differ between `--seat 1` and `--seat 2`,
+  and 0/80 with forces and escorts, so the seat bias documented below does not reach this
+  scenario.
+
+Two smaller facts worth keeping: at 23,000 HP a tier 8 is exactly a two-swing castle kill
+(the one-shot protection in `DamageCastle` floors the first hit at 1 HP), so each blocked swing
+is worth half the castle; and against tier 8 the tactic NEUTRALISES rather than kills, since
+killing one needs ~2,000 bodies, past the 600s game limit.
+
+**Unrelated balance finding the sweep turned up:** against an undefended castle a tier-4 stream
+razes it in comparable time to a single tier 8 for a median **28× less money** — tier 4 moves
+7–23 px/tick against a tier 8's 1–5, and its attack speed clamps at the TOP of the range (5.0/s)
+where a tier 8's clamps at the BOTTOM (0.2/s). Untested against a defended castle.
 
 ## Cleanup backlog
 
