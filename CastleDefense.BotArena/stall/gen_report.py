@@ -1,6 +1,6 @@
 """Builds the chump-block report HTML straight from the sweep CSVs, so no number in
 the page is transcribed by hand."""
-import csv, statistics as st, os, html
+import csv, statistics as st, os, html, math
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 OUT  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chump_block.html")
@@ -483,6 +483,140 @@ def anchor_optimum_table():
             "<th>anchor tier</th><th>cadence</th><th>chumps</th>"
             "<th>total defence</th></tr></thead><tbody>%s</tbody></table></div>" % body)
 
+
+# ================================================================ experiment 4
+INF = float("inf")
+
+UNITDEF = {}
+for _r in csv.DictReader(open(os.path.join(BASE, "master_roster_copy.csv"), encoding="utf-8-sig")):
+    _t = int(_r["Tier"]); _d = int(_r["Damage"]); _sp = float(_r["Speed"])
+    if _t < 6:   _a = _t * 2 * _sp / _d
+    elif _t < 7: _a = _t * _t * _sp / _d
+    else:        _a = _t ** 3 * _sp / _d
+    UNITDEF[(_r["Team"].capitalize(), _t)] = dict(
+        dmg=_d, aps=min(max(_a, 0.2), 5.0), speed=_sp, cost=int(_r["Price"]))
+
+CURVE = []
+for r in csv.DictReader(open(os.path.join(BASE, "curve_full.csv"))):
+    r["tier"] = int(r["tier"]); r["f"] = int(r["force_size"]); r["e"] = int(r["escort_tier"])
+    r["a"] = int(r["anchor_tier"]); r["iv"] = int(r["interval_ticks"])
+    r["sec"] = float(r["seconds"])
+    r["rate"] = 30.0 / r["iv"] if r["iv"] else 0.0
+    r["surv"] = r["sec"] if r["outcome"] == "castle_destroyed" else INF
+    r["spendrate"] = (float(r["blocker_spend"]) + float(r["anchor_spend"])) / max(r["sec"], 1e-9)
+    CURVE.append(r)
+
+CIVS = sorted({r["iv"] for r in CURVE if r["iv"] > 0}, reverse=True)
+CIDX = {(r["attacker_team"], r["tier"], r["f"], r["e"], r["a"], r["iv"]): r for r in CURVE}
+
+def cmed(vals):
+    """Median that respects censoring: an un-killed castle has infinite survival."""
+    v = sorted(vals, key=lambda x: (x == INF, x)); n = len(v)
+    if n % 2: return v[n // 2]
+    a, b = v[n // 2 - 1], v[n // 2]
+    return INF if (a == INF or b == INF) else (a + b) / 2
+
+def _sv(m):
+    if m == INF: return '<td class="o-hold">&infin;</td>'
+    k = "o-fell" if m < 45 else "o-mixed"
+    return '<td class="%s">%.0f</td>' % (k, m)
+
+def survival_matrix(e):
+    head = "".join("<th>%s</th>" % rate(i) for i in CIVS)
+    cost = "".join('<td class="o-base">%.0f</td>'
+                   % cmed([CIDX[(x, 7, 3, e, 0, i)]["spendrate"] for x in TEAMS]) for i in CIVS)
+    body = ""
+    for t in (5, 6, 7, 8):
+        for f in (1, 3, 5):
+            base = cmed([CIDX[(x, t, f, e, 0, 0)]["surv"] for x in TEAMS])
+            cells = "".join(_sv(cmed([CIDX[(x, t, f, e, 0, i)]["surv"] for x in TEAMS]))
+                            for i in CIVS)
+            lead = '<th class="rh">T%d</th>' % t if f == 1 else '<th class="rh"></th>'
+            cls = ' class="grp"' if f == 1 and t > 5 else ""
+            body += ("<tr%s>%s<td class=\"unit\">&times;%d</td>"
+                     '<td class="o-base">%s</td>%s</tr>'
+                     % (cls, lead, f, "&infin;" if base == INF else "%.0f" % base, cells))
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th></th><th class="o-base">nothing</th>'
+            '<th colspan="%d" class="grouphead">tier-1 chumps per second</th></tr>'
+            '<tr><th class="rh">tier</th><th>force</th><th class="o-base">&nbsp;</th>%s</tr>'
+            '<tr><th class="rh"></th><td class="unit">defence $/s</td>'
+            '<td class="o-base">0</td>%s</tr></thead><tbody>%s</tbody></table></div>'
+            % (len(CIVS), head, cost, body))
+
+def _K(team, tier):
+    d = UNITDEF[(team, tier)]; per = d["dmg"] * (2 if tier == 8 else 1)
+    return 2 if per >= 23000 else math.ceil(23000.0 / per)
+
+def law_table():
+    targets = (45, 60, 90)
+    body = ""
+    for t in (5, 6, 7, 8):
+        for f in (1, 3, 5):
+            base = cmed([CIDX[(x, t, f, 0, 0, 0)]["surv"] for x in TEAMS])
+            cells = ""
+            for T in targets:
+                pred = []
+                for x in TEAMS:
+                    S = UNITDEF[(x, t)]["aps"] * f; K = _K(x, t)
+                    tw = 1700.0 / UNITDEF[(x, t)]["speed"] / 30.0
+                    pred.append(0.0 if T <= tw else max(0.0, min(S, S - K / (T - tw))))
+                p = cmed(pred)
+                meas = None
+                for i in sorted(CIVS, reverse=True):
+                    if cmed([CIDX[(x, t, f, 0, 0, i)]["surv"] for x in TEAMS]) >= T:
+                        meas = 30.0 / i; break
+                c1 = cmed([UNITDEF[(x, 1)]["cost"] for x in TEAMS])
+                cells += ('<td class="num">%.2f<span class="u">/s</span></td>'
+                          '<td class="num dim">%s</td>'
+                          '<td class="num">$%.0f<span class="u">/s</span></td>'
+                          % (p, ("%.2f/s" % meas) if meas else "&gt;30/s", p * c1))
+            lead = '<th class="rh">T%d</th>' % t if f == 1 else '<th class="rh"></th>'
+            cls = ' class="grp"' if f == 1 and t > 5 else ""
+            body += ("<tr%s>%s<td class=\"unit\">&times;%d</td>"
+                     '<td class="o-base">%s</td>%s</tr>'
+                     % (cls, lead, f, "&infin;" if base == INF else "%.0f" % base, cells))
+    hdr = "".join('<th colspan="3" class="grouphead">survive %ds</th>' % T for T in targets)
+    sub = "".join("<th>law</th><th>measured</th><th>cost</th>" for _ in targets)
+    return ('<div class="scroll"><table class="matrix"><thead>'
+            '<tr><th class="rh"></th><th></th><th class="o-base">nothing</th>%s</tr>'
+            '<tr><th class="rh">tier</th><th>force</th><th class="o-base">&nbsp;</th>%s</tr>'
+            "</thead><tbody>%s</tbody></table></div>" % (hdr, sub, body))
+
+def escort_multiplier_table():
+    def cheapest(t, f, e):
+        for i in sorted(CIVS, reverse=True):
+            if all(CIDX[(x, t, f, e, 0, i)]["outcome"] != "castle_destroyed" for x in TEAMS):
+                return 30.0 / i
+        return None
+    body = ""
+    for t in (5, 6, 7, 8):
+        for f in (1, 3, 5):
+            a, b = cheapest(t, f, 0), cheapest(t, f, 4)
+            m = ("%.0f&times;" % (b / a)) if (a and b) else "&mdash;"
+            lead = '<th class="rh">T%d</th>' % t if f == 1 else '<th class="rh"></th>'
+            cls = ' class="grp"' if f == 1 and t > 5 else ""
+            body += ("<tr%s>%s<td class=\"unit\">&times;%d</td>"
+                     '<td class="num">%s</td><td class="num">%s</td>'
+                     '<td class="o-mixed">%s</td></tr>'
+                     % (cls, lead, f,
+                        ("%g/s" % a) if a else "&gt;30/s", ("%g/s" % b) if b else "&gt;30/s", m))
+    return ('<div class="scroll"><table class="matrix"><thead><tr><th class="rh">tier</th>'
+            "<th>force</th><th>chumps needed, no escort</th><th>with a T4 escort</th>"
+            "<th>escort tax</th></tr></thead><tbody>%s</tbody></table></div>" % body)
+
+def blocking_price_table():
+    body = ""
+    c1 = cmed([UNITDEF[(x, 1)]["cost"] for x in TEAMS])
+    for t in (1, 4, 5, 6):
+        c = cmed([UNITDEF[(x, t)]["cost"] for x in TEAMS])
+        k = "o-hold" if t == 1 else "o-fell" if c / c1 > 20 else "o-mixed"
+        body += ('<tr><th class="rh">tier %d</th><td class="num">$%.0f</td>'
+                 '<td class="%s">%.0f&times;</td></tr>' % (t, c, k, c / c1))
+    return ('<div class="scroll"><table><thead><tr><th class="rh">body</th>'
+            "<th>price each</th><th>cost per unit of blocking</th></tr></thead>"
+            "<tbody>%s</tbody></table></div>" % body)
+
 # ================================================================ page
 def td(v, cls=""):
     return f'<td class="{cls}">{v}</td>'
@@ -754,13 +888,13 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
 <div class="wrap">
 
 <header class="top">
-  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 11,000+ scripted games</span></div>
+  <div class="kicker"><span class="dot"></span><span class="lab">Engine measurement &middot; 19,000+ scripted games</span></div>
   <h1>One cheap body per enemy swing stops anything in the game.</h1>
   <p class="dek">Chump-blocking is not a damage race. It has a single threshold &mdash; the
   attacker&rsquo;s <em>attack period</em> &mdash; and against a lone unit it is close to free.
-  Multiply the force and the price climbs faster than the force does. Add a tier-4 escort and
-  only the engine&rsquo;s maximum click rate holds the line &mdash; until the defender weaves a
-  tier-5 anchor into the wave, which fixes it against every tier but the one you would expect.</p>
+  Multiply the force and the price climbs faster than the force does; add an escort and it climbs
+  again. But the whole thing turns out to obey one closed form, so the rate a defender needs can be
+  computed from the board rather than looked up.</p>
   <div class="meta">
     <span>23,000 HP both castles</span>
     <span>$5,000/s both incomes</span>
@@ -788,9 +922,10 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
     but <em>destroyed</em> by tier-1 bodies at 2/s, with no other defence at all.</span>
   </div>
   <div class="stat">
-    <span class="stat-n">30<span class="u">/s</span></span>
-    <span class="stat-t">The only rate that still holds an escorted tier-5, -6 or -7 force
-    &mdash; one spawn per tick, the engine&rsquo;s ceiling. Halve it and the line collapses.</span>
+    <span class="stat-n">0.97<span class="u"> R&sup2;</span></span>
+    <span class="stat-t">Fit of the survival law t = T<sub>walk</sub> + K/(S &minus; r). It
+    predicts held-out anchor runs to within 3.7%, so a bot can compute its defence rather than
+    look it up.</span>
   </div>
 </div>
 
@@ -1040,19 +1175,17 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
 </section>
 
 <section>
-  <div class="shead"><span class="n">11</span><h2>A tier-4 escort all but breaks the tactic</h2></div>
+  <div class="shead"><span class="n">11</span><h2>A tier-4 escort taxes the tactic heavily</h2></div>
   <div class="prose">
     <p>Same forces, plus one tier-4 unit per second &mdash; a median $20/s of ongoing spend.</p>
   </div>
   <h3>Teams held, out of 8 &mdash; with escort</h3>
   {hold_matrix(4)}
-  <p class="cap">One escort unit per second costs the attacker about $20/s and moves the
-  whole tactic to the edge of what is physically possible. Escorted tier-5, -6 and -7 forces are
-  still held at 30 chumps/s &mdash; but 30/s is <em>one spawn per tick</em>, the engine&rsquo;s
-  hard ceiling, and it holds for only 5&ndash;7 of the 8 teams. Halve it to 15/s and that drops
-  to 0&ndash;1 of 8; below that, nothing holds. Tier-8 forces hold more comfortably, but at 30/s
-  the bill is about $36,000 and 20,000 bodies &mdash; at &times;1 that is 1.26&times; the
-  attacker&rsquo;s own spend, the only configuration measured where blocking is a losing trade.</p>
+  <p class="cap">One escort unit per second costs the attacker about $20/s and multiplies the
+  chump rate the defender needs by 2&ndash;120&times;, median about 7&times; &mdash; the full
+  accounting is in section 20. It is a tax, not a counter: an escorted tier-5 force is still held
+  at 6 chumps/s and an escorted tier 6 at 10&ndash;15/s. Only tier 7 in numbers actually needs the
+  engine&rsquo;s maximum rate.</p>
 
   <div class="callout">
     <h3>It really is escorting, not just a scarier attack</h3>
@@ -1111,9 +1244,10 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
     chump line alone, then the same line with the anchor woven in.</p>
   </div>
   {anchor_matrix(4)}
-  <p class="cap">Against escorted tier-5, -6 and -7 forces the chump line alone never holds all
-  eight teams at any rate. With the anchor it does. The lift is largest in the middle of the
-  range: at 10 chumps/s a tier-5 &times;1 force goes from 0/8 to 7/8.</p>
+  <p class="cap">The anchor buys real ground in the middle of the range, where the chump line
+  alone is still losing teams. It is not the difference between impossible and possible &mdash;
+  that reading came from the idle-defender bug corrected in section 20 &mdash; but it does shift
+  the whole curve left.</p>
 </section>
 
 <section>
@@ -1124,17 +1258,17 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
   </div>
   <h3>Against escorted forces</h3>
   {anchor_cost_table(4)}
-  <p class="cap">Against escorted tier-8 forces the anchor is a <em>net loss</em>: both defences
-  hold at 30/s and the anchor just adds about $12/s for nothing. Tier 8 swings so slowly that raw
-  bodies already satisfy the threshold &mdash; it is tiers 5 to 7 that need killing power in the
-  line.</p>
+  <p class="cap">Corrected, this is close to a coin flip: the anchor is the cheaper buy in 5 of
+  the 12 escorted cells and pure chumps in the other 7. Where it wins it wins clearly &mdash; a
+  single tier 7 or tier 8 with an escort costs $60/s to hold with chumps alone and $32.5/s with an
+  anchor &mdash; and where it loses, it loses by adding $12/s that bought nothing. It is a
+  matchup-dependent tool, not a general upgrade.</p>
 
   <h3 style="margin-top:30px">Against unescorted forces</h3>
   {anchor_cost_table(0)}
-  <p class="cap">Here the anchor is usually money wasted. Plain chumps hold for $2&ndash;4/s in
-  most cells and the anchor&rsquo;s floor is $12&ndash;15/s. It only pays where the chump-only
-  requirement had already gone extreme &mdash; against five tier 7s it roughly
-  <strong>halves</strong> the bill, $60/s down to $33/s.</p>
+  <p class="cap">Here the anchor is usually money wasted, and section 19 explains why from the
+  law rather than from the sweep: per unit of blocking a tier-5 body costs 30&times; what a chump
+  does, so unless it is killing something the chumps cannot, it is the wrong purchase.</p>
 
   <div class="callout">
     <h3>Careful: the anchor is also just a blocker</h3>
@@ -1170,8 +1304,118 @@ footer {{ margin-top: 76px; padding-top: 20px; border-top: 1px solid var(--rule)
   hole below 15 chumps/s stays open in every configuration tested.</p>
 </section>
 
+
+<div class="part">
+  <span class="lab">Part four</span>
+  <h2>What each dollar of defence actually buys</h2>
+  <p>Everything so far asks whether a defence <em>holds</em>. That is the wrong question for a
+  real game: money is finite, thirty spawns a second is not a real option, and an attacker who
+  has already bought their force is banking income while the defender burns it. The useful
+  question is how many <em>seconds</em> a given spend rate buys &mdash; and whether that has a
+  shape a bot can compute rather than look up.</p>
+</div>
+
 <section>
-  <div class="shead"><span class="n">17</span><h2>Reproducing it</h2></div>
+  <div class="shead"><span class="n">17</span><h2>Seconds of life per dollar per second</h2></div>
+  <div class="prose">
+    <p>Median survival across the eight teams. <strong>&infin;</strong> means the castle was never
+    destroyed. The <em>defence $/s</em> row is what the chump stream actually costs.</p>
+  </div>
+  <h3>Unescorted force</h3>
+  {survival_matrix(0)}
+  <p class="cap">Read a row left to right and the curve is flat, then steep, then vertical. Three
+  tier-7s take a castle in 20s undefended; $3/s of chumps stretches that to 43s, $7.50/s to 165s,
+  and $10/s makes it never. <strong>The whole useful range is a few dollars per second</strong> &mdash;
+  chumps cost $1&ndash;4 each, so even 5/s is pocket change against the $1,526&ndash;$18,392 the
+  attacker sank into the force.</p>
+
+  <h3 style="margin-top:30px">With a tier-4 escort</h3>
+  {survival_matrix(4)}
+  <p class="cap">The same shape, shifted right by roughly an order of magnitude.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">18</span><h2>The pattern is a closed form, not a lookup table</h2></div>
+  <div class="prose">
+    <p>Each body in contact absorbs one enemy swing. If the enemy delivers <em>S</em> swings per
+    second and bodies arrive at <em>r</em> per second, castle-bound swings leak at
+    <em>(S&nbsp;&minus;&nbsp;r)</em>, and the castle needs <em>K</em> of them. So</p>
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:1.05rem;text-align:center;
+              background:var(--surface);border:1px solid var(--rule);padding:16px 12px">
+      t(r) = T<sub>walk</sub> + K / (S &minus; r)
+    </p>
+    <p>Fitted on unescorted chumps-only runs, the linearised form
+    <code>1/(t &minus; T_walk) = S/K &minus; r/K</code> gives a <strong>median R&sup2; of
+    0.972</strong>, and the recovered <em>S</em> and <em>K</em> land within 4% and 6% of the
+    values the roster says they should be. Two out-of-sample checks it was never fitted on:</p>
+    <ul style="color:var(--ink-soft)">
+      <li>Predicting survival directly: median error <strong>&minus;4.5%</strong>, 85% of runs
+      within 20%.</li>
+      <li>Anchors: treating a tier-5 every 5s as nothing but a body arriving at 0.2/s moves the
+      error from &minus;17.5% to <strong>&minus;3.7%</strong>. The law was never shown an anchor.</li>
+    </ul>
+    <p>Inverted, it is the rule a bot wants &mdash; the rate needed to survive a target time:</p>
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:1.05rem;text-align:center;
+              background:var(--surface);border:1px solid var(--rule);padding:16px 12px">
+      r = S &minus; K / (T &minus; T<sub>walk</sub>)
+    </p>
+  </div>
+  {law_table()}
+  <p class="cap">Law against measurement, unescorted. The measured column is quantised by the
+  rate grid, so agreement to within one grid step is the most it can show &mdash; and that is
+  what it shows almost everywhere. Tier 5 is where the law is most conservative: it only models
+  blocking, and chumps also out-damage a tier 5 outright, so less is needed than predicted.</p>
+
+  <div class="callout">
+    <h3>What the bot needs to read off the board</h3>
+    <p><strong>S</strong> is the sum of attack rates of every enemy unit on the field &mdash;
+    directly observable, and it handles escorts and mixed forces without any special case.
+    <strong>K</strong> is castle HP divided by damage per swing. <strong>T<sub>walk</sub></strong>
+    is the remaining distance over move speed. The whole rule costs a loop over visible units.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="n">19</span><h2>Two consequences worth building on</h2></div>
+  <div class="prose">
+    <h3>Returns accelerate, so half-measures are the worst buy</h3>
+    <p>Differentiating the law, the marginal seconds bought by one more chump per second is
+    <code>K/(S&minus;r)&sup2;</code> &mdash; which <em>grows</em> as you approach S. Spending a
+    little is nearly worthless; spending enough to sit just under the enemy&rsquo;s swing rate is
+    where almost all the value is. For a bot this argues for a threshold policy, not a
+    proportional one: either commit to matching the swing rate or save the money.</p>
+
+    <h3 style="margin-top:26px">Chumps dominate anything bigger, per unit of blocking</h3>
+    <p>The law says a body&rsquo;s blocking contribution is one absorbed swing regardless of what
+    the body is. So the only thing that matters for blocking is price:</p>
+  </div>
+  {blocking_price_table()}
+  <p class="cap">This is why the anchor was wasted against unescorted forces in part three, and it
+  predicts it from first principles rather than from the sweep. Buy a bigger body only for what
+  the blocking law does <em>not</em> capture &mdash; killing the escort that is eating your line.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">20</span><h2>Correction: what the escort really costs</h2></div>
+  <div class="prose">
+    <p>Parts two and three overstated the escort. The harness stopped the defender buying once the
+    <em>high-tier</em> units died &mdash; but with an escort a lethal swarm is still on the field,
+    so the defender stood idle while it walked in. No bot would play that way. With the defence
+    gated on <em>any</em> enemy being present, the escorted numbers move a long way; unescorted
+    runs are unaffected (verified, 0 of 48 cells differ). Every table on this page now comes from
+    the corrected build.</p>
+    <p>The escort is a <strong>tax on the stall, not a counter to it</strong>:</p>
+  </div>
+  {escort_multiplier_table()}
+  <p class="cap">It multiplies the chumps needed by 2&ndash;120&times;, median about 7&times;. But
+  an escorted tier-5 force is still held for 6 chumps/s and an escorted tier 6 for 10&ndash;15/s.
+  Only tier 7 in numbers genuinely needs the engine&rsquo;s maximum rate. The earlier claim that
+  no rate up to 30/s holds an escorted tier-5, -6 or -7 force was an artefact of the idle defender
+  and is withdrawn.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">21</span><h2>Reproducing it</h2></div>
   <div class="prose">
     <p>New BotArena mode, committed as <code>StallTest.cs</code>. Seeded throughout, so the
     same arguments give byte-identical output.</p>
@@ -1209,11 +1453,17 @@ CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 5,6,7,8 \\
 
 # anchor tier and cadence (section 16)
 CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 6,7 --forces 3 \\
-    --escorts 4 --anchors 0,3,4,5,6 --intervals 1,2,3,5,8 --csv anchor_tier.csv</pre>
+    --escorts 4 --anchors 0,3,4,5,6 --intervals 1,2,3,5,8 --csv anchor_tier.csv
+
+# PART FOUR -- the survival curve behind the law (sections 17-20)
+CastleDefense.BotArena.exe stall-test --teams all --seat 1 --tiers 5,6,7,8 \\
+    --forces 1,3,5 --escorts 0,4 --anchors 0,5 --anchor-gap 150 \\
+    --intervals 240,180,120,90,60,45,30,24,20,15,12,10,8,6,5,4,3,2,1 \\
+    --protect-attacker true --csv curve_full.csv</pre>
 </section>
 
 <footer>
-  Castle Defense engine &middot; measured 21 August 2026 &middot; 11,200 runs across three parts
+  Castle Defense engine &middot; measured 21 August 2026 &middot; 19,400 runs across four parts
   &middot; every cell is n&nbsp;=&nbsp;8 teams &middot; raw CSVs, this generator and a written
   record in <code>CastleDefense.BotArena/stall/</code>
 </footer>

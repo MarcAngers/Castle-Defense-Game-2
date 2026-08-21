@@ -223,6 +223,13 @@ namespace CastleDefense.BotArena
             // escort, so the escort stream IS the attack and must not switch itself off.
             bool escortOnly = s.Force == 0;
             bool forceAlive = true;
+            // The defence keeps buying while ANY enemy is on the field, not merely while the
+            // high-tier units live. Gating it on forceAlive meant that once the big units died
+            // the defender stood idle while a surviving escort swarm walked in and razed the
+            // castle -- which understated both the survival time and the spend, and is not a
+            // defender any bot would model. Unescorted runs are unaffected: there the force is
+            // every enemy there is.
+            bool threatPresent = true;
 
             while (state.CurrentTick < s.Horizon)
             {
@@ -250,7 +257,7 @@ namespace CastleDefense.BotArena
                 }
 
                 // --- defender's schedule ---
-                if (interval > 0 && forceAlive && state.CurrentTick % interval == 0)
+                if (interval > 0 && threatPresent && state.CurrentTick % interval == 0)
                 {
                     double before = defender.Money;
                     if (engine.SpawnUnit(defenderSeat, blkDef.Id))
@@ -261,7 +268,7 @@ namespace CastleDefense.BotArena
                 }
                 // The anchor rides along with the chump wave on its own slower cadence. It
                 // stops with the chumps when the threat is gone, for the same reason.
-                if (ancDef != null && forceAlive && state.CurrentTick % s.AnchorGap == 0)
+                if (ancDef != null && threatPresent && state.CurrentTick % s.AnchorGap == 0)
                 {
                     double before = defender.Money;
                     if (engine.SpawnUnit(defenderSeat, ancDef.Id))
@@ -301,6 +308,7 @@ namespace CastleDefense.BotArena
                 res.PeakBlockers = Math.Max(res.PeakBlockers, liveBlockers);
                 res.BlockersLost = res.BlockersSpawned - liveBlockers;
                 res.BigUnitsAlive = liveBig;
+                threatPresent = liveAttackerUnits > 0 || spawnedBig < s.Force;
 
                 if (!escortOnly && forceAlive && liveBig == 0 && spawnedBig == s.Force)
                 {

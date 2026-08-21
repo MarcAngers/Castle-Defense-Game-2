@@ -358,7 +358,7 @@ CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
 The attacker gets a fixed force — N copies of one tier spawned `--force-gap` apart, optionally
 with a lower-tier escort streamed in behind — and nothing else ever. The defender either does
 nothing (the `interval 0` control) or feeds tier-1 bodies every N ticks. No gadgets, no
-investing, no repairs. 11,200 runs measured 2026-08-21.
+investing, no repairs. 19,400 runs measured 2026-08-21.
 
 **The stall threshold is the attacker's ATTACK PERIOD, not its DPS or HP.** `MoveAndFight` sets
 `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in range, so reaching the castle
@@ -373,27 +373,53 @@ swings. Chumps needed per enemy swing: ×1 → 1.0, ×2 → 2.5, ×3 → 5.0, ×
 Defence is still the cheaper side and increasingly so: 0.04× the attacker's spend against one
 tier 8, 0.07× against five. Tier 7 is the hardest tier to hold.
 
-**A tier-4 escort at one per second all but breaks the tactic.** An escorted tier-5, -6 or -7
-force is still held at 30 chumps/s — but that is one spawn per TICK, the engine ceiling, and it
-holds for only 5–7 of 8 teams. At 15/s it is 0–1 of 8, and below that nothing holds. And the
-escort genuinely escorts rather than just being a better attack: the escort stream ALONE is
-stopped by 8/8 teams at 15/s, and adding a single high-tier unit collapses that to 1/8.
+**A tier-4 escort at one per second is a TAX, not a counter.** It multiplies the chump rate the
+defender needs by 2-120x (median ~7x), but an escorted tier-5 force is still held for 6 chumps/s
+and an escorted tier 6 for 10-15/s; only tier 7 in numbers needs the engine's ceiling. The escort
+does genuinely escort rather than merely being a better attack: the escort stream ALONE is stopped
+by 8/8 teams, and adding a single high-tier unit collapses that.
 
-**The answer to the escort is an ANCHOR: a tier-5 woven into the chump wave every 5s** (~$12/s).
-Against escorted T5/T6/T7 forces chumps alone never hold all 8 teams at any rate; chumps + the
-anchor do, at 15-30/s. But it is a targeted tool, not a general upgrade:
-- Against escorted TIER 8 it is a net loss ($71.6/s vs $59.8/s, both holding at 30/s) — tier 8
-  swings so slowly that raw bodies already satisfy the threshold.
-- Against UNESCORTED forces it is usually wasted: plain chumps hold for $2-4/s in most cells and
-  the anchor's floor is $12-15/s. It only pays where the chump-only requirement had gone extreme
-  (T7 x5: $60/s -> $33/s).
-- **It doubles as a blocker**, which muddies attribution: a T5 every 5s with ZERO chumps already
-  holds a single tier 8 8/8, because 5s IS the tier-8 swing period. "Anchor + chumps" is not
-  cleanly "killer + blockers".
-- 5s was not optimal. Tier and cadence both matter and trade against the chump rate: against a
-  T6 x3 escorted force the cheapest holding defence is a T5 anchor every **2s** plus only 10
-  chumps/s ($44/s), beating the 5s version's 30 chumps/s ($62/s). Against tier 7 nothing escapes
-  needing 30 chumps/s, and the hole below 15/s stays open in every configuration tested.
+**A defender ANCHOR (a tier-5 woven into the chump wave every 5s, ~$12/s) is a matchup tool**, not
+a general upgrade. Against escorted forces it is the cheaper buy in 5 of 12 cells and pure chumps
+in the other 7; where it wins it roughly halves the bill ($60/s -> $32.5/s vs a single escorted
+tier 7 or 8). It also doubles as a blocker, so the two effects cannot be separated: a T5 every 5s
+with ZERO chumps already holds a single tier 8, because 5s IS the tier-8 swing period.
+
+### THE SURVIVAL LAW — use this rather than the tables
+
+Binary "does it hold" is the wrong question for a real game: money is finite and 30 spawns/sec is
+not reachable. What the bot needs is seconds bought per dollar, and that has a closed form.
+
+```
+t(r) = T_walk + K / (S - r)        survival at chump rate r
+r    = S - K / (T - T_walk)        rate needed to survive T seconds
+```
+
+- **S** = sum of the attack rates of every enemy unit ON THE FIELD. Directly observable, and it
+  absorbs escorts and mixed forces with no special case.
+- **K** = castle HP / damage per swing (Siege doubles it; the one-shot floor in DamageCastle makes
+  a tier 8 exactly 2 swings at 23,000 HP).
+- **T_walk** = remaining distance / move speed.
+
+Fitted on unescorted chumps-only runs: **median R^2 = 0.972**, recovered S within 4% and K within
+6% of roster values, median survival-prediction error **-4.5%**. Out of sample, never fitted:
+treating an anchor as nothing but a body arriving at 1/cadence moves the error from -17.5% to
+**-3.7%**.
+
+Two consequences worth building the bot's policy on:
+
+- **Returns accelerate**: dt/dr = K/(S-r)^2 GROWS as r approaches S. Spending a little is nearly
+  worthless. This argues for a THRESHOLD policy (match the swing rate or save the money), not a
+  proportional one.
+- **Chumps dominate per unit of blocking.** A body absorbs one swing whatever it is, so only price
+  matters: tier 4 costs 10x a chump per unit of blocking, tier 5 30x, tier 6 166x. Buy a bigger
+  body ONLY for what the blocking law does not capture — killing an escort that is eating the line.
+
+Practical scale: three tier-7s take an undefended castle in 20s; $3/s of chumps makes it 43s,
+$7.50/s makes it 165s, $10/s makes it never — against a force that cost the attacker $4,578.
+
+The law models BLOCKING ONLY. Chumps also out-damage low tiers, so it is conservative against
+tier 5, and it predicts the survival time much better than it predicts the exact critical rate.
 
 ### Four methodology rules this harness established
 
@@ -404,6 +430,14 @@ anchor do, at 15-30/s. But it is a targeted tool, not a general upgrade:
   *blocking* from the *counter-attack*; with it false the chumps kill the force and then raze
   its castle, winning outright in 8/8 teams at ≥6/s unescorted. Conflating the two reads the
   counter-attack as if it were stalling.
+- **A censored run has NO finite survival time.** When the castle is never destroyed, the
+  `seconds` field records when the attacking FORCE died, which is short. Averaging that into a
+  survival median makes defence look worse the more you spend — it produced a spurious negative
+  marginal return before it was caught. Treat non-`castle_destroyed` rows as +infinity.
+- **The defence must keep buying while ANY enemy is present**, not merely while the high-tier
+  units live. Gating it on the force alone let the defender stand idle against a surviving escort
+  swarm, which inflated the escort's apparent strength by up to 120x and produced two withdrawn
+  conclusions before it was found.
 - **The response is NOT monotone in spawn rate near a threshold.** It depends on how the spawn
   period lines up with the swing period — at ×5 the line holds 8/8 at 15 ticks, 6/8 at 12, and
   8/8 again at 10. Quote the ROBUST threshold (slowest period where every faster period also
