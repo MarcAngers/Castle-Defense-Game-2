@@ -230,6 +230,154 @@ a prerequisite for BC being worth trying at all.
 `bc_pretrain.py`'s `find_recordings_root()` also still points at the `bin/` paths that
 caused the 2026-07-14 data loss — pass `--replay-dir` explicitly.
 
+## Loadout counter-picking (singleplayer)
+
+Singleplayer's bot no longer rolls a random team/loadout. It picks SECOND, with the human's
+choice already locked in, and now answers with a measured best response
+(`CounterPicker`, `CastleDefense.Engine/Data/counter_table.csv`).
+
+**The `dashboard` sweep cannot produce this table and never could.** It fixes the bot's
+(team, offense, defense) and hands the opponent `AssignRandomLoadout`, then never writes the
+opponent's loadout to the CSV. Its numbers are marginalised over exactly the variable a
+counter table conditions on. `results.csv` says which loadout is good on average, not which
+beats which; no re-analysis recovers the missing column.
+
+### Pipeline
+
+```
+CastleDefense.BotArena.exe counter-matrix --games N [--pairs cells.csv] [--game-offset K]
+python CastleDefense.BotArena/counter/analyze.py <sweeps...> --emit CastleDefense.Engine/Data/counter_table.csv
+CastleDefense.BotArena.exe counter-eval --games N --fixed White,nuke,wall   # held-out check
+```
+
+Built 2026-08-18 from 466,944 HeuristicBot-vs-HeuristicBot games: a full 128x128 sweep at
+n=16, plus n=200 refinement on the top 8 answers per human loadout.
+
+**Three deliberate departures from every other harness here, all load-bearing:**
+
+- **Seats are FIXED, not alternated.** Everything else alternates because it wants unbiased
+  bot strength and the seat asymmetry is severe. Here the deployed configuration IS
+  fixed-seat (`sp` always puts the human on P1), so alternating would average away an
+  asymmetry the bot gets to keep. **The table is meaningless transposed.**
+- **No headstart**, matching `sp`'s plain `new GameState()` at tick 0.
+- **Common random numbers.** Game index i draws the same map, shadow roll and engine seed in
+  every cell, because the setup seed comes from i alone and never from the loadout pair. The
+  map is a real gameplay-affecting roll; without pairing a cell can look strong purely for
+  having drawn friendlier maps. Two runs at the same settings are byte-identical.
+
+### What it found
+
+**Loadout choice is a bigger lever than the entire search programme.** Held-out, 76,800
+fresh games, HeuristicBot both seats:
+
+| bot seat | human seat | counter | random (old behaviour) | fixed White/nuke/wall |
+|---|---|---|---|---|
+| heuristic | heuristic | **99.94%** | 50.64% | 95.52% |
+| heuristic | clone | 99.63% | 94.67% | 99.99% |
+| search | heuristic | 99.09% | 82.73% | 100.00% |
+
+**The average is NOT the reason to counter-pick — the holes are.** A single fixed loadout
+averages 95.5% but has **5 deterministic 0% cells** out of 128: human loadouts that hard
+counter it, where the bot loses every game (Black/firebomb/wall, Blue/firebomb/heal,
+White/nuke/reinforcements, White/firebomb/reinforcements, White/freeze/wall). The counter
+table's worst row is 92.5% and nothing is below 50%. Marc picks first and would find those
+holes; that is what the table buys, not the +4.4 average points.
+
+The +4.4 that counter beat fixed by against HeuristicBot **did not replicate** against
+either other configuration (clone: -0.36, search: -0.91). Treat the fine-grained per-row
+choices as HeuristicBot-specific noise; the robust content of the table is "play a strong
+White loadout, and avoid the near-mirror that hard-counters your default."
+
+Interaction is real but mostly lives in the losing half of the matrix: 41% of logit variance
+is additive, and 44% is genuine interaction after subtracting binomial sampling noise — yet
+the argmax collapses to **5 distinct answers across all 128 rows**, and
+White/nuke/reinforcements answers 112 of them.
+
+Marginal bot-seat win rate, stage 1 only (equal n=16 everywhere, so uncontaminated by the
+refinement pass which only deepened the top cells):
+
+| team | | offense | | defense | |
+|---|---|---|---|---|---|
+| White | **78.3%** | nuke | **65.9%** | reinforcements | 55.7% |
+| Black | 59.7% | freeze | 53.3% | heal | 55.6% |
+| Yellow | 57.1% | firebomb | 50.5% | wall | 55.2% |
+| Blue | 54.8% | snipe | **33.9%** | speed | **36.9%** |
+| Orange | 50.6% | | | | |
+| Purple | 46.3% | | | | |
+| Red | 33.2% | | | | |
+| Green | **26.9%** | | | | |
+
+Speed defence and Green/Red replicate the independent mirror-sweep balance findings, which
+is a useful validity check on the whole instrument.
+
+### What this table is NOT
+
+- **It is not fitted against Marc.** Both seats are HeuristicBot. The absolute rates will not
+  transfer to a human; only the ordering has any claim to. He beats HeuristicBot 92.1%.
+- **It is P2-specific.** Fitted for the bot in seat 2 only.
+- **The top-8 rows are near-ties at ceiling** (~99.8%), so rank 0 within a row is close to
+  arbitrary. Do not read meaning into rank 1 vs rank 3.
+
+Knobs live in `appsettings.json` under `CounterPick`: `Enabled` (false restores the random
+roll) and `TopK` (1 = always the single best answer, maximum win rate and fully predictable;
+higher samples among the top K and trades some win rate for unpredictability).
+
+### `ForcedLoadout` — pinning the bot for mirror matches
+
+`CounterPick:ForcedLoadout` ("Team,offense,defense", empty to disable) makes the bot play one
+loadout every singleplayer game, bypassing both the table and the random roll. **Currently set
+to `White,nuke,reinforcements`** so Marc can record MIRROR games: counter-picking makes the
+bot's loadout a function of his, which confounds play with loadout in exactly the comparison
+`--divergence` is trying to make. Pinning both sides removes that variable.
+
+It is not a strength setting — it reopens the deterministic holes counter-picking closed.
+Clear it for normal play.
+
+**White/nuke/reinforcements is a genuinely clean mirror: `mirror-fixed White nuke
+reinforcements 100` returns 100/100 DRAWS**, no seat advantage either way. This refines the
+2026-08-11 seat-bias table above, which recorded "P2 always wins for Black/Red/White" — that
+was measured at nuke/wall. **Seat bias is a property of (team, gadgets), not of team alone**,
+so the per-team summary cannot be read as applying to every loadout of that team. It also
+makes this particular pairing an unusually honest instrument: the mirror Marc will play has
+no built-in seat edge to explain away a result.
+
+## Chump-blocking (stalling a big unit with tier-1 bodies)
+
+```
+CastleDefense.BotArena.exe stall-test [--teams all|<T,..>] [--tiers 5,6,7,8]
+    [--intervals 1,3,10,..] [--blocker mirror|all|<Team>] [--seat both|1|2]
+    [--hp 23000] [--income 5000] [--protect-attacker true|false] [--csv out.csv]
+```
+
+One attacker is spawned once and never reinforced; the defender either does nothing
+(the `interval 0` control) or feeds tier-1 bodies every N ticks and does nothing else.
+No gadgets, no investing, no repairs. Deterministic — same seed, byte-identical output.
+
+**The stall threshold is exactly the attacker's ATTACK PERIOD, not its DPS or its HP.**
+`MoveAndFight` sets `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in
+range, so reaching the castle requires `FindTargetsFast` to come back empty: one body in
+contact is a hard stop, not a damage race. Every tier-8 unit in the game has AttackSpeed
+clamped to 0.20/s (5.00s per swing), and across all 8 teams **one chump per 5.00s holds
+to the 1200s horizon while one per 5.17s does not**. Measured price of delay, pooled over
+every cell where the castle still fell: **$2.00 per second**, i.e. 0.04% of a $5,000/s
+income.
+
+**Run BOTH arms — the stream does two things at once.** `--protect-attacker true` makes
+the attacker's castle invulnerable, which isolates *blocking* from the *counter-attack*.
+With it false, the chumps kill the attacker and then walk on and raze its castle, winning
+outright in 8/8 teams at >= 6 chumps/s at every tier. Conflating the two arms reads the
+counter-attack as if it were stalling.
+
+**"Kill" and "neutralise" are different results and the tier decides which.** Killing a
+tier 8 takes 1,572-2,207 bodies over 74-1,058s, and the real game ends at 600s — so
+against tier 8 the tactic neutralises but does not kill. Against tier 5/6 it takes ~40-160
+bodies and kills comfortably inside a game.
+
+Incidental checks worth keeping: all 480 cells are identical between `--seat 1` and
+`--seat 2`, so the seat bias documented below does not reach this scenario (measured, not
+assumed); and at 23,000 HP a tier 8 is exactly a two-swing castle kill, because the
+one-shot protection in `DamageCastle` floors the first hit at 1 HP.
+
 ## Cleanup backlog
 
 Deferred tidy-up work lives in `CLEANUP_BACKLOG.md` — stale comments, measurement tools
