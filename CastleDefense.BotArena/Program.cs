@@ -300,6 +300,16 @@ if (args.Length > 0 && args[0] == "clone-check")
     return;
 }
 
+// Oracle checks for the t_arma / t_death evaluator features. Every expected value was
+// derived by hand BEFORE the implementation. Same discipline as --divergence --bot replay
+// having to read exactly 1.000. See TimeFeatureCheck.cs.
+// Usage: time-features-check
+if (args.Length > 0 && args[0] == "time-features-check")
+{
+    TimeFeatureCheck.Run(args);
+    return;
+}
+
 // Evaluator calibration data from games the CURRENT bots play. Diagnostic only —
 // writes data, fits nothing. See CalibCollect.cs for why Simulation's collector
 // cannot cover HeuristicBot.
@@ -334,6 +344,14 @@ if (args.Length > 0 && args[0] == "search-test")
 if (args.Length > 0 && args[0] == "defence-duel")
 {
     CastleDefense.BotArena.DefenceDuel.Run(args);
+    return;
+}
+
+// Isolates the chump-block: one high-tier attacker vs a stream of tier-1 bodies.
+// See StallTest.cs.
+if (args.Length > 0 && args[0] == "stall-test")
+{
+    StallTest.Run(args);
     return;
 }
 
@@ -608,6 +626,28 @@ if (args.Length > 0 && args[0] == "model-vs-model")
     }
     Console.WriteLine($"{nameA} wins: {aWins}/{games} ({100.0*aWins/games:F1}%)  {nameB} wins: {bWins}/{games} ({100.0*bWins/games:F1}%)  draws: {draws}  timeouts: {timeouts}");
     Console.WriteLine($"{nameA} avg invests/game: {aInvests.Average():F2}   {nameB} avg invests/game: {bInvests.Average():F2}");
+    return;
+}
+
+// Reproduces Marc's "T4 spawn right after investment 2" report against an idle opponent.
+if (args.Length > 0 && args[0] == "opening-trace")
+{
+    OpeningTrace.Run(args);
+    return;
+}
+
+// Held-out check that the counter table actually beats the random roll it replaced.
+if (args.Length > 0 && args[0] == "counter-eval")
+{
+    CounterEval.Run(args);
+    return;
+}
+
+// Full loadout-vs-loadout cross-tab for singleplayer counter-picking. See CounterMatrix.cs
+// for why the dashboard sweep cannot answer this and why this one does not alternate seats.
+if (args.Length > 0 && args[0] == "counter-matrix")
+{
+    CounterMatrix.Run(args);
     return;
 }
 
@@ -1304,7 +1344,19 @@ if (args.Length > 0 && args[0] == "trace")
     var (state, engine) = CreateGame(headStart);
     state.Player1.Team = TeamColour.White; state.Player1.SetLoadout(new[] { "freeze", "heal", "cash" });
     state.Player2.Team = TeamColour.White; state.Player2.SetLoadout(new[] { "freeze", "heal", "cash" });
-    var bot = new HeuristicBotAdapter(1);
+    // --variant <ProfileName> runs the traced bot on a named HeuristicBotSettings
+    // profile, so a candidate flag's effect on the per-decision danger/TTD columns can be
+    // read directly rather than inferred from win rate. Same reflection lookup the ladder uses.
+    HeuristicBotSettings? traceProfile = null;
+    for (int i = 1; i < args.Length - 1; i++)
+        if (args[i] == "--variant")
+        {
+            var fld = typeof(HeuristicBotSettings).GetField(args[i + 1],
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (fld == null) { Console.Error.WriteLine($"no profile '{args[i + 1]}'"); return; }
+            traceProfile = (HeuristicBotSettings)fld.GetValue(null)!;
+        }
+    var bot = traceProfile == null ? new HeuristicBotAdapter(1) : new HeuristicBotAdapter(1, traceProfile);
     var foe = makeOpponent(2);
 
     Console.WriteLine($"tick\tsec\tP1$\tP1inc\tP1inv\tP1units\tP1hp%\tP2$\tP2inc\tP2inv\tP2units\tP2hp%\tP1danger\tTTD\tTTI\tP1comp\tP2comp");
