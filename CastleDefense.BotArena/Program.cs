@@ -347,6 +347,13 @@ if (args.Length > 0 && args[0] == "defence-duel")
     return;
 }
 
+// Guards ThreatModel against the measured stall-test data. See ThreatCheck.cs.
+if (args.Length > 0 && args[0] == "threat-check")
+{
+    ThreatCheck.Run(args);
+    return;
+}
+
 // Isolates the chump-block: one high-tier attacker vs a stream of tier-1 bodies.
 // See StallTest.cs.
 if (args.Length > 0 && args[0] == "stall-test")
