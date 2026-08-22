@@ -142,9 +142,12 @@ def invest_marks(rows, key, cls):
     return out
 
 
-# The investment race, which is what this game is actually about. Investment 8 is
-# Armageddon and a guaranteed win; its price is set when the 7th lands.
-INV8_PRICE = 40000   # PlayerState.ApplyInvestmentStep, the InvestmentCount == 7 branch
+# The investment race. ARMAGEDDON IS THE NINTH PURCHASE, not the eighth: GameEngine.Invest
+# fires it when InvestmentCount is ALREADY >= 8 and deliberately leaves income untouched
+# ("this purchase buys the end of the game, not more income"). So investment 8 is an ordinary
+# economy rung -- $40,000 for $750/s -> $2,500/s -- and Armageddon costs $121,221 on top.
+INV8_PRICE = 40000     # price set by ApplyInvestmentStep's InvestmentCount == 7 branch
+ARMAGEDDON_PRICE = 121221  # its InvestmentCount == 8 branch
 
 
 def inv_times(rows, key):
@@ -447,8 +450,7 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   <div class="shead"><span class="n">03</span><h2>The economy, both players</h2></div>
   <div class="prose">
     <p>Money on hand through the current build\'s game. The ticks along the bottom mark
-    investments &mdash; the sawtooth is the economy laddering up, not spending. Investment 8 is
-    Armageddon, and Armageddon is a guaranteed win, so this chart is the game.</p>
+    investments &mdash; the sawtooth is the economy laddering up, not spending.</p>
   </div>
   <figure>
     <p class="figtitle">Money on hand</p>
@@ -482,9 +484,14 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
     {NEW_END-RACE_FROM:.0f} seconds we had, we earned ${EARNED_LATE:,.0f} and spent
     <strong>${SPEND_LATE:,.0f} of it on defence</strong> &mdash; against the
     ${THEIR_SPEND_LATE:,.0f} they spent attacking. Our cash peaked at ${PEAK_CASH:,.0f}:
-    <strong>{100*PEAK_CASH/INV8_PRICE:.0f}% of the price</strong>. The bot never chose to lose
-    this race; it was never once asked whether to buy the win condition instead of the next
-    blocker.</p>
+    <strong>{100*PEAK_CASH/INV8_PRICE:.0f}% of the price</strong>.</p>
+    <p class="cap" style="max-width:none"><strong>Correction.</strong> An earlier version of this
+    page called investment 8 "Armageddon, and a guaranteed win". It is not. `GameEngine.Invest`
+    fires Armageddon when the count is <em>already</em> 8 &mdash; the ninth purchase &mdash; and
+    leaves income alone, so investment 8 is an ordinary economy rung and Armageddon costs
+    ${ARMAGEDDON_PRICE:,} on top of it. That makes the gap far wider than the paragraph above
+    implies: the bot was not one affordable rung from winning, it was two, and the second is
+    {ARMAGEDDON_PRICE/INV8_PRICE:.0f}x the price of the first.</p>
   </div>
   <p class="cap">Our line sits above $5,000 for {CASH_PCT:.0f}% of the game, up from 16% before the
   repair fix. That is money not being burned on $8,837 repairs &mdash; but the defensive comparison

@@ -127,19 +127,67 @@ a genuine interaction: neither change is worth much alone, and the pair is worth
 - **Two survival clocks.** The defence reads `ThreatModel`; repair still reads
   `EstimateProjectedThreatDps`. They share a threshold (`RepairTtdSeconds`) but not a number.
   Unifying them changes the SHIPPED bot's repair timing and needs its own measurement.
-- **THE GAME IS LOST ON THE EIGHTH INVESTMENT, AND THE BOT IS NEVER ASKED ABOUT IT.** This
-  replaces the earlier "the bot gains no economic advantage", which was wrong. In the pinned
-  mirror the two economies are **lock-step identical for 7 rungs** — the same seconds for each,
-  and the bot reaches #7 **3s ahead** (148s vs 151s). The premise works. Then the opponent buys
-  #8 at 221s, triples to $2,500/s, and the bot never buys it and dies 65s later.
+- **ARMAGEDDON IS THE NINTH PURCHASE, NOT THE EIGHTH.** `GameEngine.Invest` fires it when
+  `InvestmentCount` is *already* >= 8 and deliberately leaves income untouched ("this purchase
+  buys the end of the game, not more income", GameEngine.cs:517). So investment 8 is an ordinary
+  economy rung — $40,000 for $750/s → $2,500/s — and Armageddon costs **$121,221** on top.
+  An earlier version of this file and of `mirror_anatomy.html` said investment 8 *was*
+  Armageddon; both are corrected.
 
-  Investment 8 costs **$40,000** (`PlayerState.ApplyInvestmentStep`, the `InvestmentCount == 7`
-  branch) and IS Armageddon, i.e. the win condition. In the 138s available the bot earned
-  $103,425 and spent **$76,935 of it on defence**; its cash peaked at $21,650, **54% of the
-  price**. The defensive comparison prices every option against *dying* and nothing against
-  *winning*, so the last rung is invisible to it. A savings gate at investment 7 — cap the
-  defensive burn rate once the Armageddon rung is the only thing left to buy — is the next
-  change to try, and it is a bigger lever than any wiper tuning. See `mirror_anatomy.html`.
+- **The bot is NOT losing an economic race — it fields MORE army than the opponent and dies.**
+  This retracts the "savings gate for Armageddon" recommendation that replaced the earlier
+  "no economic advantage" claim. In the pinned mirror the bot puts **$215,781** of units on the
+  field against the opponent's **$172,781**. Fielding 25% more army value and still losing is a
+  conversion problem, not a budget one, and no savings rule addresses it.
+
+## REINFORCEMENTS IS THE BIGGEST SINGLE FACTOR MEASURED SO FAR
+
+`reinforcements_3` costs **$1,440** and spawns **5 × tier 7** on a 10s cooldown. At White's
+$2,066 per tier 7 that is **$10,330 of army for $1,440 — a 7.2× multiplier**, and no unit
+purchase in the game comes close. In the pinned mirror it fires as a metronome: 13 casts, one
+every 10s from 163s to the end, and the bot's decision arm during those windows is dominated by
+`critical` and `outmatched`.
+
+**The bot does use its defensive gadget** — 28 casts in the mirror, ending on `reinforcements_3`,
+identical to the opponent. That worry is unfounded. The problem is what happens next.
+
+Win rate by which defensive gadget each side holds (n=80, random loadouts, defence-only in seat 1):
+
+| our defensive gadget | n | we win | our army fielded | we paid | free |
+|---|---|---|---|---|---|
+| wall | 20 | **75%** | $8,215 | $8,215 | 0% |
+| reinforcements | 20 | 55% | **$66,542** | $6,165 | **91%** |
+| speed | 20 | 45% | $9,657 | $9,657 | 0% |
+| heal | 20 | 40% | $7,663 | $7,663 | 0% |
+
+| THEIR defensive gadget | n | we win |
+|---|---|---|
+| speed | 19 | 84% |
+| wall | 21 | 76% |
+| heal | 19 | 37% |
+| **reinforcements** | 21 | **19%** |
+
+Two things, and the second is the actionable one:
+
+- **The opponent holding reinforcements is worth about −60 points to us** (19% against 76–84%).
+  It is the largest effect any instrument in this project has measured on this bot.
+- **Our own reinforcements gives us 8× the army value and converts it WORSE than wall does.**
+  $66,542 fielded at 55% against wall's $8,215 at 75%. We are handed the single strongest
+  economic engine in the game and finish behind a gadget that grants no units at all.
+
+Why it is squandered is not yet proven, but two mechanisms are visible in the code:
+
+- **Reinforcement units march.** `ReinforcementsEffect.ExecuteScheduled` calls
+  `SpawnUnit(side, id, true)` with no position, so they appear at the caster's castle and walk at
+  the enemy like any other unit. A defence-only bot converts its free tier-7s into an attack it
+  has otherwise renounced, meeting the enemy mid-map instead of holding the line.
+- **`ThreatModel.EstimateRelief` scores reinforcements at ZERO** (the `default:` branch), on the
+  reasoning that friendly-side gadgets "show up in the next decision's board anyway". So while
+  five free tier-7s are inbound the bot keeps buying chumps at maximum rate, paying for blocking
+  it has already bought.
+
+Both are testable and neither has been tested. This is the next thing to work on, ahead of any
+further wiper or cooldown tuning.
 
 ## Reproducing
 

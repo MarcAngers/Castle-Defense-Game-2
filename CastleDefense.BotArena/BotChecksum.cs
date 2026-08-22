@@ -106,6 +106,7 @@ namespace CastleDefense.BotArena
                 // landed -- at cd 0 it claims to have destroyed 1.28x everything the opponent
                 // ever bought, which is impossible. This cannot inflate: a unit is counted once.
                 var seenFoe = new Dictionary<Guid, double>();
+                var seenOwn = new Dictionary<Guid, double>();
 
                 while (!state.IsGameOver)
                 {
@@ -153,8 +154,11 @@ namespace CastleDefense.BotArena
                     p2.Update(engine);
                     int after = state.Units.Count(u => u.Side == 1);
                     foreach (var u in state.Units)
-                        if (u.Side == 2 && !seenFoe.ContainsKey(u.InstanceId))
-                            seenFoe[u.InstanceId] = CastleDefense.Engine.Gadgets.GadgetTargeting.UnitCost(engine, u);
+                    {
+                        var book = u.Side == 2 ? seenFoe : seenOwn;
+                        if (!book.ContainsKey(u.InstanceId))
+                            book[u.InstanceId] = CastleDefense.Engine.Gadgets.GadgetTargeting.UnitCost(engine, u);
+                    }
                     if (after > before)
                     {
                         p1Spawns += after - before;
@@ -176,7 +180,16 @@ namespace CastleDefense.BotArena
                 row += $"{engine.MoneySpentOnUnits[1],9:F0}{engine.MoneySpentOnUnits[2],9:F0}";
                                 var aliveFoe = state.Units.Where(u => u.Side == 2).Select(u => u.InstanceId).ToHashSet();
                 double foeLost = seenFoe.Where(kv => !aliveFoe.Contains(kv.Key)).Sum(kv => kv.Value);
-                row += $"  FOELOST={foeLost:F0} FOESEEN={seenFoe.Values.Sum():F0}";
+                row += $"  FOELOST={foeLost:F0} FOESEEN={seenFoe.Values.Sum():F0} OWNSEEN={seenOwn.Values.Sum():F0}";
+                // Gadget casts per side. reinforcements_3 buys 5 tier-7 units ($10,330 of
+                // White army) for $1,440 on a 10s cooldown -- a 7.2x multiplier no unit
+                // purchase can match -- so "did each side actually fire its defensive
+                // gadget" is a first-order economic question, not a detail.
+                row += $"  GAD p1 off={p1.ActionCounts[11]} def={p1.ActionCounts[12]} sig={p1.ActionCounts[13]}"
+                     + $" | p2 off={p2.ActionCounts[11]} def={p2.ActionCounts[12]} sig={p2.ActionCounts[13]}";
+                // The CAST COUNT hides the tier, and the tier is the whole story: the same
+                // 28 casts are 5 tier-1 units each on the base gadget and 5 tier-7 on tier 3.
+                row += $"  DEFGAD p1={state.Player1.DefensiveGadget?.Id} p2={state.Player2.DefensiveGadget?.Id}";
                 row += $"  WIPE n={p1.WipeCount} reach={p1.WipeValueReached:F0} cred={p1.WipeValueCredited:F0} paid={p1.WipeSpend:F0} "
                     + $"altkill={p1.WipeBestAltKill:F0} altcost={p1.WipeBestAltCost:F0} altdiff={p1.WipeBestAltCount}";
                 Console.WriteLine(row + "  " + string.Join(" ", reasons.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value))
