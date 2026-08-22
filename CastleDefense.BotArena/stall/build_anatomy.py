@@ -15,7 +15,8 @@ def load(name):
     for r in rows:
         for k in ("tick", "hp", "maxhp", "money", "inv", "own", "enemy",
                   "enemy_dps", "enemy_swings", "enemy_value",
-                  "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"):
+                  "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8",
+                  "p2money", "p2inv", "p1income", "p2income", "p1spent", "p2spent"):
             r[k] = float(r[k])
         r["t"] = round(r["tick"] / 30.0, 2)
     return rows
@@ -100,6 +101,39 @@ x_axis = "".join(
     f'<text class="ax" x="{x(t):.1f}" y="{PADT+H_DPS+22}" text-anchor="middle">{t}s</text>'
     for t in [0, 40, 80, 120, 160, 200, int(T_MAX)])
 
+# ── economy figure ──────────────────────────────────────────────────────────
+H_ECON = 190
+MONEY_MAX = max(max(r["money"] for r in NEW), max(r["p2money"] for r in NEW))
+
+
+def yecon(v): return PADT + H_ECON * (1 - v / MONEY_MAX)
+
+
+econ_grid = "".join(
+    f'<line class="grid" x1="{PADL}" y1="{yecon(v):.1f}" x2="{W-PADR}" y2="{yecon(v):.1f}"/>'
+    f'<text class="ax" x="{PADL-9}" y="{yecon(v)+3.5:.1f}" text-anchor="end">${fmt(v)}</text>'
+    for v in ticks(MONEY_MAX, 4))
+econ_x = "".join(
+    f'<text class="ax" x="{x(t):.1f}" y="{PADT+H_ECON+22}" text-anchor="middle">{t}s</text>'
+    for t in [0, 40, 80, 120, 160, 200, int(T_MAX)])
+
+
+def invest_marks(rows, key, cls):
+    """A tick wherever an investment lands -- the money sawtooth is this, not spending."""
+    out, prev = "", rows[0][key]
+    for r in rows:
+        if r[key] > prev:
+            out += (f'<line class="{cls}" x1="{x(r["t"]):.1f}" y1="{PADT+H_ECON-7}" '
+                    f'x2="{x(r["t"]):.1f}" y2="{PADT+H_ECON}"/>')
+            prev = r[key]
+    return out
+
+
+econ_us = path(NEW, yecon, "money")
+econ_them = path(NEW, yecon, "p2money")
+econ_marks = invest_marks(NEW, "inv", "invus") + invest_marks(NEW, "p2inv", "invthem")
+LAST = NEW[-1]
+
 markers, cards = "", ""
 RAMP = {"T3": "var(--ord-1)", "T4": "var(--ord-1)", "T5": "var(--ord-2)",
         "T6": "var(--ord-2)", "T7": "var(--ord-3)", "T8": "var(--ord-3)"}
@@ -139,13 +173,13 @@ HTML = f"""<title>Anatomy of a Lost Mirror</title>
 <style>
 :root{{--ground:#f5f3ee;--surface:#fffdf9;--sunken:#edeae2;--ink:#1b1813;--ink-soft:#5a5346;
 --ink-dim:#8a8271;--rule:#dad5c8;--rule-soft:#e7e3d9;--accent:#8a6212;--accent-w:#f0e4c8;
---new:#2a78d6;--old:#eb6834;--ord-1:#86b6ef;--ord-2:#2a78d6;--ord-3:#104281}}
+--new:#2a78d6;--old:#eb6834;--them:#1baf7a;--ord-1:#86b6ef;--ord-2:#2a78d6;--ord-3:#104281}}
 @media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--ground:#131210;--surface:#1c1a16;
 --sunken:#242119;--ink:#efebe1;--ink-soft:#b3ab99;--ink-dim:#837b69;--rule:#343026;--rule-soft:#282419;
---accent:#d6a741;--accent-w:#3a2e14;--new:#3987e5;--old:#d95926;--ord-1:#b7d3f6;--ord-2:#5598e7;--ord-3:#184f95}}}}
+--accent:#d6a741;--accent-w:#3a2e14;--new:#3987e5;--old:#d95926;--them:#199e70;--ord-1:#b7d3f6;--ord-2:#5598e7;--ord-3:#184f95}}}}
 :root[data-theme="dark"]{{--ground:#131210;--surface:#1c1a16;--sunken:#242119;--ink:#efebe1;
 --ink-soft:#b3ab99;--ink-dim:#837b69;--rule:#343026;--rule-soft:#282419;--accent:#d6a741;
---accent-w:#3a2e14;--new:#3987e5;--old:#d95926;--ord-1:#b7d3f6;--ord-2:#5598e7;--ord-3:#184f95}}
+--accent-w:#3a2e14;--new:#3987e5;--old:#d95926;--them:#199e70;--ord-1:#b7d3f6;--ord-2:#5598e7;--ord-3:#184f95}}
 *{{box-sizing:border-box}}
 body{{background:var(--ground);color:var(--ink);margin:0;padding:0 24px 88px;
 font-family:"Newsreader",Georgia,serif;font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}}
@@ -177,6 +211,9 @@ figure{{margin:0;background:var(--surface);border:1px solid var(--rule);padding:
 .scroll{{overflow-x:auto}} svg{{display:block;width:100%;height:auto;font-family:"IBM Plex Mono",monospace}}
 .grid{{stroke:var(--rule-soft);stroke-width:1}} .ax{{fill:var(--ink-dim);font-size:10.5px}}
 .lnew{{fill:none;stroke:var(--new);stroke-width:2;stroke-linejoin:round}}
+.lthem{{fill:none;stroke:var(--them);stroke-width:2;stroke-linejoin:round}}
+.invus{{stroke:var(--new);stroke-width:2;opacity:.9}}
+.invthem{{stroke:var(--them);stroke-width:2;opacity:.9}}
 .lold{{fill:none;stroke:var(--old);stroke-width:2;stroke-linejoin:round;opacity:.85}}
 .anew{{fill:var(--new);opacity:.12}} .aold{{fill:var(--old);opacity:.10}}
 .mark{{stroke:var(--accent);stroke-width:1;stroke-dasharray:2 3;opacity:.65}}
@@ -184,6 +221,7 @@ figure{{margin:0;background:var(--surface);border:1px solid var(--rule);padding:
 .marklab{{fill:var(--accent);font-size:11px;font-weight:600}}
 .legend{{display:flex;flex-wrap:wrap;gap:18px;margin:10px 0 4px 4px;font-family:"Archivo",sans-serif;font-size:.78rem;color:var(--ink-soft)}}
 .legend i{{display:inline-block;width:16px;height:3px;border-radius:2px;margin-right:7px;vertical-align:middle}}
+.legend .note{{color:var(--ink-dim);font-style:italic}}
 .snaps{{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);
 grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-top:22px}}
 .snap{{background:var(--surface);padding:16px 15px}}
@@ -286,7 +324,47 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
 </section>
 
 <section>
-  <div class="shead"><span class="n">03</span><h2>Where the money went</h2></div>
+  <div class="shead"><span class="n">03</span><h2>The economy, both players</h2></div>
+  <div class="prose">
+    <p>Money on hand through the current build\'s game. The ticks along the bottom mark
+    investments &mdash; the sawtooth is the economy laddering up, not spending.</p>
+  </div>
+  <figure>
+    <p class="figtitle">Money on hand</p>
+    <p class="figsub">us against the shipped attacking bot, same team, same loadout</p>
+    <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_ECON+30}" role="img"
+      aria-label="Money over time for both players. Both ladder up through seven investments; the opponent finishes with substantially more cash.">
+      {econ_grid}{econ_marks}
+      <path class="lthem" d="{econ_them}"/>
+      <path class="lnew" d="{econ_us}"/>
+      {econ_x}
+    </svg></div>
+    <div class="legend">
+      <span><i style="background:var(--new)"></i>us (defence only)</span>
+      <span><i style="background:var(--them)"></i>them (shipped attacking bot)</span>
+      <span class="note">ticks along the axis mark each player&rsquo;s investments, in their own colour</span>
+    </div>
+  </figure>
+
+  <div class="callout">
+    <h3>Identical economies &mdash; which kills the premise</h3>
+    <p>Both players finish on <strong>income ${LAST['p1income']:,.0f}/s</strong> having earned
+    <strong>{LAST['inv']:.0f} investments each</strong>. The defence-only bot is not out-earning
+    anybody. The whole case for playing this way was "defend cheaply, invest faster, reach
+    Armageddon first" &mdash; and the ladders are the same height.</p>
+    <p>What differs is what the money became. We spent ${LAST['p1spent']:,.0f} on units and they
+    spent ${LAST['p2spent']:,.0f}; they finish holding ${LAST['p2money']:,.0f} against our
+    ${LAST['money']:,.0f}. They are richer at the end <em>because we never threaten them</em> &mdash;
+    nothing forces them to convert cash into defence, so their spending is discretionary and ours
+    is not.</p>
+  </div>
+  <p class="cap">Our line sits above $5,000 for 34% of the game, up from 16% before the repair
+  fix. Some of that is healthy &mdash; it is money not being burned on $8,837 repairs &mdash; but
+  it is also money the bot never finds a use for while it is being killed.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">04</span><h2>Where the money went</h2></div>
   <div class="prose">
     <p>The old build bought six repairs in seven seconds, each one raising max health, which drops
     time-to-death back under the threshold a second later. The last cost <strong>$8,837 for 0.89
