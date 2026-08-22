@@ -347,6 +347,13 @@ if (args.Length > 0 && args[0] == "defence-duel")
     return;
 }
 
+// Deterministic fingerprint of HeuristicBot's play, for refactor guards. See BotChecksum.cs.
+if (args.Length > 0 && args[0] == "bot-checksum")
+{
+    BotChecksum.Run(args);
+    return;
+}
+
 // Guards ThreatModel against the measured stall-test data. See ThreatCheck.cs.
 if (args.Length > 0 && args[0] == "threat-check")
 {

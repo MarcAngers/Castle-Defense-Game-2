@@ -1,6 +1,7 @@
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
+using System;
 
 namespace CastleDefense.Engine.Bot
 {
@@ -213,6 +214,108 @@ namespace CastleDefense.Engine.Bot
             m.WalkSeconds = float.IsPositiveInfinity(nearestWalk) ? 0f : nearestWalk;
             m.RefitSwingsToKill(castleHealth);
             return m;
+        }
+
+
+        /// <summary>
+        /// What one gadget cast takes off the threat, in the two currencies
+        /// <see cref="ApplyRelief"/> understands.
+        ///
+        /// DELIBERATELY CONSERVATIVE, and the asymmetry is the reason. Under-claiming relief
+        /// makes the bot buy a few more bodies than it strictly needed -- cheap. Over-claiming
+        /// makes it stand down in front of an attack that is still coming -- fatal. Every
+        /// judgement call below is therefore resolved downward.
+        ///
+        /// Keyed by gadget FAMILY rather than derived generically from Radius, because the
+        /// generic reading is wrong for the most important case: freeze has Radius 0 but
+        /// FreezeEffect hits every enemy on the board, and gives tier 8 units one second where
+        /// everything else gets StatusDuration. A generic rule would have quietly mis-scored
+        /// the single best delaying tool in the game.
+        /// </summary>
+        public static (float SuppressSeconds, float KilledSwingRate, float KilledDps)
+            EstimateRelief(GadgetDefinition def, int position,
+                           System.Collections.Generic.List<Unit> enemyUnits)
+        {
+            if (def == null || enemyUnits == null || enemyUnits.Count == 0) return (0f, 0f, 0f);
+            string family = def.Id.Split('_')[0].ToLowerInvariant();
+
+            switch (family)
+            {
+                // ---- DELAYERS -------------------------------------------------------
+                case "freeze":
+                {
+                    // Global, and tier 8 is capped at 30 ticks by FreezeEffect. Take the
+                    // SHORTEST freeze any live attacker will get: the attack resumes as soon
+                    // as the first one thaws, so that is the honest suppression.
+                    float shortest = def.StatusDuration / (float)GameEngine.TICKS_PER_SECOND;
+                    foreach (var u in enemyUnits)
+                        if (u.Tier == 8) { shortest = Math.Min(shortest, 1f); break; }
+                    return (Math.Max(0f, shortest), 0f, 0f);
+                }
+                case "blackhole":
+                {
+                    // Hard CC, but only for what the hazard actually catches. Scale the
+                    // duration by the share of the swing rate inside the radius.
+                    float share = SwingShareInRadius(enemyUnits, position, def.Radius);
+                    float seconds = def.HazardDuration / (float)GameEngine.TICKS_PER_SECOND;
+                    return (seconds * share, 0f, 0f);
+                }
+
+                // ---- ELIMINATORS ----------------------------------------------------
+                case "nuke":
+                case "firebomb":
+                case "meteor":
+                case "wave":
+                case "poison":
+                case "snipe":
+                {
+                    // Only count a unit as removed when the hit alone finishes it -- shield
+                    // first, then health, exactly as ApplyDamage resolves it. Burn and poison
+                    // ticks are ignored on purpose: they are real, but counting them would be
+                    // claiming a kill the cast has not yet made.
+                    int radius = family == "snipe" ? 0 : def.Radius;
+                    float killedSwings = 0f, killedDps = 0f;
+                    foreach (var u in enemyUnits)
+                    {
+                        if (radius > 0 && Math.Abs(u.Position - position) > radius) continue;
+                        var ud = LookupDefinition(u);
+                        if (ud == null || ud.AttackSpeed <= 0f) continue;
+                        if (def.BaseValue < u.CurrentHealth + u.CurrentShield) continue;
+
+                        float swing = ud.Damage * (ud.AttackType == AttackType.Siege ? 2f : 1f);
+                        killedSwings += ud.AttackSpeed;
+                        killedDps += ud.AttackSpeed * swing;
+                        if (radius <= 0) break;   // snipe removes exactly one thing
+                    }
+                    return (0f, killedSwings, killedDps);
+                }
+
+                // ---- NOTHING THE THREAT MODEL CAN BANK ------------------------------
+                // wall  -- a real absorbing body, but it blocks rather than suppresses and
+                //          modelling that properly means tracking its HP against the swings
+                //          it eats. Worth doing; not worth guessing. Scores 0 for now, which
+                //          errs the safe way.
+                // heal / speed / rage / divine / cash / reinforcements -- act on OUR side, so
+                //          they change survival without changing the threat. Any relief they
+                //          give shows up in the next decision's board anyway.
+                default:
+                    return (0f, 0f, 0f);
+            }
+        }
+
+        /// <summary>Share of the active swing rate standing within <paramref name="radius"/> of a point.</summary>
+        private static float SwingShareInRadius(System.Collections.Generic.List<Unit> enemyUnits,
+                                                int position, int radius)
+        {
+            float total = 0f, inside = 0f;
+            foreach (var u in enemyUnits)
+            {
+                var ud = LookupDefinition(u);
+                if (ud == null || ud.AttackSpeed <= 0f) continue;
+                total += ud.AttackSpeed;
+                if (radius <= 0 || Math.Abs(u.Position - position) <= radius) inside += ud.AttackSpeed;
+            }
+            return total <= 0.0001f ? 0f : inside / total;
         }
 
         /// <summary>
