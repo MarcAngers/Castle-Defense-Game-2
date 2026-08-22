@@ -134,6 +134,68 @@ econ_them = path(NEW, yecon, "p2money")
 econ_marks = invest_marks(NEW, "inv", "invus") + invest_marks(NEW, "p2inv", "invthem")
 LAST = NEW[-1]
 
+
+# ── decision ribbon ─────────────────────────────────────────────────────────
+# Four groups rather than seven raw arms. A ribbon puts arbitrary pairs of segments
+# side by side, so the all-pairs colour floor applies -- and the reference palette
+# only clears that for its first three slots. Three hues plus a recessive neutral is
+# what fits, and the grouping is the one that answers "is the bot acting, and why".
+GROUP = {
+    "": "idle", "(none)": "idle", "watch": "idle", "free": "idle",
+    "wait": "holding", "outmatched": "holding",
+    "block": "spending", "wipe": "spending", "repair": "spending", "repair-idle": "spending",
+    "critical": "critical",
+}
+GCOLOR = {"idle": "var(--sunken)", "holding": "var(--them)",
+          "spending": "var(--new)", "critical": "var(--old)"}
+H_RIB = 34
+
+
+def ribbon(rows):
+    """Contiguous runs of the grouped decision, as one row of segments."""
+    segs, start, cur = [], rows[0]["t"], GROUP.get(rows[0]["choice"], "idle")
+    for r in rows[1:]:
+        g = GROUP.get(r["choice"], "idle")
+        if g != cur:
+            segs.append((start, r["t"], cur))
+            start, cur = r["t"], g
+    segs.append((start, rows[-1]["t"], cur))
+    out = ""
+    for a, b, g in segs:
+        w = max(0.6, x(b) - x(a))
+        out += (f'<rect x="{x(a):.1f}" y="{PADT}" width="{w:.1f}" height="{H_RIB}" '
+                f'fill="{GCOLOR[g]}"><title>{g} {a:.0f}-{b:.0f}s</title></rect>')
+    return out
+
+
+rib = ribbon(NEW)
+rib_x = "".join(
+    f'<text class="ax" x="{x(t):.1f}" y="{PADT+H_RIB+18}" text-anchor="middle">{t}s</text>'
+    for t in [0, 40, 80, 120, 160, 200, int(T_MAX)])
+
+# share of time per group, and the full arm breakdown per investment level
+import collections
+gshare = collections.Counter(GROUP.get(r["choice"], "idle") for r in NEW)
+gtotal = sum(gshare.values())
+rib_legend = "".join(
+    f'<span><i style="background:{GCOLOR[g]}"></i>{g} &mdash; {100*gshare[g]/gtotal:.0f}% of the game</span>'
+    for g in ("idle", "holding", "spending", "critical"))
+
+ARMS = ["watch", "wait", "outmatched", "block", "wipe", "critical"]
+inv_rows = ""
+for L in sorted({int(r["inv"]) for r in NEW}):
+    sub = [r for r in NEW if int(r["inv"]) == L]
+    if len(sub) < 5:
+        continue
+    cc = collections.Counter(r["choice"] or "idle" for r in sub)
+    span = max(r["t"] for r in sub) - min(r["t"] for r in sub)
+    cells = ""
+    for a in ARMS:
+        pct = 100 * cc[a] / len(sub)
+        k = "hot" if (a == "critical" and pct >= 50) else ("dim" if pct < 1 else "")
+        cells += f'<td class="{k}">{pct:.0f}%</td>'
+    inv_rows += (f'<tr><th class="rh">{L}</th><td class="num dim">{span:.0f}s</td>{cells}</tr>')
+
 markers, cards = "", ""
 RAMP = {"T3": "var(--ord-1)", "T4": "var(--ord-1)", "T5": "var(--ord-2)",
         "T6": "var(--ord-2)", "T7": "var(--ord-3)", "T8": "var(--ord-3)"}
@@ -220,8 +282,11 @@ figure{{margin:0;background:var(--surface);border:1px solid var(--rule);padding:
 .markdot{{fill:var(--new);stroke:var(--surface);stroke-width:2}}
 .marklab{{fill:var(--accent);font-size:11px;font-weight:600}}
 .legend{{display:flex;flex-wrap:wrap;gap:18px;margin:10px 0 4px 4px;font-family:"Archivo",sans-serif;font-size:.78rem;color:var(--ink-soft)}}
-.legend i{{display:inline-block;width:16px;height:3px;border-radius:2px;margin-right:7px;vertical-align:middle}}
+.legend i{{display:inline-block;width:16px;height:12px;border-radius:2px;margin-right:7px;vertical-align:middle}}
 .legend .note{{color:var(--ink-dim);font-style:italic}}
+.legend i.sq{{width:12px;height:12px;border-radius:2px}}
+td.hot{{color:var(--old);font-weight:600;background:var(--accent-w)}}
+th.rh{{text-align:left;font-family:"Archivo",sans-serif;font-weight:600;color:var(--ink)}}
 .snaps{{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);
 grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-top:22px}}
 .snap{{background:var(--surface);padding:16px 15px}}
@@ -364,7 +429,53 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
 </section>
 
 <section>
-  <div class="shead"><span class="n">04</span><h2>Where the money went</h2></div>
+  <div class="shead"><span class="n">04</span><h2>Which arm the bot is in</h2></div>
+  <div class="prose">
+    <p>The same clock again, as a band. Four groups: <em>idle</em> is not engaging at all,
+    <em>holding</em> is engaged but deliberately not spending, <em>spending</em> is buying
+    blockers or a wipe, and <em>critical</em> is inside its own death window with the economics
+    switched off.</p>
+  </div>
+  <figure>
+    <p class="figtitle">Decision arm through the game</p>
+    <p class="figsub">what the defensive comparison chose, moment to moment</p>
+    <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_RIB+26}" role="img"
+      aria-label="Decision arm over time: idle for the first two thirds, then holding, then predominantly critical from 183 seconds onward.">
+      {rib}{rib_x}
+    </svg></div>
+    <div class="legend">{rib_legend}</div>
+  </figure>
+
+  <div class="prose" style="margin-top:26px">
+    <p>Broken out by investment level, which is where the story is:</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>inv</th><th>lasted</th><th>watch</th><th>wait</th><th>outmatched</th>
+      <th>block</th><th>wipe</th><th>critical</th></tr></thead>
+    <tbody>{inv_rows}</tbody>
+  </table></div>
+
+  <div class="callout">
+    <h3>Investment 7 is where it stops choosing</h3>
+    <p>Through investments 3 to 5 the bot is in <em>watch</em> almost the whole time &mdash;
+    correctly, nothing is threatening it. At investment 6 it fights its first real engagement and
+    spends most of it <em>holding</em>, which is the branch working as designed: it lets the wave
+    form and answers it.</p>
+    <p>Then at investment 7 it spends <strong>68% of the level in <em>critical</em></strong>. That
+    is not a decision, it is the absence of one &mdash; the survival law has it permanently inside
+    its own death window, so the dollar comparison never runs and it just blocks at maximum rate.
+    <em>wipe</em> fires 2% of the time, at exactly the point in the game where a single unit could
+    clear the biggest army it will ever face.</p>
+  </div>
+  <p class="cap">Across the whole game: {100*gshare['idle']/gtotal:.0f}% idle,
+  {100*gshare['holding']/gtotal:.0f}% holding, {100*gshare['spending']/gtotal:.0f}% spending,
+  {100*gshare['critical']/gtotal:.0f}% critical &mdash; so only
+  {100*gshare['spending']/gtotal:.0f}% of the game is spent actually buying anything, and more
+  than a quarter of it is spent past the point where the bot still has a choice.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">05</span><h2>Where the money went</h2></div>
   <div class="prose">
     <p>The old build bought six repairs in seven seconds, each one raising max health, which drops
     time-to-death back under the threshold a second later. The last cost <strong>$8,837 for 0.89
