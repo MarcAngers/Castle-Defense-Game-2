@@ -64,8 +64,20 @@ anything.
   collapses to 21.9% at 124 wipers a game. The gate prices the THREAT and knows nothing about the
   wiper bought two seconds ago that has not landed. Redundant purchases are a self-knowledge
   problem, not a valuation one. Subtracting in-flight wipers from the threat is the real fix.
-- **Wipes still collect $715 against a $1,528 price — 0.47×.** They are bought for the time they
-  buy, not the material they kill. Whether that is acceptable is unresolved; win rate says yes.
+- **The wiper SELECTION RULE is wrong, and it is the reason wipes lose money.** `FindWiper`
+  requires `d.Damage >= toughest` — the unit must one-shot the toughest thing in the band. In a
+  pile of forty tier-4s plus one tier-7 that forces a $2,066 purchase to clear mostly $18 chaff,
+  when an $81 tier-5 would one-shot all forty tier-4s. Measured over 1,600 wipes:
+
+  | | kills | price | net per wipe | ratio |
+  |---|---|---|---|---|
+  | what we buy | $715 | $1,528 | **−$813** | 0.47× |
+  | best available alternative | $361 | $171 | **+$189** | 2.11× |
+
+  A different unit would have been the better buy in **1,064 of 1,600 wipes (66%)**, worth
+  **+$1,003 per wipe**. The rule optimises "kill everything in one swing" when it should
+  maximise value killed minus price — and the cheaper unit killing less is usually the better
+  trade. Fixing this is the highest-value open item.
 - **Two survival clocks.** The defence reads `ThreatModel`; repair still reads
   `EstimateProjectedThreatDps`. They share a threshold (`RepairTtdSeconds`) but not a number.
   Unifying them changes the SHIPPED bot's repair timing and needs its own measurement.
