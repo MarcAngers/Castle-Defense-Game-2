@@ -69,7 +69,12 @@ namespace CastleDefense.BotArena
                 dumpw = new StreamWriter(dump);
                 dumpw.WriteLine("tick,hp,maxhp,money,inv,own,enemy,enemy_dps,enemy_swings,"
                     + "enemy_value,choice,t1,t2,t3,t4,t5,t6,t7,t8,"
-                    + "wipe_veto,w_radius,w_reach,w_valrad,w_valreach,w_spread,p2money,p2inv,p1income,p2income,p1spent,p2spent");
+                    + "wipe_veto,w_radius,w_reach,w_valrad,w_valreach,w_spread,p2money,p2inv,p1income,p2income,p1spent,p2spent,"
+                    // The trade curve: value each side has LOST cumulatively, plus what each
+                    // side is holding in gadgets. "When did we stop winning the trades" is not
+                    // answerable without these two running totals.
+                    + "own_lost,foe_lost,own_val,foe_val,p1def,p2def,p1off,p2off,"
+                    + "o1,o2,o3,o4,o5,o6,o7,o8,p2hp,p2maxhp,ownpos,foepos");
             }
 
             for (int g = 0; g < games; g++)
@@ -107,6 +112,7 @@ namespace CastleDefense.BotArena
                 // ever bought, which is impossible. This cannot inflate: a unit is counted once.
                 var seenFoe = new Dictionary<Guid, double>();
                 var seenOwn = new Dictionary<Guid, double>();
+                double ownLost = 0, foeLost = 0;   // running, so the dump can chart the trade
 
                 while (!state.IsGameOver)
                 {
@@ -125,6 +131,9 @@ namespace CastleDefense.BotArena
                         var foe = state.Units.Where(u => u.Side == 2).ToList();
                         var tm = CastleDefense.Engine.Bot.ThreatModel.Build(engine, 1, foe, state.Player1.CastleHealth);
                         var tiers = new int[9];
+                        var ot = new int[9];
+                        foreach (var u in state.Units)
+                            if (u.Side == 1 && u.Tier >= 1 && u.Tier <= 8) ot[u.Tier]++;
                         double val = 0;
                         foreach (var u in foe)
                         {
@@ -141,7 +150,17 @@ namespace CastleDefense.BotArena
                             + $"{p1.LastWipeValRadius:F0},{p1.LastWipeValReach:F0},{p1.LastWipeSpread:F0},"
                             + $"{state.Player2.Money:F0},{state.Player2.InvestmentCount},"
                             + $"{state.Player1.Income:F0},{state.Player2.Income:F0},"
-                            + $"{engine.MoneySpentOnUnits[1]:F0},{engine.MoneySpentOnUnits[2]:F0}");
+                            + $"{engine.MoneySpentOnUnits[1]:F0},{engine.MoneySpentOnUnits[2]:F0},"
+                            + $"{ownLost:F0},{foeLost:F0},{seenOwn.Values.Sum():F0},{seenFoe.Values.Sum():F0},"
+                            + $"{state.Player1.DefensiveGadget?.Id},{state.Player2.DefensiveGadget?.Id},"
+                            + $"{state.Player1.OffensiveGadget?.Id},{state.Player2.OffensiveGadget?.Id},"
+                            + $"{ot[1]},{ot[2]},{ot[3]},{ot[4]},{ot[5]},{ot[6]},{ot[7]},{ot[8]},"
+                            + $"{state.Player2.CastleHealth},{state.Player2.CastleMaxHealth},"
+                            // Mean position of each army: where the fighting line actually sits.
+                            // A defence-only bot whose line is deep in enemy territory is not
+                            // defending, whatever its decision arm says it chose.
+                            + $"{(state.Units.Where(u => u.Side == 1).Select(u => (double)u.Position).DefaultIfEmpty(0).Average()):F0},"
+                            + $"{(state.Units.Where(u => u.Side == 2).Select(u => (double)u.Position).DefaultIfEmpty(0).Average()):F0}");
                     }
                     if (g == trace && state.CurrentTick % 30 == 0)
                         Console.WriteLine($"  t={state.CurrentTick/30,4}s hp={state.Player1.CastleHealth,7} "
@@ -158,6 +177,11 @@ namespace CastleDefense.BotArena
                         var book = u.Side == 2 ? seenFoe : seenOwn;
                         if (!book.ContainsKey(u.InstanceId))
                             book[u.InstanceId] = CastleDefense.Engine.Gadgets.GadgetTargeting.UnitCost(engine, u);
+                    }
+                    {
+                        var live = new HashSet<Guid>(state.Units.Select(u => u.InstanceId));
+                        ownLost = seenOwn.Where(kv => !live.Contains(kv.Key)).Sum(kv => kv.Value);
+                        foeLost = seenFoe.Where(kv => !live.Contains(kv.Key)).Sum(kv => kv.Value);
                     }
                     if (after > before)
                     {
@@ -178,8 +202,6 @@ namespace CastleDefense.BotArena
                   .Append(',').Append(state.Player1.InvestmentCount).Append(',').Append(state.Player2.InvestmentCount)
                   .Append(',').Append(p1Spawns).Append('\n');
                 row += $"{engine.MoneySpentOnUnits[1],9:F0}{engine.MoneySpentOnUnits[2],9:F0}";
-                                var aliveFoe = state.Units.Where(u => u.Side == 2).Select(u => u.InstanceId).ToHashSet();
-                double foeLost = seenFoe.Where(kv => !aliveFoe.Contains(kv.Key)).Sum(kv => kv.Value);
                 row += $"  FOELOST={foeLost:F0} FOESEEN={seenFoe.Values.Sum():F0} OWNSEEN={seenOwn.Values.Sum():F0}";
                 // Gadget casts per side. reinforcements_3 buys 5 tier-7 units ($10,330 of
                 // White army) for $1,440 on a 10s cooldown -- a 7.2x multiplier no unit

@@ -189,6 +189,52 @@ Why it is squandered is not yet proven, but two mechanisms are visible in the co
 Both are testable and neither has been tested. This is the next thing to work on, ahead of any
 further wiper or cooldown tuning.
 
+### WHY 170s: the reinforcements_2 -> _3 upgrade crosses the spawn ceiling
+
+Traced on the pinned mirror, both sides White/nuke/reinforcements. **Both players upgrade to
+`reinforcements_3` at exactly 152s** — the same second, because their economies are lock-step —
+and the first tier-7 casts land at 163s. The trade flips between 160s and 180s:
+
+| window | we lost | they lost | trade ratio | our castle damage | theirs |
+|---|---|---|---|---|---|
+| 100–150s (on `_2`) | $2,832 | $4,044 | **1.43×** | 600 | 600 |
+| 152–175s (crossing) | $13,062 | $11,686 | 0.89× | 0 | 0 |
+| 175–286s (on `_3`) | $192,445 | $144,045 | **0.75×** | **29,990** | 10,500 |
+
+**The mechanism is the payload tier, and the stall harness already measured it.**
+
+| gadget | payload | cost | army bought | chumps/s needed to hold (FINDINGS.md) |
+|---|---|---|---|---|
+| `reinforcements_2` | 5 × tier 5 | $180 | $405 | **2 /s** |
+| `reinforcements_3` | 5 × tier 7 | $1,440 | $10,330 | **30 /s** |
+
+The bot's hard spawn ceiling is **6/s** (`DecisionIntervalTicks = 5`, one purchase per decision).
+So the upgrade takes the incoming wave from **3× inside** what a chump line can hold to
+**5× beyond** it, in one step, and repeats it every 10s forever. Tier 7 is the single hardest tier
+to hold in the whole stall matrix — "fast enough to close and cheap enough to mass" — and
+`reinforcements_3` is a tier-7 ×5 delivery mechanism.
+
+Corroborating: our army's mean position collapses from ~650 (mid-map) before the upgrade to
+~280 after, against a castle wall at 200. The line is on our own doorstep from 175s on.
+
+**The trades are not actually lopsided per dollar fielded** — we lose 97.1% of what we field and
+they lose 93.0%. The absolute gap is mostly that we field $43,000 more army. What differs is
+CONVERSION: after 175s their army does 29,990 damage to our castle and ours does 10,500 to theirs.
+Both armies annihilate; only one of them is being spent on the objective.
+
+Three consequences for the fix, in priority order:
+
+1. **A chump-only response to `reinforcements_3` cannot work at any budget.** 30/s is not
+   reachable. The bot must stop pricing "block" as if rate were the free variable once the
+   required rate exceeds the ceiling — it already computes this (`MaxBlockCredit`), but it still
+   spends into a losing option rather than switching.
+2. **The 10s cooldown is a clock the bot can read.** The wave is perfectly periodic and its
+   composition is known from the enemy's visible gadget tier. Nothing in the bot anticipates it.
+3. **`ThreatModel.EstimateRelief` returning 0 for our own reinforcements is worse than neutral
+   here**: our five tier-7s arrive at the same cadence and are the only thing on our side that
+   can actually trade with theirs, yet the spawn logic counts them as nothing and buys chumps
+   against a wave they were going to meet anyway.
+
 ## Reproducing
 
 ```
