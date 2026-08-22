@@ -28,6 +28,7 @@ namespace CastleDefense.BotArena
             bool p1Only = false;
             int trace = -1;
             float engageDps = -1f;
+            double wiperCd = -1;
             string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides
             string dump = null;      // per-tick CSV of the traced game   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
             for (int i = 1; i < args.Length; i++)
@@ -37,15 +38,22 @@ namespace CastleDefense.BotArena
                 if (args[i] == "--p1-defence-only") { p1Only = true; defenceOnly = true; }
                 if (args[i] == "--trace" && i + 1 < args.Length) trace = int.Parse(args[++i]);
                 if (args[i] == "--engage-dps" && i + 1 < args.Length) engageDps = float.Parse(args[++i]);
+                if (args[i] == "--wiper-cd" && i + 1 < args.Length) wiperCd = double.Parse(args[++i]);
                 if (args[i] == "--loadout" && i + 1 < args.Length) loadout = args[++i];
                 if (args[i] == "--dump" && i + 1 < args.Length) dump = args[++i];
             }
 
-            var settings = defenceOnly
-                ? (engageDps >= 0f
-                    ? new HeuristicBotSettings { DefenceOnly = true, MinBlockEffectiveness = engageDps }
-                    : HeuristicBotSettings.DefenceOnlyProfile)
-                : null;
+            var settings = !defenceOnly ? null
+                : (engageDps >= 0f || wiperCd >= 0)
+                    ? new HeuristicBotSettings
+                      {
+                          DefenceOnly = true,
+                          MinBlockEffectiveness = engageDps >= 0f
+                              ? engageDps : HeuristicBotSettings.Default.MinBlockEffectiveness,
+                          WiperMinIntervalSeconds = wiperCd >= 0
+                              ? wiperCd : HeuristicBotSettings.Default.WiperMinIntervalSeconds,
+                      }
+                    : HeuristicBotSettings.DefenceOnlyProfile;
             var teams = (TeamColour[])Enum.GetValues(typeof(TeamColour));
             var offense = new[] { "nuke", "firebomb", "snipe", "freeze" };
             var defense = new[] { "heal", "reinforcements", "speed", "wall" };
