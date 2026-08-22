@@ -235,6 +235,45 @@ Three consequences for the fix, in priority order:
    can actually trade with theirs, yet the spawn logic counts them as nothing and buys chumps
    against a wave they were going to meet anyway.
 
+### CONFIRMED: the bot buys the exact unit its own gadget is handing it free
+
+Own arrivals split by provenance — `b*` = the bot paid, `f*` = a gadget spawned it free.
+Pinned White mirror, **160s to 210s**, the window where the trade flips:
+
+| tier | bought | unit price | spend | share of spend | arrived FREE in the same window |
+|---|---|---|---|---|---|
+| 1 | 163 | $3 | $489 | 2% | 0 |
+| 5 | 8 | $81 | $648 | 3% | 0 |
+| **7** | **11** | **$2,066** | **$22,726** | **95%** | **25** |
+
+**It paid $22,726 for 11 tier-7 units while 25 identical tier-7 units arrived free from its own
+`reinforcements_3`.** Five casts in fifty seconds, five units each — $51,650 of free tier 7 —
+and the spawn logic, which scores that gadget at zero relief, bought eleven more.
+
+Over the whole game: **36 tier-7 bought ($74,376) against 65 arriving free**, and tier-7
+purchases are **96% of the bot's entire $77,756 unit budget**.
+
+**The "chump-blocking" bot does not chump-block.** It bought 543 tier-1 bodies all game — $1,629,
+**2% of its spend**. The blocking law that the whole design was built on governs a fiftieth of
+what the bot actually does. Cross-referencing the wipe tally (`n=57 paid=76,130`) against total
+unit spend ($77,756) shows **98% of every dollar goes through the wiper arm**, not the block arm.
+
+So the previous entry's framing — "a chump-only response cannot work at any budget" — is true but
+beside the point: the bot was never running a chump defence to begin with. The real defect is that
+`FindWiper` maximises `value killed − price` against the CURRENT board and has no idea that five
+free tier-7s are landing every ten seconds. It buys the reinforcement wave it is already getting.
+
+Two fixes fall straight out, and both are cheap:
+
+- **Subtract in-flight and imminent friendly arrivals from the threat before pricing anything.**
+  This is the same "self-knowledge" gap already logged for redundant wipers under *Open, and
+  known* — the bot cannot see what it has already bought. Reinforcements makes it far more
+  expensive, because the arrivals are free, periodic and predictable from the enemy's visible
+  gadget tier.
+- **Price the wiper against the free alternative.** A $2,066 tier 7 bought 4 seconds before an
+  identical free one lands is a pure waste of $2,066; the option comparison never considers
+  waiting.
+
 ## Reproducing
 
 ```

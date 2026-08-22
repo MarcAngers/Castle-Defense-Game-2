@@ -74,7 +74,11 @@ namespace CastleDefense.BotArena
                     // side is holding in gadgets. "When did we stop winning the trades" is not
                     // answerable without these two running totals.
                     + "own_lost,foe_lost,own_val,foe_val,p1def,p2def,p1off,p2off,"
-                    + "o1,o2,o3,o4,o5,o6,o7,o8,p2hp,p2maxhp,ownpos,foepos");
+                    + "o1,o2,o3,o4,o5,o6,o7,o8,p2hp,p2maxhp,ownpos,foepos,"
+                    // Cumulative own arrivals split by HOW they arrived: b* = the bot
+                    // PAID for it, f* = a gadget spawned it free. The field histogram
+                    // (o*) cannot separate these, and the whole question is which.
+                    + "b1,b2,b3,b4,b5,b6,b7,b8,f1,f2,f3,f4,f5,f6,f7,f8");
             }
 
             for (int g = 0; g < games; g++)
@@ -113,13 +117,25 @@ namespace CastleDefense.BotArena
                 var seenFoe = new Dictionary<Guid, double>();
                 var seenOwn = new Dictionary<Guid, double>();
                 double ownLost = 0, foeLost = 0;   // running, so the dump can chart the trade
+                // Arrivals split by provenance. A unit that appears while engine.Tick() runs came
+                // from a scheduled gadget effect (reinforcements) and was free; one that appears
+                // while p1.Update() runs was bought. Nothing else spawns our units.
+                var bought = new int[9];
+                var freeIn = new int[9];
+                var ownIds = new HashSet<Guid>();
 
                 while (!state.IsGameOver)
                 {
                     engine.Tick();
+                    foreach (var u in state.Units)
+                        if (u.Side == 1 && ownIds.Add(u.InstanceId) && u.Tier >= 1 && u.Tier <= 8)
+                            freeIn[u.Tier]++;
                     int before = state.Units.Count(u => u.Side == 1);
                     string beforeChoice = p1.LastDefenceChoice;
                     p1.Update(engine);
+                    foreach (var u in state.Units)
+                        if (u.Side == 1 && ownIds.Add(u.InstanceId) && u.Tier >= 1 && u.Tier <= 8)
+                            bought[u.Tier]++;
                     if (!string.IsNullOrEmpty(p1.LastDefenceChoice) && p1.PendingActionCount == 0)
                     {
                         string c = p1.LastDefenceChoice;
@@ -160,7 +176,9 @@ namespace CastleDefense.BotArena
                             // A defence-only bot whose line is deep in enemy territory is not
                             // defending, whatever its decision arm says it chose.
                             + $"{(state.Units.Where(u => u.Side == 1).Select(u => (double)u.Position).DefaultIfEmpty(0).Average()):F0},"
-                            + $"{(state.Units.Where(u => u.Side == 2).Select(u => (double)u.Position).DefaultIfEmpty(0).Average()):F0}");
+                            + $"{(state.Units.Where(u => u.Side == 2).Select(u => (double)u.Position).DefaultIfEmpty(0).Average()):F0},"
+                            + $"{bought[1]},{bought[2]},{bought[3]},{bought[4]},{bought[5]},{bought[6]},{bought[7]},{bought[8]},"
+                            + $"{freeIn[1]},{freeIn[2]},{freeIn[3]},{freeIn[4]},{freeIn[5]},{freeIn[6]},{freeIn[7]},{freeIn[8]}");
                     }
                     if (g == trace && state.CurrentTick % 30 == 0)
                         Console.WriteLine($"  t={state.CurrentTick/30,4}s hp={state.Player1.CastleHealth,7} "
