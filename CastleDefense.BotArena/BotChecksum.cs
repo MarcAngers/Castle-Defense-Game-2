@@ -28,7 +28,8 @@ namespace CastleDefense.BotArena
             bool p1Only = false;
             int trace = -1;
             float engageDps = -1f;
-            string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
+            string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides
+            string dump = null;      // per-tick CSV of the traced game   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
             for (int i = 1; i < args.Length; i++)
             {
                 if (args[i] == "--games" && i + 1 < args.Length) games = int.Parse(args[++i]);
@@ -37,6 +38,7 @@ namespace CastleDefense.BotArena
                 if (args[i] == "--trace" && i + 1 < args.Length) trace = int.Parse(args[++i]);
                 if (args[i] == "--engage-dps" && i + 1 < args.Length) engageDps = float.Parse(args[++i]);
                 if (args[i] == "--loadout" && i + 1 < args.Length) loadout = args[++i];
+                if (args[i] == "--dump" && i + 1 < args.Length) dump = args[++i];
             }
 
             var settings = defenceOnly
@@ -52,6 +54,14 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"BOT CHECKSUM -- {games} seeded self-play games, "
                             + $"{(defenceOnly ? "DEFENCE-ONLY" : "shipped")} settings\n");
             Console.WriteLine($"{"game",-6}{"map",-9}{"winner",-8}{"ticks",8}{"p1hp",9}{"p2hp",9}{"p1inv",7}{"p2inv",7}{"p1units",9}{"p1$",9}{"p2$",9}");
+
+            StreamWriter dumpw = null;
+            if (dump != null)
+            {
+                dumpw = new StreamWriter(dump);
+                dumpw.WriteLine("tick,hp,maxhp,money,inv,own,enemy,enemy_dps,enemy_swings,"
+                    + "enemy_value,choice,t1,t2,t3,t4,t5,t6,t7,t8");
+            }
 
             for (int g = 0; g < games; g++)
             {
@@ -94,6 +104,24 @@ namespace CastleDefense.BotArena
                         choices[c] = choices.TryGetValue(c, out var cc) ? cc + 1 : 1;
                     }
                     _ = beforeChoice;
+                    if (dumpw != null && g == (trace < 0 ? 0 : trace) && state.CurrentTick % 3 == 0)
+                    {
+                        var foe = state.Units.Where(u => u.Side == 2).ToList();
+                        var tm = CastleDefense.Engine.Bot.ThreatModel.Build(engine, 1, foe, state.Player1.CastleHealth);
+                        var tiers = new int[9];
+                        double val = 0;
+                        foreach (var u in foe)
+                        {
+                            if (u.Tier >= 1 && u.Tier <= 8) tiers[u.Tier]++;
+                            var rd = GameDataManager.Teams.SelectMany(t2 => t2.Roster).FirstOrDefault(r2 => r2.Id == u.DefinitionId);
+                            if (rd != null) val += rd.Cost;
+                        }
+                        dumpw.WriteLine($"{state.CurrentTick},{state.Player1.CastleHealth},{state.Player1.CastleMaxHealth},"
+                            + $"{state.Player1.Money:F0},{state.Player1.InvestmentCount},"
+                            + $"{state.Units.Count(u => u.Side == 1)},{foe.Count},{tm.UnblockedDps:F0},{tm.SwingRate:F1},"
+                            + $"{val:F0},{p1.LastDefenceChoice},"
+                            + $"{tiers[1]},{tiers[2]},{tiers[3]},{tiers[4]},{tiers[5]},{tiers[6]},{tiers[7]},{tiers[8]}");
+                    }
                     if (g == trace && state.CurrentTick % 30 == 0)
                         Console.WriteLine($"  t={state.CurrentTick/30,4}s hp={state.Player1.CastleHealth,7} "
                             + $"inv={state.Player1.InvestmentCount} $={state.Player1.Money,8:F0} "
@@ -126,6 +154,8 @@ namespace CastleDefense.BotArena
                 Console.WriteLine(row + "  " + string.Join(" ", reasons.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value))
                                 + "  | " + string.Join(" ", choices.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value)));
             }
+
+            dumpw?.Flush(); dumpw?.Dispose();
 
             using var md5 = MD5.Create();
             string hash = Convert.ToHexString(md5.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString())));
