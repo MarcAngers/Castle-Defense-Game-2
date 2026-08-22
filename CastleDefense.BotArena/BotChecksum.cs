@@ -26,16 +26,24 @@ namespace CastleDefense.BotArena
             int games = 24;
             bool defenceOnly = false;
             bool p1Only = false;
-            int trace = -1;   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
+            int trace = -1;
+            float engageDps = -1f;
+            string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
             for (int i = 1; i < args.Length; i++)
             {
                 if (args[i] == "--games" && i + 1 < args.Length) games = int.Parse(args[++i]);
                 if (args[i] == "--defence-only") defenceOnly = true;
                 if (args[i] == "--p1-defence-only") { p1Only = true; defenceOnly = true; }
                 if (args[i] == "--trace" && i + 1 < args.Length) trace = int.Parse(args[++i]);
+                if (args[i] == "--engage-dps" && i + 1 < args.Length) engageDps = float.Parse(args[++i]);
+                if (args[i] == "--loadout" && i + 1 < args.Length) loadout = args[++i];
             }
 
-            var settings = defenceOnly ? HeuristicBotSettings.DefenceOnlyProfile : null;
+            var settings = defenceOnly
+                ? (engageDps >= 0f
+                    ? new HeuristicBotSettings { DefenceOnly = true, MinBlockEffectiveness = engageDps }
+                    : HeuristicBotSettings.DefenceOnlyProfile)
+                : null;
             var teams = (TeamColour[])Enum.GetValues(typeof(TeamColour));
             var offense = new[] { "nuke", "firebomb", "snipe", "freeze" };
             var defense = new[] { "heal", "reinforcements", "speed", "wall" };
@@ -52,21 +60,25 @@ namespace CastleDefense.BotArena
                 var state = new GameState(map, new Random(g));
                 state.Player1 = new PlayerState();
                 state.Player2 = new PlayerState();
+                string[] pin = loadout?.Split(',');
                 for (int side = 1; side <= 2; side++)
                 {
                     var p = side == 1 ? state.Player1 : state.Player2;
-                    var t = teams[rng.Next(teams.Length)];
+                    var t = pin != null ? Enum.Parse<TeamColour>(pin[0], true) : teams[rng.Next(teams.Length)];
                     p.Side = side;
                     p.Team = t;
-                    p.SetLoadout(new[] { offense[rng.Next(offense.Length)],
-                                         defense[rng.Next(defense.Length)],
-                                         GameDataManager.GetSignatureGadgetIdForTeam(t) });
+                    p.SetLoadout(pin != null
+                        ? new[] { pin[1], pin[2], GameDataManager.GetSignatureGadgetIdForTeam(t) }
+                        : new[] { offense[rng.Next(offense.Length)],
+                                  defense[rng.Next(defense.Length)],
+                                  GameDataManager.GetSignatureGadgetIdForTeam(t) });
                 }
 
                 var engine = new GameEngine(state, null, g);
                 var p1 = new HeuristicBot(1, settings);
                 var p2 = new HeuristicBot(2, p1Only ? null : settings);
                 int p1Spawns = 0;
+                int spawnsThisSecond = 0;
                 var reasons = new Dictionary<string,int>();
                 var choices = new Dictionary<string,int>();
 
@@ -82,17 +94,20 @@ namespace CastleDefense.BotArena
                         choices[c] = choices.TryGetValue(c, out var cc) ? cc + 1 : 1;
                     }
                     _ = beforeChoice;
-                    if (g == trace && state.CurrentTick % 60 == 0)
+                    if (g == trace && state.CurrentTick % 30 == 0)
                         Console.WriteLine($"  t={state.CurrentTick/30,4}s hp={state.Player1.CastleHealth,7} "
                             + $"inv={state.Player1.InvestmentCount} $={state.Player1.Money,8:F0} "
                             + $"bare={p1.LastBareSurvival,6:F1}s tgt={p1.LastDefenceTarget,5:F1}s "
                             + $"need={p1.LastRequiredRate,5:F2}/s cred={p1.LastBlockCredit,4:F1} "
-                            + $"$/hp={p1.LastDollarsPerHp,6:F3} {p1.LastDefenceChoice,-6} {p1.LastThreatDebug}");
+                            + $"$/hp={p1.LastDollarsPerHp,6:F3} {p1.LastDefenceChoice,-6} spawned={spawnsThisSecond,2}/s "
+                            + $"own={state.Units.Count(u => u.Side == 1),3} {p1.LastThreatDebug}");
+                    if (state.CurrentTick % 30 == 0) spawnsThisSecond = 0;
                     p2.Update(engine);
                     int after = state.Units.Count(u => u.Side == 1);
                     if (after > before)
                     {
                         p1Spawns += after - before;
+                        spawnsThisSecond += after - before;
                         string why = p1.LastSpawnReason ?? "?";
                         reasons[why] = reasons.TryGetValue(why, out var c) ? c + 1 : 1;
                     }
