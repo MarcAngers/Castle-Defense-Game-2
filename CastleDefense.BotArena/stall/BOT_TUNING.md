@@ -17,9 +17,10 @@ change below.
 | ceiling-aware option pricing | 36.9% | $11,033 | — |
 | priced repair (refuse repairs that cost more than their seconds) | 39.4% | $22,317 | 7.08 |
 | + 8s wiper cooldown | 42.5% | $14,804 | 7.09 |
-| + value-gated wipe | **46.2%** | $16,021 | 7.20 |
+| + value-gated wipe | 46.2% | $16,021 | 7.20 |
+| + value-SELECTED wiper, 1s cooldown | **53.1%** | $9,642 | 7.35 |
 
-Paired against the settle gate: **+26 games, p < 0.0001**. The individual steps are mostly not
+Paired against the settle gate: **+37 games, 38 gained against 1 lost, p < 0.0001**. The individual steps are mostly not
 significant on their own — only the cumulative move is.
 
 ## What each change was, and what it actually fixed
@@ -46,6 +47,31 @@ the time the opponent needs to rebuild what was destroyed — instead of crediti
 the threat for the whole 41-second window. That old term swamped every other and approved
 anything.
 
+**Value-SELECTED wiper.** `FindWiper` required `d.Damage >= toughest` — the unit had to
+one-shot the toughest thing in the band. Against forty tier-4s plus one tier-7 that forced a
+$2,066 purchase to clear mostly $18 chaff, when an $81 tier-5 one-shots all forty and leaves the
+tier-7 standing. It now picks the unit maximising **value killed minus price**:
+
+| | kills | price | net per wipe | ratio |
+|---|---|---|---|---|
+| before | $715 | $1,528 | −$813 | 0.47× |
+| after | $474 | $224 | **+$249** | **2.11×** |
+
+The counterfactual check agrees in 99% of wipes, and defence spend fell 82% ($16,021 → $2,838 at
+the old cooldown). **On its own this was win-rate neutral** (−4 paired, p = 0.62) — the gain came
+from what it unlocked.
+
+**The cooldown optimum MOVED once wipes became profitable**, which invalidated the earlier sweep.
+Shorter was catastrophic when each wipe lost $813; it is correct now that each gains $249:
+
+| cooldown | 0.0s | 0.5s | **1.0s** | 2.0s | 4.0s | 8.0s |
+|---|---|---|---|---|---|---|
+| wins | 40.0% | 41.9% | **53.1%** | 46.9% | 46.2% | 43.8% |
+| spend | $26,139 | $13,372 | $9,642 | $5,411 | $4,368 | $2,838 |
+
+1.0s is **+15 paired against 8.0s (p = 0.011)** and is now the defence-only default. Note this is
+a genuine interaction: neither change is worth much alone, and the pair is worth 9 points.
+
 ## Things that were tried and did not work
 
 - **A DPS engage threshold** replacing the settle gate. Swept 0 → 1500 DPS: flat, 27.5–30.0%.
@@ -64,20 +90,6 @@ anything.
   collapses to 21.9% at 124 wipers a game. The gate prices the THREAT and knows nothing about the
   wiper bought two seconds ago that has not landed. Redundant purchases are a self-knowledge
   problem, not a valuation one. Subtracting in-flight wipers from the threat is the real fix.
-- **The wiper SELECTION RULE is wrong, and it is the reason wipes lose money.** `FindWiper`
-  requires `d.Damage >= toughest` — the unit must one-shot the toughest thing in the band. In a
-  pile of forty tier-4s plus one tier-7 that forces a $2,066 purchase to clear mostly $18 chaff,
-  when an $81 tier-5 would one-shot all forty tier-4s. Measured over 1,600 wipes:
-
-  | | kills | price | net per wipe | ratio |
-  |---|---|---|---|---|
-  | what we buy | $715 | $1,528 | **−$813** | 0.47× |
-  | best available alternative | $361 | $171 | **+$189** | 2.11× |
-
-  A different unit would have been the better buy in **1,064 of 1,600 wipes (66%)**, worth
-  **+$1,003 per wipe**. The rule optimises "kill everything in one swing" when it should
-  maximise value killed minus price — and the cheaper unit killing less is usually the better
-  trade. Fixing this is the highest-value open item.
 - **Two survival clocks.** The defence reads `ThreatModel`; repair still reads
   `EstimateProjectedThreatDps`. They share a threshold (`RepairTtdSeconds`) but not a number.
   Unifying them changes the SHIPPED bot's repair timing and needs its own measurement.
