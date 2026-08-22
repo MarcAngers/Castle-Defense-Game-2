@@ -57,9 +57,27 @@ tier-7 standing. It now picks the unit maximising **value killed minus price**:
 | before | $715 | $1,528 | −$813 | 0.47× |
 | after | $474 | $224 | **+$249** | **2.11×** |
 
+**DO NOT QUOTE THOSE PER-WIPE FIGURES AS A TRADE RATIO.** They price what ONE swing kills at the
+moment of purchase, which is unreliable in both directions: it misses everything a wiper kills
+over the rest of its life, and at a short cooldown consecutive purchases price the same pile
+before any of them lands. At `cd 0.0s` the tally claims to have destroyed **1.28× everything the
+opponent ever bought**, which is impossible. The figures are still valid as a BEFORE/AFTER on the
+selection rule, since both sides are measured the same way — they are not valid as economics.
+
+The honest measurement counts each distinct enemy unit once and asks whether it is still alive:
+
+| cooldown | their army | we destroyed | our spend | real ratio | wins |
+|---|---|---|---|---|---|
+| 1.0s | $42,823 | $29,479 (69%) | $7,925 | **3.72×** | 53.8% |
+| 8.0s | $34,888 | $23,354 (67%) | $2,604 | **8.97×** | 47.5% |
+
+So the defence as a whole is trading extremely well, and **the better trade ratio loses more
+games**. Spending more to kill more wins, even at worse efficiency — efficiency is not the
+objective, and optimising it directly would have taken the bot the wrong way.
+
 The counterfactual check agrees in 99% of wipes, and defence spend fell 82% ($16,021 → $2,838 at
-the old cooldown). **On its own this was win-rate neutral** (−4 paired, p = 0.62) — the gain came
-from what it unlocked.
+the old cooldown). **On its own the selection change was win-rate neutral** (−4 paired,
+p = 0.62) — the gain came from what it unlocked.
 
 **The cooldown optimum MOVED once wipes became profitable**, which invalidated the earlier sweep.
 Shorter was catastrophic when each wipe lost $813; it is correct now that each gains $249:

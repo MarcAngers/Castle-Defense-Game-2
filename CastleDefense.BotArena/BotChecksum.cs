@@ -100,6 +100,12 @@ namespace CastleDefense.BotArena
                 int spawnsThisSecond = 0;
                 var reasons = new Dictionary<string,int>();
                 var choices = new Dictionary<string,int>();
+                // Honest kill accounting: every distinct enemy unit that appeared, and whether
+                // it is still alive. The bot's own WIPE tally double-counts, because at a short
+                // cooldown consecutive purchases each price the SAME pile before the first has
+                // landed -- at cd 0 it claims to have destroyed 1.28x everything the opponent
+                // ever bought, which is impossible. This cannot inflate: a unit is counted once.
+                var seenFoe = new Dictionary<Guid, double>();
 
                 while (!state.IsGameOver)
                 {
@@ -146,6 +152,9 @@ namespace CastleDefense.BotArena
                     if (state.CurrentTick % 30 == 0) spawnsThisSecond = 0;
                     p2.Update(engine);
                     int after = state.Units.Count(u => u.Side == 1);
+                    foreach (var u in state.Units)
+                        if (u.Side == 2 && !seenFoe.ContainsKey(u.InstanceId))
+                            seenFoe[u.InstanceId] = CastleDefense.Engine.Gadgets.GadgetTargeting.UnitCost(engine, u);
                     if (after > before)
                     {
                         p1Spawns += after - before;
@@ -165,6 +174,9 @@ namespace CastleDefense.BotArena
                   .Append(',').Append(state.Player1.InvestmentCount).Append(',').Append(state.Player2.InvestmentCount)
                   .Append(',').Append(p1Spawns).Append('\n');
                 row += $"{engine.MoneySpentOnUnits[1],9:F0}{engine.MoneySpentOnUnits[2],9:F0}";
+                                var aliveFoe = state.Units.Where(u => u.Side == 2).Select(u => u.InstanceId).ToHashSet();
+                double foeLost = seenFoe.Where(kv => !aliveFoe.Contains(kv.Key)).Sum(kv => kv.Value);
+                row += $"  FOELOST={foeLost:F0} FOESEEN={seenFoe.Values.Sum():F0}";
                 row += $"  WIPE n={p1.WipeCount} reach={p1.WipeValueReached:F0} cred={p1.WipeValueCredited:F0} paid={p1.WipeSpend:F0} "
                     + $"altkill={p1.WipeBestAltKill:F0} altcost={p1.WipeBestAltCost:F0} altdiff={p1.WipeBestAltCount}";
                 Console.WriteLine(row + "  " + string.Join(" ", reasons.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value))
