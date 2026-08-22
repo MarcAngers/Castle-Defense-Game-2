@@ -60,20 +60,36 @@ tier-7 standing. It now picks the unit maximising **value killed minus price**:
 **DO NOT QUOTE THOSE PER-WIPE FIGURES AS A TRADE RATIO.** They price what ONE swing kills at the
 moment of purchase, which is unreliable in both directions: it misses everything a wiper kills
 over the rest of its life, and at a short cooldown consecutive purchases price the same pile
-before any of them lands. At `cd 0.0s` the tally claims to have destroyed **1.28× everything the
-opponent ever bought**, which is impossible. The figures are still valid as a BEFORE/AFTER on the
-selection rule, since both sides are measured the same way — they are not valid as economics.
+before any of them lands. They remain valid as a BEFORE/AFTER on the selection rule, since both
+sides are measured the same way — they are not valid as economics.
 
-The honest measurement counts each distinct enemy unit once and asks whether it is still alive:
+**`MoneySpentOnUnits` IS NOT THE ENEMY'S ARMY VALUE, and reaching for it as one produced a wrong
+proof.** It deliberately excludes `ignoreCost` spawns (`GameEngine.cs:403`), so every unit the
+`reinforcements` gadget spawns is free to it — about **20% of the opponent's army** in the random
+loadout population, and far more in a pinned reinforcements mirror. The first version of this
+entry argued the tally double-counts because it claimed 1.28× of what the opponent "ever bought";
+that comparison was invalid, and the conclusion happened to be right for a different reason.
 
-| cooldown | their army | we destroyed | our spend | real ratio | wins |
-|---|---|---|---|---|---|
-| 1.0s | $42,823 | $29,479 (69%) | $7,925 | **3.72×** | 53.8% |
-| 8.0s | $34,888 | $23,354 (67%) | $2,604 | **8.97×** | 47.5% |
+The instrument that settles it counts each distinct enemy unit once and asks whether it is still
+alive at the end — it cannot inflate, and it captures free units:
 
-So the defence as a whole is trading extremely well, and **the better trade ratio loses more
-games**. Spending more to kill more wins, even at worse efficiency — efficiency is not the
-objective, and optimising it directly would have taken the bot the wrong way.
+| cooldown | their army | they paid | free | we destroyed | our spend | real ratio | the bot's claim | wins |
+|---|---|---|---|---|---|---|---|---|
+| 0.0s | $42,464 | $34,645 | 18% | $30,852 | $21,453 | 1.44× | $44,246 = **1.43× of everything that died** | 42.5% |
+| **1.0s** | $42,823 | $34,300 | 20% | $29,479 | $7,925 | **3.72×** | $13,384 = 0.45× | **53.8%** |
+| 8.0s | $34,888 | $27,330 | 22% | $23,354 | $2,604 | **8.97×** | $4,673 = 0.20× | 47.5% |
+
+The double-count is real and now properly evidenced: at `cd 0.0s` the tally claims **more than
+everything that died from all causes combined**. At the useful cooldowns it under-counts instead.
+
+Two results worth keeping:
+
+- **The defence trades extremely well** — it destroys about two-thirds of the enemy army for a
+  fraction of what the army cost. Note ~20% of that army was free to them, so this measures
+  combat effectiveness, not economic damage.
+- **The better trade ratio loses more games.** 8.97× loses to 3.72×. Spending more to kill more
+  wins at worse efficiency, so efficiency is not the objective and optimising it directly would
+  have taken the bot the wrong way.
 
 The counterfactual check agrees in 99% of wipes, and defence spend fell 82% ($16,021 → $2,838 at
 the old cooldown). **On its own the selection change was win-rate neutral** (−4 paired,
@@ -111,9 +127,19 @@ a genuine interaction: neither change is worth much alone, and the pair is worth
 - **Two survival clocks.** The defence reads `ThreatModel`; repair still reads
   `EstimateProjectedThreatDps`. They share a threshold (`RepairTtdSeconds`) but not a number.
   Unifying them changes the SHIPPED bot's repair timing and needs its own measurement.
-- **The bot gains no economic advantage.** In the pinned mirror both players finish on income
-  $750/s having earned exactly 7 investments. The premise — defend cheaply, invest faster, reach
-  Armageddon first — is not happening. See `mirror_anatomy.html`.
+- **THE GAME IS LOST ON THE EIGHTH INVESTMENT, AND THE BOT IS NEVER ASKED ABOUT IT.** This
+  replaces the earlier "the bot gains no economic advantage", which was wrong. In the pinned
+  mirror the two economies are **lock-step identical for 7 rungs** — the same seconds for each,
+  and the bot reaches #7 **3s ahead** (148s vs 151s). The premise works. Then the opponent buys
+  #8 at 221s, triples to $2,500/s, and the bot never buys it and dies 65s later.
+
+  Investment 8 costs **$40,000** (`PlayerState.ApplyInvestmentStep`, the `InvestmentCount == 7`
+  branch) and IS Armageddon, i.e. the win condition. In the 138s available the bot earned
+  $103,425 and spent **$76,935 of it on defence**; its cash peaked at $21,650, **54% of the
+  price**. The defensive comparison prices every option against *dying* and nothing against
+  *winning*, so the last rung is invisible to it. A savings gate at investment 7 — cap the
+  defensive burn rate once the Armageddon rung is the only thing left to buy — is the next
+  change to try, and it is a bigger lever than any wiper tuning. See `mirror_anatomy.html`.
 
 ## Reproducing
 

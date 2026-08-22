@@ -2,7 +2,8 @@
 clock, incoming pressure below it (never a second y-scale), and the army behind each collapse.
 
 Run from this directory. Reads mirror_dump.csv (the original defence-only build) and
-mirror_dump_new.csv (with the priced repair and the seconds-valued option comparison).
+mirror_dump_cur.csv (the current build: priced repair, seconds-valued options,
+value-selected wiper on a 1s cooldown).
 """
 import csv, io, math, os
 
@@ -57,11 +58,23 @@ def repairs(rows):
     return ev, tot
 
 
-OLD, NEW = load("mirror_dump.csv"), load("mirror_dump_new.csv")
+OLD, NEW = load("mirror_dump.csv"), load("mirror_dump_cur.csv")
 old_ev, old_cost = repairs(OLD)
 new_ev, new_cost = repairs(NEW)
 snaps = steep(NEW)
 old_worst = min(steep(OLD), key=lambda x: x[0])
+
+# ── prose numbers, derived rather than typed ────────────────────────────────
+# Every figure quoted in the copy below comes from here. Hand-typed numbers in a
+# generated report are exactly the "no feedback loop" failure the project keeps hitting.
+new_worst = min(steep(NEW), key=lambda x: x[0])
+OLD_END, NEW_END = OLD[-1]["t"], NEW[-1]["t"]
+OLD_PEAK_HP, NEW_PEAK_HP = max(r["hp"] for r in OLD), max(r["hp"] for r in NEW)
+OLD_PEAK_DPS, NEW_PEAK_DPS = max(r["enemy_dps"] for r in OLD), max(r["enemy_dps"] for r in NEW)
+SHALLOWER = old_worst[0] / new_worst[0]
+LONGER = (NEW_END - OLD_END) / OLD_END
+CASH_PCT = 100 * sum(1 for r in NEW if r["money"] > 5000) / len(NEW)
+
 
 T_MAX = max(OLD[-1]["t"], NEW[-1]["t"])
 HP_MAX = max(max(r["maxhp"] for r in OLD), max(r["maxhp"] for r in NEW))
@@ -129,6 +142,30 @@ def invest_marks(rows, key, cls):
     return out
 
 
+# The investment race, which is what this game is actually about. Investment 8 is
+# Armageddon and a guaranteed win; its price is set when the 7th lands.
+INV8_PRICE = 40000   # PlayerState.ApplyInvestmentStep, the InvestmentCount == 7 branch
+
+
+def inv_times(rows, key):
+    out, prev = {}, rows[0][key]
+    for r in rows:
+        if r[key] > prev:
+            out[int(r[key])] = r["t"]
+            prev = r[key]
+    return out
+
+
+US_INV, THEM_INV = inv_times(NEW, "inv"), inv_times(NEW, "p2inv")
+OUR_LAST, THEIR_LAST = max(US_INV), max(THEM_INV)
+RACE_FROM = US_INV[OUR_LAST]
+late = [r for r in NEW if r["t"] >= RACE_FROM]
+PEAK_CASH = max(r["money"] for r in late)
+SPEND_LATE = late[-1]["p1spent"] - late[0]["p1spent"]
+THEIR_SPEND_LATE = late[-1]["p2spent"] - late[0]["p2spent"]
+EARNED_LATE = late[-1]["p1income"] * (late[-1]["t"] - RACE_FROM)
+LOCKSTEP = sum(1 for k in US_INV if k in THEM_INV and abs(US_INV[k] - THEM_INV[k]) < 5)
+
 econ_us = path(NEW, yecon, "money")
 econ_them = path(NEW, yecon, "p2money")
 econ_marks = invest_marks(NEW, "inv", "invus") + invest_marks(NEW, "p2inv", "invthem")
@@ -195,6 +232,10 @@ for L in sorted({int(r["inv"]) for r in NEW}):
         k = "hot" if (a == "critical" and pct >= 50) else ("dim" if pct < 1 else "")
         cells += f'<td class="{k}">{pct:.0f}%</td>'
     inv_rows += (f'<tr><th class="rh">{L}</th><td class="num dim">{span:.0f}s</td>{cells}</tr>')
+    LAST_L, LAST_SPAN, LAST_CC, LAST_N = L, span, cc, len(sub)
+
+# the level the game is actually lost on, as shares
+LP = {a: 100 * LAST_CC[a] / LAST_N for a in ARMS}
 
 markers, cards = "", ""
 RAMP = {"T3": "var(--ord-1)", "T4": "var(--ord-1)", "T5": "var(--ord-2)",
@@ -221,6 +262,12 @@ for i, (rate, b) in enumerate(snaps):
           <dt>army value</dt><dd>${b['enemy_value']:,.0f}</dd>
           <dt>our blockers</dt><dd>{b['own']:.0f}</dd>
           <dt>bot chose</dt><dd class="choice">{b['choice'] or '&mdash;'}</dd></dl></div>"""
+
+# what the threat is actually made of, across the snapshot windows
+SNAP_TIERS = {k: sum(int(b["t" + str(k)]) for _, b in snaps) for k in range(1, 9)}
+SNAP_TOT = max(1, sum(SNAP_TIERS.values()))
+TOP_TIERS = sorted(SNAP_TIERS, key=SNAP_TIERS.get, reverse=True)[:2]
+TOP_SHARE = 100 * sum(SNAP_TIERS[k] for k in TOP_TIERS) / SNAP_TOT
 
 rep_rows = ""
 for label, ev, tot in (("before", old_ev, old_cost), ("after", new_ev, new_cost)):
@@ -318,19 +365,19 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   <div class="kicker"><span class="dot"></span><span class="lab">White / nuke / reinforcements mirror &middot; before and after</span></div>
   <h1>Still a loss &mdash; but it stopped being a deletion.</h1>
   <p class="dek">The defence-only bot against the shipped attacking bot, same team and same
-  loadout, before and after pricing repairs by the seconds they buy. Nothing gameplay-affecting
+  loadout &mdash; the first defence-only build against the current one. Nothing gameplay-affecting
   varies in this matchup, so each line is the whole story of its build rather than a sample.</p>
   <div class="stats">
-    <div class="stat"><span class="stat-n">+29<span class="u">s</span></span>
-      <span class="stat-t">Longer before the castle falls &mdash; {OLD[-1]['t']:.0f}s to {NEW[-1]['t']:.0f}s.</span></div>
-    <div class="stat"><span class="stat-n">3<span class="u">&times;</span></span>
+    <div class="stat"><span class="stat-n">+{100*LONGER:.0f}<span class="u">%</span></span>
+      <span class="stat-t">Longer before the castle falls &mdash; {OLD_END:.0f}s to {NEW_END:.0f}s.</span></div>
+    <div class="stat"><span class="stat-n">{SHALLOWER:.1f}<span class="u">&times;</span></span>
       <span class="stat-t">Shallower worst moment: the steepest loss goes from
-      {old_worst[0]:,.0f} to {snaps[0][0] if False else min(s[0] for s in snaps):,.0f} HP/s.</span></div>
-    <div class="stat"><span class="stat-n">&minus;78<span class="u">%</span></span>
+      {old_worst[0]:,.0f} to {new_worst[0]:,.0f} HP/s.</span></div>
+    <div class="stat"><span class="stat-n">&minus;{100*(1-new_cost/old_cost):.0f}<span class="u">%</span></span>
       <span class="stat-t">Spent on repairs: ${old_cost:,.0f} down to ${new_cost:,.0f}.</span></div>
-    <div class="stat"><span class="stat-n">&minus;34<span class="u">%</span></span>
-      <span class="stat-t">Peak incoming damage, {max(r['enemy_dps'] for r in OLD):,.0f} to
-      {max(r['enemy_dps'] for r in NEW):,.0f} &mdash; the wipes are landing.</span></div>
+    <div class="stat"><span class="stat-n">{NEW_PEAK_DPS/OLD_PEAK_DPS:.1f}<span class="u">&times;</span></span>
+      <span class="stat-t">Peak incoming damage, {OLD_PEAK_DPS:,.0f} to {NEW_PEAK_DPS:,.0f} &mdash;
+      it now survives to meet a far worse army.</span></div>
   </div>
 </header>
 
@@ -340,14 +387,14 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
     <p class="figtitle">Our castle health</p>
     <p class="figsub">one shared clock; markers A&ndash;E are the new build's steepest loss windows</p>
     <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_HP+16}" role="img"
-      aria-label="Castle health for both builds. The old build spikes to 78000 then collapses at 193 seconds; the new build peaks lower and declines gradually to 222 seconds.">
+      aria-label="Castle health for both builds on one clock. The original build spikes high on repair spending then collapses early; the current build peaks lower and grinds down over a substantially longer game.">
       {hp_grid}{markers}
       <path class="lold" d="{path(OLD, yhp, 'hp')}"/>
       <path class="lnew" d="{path(NEW, yhp, 'hp')}"/>
     </svg></div>
     <div class="legend">
-      <span><i style="background:var(--new)"></i>after &mdash; priced repair, seconds-valued options</span>
-      <span><i style="background:var(--old)"></i>before</span>
+      <span><i style="background:var(--new)"></i>current build</span>
+      <span><i style="background:var(--old)"></i>first defence-only build</span>
       <span><i style="background:var(--accent)"></i>A&ndash;E steepest windows</span>
     </div>
   </figure>
@@ -356,27 +403,33 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
     <p class="figtitle">Incoming damage per second</p>
     <p class="figsub">what the enemy army on the field could do to the castle, unblocked</p>
     <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_DPS+30}" role="img"
-      aria-label="Incoming damage per second for both builds. The old build peaks near 30000; the new build peaks near 19750.">
+      aria-label="Incoming damage per second for both builds. The original build ends before the enemy army compounds; the current build survives into a period of far higher incoming damage.">
       {dps_grid}
       <path class="lold" d="{path(OLD, ydps, 'enemy_dps')}"/>
       <path class="lnew" d="{path(NEW, ydps, 'enemy_dps')}"/>
       {x_axis}
     </svg></div>
-    <div class="legend"><span><i style="background:var(--new)"></i>after</span>
-      <span><i style="background:var(--old)"></i>before</span></div>
+    <div class="legend"><span><i style="background:var(--new)"></i>current build</span>
+      <span><i style="background:var(--old)"></i>first defence-only build</span></div>
   </figure>
-  <p class="cap">Two charts rather than one with two vertical scales: health peaks at 78,000 and
-  incoming damage at 29,990, so a shared axis would flatten one and invent a crossing point that
-  means nothing.</p>
+  <p class="cap">Two charts rather than one with two vertical scales: health peaks at
+  {max(OLD_PEAK_HP, NEW_PEAK_HP):,.0f} and incoming damage at {max(OLD_PEAK_DPS, NEW_PEAK_DPS):,.0f},
+  so a shared axis would flatten one and invent a crossing point that means nothing.</p>
 
   <div class="callout">
     <h3>The shape changed, not just the numbers</h3>
-    <p>The old line is a cliff &mdash; a tall repair-funded spike to 78,000 and then 24,045 health
-    gone in a single second. The new line never gets that high and never falls that fast: its
-    worst moment is <strong>three times shallower</strong>, and it grinds down through three
-    similar windows instead of being deleted in one.</p>
-    <p>Peak incoming damage also dropped by a third, from 29,990 to 19,750. That is the wipes
-    landing &mdash; the enemy army is being cut down rather than accumulating unopposed.</p>
+    <p>The old line is a cliff &mdash; a repair-funded spike to {OLD_PEAK_HP:,.0f} and then
+    {abs(old_worst[0]):,.0f} health gone per second. The current line never gets that high and never
+    falls that fast: its worst moment is <strong>{SHALLOWER:.1f} times shallower</strong>
+    ({abs(new_worst[0]):,.0f} HP/s), and it grinds down through several similar windows instead of
+    being deleted in one.</p>
+    <p><strong>Peak incoming damage went the other way</strong> &mdash; {OLD_PEAK_DPS:,.0f} to
+    {NEW_PEAK_DPS:,.0f}, {NEW_PEAK_DPS/OLD_PEAK_DPS:.1f} times worse. An earlier draft of this page
+    read that as the wipes landing, back when the number fell. It rose because the bot now lives
+    {NEW_END-OLD_END:.0f} seconds longer, and the opponent's economy compounds through every one of
+    them. Surviving longer means meeting a bigger army, so peak DPS is a clock reading, not a
+    scoreboard &mdash; the honest measure is the slope of our health, and that is
+    {SHALLOWER:.1f} times shallower.</p>
   </div>
 </section>
 
@@ -384,21 +437,24 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   <div class="shead"><span class="n">02</span><h2>The army at each collapse, now</h2></div>
   <div class="prose"><p>Five steepest two-second windows of the new build.</p></div>
   <div class="snaps">{cards}</div>
-  <p class="cap">Still overwhelmingly tier 4. The composition of the threat has not changed &mdash;
-  what changed is that the bot now trades against it instead of banking health it cannot keep.</p>
+  <p class="cap">Tiers {TOP_TIERS[0]} and {TOP_TIERS[1]} are {TOP_SHARE:.0f}% of every body in
+  these windows &mdash; the threat is still a cheap swarm, not a few expensive units, which is why
+  one wiper can be worth so much more than its price. Note that the worst window is now the
+  <em>last</em> one: the earlier build's collapse came first and everything after it was falling.</p>
 </section>
 
 <section>
   <div class="shead"><span class="n">03</span><h2>The economy, both players</h2></div>
   <div class="prose">
     <p>Money on hand through the current build\'s game. The ticks along the bottom mark
-    investments &mdash; the sawtooth is the economy laddering up, not spending.</p>
+    investments &mdash; the sawtooth is the economy laddering up, not spending. Investment 8 is
+    Armageddon, and Armageddon is a guaranteed win, so this chart is the game.</p>
   </div>
   <figure>
     <p class="figtitle">Money on hand</p>
     <p class="figsub">us against the shipped attacking bot, same team, same loadout</p>
     <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_ECON+30}" role="img"
-      aria-label="Money over time for both players. Both ladder up through seven investments; the opponent finishes with substantially more cash.">
+      aria-label="Money on hand for both players. The two ladders track each other closely through seven investments, then the opponent takes an eighth and pulls away.">
       {econ_grid}{econ_marks}
       <path class="lthem" d="{econ_them}"/>
       <path class="lnew" d="{econ_us}"/>
@@ -412,20 +468,28 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   </figure>
 
   <div class="callout">
-    <h3>Identical economies &mdash; which kills the premise</h3>
-    <p>Both players finish on <strong>income ${LAST['p1income']:,.0f}/s</strong> having earned
-    <strong>{LAST['inv']:.0f} investments each</strong>. The defence-only bot is not out-earning
-    anybody. The whole case for playing this way was "defend cheaply, invest faster, reach
-    Armageddon first" &mdash; and the ladders are the same height.</p>
-    <p>What differs is what the money became. We spent ${LAST['p1spent']:,.0f} on units and they
-    spent ${LAST['p2spent']:,.0f}; they finish holding ${LAST['p2money']:,.0f} against our
-    ${LAST['money']:,.0f}. They are richer at the end <em>because we never threaten them</em> &mdash;
-    nothing forces them to convert cash into defence, so their spending is discretionary and ours
-    is not.</p>
+    <h3>It wins the economic race for {LOCKSTEP} rungs and loses it on the eighth</h3>
+    <p>The two ladders are <strong>lock-step identical</strong> through investment {OUR_LAST}
+    &mdash; the same {LOCKSTEP} rungs at the same seconds, and we reach the last shared one
+    <strong>{THEM_INV[OUR_LAST]-US_INV[OUR_LAST]:.0f} seconds ahead</strong> of them
+    ({US_INV[OUR_LAST]:.0f}s against {THEM_INV[OUR_LAST]:.0f}s). The premise of the whole
+    defence-only design &mdash; defend cheaply, keep pace, reach Armageddon &mdash; is working
+    exactly as intended, right up to the rung that decides the game.</p>
+    <p>Then they buy investment <strong>{THEIR_LAST}</strong> at {THEM_INV[THEIR_LAST]:.0f}s, their
+    income triples to ${LAST['p2income']:,.0f}/s, and we never buy it at all. We die
+    {NEW_END-THEM_INV[THEIR_LAST]:.0f} seconds later.</p>
+    <p>The eighth investment costs <strong>${INV8_PRICE:,}</strong>. In the
+    {NEW_END-RACE_FROM:.0f} seconds we had, we earned ${EARNED_LATE:,.0f} and spent
+    <strong>${SPEND_LATE:,.0f} of it on defence</strong> &mdash; against the
+    ${THEIR_SPEND_LATE:,.0f} they spent attacking. Our cash peaked at ${PEAK_CASH:,.0f}:
+    <strong>{100*PEAK_CASH/INV8_PRICE:.0f}% of the price</strong>. The bot never chose to lose
+    this race; it was never once asked whether to buy the win condition instead of the next
+    blocker.</p>
   </div>
-  <p class="cap">Our line sits above $5,000 for 34% of the game, up from 16% before the repair
-  fix. Some of that is healthy &mdash; it is money not being burned on $8,837 repairs &mdash; but
-  it is also money the bot never finds a use for while it is being killed.</p>
+  <p class="cap">Our line sits above $5,000 for {CASH_PCT:.0f}% of the game, up from 16% before the
+  repair fix. That is money not being burned on $8,837 repairs &mdash; but the defensive comparison
+  prices a blocker against <em>dying</em> and never against the ${INV8_PRICE:,} that ends the game,
+  so a rung it could reach stays invisible to it.</p>
 </section>
 
 <section>
@@ -440,7 +504,7 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
     <p class="figtitle">Decision arm through the game</p>
     <p class="figsub">what the defensive comparison chose, moment to moment</p>
     <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_RIB+26}" role="img"
-      aria-label="Decision arm over time: idle for the first two thirds, then holding, then predominantly critical from 183 seconds onward.">
+      aria-label="Decision arm over time: idle through the early economy, then alternating between holding, spending and critical once the first real wave arrives.">
       {rib}{rib_x}
     </svg></div>
     <div class="legend">{rib_legend}</div>
@@ -456,16 +520,22 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   </table></div>
 
   <div class="callout">
-    <h3>Investment 7 is where it stops choosing</h3>
+    <h3>Investment {LAST_L} is where the game is decided &mdash; and it is choosing again</h3>
     <p>Through investments 3 to 5 the bot is in <em>watch</em> almost the whole time &mdash;
     correctly, nothing is threatening it. At investment 6 it fights its first real engagement and
     spends most of it <em>holding</em>, which is the branch working as designed: it lets the wave
     form and answers it.</p>
-    <p>Then at investment 7 it spends <strong>68% of the level in <em>critical</em></strong>. That
-    is not a decision, it is the absence of one &mdash; the survival law has it permanently inside
-    its own death window, so the dollar comparison never runs and it just blocks at maximum rate.
-    <em>wipe</em> fires 2% of the time, at exactly the point in the game where a single unit could
+    <p>Investment {LAST_L} is then <strong>{LAST_SPAN:.0f} seconds long</strong>, half the game, and
+    the whole outcome sits inside it. The previous build spent 68% of that level in
+    <em>critical</em> &mdash; not a decision but the absence of one, the survival law holding it
+    permanently inside its own death window so the dollar comparison never ran. It is now
+    <strong>{LP['critical']:.0f}%</strong>, with {LP['block']:.0f}% <em>block</em>,
+    {LP['outmatched']:.0f}% <em>outmatched</em> and {LP['wipe']:.0f}% <em>wipe</em> &mdash; wipes
+    firing {LP['wipe']/2:.0f} times as often as before, at exactly the point where one unit can
     clear the biggest army it will ever face.</p>
+    <p>That is the intended machinery finally running under load. It is also still a loss, which
+    is the point worth keeping: the comparison now works and picks the best available option, and
+    the best available option is not good enough.</p>
   </div>
   <p class="cap">Across the whole game: {100*gshare['idle']/gtotal:.0f}% idle,
   {100*gshare['holding']/gtotal:.0f}% holding, {100*gshare['spending']/gtotal:.0f}% spending,
@@ -493,8 +563,8 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
 <footer>
   Castle Defense engine &middot; two deterministic games, dumped every 3 ticks &middot;
   defence-only bot in seat 1 against the shipped bot in seat 2 &middot;
-  before: {OLD[-1]['t']:.0f}s, {OLD[-1]['inv']:.0f} investments &middot;
-  after: {NEW[-1]['t']:.0f}s, {NEW[-1]['inv']:.0f} investments
+  first build: {OLD_END:.0f}s &middot;
+  current build: {NEW_END:.0f}s, {OUR_LAST} investments to their {THEIR_LAST}
 </footer>
 </div>
 """
