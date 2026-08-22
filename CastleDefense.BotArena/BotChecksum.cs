@@ -165,6 +165,7 @@ namespace CastleDefense.BotArena
                   .Append(',').Append(state.Player1.InvestmentCount).Append(',').Append(state.Player2.InvestmentCount)
                   .Append(',').Append(p1Spawns).Append('\n');
                 row += $"{engine.MoneySpentOnUnits[1],9:F0}{engine.MoneySpentOnUnits[2],9:F0}";
+                row += $"  WIPE n={p1.WipeCount} reach={p1.WipeValueReached:F0} cred={p1.WipeValueCredited:F0} paid={p1.WipeSpend:F0}";
                 Console.WriteLine(row + "  " + string.Join(" ", reasons.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value))
                                 + "  | " + string.Join(" ", choices.OrderByDescending(k => k.Value).Select(k => k.Key + "=" + k.Value)));
             }
