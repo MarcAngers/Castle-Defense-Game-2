@@ -29,6 +29,7 @@ namespace CastleDefense.BotArena
             int trace = -1;
             float engageDps = -1f;
             double wiperCd = -1;
+            bool noCoverage = false;
             string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides
             string dump = null;      // per-tick CSV of the traced game   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
             for (int i = 1; i < args.Length; i++)
@@ -39,19 +40,21 @@ namespace CastleDefense.BotArena
                 if (args[i] == "--trace" && i + 1 < args.Length) trace = int.Parse(args[++i]);
                 if (args[i] == "--engage-dps" && i + 1 < args.Length) engageDps = float.Parse(args[++i]);
                 if (args[i] == "--wiper-cd" && i + 1 < args.Length) wiperCd = double.Parse(args[++i]);
+                if (args[i] == "--no-coverage") noCoverage = true;
                 if (args[i] == "--loadout" && i + 1 < args.Length) loadout = args[++i];
                 if (args[i] == "--dump" && i + 1 < args.Length) dump = args[++i];
             }
 
             var settings = !defenceOnly ? null
-                : (engageDps >= 0f || wiperCd >= 0)
+                : (engageDps >= 0f || wiperCd >= 0 || noCoverage)
                     ? new HeuristicBotSettings
                       {
                           DefenceOnly = true,
                           MinBlockEffectiveness = engageDps >= 0f
                               ? engageDps : HeuristicBotSettings.Default.MinBlockEffectiveness,
                           WiperMinIntervalSeconds = wiperCd >= 0
-                              ? wiperCd : HeuristicBotSettings.Default.WiperMinIntervalSeconds,
+                              ? wiperCd : HeuristicBotSettings.DefenceOnlyProfile.WiperMinIntervalSeconds,
+                          WiperCountsFieldCoverage = !noCoverage,
                       }
                     : HeuristicBotSettings.DefenceOnlyProfile;
             var teams = (TeamColour[])Enum.GetValues(typeof(TeamColour));

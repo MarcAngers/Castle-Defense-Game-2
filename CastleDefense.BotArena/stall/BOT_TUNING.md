@@ -274,6 +274,49 @@ Two fixes fall straight out, and both are cheap:
   identical free one lands is a pure waste of $2,066; the option comparison never considers
   waiting.
 
+### The field-coverage rule: implemented, works, and does NOT replace the cooldown
+
+`FindWiper` now prices a wipe on the **margin** — what a purchase adds over the units already
+deployed — rather than on the whole pile as if the field were empty. Marginal rather than a
+binary "is there a sufficient wiper out there" veto, because it is the same rule with no
+threshold to tune: when the field already covers the pile the marginal value falls to zero and
+`netWipe` goes negative on its own.
+
+**The coverage test must score an existing unit exactly as the purchase test scores a candidate.**
+The first version scored an existing unit only where it currently stands, while candidates are
+priced as if already at the front of the pile. Since our reinforcements spawn at our own castle
+and have to walk, that version credited them with nothing and changed almost nothing (50.0% vs
+53.1%, wipes 38.7, spend unmoved). Fixed by crediting a live friendly unit with what it kills
+**when it arrives**, from the same front, with its own reach — and skipping any unit that has
+already passed the pile.
+
+It fires hard. In the pinned mirror after 160s, **`already-covered` is the largest single veto
+reason at 43.8%** of decisions.
+
+Paired A/B on identical 160 seeds (`--no-coverage` is the off arm):
+
+| cooldown | wins off → on | paired | unit spend | wipes/game |
+|---|---|---|---|---|
+| 1.0s | 53.1% → 51.9% | 10 gained / 12 lost, **p = 0.83** | $9,642 → **$6,576 (−32%)** | 42.4 → 32.1 (−24%) |
+| 0.0s | 40.0% → **45.6%** | 16 gained / 7 lost, p = 0.093 | $26,139 → **$12,893 (−51%)** | 147.2 → 80.5 (−45%) |
+
+**Keep it: the same win rate for a third less money, and it is the correct model.** But be clear
+about what it is not — at the operating cooldown it is **win-rate neutral**, not an improvement.
+
+**MARC'S PREDICTION THAT THIS WOULD REMOVE THE NEED FOR THE WIPER COOLDOWN DOES NOT HOLD.**
+Measured after the fix: 8.0s → 41.9%, 4.0s → 45.0%, **1.0s → 51.9%**, 0.0s → 45.6%. The optimum
+is still an interior 1.0s and removing the cooldown still costs 6 points. The coverage rule
+halves the redundant buying at cd 0 without closing the gap, so whatever the cooldown is doing is
+**not** "stop buying what you already have on the field". That is now an open question rather
+than an assumption.
+
+One correction to the previous entry's framing. "The bot buys the exact unit its own gadget hands
+it free" is true as accounting but misleading tactically: in the mirror those free tier-7s
+**march out and die attacking**, so at the moment the defence needs them they are past the pile
+and genuinely unavailable. The coverage rule counts them only while they can still fight the
+incoming wave, which is correct, and is why the mirror barely improves (286s → 302s, still a
+loss) while the random-loadout population improves a lot.
+
 ## Reproducing
 
 ```
