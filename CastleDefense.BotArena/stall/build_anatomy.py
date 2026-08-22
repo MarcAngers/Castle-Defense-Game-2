@@ -17,7 +17,13 @@ def load(name):
         for k in ("tick", "hp", "maxhp", "money", "inv", "own", "enemy",
                   "enemy_dps", "enemy_swings", "enemy_value",
                   "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8",
-                  "p2money", "p2inv", "p1income", "p2income", "p1spent", "p2spent"):
+                  "p2money", "p2inv", "p1income", "p2income", "p1spent", "p2spent",
+                  "own_lost", "foe_lost", "own_val", "foe_val", "p2hp", "p2maxhp",
+                  "ownpos", "foepos",
+                  "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8",
+                  "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"):
+            if k not in r:      # the archived "before" dump predates these columns
+                continue
             r[k] = float(r[k])
         r["t"] = round(r["tick"] / 30.0, 2)
     return rows
@@ -272,6 +278,53 @@ SNAP_TOT = max(1, sum(SNAP_TIERS.values()))
 TOP_TIERS = sorted(SNAP_TIERS, key=SNAP_TIERS.get, reverse=True)[:2]
 TOP_SHARE = 100 * sum(SNAP_TIERS[k] for k in TOP_TIERS) / SNAP_TOT
 
+# ── the trade curve ─────────────────────────────────────────────────────────
+# Cumulative VALUE DESTROYED each way. This is the chart that answers "are we winning
+# the fights", which castle health cannot: health falls for a while in every game.
+H_TRD = 200
+TRADE_MAX = max(max(r["own_lost"] for r in NEW), max(r["foe_lost"] for r in NEW))
+COST = {1: 3, 2: 4, 3: 9, 4: 18, 5: 81, 6: 338, 7: 2066, 8: 23000}   # White roster
+
+
+def ytrd(v): return PADT + H_TRD * (1 - v / TRADE_MAX)
+
+
+trd_grid = "".join(
+    f'<line class="grid" x1="{PADL}" y1="{ytrd(v):.1f}" x2="{W-PADR}" y2="{ytrd(v):.1f}"/>'
+    f'<text class="ax" x="{PADL-9}" y="{ytrd(v)+3.5:.1f}" text-anchor="end">${fmt(v)}</text>'
+    for v in ticks(TRADE_MAX, 4))
+trd_x = "".join(
+    f'<text class="ax" x="{x(t):.1f}" y="{PADT+H_TRD+22}" text-anchor="middle">{t}s</text>'
+    for t in [0, 40, 80, 120, 160, 200, 240, int(T_MAX)])
+trd_us = path(NEW, ytrd, "own_lost")
+trd_them = path(NEW, ytrd, "foe_lost")
+
+# the upgrade moment, and the trade ratio either side of it
+UPG = next((r["t"] for r in NEW if str(r.get("p2def", "")).endswith("_3")), None)
+
+
+def ratio(a, b):
+    w = [r for r in NEW if a <= r["t"] <= b]
+    ol = w[-1]["own_lost"] - w[0]["own_lost"]
+    fl = w[-1]["foe_lost"] - w[0]["foe_lost"]
+    return (fl / ol if ol > 0 else 0), ol, fl
+
+
+R_PRE, OL_PRE, FL_PRE = ratio(100, UPG)
+R_POST, OL_POST, FL_POST = ratio(UPG + 23, NEW_END)
+
+# bought vs free, whole game
+BOUGHT = {k: NEW[-1][f"b{k}"] for k in range(1, 9)}
+FREE = {k: NEW[-1][f"f{k}"] for k in range(1, 9)}
+SPEND_T = {k: BOUGHT[k] * COST[k] for k in range(1, 9)}
+SPEND_ALL = max(1, sum(SPEND_T.values()))
+buy_rows = "".join(
+    f'<tr><th class="rh">T{k}</th><td>{BOUGHT[k]:,.0f}</td><td>${COST[k]:,}</td>'
+    f'<td>${SPEND_T[k]:,.0f}</td>'
+    f'<td class="{"hot" if 100*SPEND_T[k]/SPEND_ALL >= 50 else ""}">{100*SPEND_T[k]/SPEND_ALL:.0f}%</td>'
+    f'<td class="dim">{FREE[k]:,.0f}</td></tr>'
+    for k in range(1, 9) if BOUGHT[k] or FREE[k])
+
 rep_rows = ""
 for label, ev, tot in (("before", old_ev, old_cost), ("after", new_ev, new_cost)):
     for t, c, p in ev:
@@ -495,8 +548,9 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
   </div>
   <p class="cap">Our line sits above $5,000 for {CASH_PCT:.0f}% of the game, up from 16% before the
   repair fix. That is money not being burned on $8,837 repairs &mdash; but the defensive comparison
-  prices a blocker against <em>dying</em> and never against the ${INV8_PRICE:,} that ends the game,
-  so a rung it could reach stays invisible to it.</p>
+  prices a blocker against <em>dying</em> and never against the economy rung it is trying to reach,
+  so the ${INV8_PRICE:,} it peaked {100*PEAK_CASH/INV8_PRICE:.0f}% of the way toward stays
+  invisible to it.</p>
 </section>
 
 <section>
@@ -552,7 +606,62 @@ footer{{margin-top:70px;padding-top:18px;border-top:1px solid var(--rule);font-s
 </section>
 
 <section>
-  <div class="shead"><span class="n">05</span><h2>Where the money went</h2></div>
+  <div class="shead"><span class="n">05</span><h2>Are we winning the fights?</h2></div>
+  <div class="prose">
+    <p>Castle health cannot answer that &mdash; it falls for a while in every game. What answers
+    it is the cumulative value each side has had destroyed. While our line is <em>below</em>
+    theirs we are trading up.</p>
+  </div>
+  <figure>
+    <p class="figtitle">Cumulative value destroyed</p>
+    <p class="figsub">lower is better for that side; the crossing is the moment the game turns</p>
+    <div class="scroll"><svg viewBox="0 0 {W} {PADT+H_TRD+30}" role="img"
+      aria-label="Cumulative value destroyed for both sides. The two lines track together early, then ours climbs above theirs after the reinforcements upgrade and stays there.">
+      {trd_grid}
+      <path class="lthem" d="{trd_them}"/>
+      <path class="lnew" d="{trd_us}"/>
+      {trd_x}
+    </svg></div>
+    <div class="legend">
+      <span><i style="background:var(--new)"></i>our losses</span>
+      <span><i style="background:var(--them)"></i>their losses</span>
+    </div>
+  </figure>
+
+  <div class="callout">
+    <h3>Both sides upgrade Reinforcements at {UPG:.0f}s, and that is the whole story</h3>
+    <p>Before it we are comfortably ahead on trades &mdash; ${FL_PRE:,.0f} destroyed against
+    ${OL_PRE:,.0f} lost, a ratio of <strong>{R_PRE:.2f}&times;</strong>. After it we are behind at
+    <strong>{R_POST:.2f}&times;</strong>. The economies are lock-step, so both players cross on the
+    same second.</p>
+    <p>The mechanism is the payload tier, and the stall harness measured it long before this bot
+    existed. <code>reinforcements_2</code> delivers five tier-5s, which a chump line holds at
+    <strong>2 bodies/second</strong>. <code>reinforcements_3</code> delivers five tier-7s, which
+    needs <strong>30/second</strong>. The bot's hard ceiling is <strong>6/second</strong> &mdash;
+    one purchase per decision. One upgrade moves the incoming wave from three times inside what a
+    blocking defence can hold to five times beyond it, and then repeats every ten seconds
+    forever.</p>
+  </div>
+
+  <div class="prose" style="margin-top:26px">
+    <p>What the bot bought with its ${LAST['p1spent']:,.0f}, against what the same gadget handed
+    it for nothing:</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>tier</th><th>bought</th><th>unit price</th><th>spend</th><th>share</th>
+      <th>arrived free</th></tr></thead>
+    <tbody>{buy_rows}</tbody>
+  </table></div>
+  <p class="cap">The bot described as a chump-blocker spends
+  {100*SPEND_T[1]/SPEND_ALL:.0f}% of its budget on tier-1 bodies. The survival law that the whole
+  design rests on governs a fraction of what it actually does; the rest goes on high-tier wipers,
+  bought in the same minutes its own <code>reinforcements_3</code> is delivering the same units
+  free. Those free ones march out and attack, so they are not available to defend &mdash; which is
+  the real defect, and it is not one the wiper logic can fix.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="n">06</span><h2>Where the money went</h2></div>
   <div class="prose">
     <p>The old build bought six repairs in seven seconds, each one raising max health, which drops
     time-to-death back under the threshold a second later. The last cost <strong>$8,837 for 0.89
