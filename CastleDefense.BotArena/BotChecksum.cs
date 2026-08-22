@@ -61,7 +61,7 @@ namespace CastleDefense.BotArena
                 dumpw = new StreamWriter(dump);
                 dumpw.WriteLine("tick,hp,maxhp,money,inv,own,enemy,enemy_dps,enemy_swings,"
                     + "enemy_value,choice,t1,t2,t3,t4,t5,t6,t7,t8,"
-                    + "wipe_veto,p2money,p2inv,p1income,p2income,p1spent,p2spent");
+                    + "wipe_veto,w_radius,w_reach,w_valrad,w_valreach,w_spread,p2money,p2inv,p1income,p2income,p1spent,p2spent");
             }
 
             for (int g = 0; g < games; g++)
@@ -122,7 +122,8 @@ namespace CastleDefense.BotArena
                             + $"{state.Units.Count(u => u.Side == 1)},{foe.Count},{tm.UnblockedDps:F0},{tm.SwingRate:F1},"
                             + $"{val:F0},{p1.LastDefenceChoice},"
                             + $"{tiers[1]},{tiers[2]},{tiers[3]},{tiers[4]},{tiers[5]},{tiers[6]},{tiers[7]},{tiers[8]},"
-                            + $"{p1.LastWipeVeto},"
+                            + $"{p1.LastWipeVeto},{p1.LastWipeInRadius},{p1.LastWipeInReach},"
+                            + $"{p1.LastWipeValRadius:F0},{p1.LastWipeValReach:F0},{p1.LastWipeSpread:F0},"
                             + $"{state.Player2.Money:F0},{state.Player2.InvestmentCount},"
                             + $"{state.Player1.Income:F0},{state.Player2.Income:F0},"
                             + $"{engine.MoneySpentOnUnits[1]:F0},{engine.MoneySpentOnUnits[2]:F0}");
