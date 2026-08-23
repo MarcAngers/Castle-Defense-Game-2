@@ -148,3 +148,73 @@ about time but not about money or absolute health**:
 Item 1 is a one-line change with existing evidence behind it. It should be measured on the
 shipped bot before anything else here, because it is also the change most likely to alter the
 shipped fingerprint, and every benchmark in this project is anchored to that.
+
+## Balance dashboard + the pinned loadout, rebuilt 2026-08-23
+
+Both runs use the bot now in Singleplayer: plain `new HeuristicBot(2)`, stock settings.
+
+### `dashboard` — 21,760 games, 128 cells x 23 opponents
+
+```
+CastleDefense.BotArena.exe dashboard            # --bot heuristic is already the default
+```
+
+HeuristicBot wins **95.5%** overall against the spam ladder and every ONNX checkpoint.
+
+| team | | offense | | defense | |
+|---|---|---|---|---|---|
+| Purple | 98.8% | freeze | 97.2% | reinforcements | 96.6% |
+| Black | 98.5% | nuke | 96.1% | heal | 96.3% |
+| Orange | 97.3% | firebomb | 95.4% | wall | 95.0% |
+| Blue | 96.4% | snipe | **93.1%** | speed | **93.9%** |
+| White | 96.2% |
+| Green | 95.0% |
+| Red | 94.3% |
+| Yellow | **87.2%** |
+
+Hardest opponents: **Tier4Spam 85.2%**, then `v4` at 92.6%. Nothing else is under 93%.
+
+**Read this as a capability map, not a balance verdict.** The protagonist is fixed and the
+opponent is a spam bot or an ONNX checkpoint, so a low cell means "HeuristicBot is weaker with
+this kit", not "this kit is weak". Two results replicate the independent mirror sweeps and are
+therefore worth trusting: **speed defence and snipe offence are the two weakest slots**, and
+Yellow is a clear team outlier. Note Yellow was NOT an outlier in the counter-matrix marginals
+(57.1%), so its 87.2% here is HeuristicBot-specific.
+
+### What beats White/nuke/reinforcements
+
+```
+CastleDefense.BotArena.exe counter-eval --games 200 --fixed White,nuke,reinforcements     --out counter/vs_pinned.csv
+```
+
+All 128 human loadouts in seat 1 against the pinned bot in seat 2, 200 games each, fixed seats
+and no headstart — the deployed `sp` configuration.
+
+**Exactly two loadouts beat it, and both beat it every single game:**
+
+| human loadout | bot wins | human wins |
+|---|---|---|
+| **White / firebomb / reinforcements** | **0.0%** | **100.0%** |
+| **White / freeze / reinforcements** | **0.0%** | **100.0%** |
+| White / nuke / reinforcements (the mirror) | 50.0% | 50.0% |
+| *every other cell (125 of them)* | 100.0% | 0.0% |
+
+Mean 98.0%, median 100%. This is the deterministic-hole pattern the counter-matrix work
+predicted for any fixed loadout: a very high average hiding a handful of cells that lose
+outright. Here the holes are unusually clean — the whole matrix is 100% except three cells.
+
+Marginals, lower being better for the human: **White 84.4%** and every other team 100.0%;
+**reinforcements 92.2%** and every other defence 100.0%. The counter is White plus
+reinforcements plus an offensive gadget that is not nuke.
+
+**Marc has been playing Blue** (13 of 28 games), which is one of the 100% cells. He still wins
+31% of those, which is a measure of how much better a human is than HeuristicBot-in-seat-1 —
+but he is choosing a loadout the sweep says never wins. His freeze/reinforcements instinct is
+right; the team is not. **White/freeze/reinforcements is the same gadget pair on the team that
+turns it into a 100% counter.**
+
+**Caveat, and it is the same one the counter table carries.** Both seats are HeuristicBot, so
+these are not predictions about Marc's win rate — a human plays nothing like the bot whose
+0%/100% cells these are. What transfers is the ordering and the existence of the holes, not the
+absolute rates. Treat "play White/freeze/reinforcements" as a hypothesis to test at the
+keyboard, not a guarantee.
