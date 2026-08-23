@@ -472,3 +472,6 @@ CastleDefense.BotArena/dashboard/archive_prev_sweep/
 # Stray sweep output that lands in the repo root
 /round1_*.csv
 /triage_*.csv
+
+# Per-tick replay rebuilds -- regenerate with --economy-dump, ~100MB of derived data
+CastleDefense.BotArena/stall/human/
