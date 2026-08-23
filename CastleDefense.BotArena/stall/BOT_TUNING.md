@@ -274,6 +274,43 @@ Two fixes fall straight out, and both are cheap:
   identical free one lands is a pure waste of $2,066; the option comparison never considers
   waiting.
 
+### WHAT MARC DOES INSTEAD (game 9A9A41, same bot, same pinned mirror)
+
+Recorded 2026-08-22 against `new HeuristicBot(2)` — the same opponent every number above is
+measured against — and rebuilt with `--economy-dump`. The rebuild reproduces the recorded row
+exactly (income $2,500/$750, money $1,938/$24,526, HP 19939/45000 and 0, 8484 ticks).
+
+**He buys ZERO units for the first 152 seconds and lets his castle fall to 999 HP.**
+
+| rung | MARC | his bot | defence-only bot | its bot |
+|---|---|---|---|---|
+| 6 | 121s | **115s** | 115s | 115s |
+| 7 | **153s** | 221s | 147s | 151s |
+| 8 | **226s** | never | never | 227s |
+
+He is *behind* for six rungs — slower than his opponent and slower than our bot — then takes rung
+7 sixty-eight seconds ahead and rung 8 alone. Our bot's mirror is the exact inverse: it wins rung
+7 and loses rung 8.
+
+**Total unit spend: Marc $24,569, our bot $85,229.** He is not spending less in total so much as
+spending it LATER — nothing before 152s, everything after, once the income exists to pay for it.
+
+Two consequences that outrank everything else currently open:
+
+- **The defence-only premise is vindicated and the bot is failing at the part it was built for.**
+  Defend cheaply, out-invest, win late is exactly what Marc does. Our bot spends $85,229 defending
+  and finishes a rung behind.
+- **Marc treats castle health as a RESOURCE TO SPEND; the bot treats it as something to protect.**
+  He sits at 999 HP holding money he could have spent on defence and does not spend it. The whole
+  option comparison in `DefensiveResponse` prices every purchase against *dying*, so as survival
+  falls it spends harder — the opposite response. That is the shape of the defect, and it is not
+  reachable by tuning the wiper.
+
+**Do not generalise the earlier 34BA36 finding.** That game (vs the SEARCH bot) had Marc winning
+on 2 unit buys and $356, and `human_economy.html` led with it. Against HeuristicBot he buys 424
+units for $24,569. How much he buys is a property of the opponent; the timing shape is what
+transfers.
+
 ### The field-coverage rule: implemented, works, and does NOT replace the cooldown
 
 `FindWiper` now prices a wipe on the **margin** — what a purchase adds over the units already
