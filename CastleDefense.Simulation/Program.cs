@@ -199,6 +199,87 @@ namespace CastleDefense.Simulation
 
             // Replay divergence: put the bot in the human's seat and log where it
             // would have played differently. See Divergence.cs.
+            // Lists recordings where a side never acted for the whole game. Reports by
+            // default; --move relocates them to a dated quarantine folder. Never deletes.
+            // See ReplayAudit.cs.
+            if (args.Length >= 1 && args[0] == "--multi-action-check")
+            {
+                MultiActionCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--replay-format-check")
+            {
+                ReplayFormatCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--repair-audit")
+            {
+                RepairAudit.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--spend-breakdown")
+            {
+                SpendBreakdown.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--invest-decline")
+            {
+                InvestDecline.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--economy-dump")
+            {
+                EconomyDump.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--replay-fidelity")
+            {
+                ReplayFidelity.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 3 && args[0] == "--defender-trace")
+            {
+                DefenderTrace.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 3 && args[0] == "--score-decomp")
+            {
+                ScoreDecomp.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 3 && args[0] == "--nuke-repro")
+            {
+                NukeRepro.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--nuke-defence-check")
+            {
+                NukeDefenceCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--nuke-audit")
+            {
+                NukeAudit.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
+            if (args.Length >= 2 && args[0] == "--replay-audit")
+            {
+                ReplayAudit.Run(args[1], args.Skip(2).ToArray());
+                return;
+            }
+
             if (args.Length >= 3 && args[0] == "--divergence")
             {
                 Divergence.Run(args[1], args[2], args.Skip(3).ToArray());
