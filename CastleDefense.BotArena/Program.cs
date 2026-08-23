@@ -727,6 +727,17 @@ if (args.Length > 0 && args[0] == "dashboard")
             side => new RolloutSearchOpponent(side, 15, 300, 1, 0, true, 0.10),
             false, mirrorGames));
 
+    // THE MIRROR, for the heuristic protagonist. Added 2026-08-23: the sweep had no mirror
+    // arm at all unless --mirror-games was passed, and that one is a SEARCH bot, so a
+    // `--bot heuristic` dashboard described this bot only against opponents it beats
+    // 93-99% of the time. Every team and gadget therefore looked fine, because the opponent
+    // being bad dominated every cell. Cheap enough to leave on: a heuristic game is ~1/200th
+    // the cost of a search game, so 25/cell is 3,200 games, about 15% of the existing sweep.
+    if (botKind == "heuristic")
+        opponentSpecs.Add(("HeuristicMirror", "heuristic",
+            side => new HeuristicBaseline(side),
+            false, mirrorGames > 0 ? mirrorGames : 25));
+
     var modelsDir = FindLeagueModelsDir();
     if (modelsDir != null)
     {

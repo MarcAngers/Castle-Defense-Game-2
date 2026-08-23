@@ -174,12 +174,55 @@ HeuristicBot wins **95.5%** overall against the spam ladder and every ONNX check
 
 Hardest opponents: **Tier4Spam 85.2%**, then `v4` at 92.6%. Nothing else is under 93%.
 
-**Read this as a capability map, not a balance verdict.** The protagonist is fixed and the
-opponent is a spam bot or an ONNX checkpoint, so a low cell means "HeuristicBot is weaker with
-this kit", not "this kit is weak". Two results replicate the independent mirror sweeps and are
-therefore worth trusting: **speed defence and snipe offence are the two weakest slots**, and
-Yellow is a clear team outlier. Note Yellow was NOT an outlier in the counter-matrix marginals
-(57.1%), so its 87.2% here is HeuristicBot-specific.
+**THAT TABLE IS NEARLY USELESS FOR BALANCE, AND THE MIRROR IS THE REASON.** Every one of those
+23 opponents is a spam tier or an ONNX checkpoint — opponents HeuristicBot beats 93–99% of the
+time. Against that spread, "the opponent is bad" dominates every cell and a real team or gadget
+edge cannot show through. It also produced a wrong headline: Yellow looked like the weak team at
+87.2%, which is an artifact.
+
+### The mirror arm — added 2026-08-23, and it was missing entirely
+
+The sweep had **no mirror at all** for a heuristic protagonist. The only mirror arm,
+`SearchMirror`, is off by default *and* runs the search bot. `HeuristicMirror` now runs by
+default (3,200 games, 25/cell, seats alternated — mandatory here, since a near-mirror is decided
+by the seat). The opponent still draws a random loadout, so this reads "this kit against a
+competent bot", not loadout-vs-loadout.
+
+It sits at **49.9% overall**, as a mirror must, and the spread explodes:
+
+| | mirror | all other opponents |
+|---|---|---|
+| White | **83.5%** | 95.8% |
+| Yellow | 54.8% | 87.8% |
+| Black | 54.2% | 98.5% |
+| Orange | 47.5% | 97.4% |
+| Purple | 46.8% | 98.3% |
+| Blue | 45.8% | 96.0% |
+| Red | 40.0% | 93.1% |
+| Green | **26.5%** | 93.3% |
+| | | |
+| freeze | 57.1% | 96.9% |
+| nuke | 54.2% | 95.7% |
+| firebomb | 53.0% | 94.3% |
+| snipe | **35.1%** | 93.2% |
+| | | |
+| reinforcements | **62.0%** | 95.9% |
+| wall | 59.5% | 94.7% |
+| heal | 52.1% | 96.2% |
+| speed | **25.9%** | 93.3% |
+
+Team spread goes from 11 points to **57**; defence from 3 points to **36**.
+
+**It replicates the counter-matrix sweep, which is a different harness with a different design
+(fixed seats, loadout-vs-loadout, common random numbers).** Spearman rho **+0.90 on teams**,
++0.80 on offence and defence, +0.80 across all 16 slots. Green worst (26.9 vs 26.5), White best
+(78.3 vs 83.5), snipe worst offence (33.9 vs 35.1), speed worst defence (36.9 vs 25.9). Two
+instruments that share no code agreeing to that degree is the strongest validity evidence either
+of them has.
+
+**Corrected:** Green is the weak team, not Yellow. Yellow's 87.2% in the spam arms was the
+artifact; in the mirror it is mid-table at 54.8%, and the counter-matrix agreed (57.1%) all
+along.
 
 ### What beats White/nuke/reinforcements
 

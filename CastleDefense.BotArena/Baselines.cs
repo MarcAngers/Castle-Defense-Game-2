@@ -157,6 +157,31 @@ namespace CastleDefense.BotArena
     }
 
     /// <summary>
+    /// <summary>
+    /// Plain stock HeuristicBot as an ARENA OPPONENT, so the dashboard can sweep the
+    /// mirror.
+    ///
+    /// WHY THIS WAS MISSING AND WHY IT MATTERS. Until 2026-08-23 the dashboard's only mirror
+    /// arm was `SearchMirror`, which is off by default AND uses RolloutSearchBot -- so a
+    /// `--bot heuristic` sweep had no mirror at all. Every one of its 23 opponents was a spam
+    /// tier or an ONNX checkpoint, i.e. an opponent HeuristicBot beats 93-99% of the time, and
+    /// against that spread a genuine team or gadget edge is swamped by the opponent simply
+    /// being bad. The mirror is the one arm where an edge shows up as an edge.
+    ///
+    /// The dashboard alternates which physical seat the protagonist takes, which this arm
+    /// needs more than any other: a near-mirror is decided by the seat rather than the play
+    /// (see the seat-bias entry in CLAUDE.md), so an unbalanced mirror measurement is worthless.
+    /// The opponent still receives a RANDOM loadout via AssignRandomLoadout, so this is
+    /// "this kit against a competent bot playing anything", not a loadout-vs-loadout cell --
+    /// counter-matrix is the tool for that.
+    /// </summary>
+    public class HeuristicBaseline : IArenaOpponent
+    {
+        private readonly HeuristicBot _bot;
+        public HeuristicBaseline(int side) => _bot = new HeuristicBot(side);
+        public void Update(GameEngine engine) => _bot.Update(engine);
+    }
+
     /// HeuristicBot plus the scripted save-invest commitment (see SavingHeuristicBot).
     ///
     /// A ladder CONTENDER rather than a rung. Probe A only means anything if this policy is
