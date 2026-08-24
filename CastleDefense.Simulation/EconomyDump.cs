@@ -25,6 +25,11 @@ namespace CastleDefense.Simulation
         public static void Run(string replayPath, string[] args)
         {
             string outPath = Arg(args, "--csv", "economy_dump.csv");
+            // Replace the RECORDED P2 actions with a live bot. The human's actions still come
+            // from the replay, so this asks "what would a different bot have done against the
+            // same play". Not a prediction -- the human would have reacted differently -- but
+            // it isolates the bot's own decisions on an identical board history.
+            string liveP2 = Arg(args, "--live-p2", null);
             int every = int.Parse(Arg(args, "--every", "3"));
 
             var rf = ReplayFile.Read(replayPath);
@@ -39,6 +44,15 @@ namespace CastleDefense.Simulation
                                 + "end-of-game loadout from tick 0. Treat the curve as indicative.");
 
             var (state, engine) = rf.BuildStart();
+            CastleDefense.Engine.Bot.HeuristicBot bot2 = null;
+            if (liveP2 != null)
+            {
+                var st = liveP2 == "repairfix" ? CastleDefense.Engine.Bot.HeuristicBotSettings.RepairFixProfile
+                       : liveP2 == "hazard"    ? CastleDefense.Engine.Bot.HeuristicBotSettings.RepairFixPlusHazardProfile
+                                               : null;
+                bot2 = new CastleDefense.Engine.Bot.HeuristicBot(2, st);
+                Console.WriteLine($"  P2 driven LIVE by HeuristicBot [{liveP2}] instead of the recording");
+            }
             using var w = new StreamWriter(outPath);
             w.WriteLine("tick,hp,maxhp,money,inv,own,enemy,p2hp,p2maxhp,p2money,p2inv,"
                       + "p1income,p2income,p1spent,p2spent,p1act,p2act");
@@ -48,7 +62,8 @@ namespace CastleDefense.Simulation
                 int tick = (int)state.CurrentTick;
                 byte a1 = rf.A1[i], a2 = rf.A2[i];
                 if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
-                if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
+                if (bot2 != null) bot2.Update(engine);
+                else if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
                 engine.Tick();
 
                 if (i % every == 0)
