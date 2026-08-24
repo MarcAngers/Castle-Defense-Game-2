@@ -84,12 +84,25 @@ namespace CastleDefense.Simulation
                     // Clone so the shadow's actions never reach the real game.
                     var probe = engine.Clone(unchecked((int)state.CurrentTick));
                     int before = probe._state.Units.Count(u => u.Side == 2);
+                    // Money spent INSIDE the probe is the only unambiguous evidence of a
+                    // purchase. Unit count alone is not: a reinforcements cast adds bodies
+                    // without buying them, and LastSpawnReason then reads stale.
+                    double spentBefore = probe.MoneySpentOnUnits[2];
                     shadow.Update(probe);
                     int after = probe._state.Units.Count(u => u.Side == 2);
+                    double bought = probe.MoneySpentOnUnits[2] - spentBefore;
                     double sec = state.CurrentTick / 30.0;
-                    if (sec >= exFrom && sec <= exTo && after > before)
-                        Console.WriteLine($"    {sec,7:F1}s  P2 would spawn  reason={shadow.LastSpawnReason,-16} "
+                    // Log SUPPRESSED decisions too. Logging only ticks where a spawn happened
+                    // makes a working gate invisible: it fires precisely by preventing the spawn.
+                    if (sec >= exFrom && sec <= exTo && shadow.LastHazardBlackout
+                        && (int)(state.CurrentTick % 30) == 0)
+                        Console.WriteLine($"    {sec,7:F1}s  P2 SUPPRESSED by hazard blackout  "
+                                        + $"money=${state.Player2.Money,8:F0}  "
+                                        + $"ownUnits={state.Units.Count(u => u.Side == 2),3}");
+                    if (sec >= exFrom && sec <= exTo && bought > 0)
+                        Console.WriteLine($"    {sec,7:F1}s  P2 BUYS ${bought,6:F0}  reason={shadow.LastSpawnReason,-16} "
                                         + $"killRaw={shadow.LastKillerInstinctRaw,-5} lock={shadow.LastKillerLockReason ?? "-",-12} "
+                                        + $"hazBlackout={shadow.LastHazardBlackout,-5} "
                                         + $"money=${state.Player2.Money,8:F0}  investPrice=${state.Player2.InvestmentPrice,8:F0}  "
                                         + $"ownUnits={state.Units.Count(u => u.Side == 2),3}  foeUnits={state.Units.Count(u => u.Side == 1),3}");
                 }
@@ -109,6 +122,8 @@ namespace CastleDefense.Simulation
                               + $"{engine.MoneySpentOnUnits[1]:F0},{engine.MoneySpentOnUnits[2]:F0},{a1},{a2}");
             }
 
+            if (shadow != null)
+                Console.WriteLine($"  SHADOW: blackout decisions {shadow.HazardBlackoutDecisions}, offensive-branch entries {shadow.OffensiveSpendDecisions}, entries while blacked out {shadow.OffensiveWhileBlackedOut}");
             Console.WriteLine($"\nwrote {outPath}");
             Console.WriteLine($"  rebuilt final: P1 income ${state.Player1.Income:F0} money ${state.Player1.Money:F0} "
                             + $"hp {state.Player1.CastleHealth}/{state.Player1.CastleMaxHealth} inv {state.Player1.InvestmentCount}");
