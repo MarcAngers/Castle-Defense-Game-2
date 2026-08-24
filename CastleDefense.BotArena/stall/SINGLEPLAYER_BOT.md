@@ -627,3 +627,72 @@ did-nothing rate of what survives from 29% to 6%**.
 Two different failure modes, two different terms, both game-losing, both now covered. And the
 cheap-repair term is the first concrete instance of the *uncast potential* gap from the bait-wave
 note — the defender's unspent capacity, made observable through a number already on the board.
+
+### Pricing the value in dollars — and a correction to how "forced response" was measured
+
+Marc: *"as their castle max HP increases, the value of every damage point we deal increases
+exponentially, since the repair price increases exponentially."* That is right, it is the correct
+way to put damage on the same scale as money, and it changes the conclusion.
+
+**FIRST, A DEFECT IN THE EARLIER NUMBER.** `response_spend` was
+`MoneySpentOnUnits[1]` over the window — **unit purchases only**. It missed repairs and gadgets
+entirely, which is indefensible given repairs are the dominant response (55% of activations).
+Across all 119 activations it captured **$404,782 of a real $1,114,029** — about a third. Every
+"forced response" figure quoted before this section is understated by roughly 3×.
+
+Now measured as total outflow: income earned over the window, less what stayed banked, less any
+investment (a choice, not a forced response).
+
+**SECOND, THE DAMAGE PRICE.** From `PreviewRepairStep` the max rises 11,000 per repair and the
+castle heals 20 points of the new max, against `ApplyRepairStep`'s exponential price:
+
+| their repairs taken | their max HP | repair price | HP it buys | **$ per HP** |
+|---|---|---|---|---|
+| 0 | 1,000 | $8 | 11,750 | **0.001** |
+| 2 | 23,000 | $66 | 16,150 | 0.004 |
+| 4 | 45,000 | $493 | 20,550 | 0.024 |
+| 6 | 67,000 | $8,837 | 24,950 | 0.354 |
+| 7 | 78,000 | $63,195 | 27,150 | **2.328** |
+
+**A point of damage is worth 3,230× more against a defender who has repaired seven times than
+against one who has not repaired at all.**
+
+### The result: killerInstinct is economically negative below 4 defender repairs
+
+Value = damage priced at their cost to undo it, plus their total forced outflow. Cost = what the
+bot spent during the activation.
+
+| their repairs at commit | n | bot cost | damage $ | their outflow | **value / cost** |
+|---|---|---|---|---|---|
+| 0–1 | 31 | $69,657 | $48 | $44,171 | **0.63** |
+| 2–3 | 50 | $235,519 | $1,436 | $141,864 | **0.61** |
+| 4–5 | 33 | $180,470 | $32,251 | $595,623 | **3.48** |
+| 6+ | 5 | $64,648 | $307,888 | $332,371 | **9.90** |
+
+**Below four defender repairs the bot loses money on every activation. Above it, it makes 3.5×
+and then 10×.** The median damage value tells the same story: $0, $2, $668, **$61,257**.
+
+Cumulative, firing only when their repair count is at least N:
+
+| N | activations kept | bot cost | value | value/cost | kills kept | $ saved |
+|---|---|---|---|---|---|---|
+| 0 (today) | 119 | $550,294 | $1,455,652 | 2.65 | 24 | — |
+| 2 | 88 | $480,637 | $1,411,433 | 2.94 | 20 | $69,657 |
+| **3** | **55** | **$333,546** | **$1,354,773** | **4.06** | **14** | **$216,748** |
+| 4 | 38 | $245,118 | $1,268,133 | 5.17 | 12 | $305,176 |
+| 5 | 26 | $163,586 | $1,183,427 | 7.23 | 9 | $386,708 |
+
+**This is a better rule than either gate proposed earlier**, and it subsumes the cheap-repairs
+one: "their max HP ≤ 12,000" was just repair count ≤ 1 wearing a different hat. It is a single
+observable integer, it is monotonic, and it is denominated in money rather than in a
+did-nothing rate.
+
+**Where to set it is a judgement, not a calculation.** N=3 keeps 93% of the value for 61% of the
+spend but gives up 10 of 24 kills. N=2 is nearly free — 20 kills kept, $69,657 saved. The kills
+lost are real games, so the aggressive settings are not obviously right even though the ratio
+improves monotonically.
+
+**Caveat.** Value and cost are on the same scale only by assumption. Damage-to-undo is a real
+price the defender would pay *if they chose to repair*; forced outflow is money they actually
+spent but not all of it was caused by this activation. Both are defensible as directional
+measures and neither is exact.

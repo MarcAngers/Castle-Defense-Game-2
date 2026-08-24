@@ -48,7 +48,7 @@ namespace CastleDefense.Simulation
 
             using var w = new StreamWriter(outPath);
             w.WriteLine("game,arm,result,start_s,dur_s,cost,dmg,killed,response_spend,"
-                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_inv,push_dps,kill_secs,foe_repairs,foe_repair_hp");
+                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_inv,push_dps,kill_secs,foe_repairs,foe_repair_hp,foe_repair_spend,foe_outflow,dmg_value");
 
             int done = 0, acts = 0;
             foreach (var (id, arm) in games)
@@ -133,7 +133,11 @@ namespace CastleDefense.Simulation
 
             // Second pass: replay again to read the outcome window after each activation.
             var (s2, e2) = rf.BuildStart();
-            var hp = new List<(double t, double foeHp, double foeMax, double marcSpend, bool over)>();
+            // Money and investment count too, so the defender's TOTAL outflow can be
+            // reconstructed -- unit spend alone misses repairs and gadgets, and repairs are the
+            // dominant response (they happen in 55% of activations).
+            var hp = new List<(double t, double foeHp, double foeMax, double marcSpend,
+                               double money, double income, int inv, bool over)>();
             for (int i = 0; i < rf.TickCount && !s2.IsGameOver; i++)
             {
                 int tick = (int)s2.CurrentTick;
@@ -142,7 +146,8 @@ namespace CastleDefense.Simulation
                 if (a2 != 0) rf.ApplyRecorded(e2, 2, tick, a2);
                 e2.Tick();
                 hp.Add((s2.CurrentTick / 30.0, s2.Player1.CastleHealth, s2.Player1.CastleMaxHealth,
-                        e2.MoneySpentOnUnits[1], s2.IsGameOver));
+                        e2.MoneySpentOnUnits[1], s2.Player1.Money, s2.Player1.Income,
+                        s2.Player1.InvestmentCount, s2.IsGameOver));
             }
             double EndHp(double t)
             {
@@ -162,16 +167,42 @@ namespace CastleDefense.Simulation
             // 54D732 Marc went from 955 HP to 17,840 in 0.9 seconds for $34 -- the estimate was
             // right when it fired and irrelevant one second later. Count the repairs the
             // defender makes while the bot is committed, and the HP they bought with them.
-            (int n, double gained) FoeRepairs(double from, double to)
+            static double RepairPrice(int c)
             {
-                int n = 0; double gained = 0, prevMax = -1, prevHp = 0;
+                double p = Math.Exp(0.0109 * c * c * c + 0.0011 * c * c + 0.4351 * c + 0.5268)
+                         * (c * 5 + 5);
+                return c >= 8 ? p * 2 : p;
+            }
+
+            // PreviewRepairStep: max rises 11,000 and the castle heals 20 points of the NEW max.
+            static double RepairHp(int c, double pct) => pct * 11000 + 0.2 * (1000 + 11000 * (c + 1));
+
+            (int n, double gained, double spent) FoeRepairs(double from, double to)
+            {
+                int n = 0; double gained = 0, spent = 0, prevMax = -1, prevHp = 0;
                 foreach (var h in hp)
                 {
                     if (h.t >= from && h.t <= to && prevMax >= 0 && h.foeMax > prevMax)
-                    { n++; gained += (h.foeHp - prevHp) + (h.foeMax - prevMax); }
+                    {
+                        n++;
+                        gained += (h.foeHp - prevHp) + (h.foeMax - prevMax);
+                        spent += RepairPrice((int)Math.Round((prevMax - 1000) / 11000.0));
+                    }
                     prevMax = h.foeMax; prevHp = h.foeHp;
                 }
-                return (n, gained);
+                return (n, gained, spent);
+            }
+
+            // Everything the defender put back in over the window: income earned less what
+            // stayed banked, minus any investment (a choice, not a forced response).
+            double FoeOutflow(double from, double to)
+            {
+                var a = hp.FirstOrDefault(h => h.t >= from);
+                var b = hp.LastOrDefault(h => h.t <= to);
+                if (b.t <= a.t) return 0;
+                double invested = 0;
+                for (int c = a.inv; c < b.inv; c++) invested += a.income * (c * 4 + 8);
+                return Math.Max(0, a.money + a.income * (b.t - a.t) - b.money - invested);
             }
 
             string result = rf.Winner == 2 ? "BOT" : rf.Winner == 1 ? "MARC" : "draw";
@@ -184,11 +215,19 @@ namespace CastleDefense.Simulation
                 bool killed = EndHp(endT) <= 0 && rf.Winner == 2;
                 double response = Math.Max(0, EndSpend(endT) - p.marcSpend0);
                 var rep = FoeRepairs(p.start, endT);
+                double outflow = FoeOutflow(p.start, endT);
+                // A point of damage is worth what it costs THEM to undo it, priced at the
+                // repair count they held when the bot committed. That price rises ~3,230x
+                // between repair 0 and repair 7.
+                int rc = (int)Math.Round((p.maxhp - 1000) / 11000.0);
+                double pct = p.maxhp > 0 ? p.hp0 / p.maxhp : 1;
+                double dmgValue = dmg * RepairPrice(rc) / Math.Max(1, RepairHp(rc, pct));
                 w.WriteLine($"{id},{arm},{result},{p.start:F1},{p.dur:F1},{p.cost:F0},{dmg:F0},"
                           + $"{(killed ? 1 : 0)},{response:F0},{p.own},{p.foe},{p.hp0:F0},"
                           + $"{(p.maxhp > 0 ? 100 * p.hp0 / p.maxhp : 0):F0},{p.maxhp:F0},"
                           + $"{p.money:F0},{p.inv},{p.foeInv},{p.dps:F0},"
-                          + $"{(float.IsPositiveInfinity(p.ksec) ? 9999 : p.ksec):F1},{rep.n},{rep.gained:F0}");
+                          + $"{(float.IsPositiveInfinity(p.ksec) ? 9999 : p.ksec):F1},{rep.n},{rep.gained:F0},"
+                          + $"{rep.spent:F0},{outflow:F0},{dmgValue:F0}");
             }
             Console.WriteLine($"  {id} [{arm}] {result,-4} {pending.Count} activations");
             return pending.Count;
