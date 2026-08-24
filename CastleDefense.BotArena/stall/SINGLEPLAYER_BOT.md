@@ -755,3 +755,69 @@ a defensive tool, it is a *tax on the opponent's entire attack budget*.
 **Cannot yet say whether `HazardAttackBlackout` fixes it.** Splitting the Blue games by arm gives
 26 / 6 / 0 / 5 attacks — the hazard arm has no Blue games at all and the others are far too small.
 That needs Marc to play several Blue games on the current build.
+
+## WHAT SPENT THE $10,801 IN GAME 112085 — and it is not killerInstinct
+
+The bot led all eight rungs, then lost the Armageddon race by 3.4s after spending $10,801 on
+units that removed no castle health. Attributed with `--explain` using shadow settings matched to
+what actually ran (`!asplayed` — the brake profile with `HazardAttackBlackout` disconnected, per
+the erratum), across 126 purchases from 275.0s to 299.0s:
+
+| branch | buys | spent | share |
+|---|---|---|---|
+| `attack` — offensive `SpendOnUnits(preferDefense: false)` | 81 | **$5,616** | 53% |
+| `reactive` — `SpendOnUnits(preferDefense: true)` | 44 | **$4,888** | 46% |
+| `wiper` | 1 | $81 | 1% |
+
+**`killerInstinct` was false on all 126.** The brakes fired zero times. This was ordinary
+spending, and both halves are indefensible in this position.
+
+### The attack half: a structural 17% skim that cannot see the win condition
+
+At investment 8 the pacing arithmetic is:
+
+```
+investPaceRate  = Income / (1 + InvestPaceExtraTimeFraction)   = 2500 / 1.20 = $2,083/s
+attackFlowRate  = min(Income * 0.91, max(Income - investPaceRate, Income * 0.15))
+                = min($2,275, max($417, $375)) = $417/s        = 17% of income
+```
+
+Over the 24.1-second window that is a **$10,042 allowance**, of which it used $5,616.
+
+The bot was saving for **Armageddon at $121,221 — the purchase that ends the game** — and the
+pacing formula treats it as just another rung, skimming one sixth of income off the top the whole
+way. `InvestPaceExtraTimeFraction = 0.20` means "let the attack take 20% longer over the invest",
+which is algebraically a permanent `Income/6` tax.
+
+**`RushArmageddon` exists for exactly this and would NOT fix it.** It sets
+`flowFloorFraction = ArmageddonRushAttackFraction` (0) instead of `MinAttackFlowFraction` (0.15)
+at `InvestmentCount >= 7`. Its own comment says *"at InvestmentCount 7/8 it is the ONLY term
+keeping the attack funded (the residual is negative there)"* — but that is only true under the
+`else` pacing branch. With `DynamicInvestPace = true` (the default) the residual is
+`Income - Income/1.2 = Income/6`, always **positive**, so it is the residual and not the floor
+that binds. Lowering the floor to zero changes `max($417, $375)` to `max($417, 0)` — still $417.
+
+**The flag was written against a pacing mode that is not the one running.** Fixing this needs
+`InvestPaceExtraTimeFraction` driven to 0 while rushing Armageddon, not the floor.
+
+### The reactive half: fired for 24 seconds while the castle took zero damage
+
+```csharp
+bool inDanger = (enemyIsClose && !investmentRunwayIsSafe) || survivalEmergency;
+```
+
+`enemyIsClose` is a proximity test. **The bot's castle sat at 18,640/34,000 and did not lose a
+single point between 275.0s and 298.0s** — Marc had 13–37 units near it the whole time, none of
+which touched the castle. So `inDanger` was true on proximity alone and the reactive branch
+bought $4,888 of blockers against an attack that was never landing.
+
+The comment above the reactive block says the trigger was *meant* to require confirmed damage —
+*"React once the castle has actually confirmed taking damage"* — but `enemyIsClose` is what
+actually gates it.
+
+### Summary
+
+Neither half was a bad *tactical* call in isolation; both are structural. The bot has no state in
+which "I am N seconds from buying the win condition" changes how it spends, so a fixed fraction of
+income keeps leaking to attack and a proximity trigger keeps funding defence, and in a race
+decided by 3.4 seconds that leak *is* the result.

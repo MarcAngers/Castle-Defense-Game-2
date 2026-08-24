@@ -54,9 +54,29 @@ namespace CastleDefense.Simulation
             double exFrom = 0, exTo = 0;
             if (explain != null)
             {
-                var sset = explain.EndsWith("!brake")
-                    ? CastleDefense.Engine.Bot.HeuristicBotSettings.EconomyBrakeProfile : null;
-                if (sset != null) explain = explain.Replace("!brake", "");
+                // "!brake" = the brake profile as WRITTEN. "!asplayed" = the brake profile as it
+                // actually RAN in games recorded before 2026-08-24, when HazardAttackBlackout was
+                // accidentally disconnected -- see the erratum in FLAGSHIP_2026-08-23.md. Using
+                // the wrong one makes the shadow decide differently from the bot being explained.
+                CastleDefense.Engine.Bot.HeuristicBotSettings sset = null;
+                if (explain.EndsWith("!asplayed"))
+                {
+                    sset = new CastleDefense.Engine.Bot.HeuristicBotSettings
+                    {
+                        RepairPriceCheck = true,
+                        RepairHpFloorPct = 0.45f,
+                        RepairMinIntervalSeconds = 1.0,
+                        HazardAttackBlackout = false,      // it was dead in the recorded games
+                        KillerInstinctInvestLockoutSeconds = 5.0,
+                        KillerInstinctPushLatch = true,
+                    };
+                    explain = explain.Replace("!asplayed", "");
+                }
+                else if (explain.EndsWith("!brake"))
+                {
+                    sset = CastleDefense.Engine.Bot.HeuristicBotSettings.EconomyBrakeProfile;
+                    explain = explain.Replace("!brake", "");
+                }
                 var pp = explain.Split(':');
                 exFrom = double.Parse(pp[0]); exTo = double.Parse(pp[1]);
                 shadow = new CastleDefense.Engine.Bot.HeuristicBot(2, sset);
