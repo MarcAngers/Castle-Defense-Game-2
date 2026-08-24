@@ -40,6 +40,22 @@ namespace CastleDefense.Engine.Models
         public int CastleMaxHealth { get; set; }
         public double RepairPrice { get; set; }
         public int RepairCount { get; set; }
+
+        /// <summary>
+        /// Absorbing shield HP sitting in front of <see cref="CastleHealth"/>, granted by
+        /// every divine cast (see DivineEffect) and consumed first by
+        /// GameEngine.DamageCastle. Casts STACK ADDITIVELY -- a second cast before the
+        /// first shield is spent builds on top of it, so the shield is a bankable
+        /// investment rather than a refresh.
+        ///
+        /// DELIBERATELY UNRELATED TO CastleMaxHealth. A repair raises CastleMaxHealth and
+        /// must NOT move this value: a 1,000 HP shield is 1,000 HP whether the castle
+        /// behind it holds 2,000 or 12,000. Only the client's shield BAR is scaled by
+        /// CastleMaxHealth, because a bar is a proportion and the shield is not.
+        ///
+        /// It does not expire, and nothing clears it except damage.
+        /// </summary>
+        public int CastleShield { get; set; }
         public bool IsInvulnerable { get; set; }
         public long InvulnerableUntilTick { get; set; }
         public GadgetDefinition OffensiveGadget { get; set; }
@@ -60,6 +76,7 @@ namespace CastleDefense.Engine.Models
             InvestmentCount = 0;
             CastleHealth = 2000;
             CastleMaxHealth = 2000;
+            CastleShield = 0;
             RepairPrice = 20;
             RepairCount = 0;
         }

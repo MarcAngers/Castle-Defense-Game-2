@@ -5,7 +5,7 @@ using System.Numerics;
 
 namespace CastleDefense.Engine.Models
 {
-    public class GameState
+    public partial class GameState
     {
         public Guid GameId { get; set; }
         public string GameMode { get; set; }

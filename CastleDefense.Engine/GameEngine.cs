@@ -1040,6 +1040,20 @@ namespace CastleDefense.Engine
                 return; // No damage dealt
             }
 
+            // CASTLE SHIELD (divine). Absorbs first and bleeds the remainder through to
+            // health, mirroring the unit shield in ApplyDamage. It sits BEFORE the
+            // one-shot floor below on purpose: the floor is a rule about the last of the
+            // castle's REAL health, so it must see the damage that actually reaches the
+            // castle, not the raw incoming hit. A blow fully eaten by the shield leaves
+            // CastleHealth untouched and cannot end the game, so it returns early.
+            if (player.CastleShield > 0 && damage > 0)
+            {
+                int absorbed = Math.Min(player.CastleShield, damage);
+                player.CastleShield -= absorbed;
+                damage -= absorbed;
+                if (damage <= 0) return;
+            }
+
             // Prevent 1-shots
             if (player.CastleHealth == player.CastleMaxHealth && damage >= player.CastleMaxHealth)
                 player.CastleHealth = 1;
@@ -1085,6 +1099,18 @@ namespace CastleDefense.Engine
             {
                 // Invulnerable units take no damage or knockback
                 return;
+            }
+
+            // HEALS RESTORE HEALTH ONLY, NEVER SHIELD. A heal arrives here as a NEGATIVE
+            // amount, and the shield branch below is written for damage: `CurrentShield -=
+            // amount` with a negative amount GREW the shield, without any cap, and then
+            // returned before touching CurrentHealth. So healing a divine-shielded unit
+            // used to inflate its shield without limit and never heal the thing the
+            // gadget is for. Split heals off before the shield ever sees them.
+            if (amount < 0)
+            {
+                target.CurrentHealth = Math.Min(target.MaxHealth, target.CurrentHealth - amount);
+                return; // heals carry no knockback
             }
 
             // Shield Logic

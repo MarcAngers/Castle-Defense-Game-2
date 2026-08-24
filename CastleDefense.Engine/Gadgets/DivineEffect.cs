@@ -38,15 +38,31 @@ namespace CastleDefense.Engine.Gadgets
 
             // Make all allies invulnerable
             var allies = engine._state.Units.Where(u => u.Side == side).ToList();
+            var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
 
-            if (_def.Level < 3)
+            // EVERY TIER SHIELDS THE CASTLE, and the grants STACK. Unlike the unit shield
+            // below -- which is a SET, so a fresh cast merely refreshes a unit back to
+            // BaseValue -- the castle total is added to, so repeated casts bank a bigger
+            // and bigger buffer for as long as nothing spends it. PlayerState.CastleShield
+            // is independent of CastleMaxHealth, so a later repair leaves it alone.
+            player.CastleShield += (int)_def.BaseValue;
+
+            // EVERY TIER ALSO SHIELDS THE UNITS, tier 3 included. Unlike the castle total
+            // this is a SET rather than an add, so a recast refreshes a unit back up to
+            // BaseValue instead of banking on top of it.
+            //
+            // Tier 3 laying a shield UNDER its invulnerability is the point of the tier,
+            // not a bonus: ApplyDamage returns early for an Invulnerable unit, so nothing
+            // touches the shield while the window is open, and the moment the status
+            // expires the unit drops to an ordinary shielded body with BaseValue left to
+            // spend. That transition is what the client reads to swap divine_3 art back to
+            // divine art -- see View.drawUnit.
+            foreach (var ally in allies)
             {
-                foreach (var ally in allies)
-                {
-                    ally.CurrentShield = (int)_def.BaseValue;
-                }
+                ally.CurrentShield = (int)_def.BaseValue;
             }
-            else
+
+            if (_def.Level >= 3)
             {
                 foreach (var ally in allies)
                 {
@@ -58,7 +74,6 @@ namespace CastleDefense.Engine.Gadgets
                 }
 
                 // Make castle invulnerable
-                var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
                 player.IsInvulnerable = true;
                 player.InvulnerableUntilTick = engine._state.CurrentTick + _def.StatusDuration;
             }

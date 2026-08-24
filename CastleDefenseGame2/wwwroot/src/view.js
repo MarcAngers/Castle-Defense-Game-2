@@ -355,15 +355,14 @@ class View {
         // Draw health text for units? (might prefer 100hp segments similar to)
         // this.drawHealthText(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth);
 
-        // If the unit has shield health, draw a shield over it
-        if (unit.currentShield > 0) {
+        // Invulnerability (divine_3) gets its own art and outranks a plain shield layer,
+        // so a unit that has both shows the invulnerable one rather than two stacked overlays.
+        if (isInvulnerable) {
+            const divineShieldImage = loader.assets.gadgets['divine_3'];
+            this.ctx.drawImage(divineShieldImage, x, y, width, height);
+        } else if (unit.currentShield > 0) {
             const shieldImage = loader.assets.gadgets['divine'];
             this.ctx.drawImage(shieldImage, x, y, width, height);
-        }
-        // If the unit is invulnerable, draw a divine shield over it
-        if (isInvulnerable) {
-            const divineShieldImage = loader.assets.gadgets['divine'];
-            this.ctx.drawImage(divineShieldImage, x, y, width, height);
         }
     }
 
@@ -391,6 +390,17 @@ class View {
         }
 
         // Draw shield
+        //
+        // The bar is a PROPORTION OF MAX HEALTH, not of the shield's own grant, so the
+        // same 1,000 HP shield reads as half a bar on a 2,000 HP castle and a twelfth of
+        // one after repairs take it to 12,000 -- the shield value itself never moves, only
+        // how much of the castle it now covers.
+        //
+        // THE 30px OVERHANG IS DELIBERATE. The cap sits past the health bar's own width
+        // (spriteSize + 10) so that a shield worth MORE than max health visibly spills
+        // over the end of the bar rather than sitting flush with it -- that overhang is
+        // the only cue distinguishing "shielded to full" from "shielded beyond full",
+        // which stacked divine casts reach easily.
         if (currentShield > 0) {
             let shieldPct = currentShield / maxHealth;
             let shieldWidth = Math.min((spriteSize + 10) * shieldPct, (spriteSize + 30));
@@ -414,7 +424,7 @@ class View {
 
             this.ctx.restore(); // Restore coordinate system for the health bar
 
-            this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth, playerState.castleShield);
             this.drawHealthText(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         } else {
             x = this.MAP_WIDTH - 50;
@@ -425,13 +435,13 @@ class View {
             
             this.ctx.restore(); // Restore coordinate system for the health bar
             
-            this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth, playerState.castleShield);
             this.drawHealthText(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         }
 
         // If the player is invulnerable, draw a divine shield over their castle:
         if (playerState.isInvulnerable) {
-            const shieldImage = loader.assets.gadgets['divine'];
+            const shieldImage = loader.assets.gadgets['divine_3'];
             if (x > 1000) x -= 200;
             this.ctx.drawImage(shieldImage, x, y, 200, 200);
         }

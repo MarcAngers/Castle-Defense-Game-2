@@ -37,7 +37,7 @@ poison_2,Noxious Gas,Signature,poison_3,1,975,700,165,DPS,200,48,0,150,POISON,90
 poison_3,Toxic Gas,Signature,,1,7800,,1320,DPS,400,48,0,300,POISON,120,15000,"Spawns a huge cloud of the most powerful poison, melting all enemy health bars!"
 divine,Shield,Signature,divine_2,0,50,400,100,SHIELD,0,48,0,0,,150,10000,Provides a shield to all allied units. Absorbing damage and preventing knockback.
 divine_2,Big Shield,Signature,divine_3,0,750,1100,2500,SHIELD,0,48,0,0,,300,10000,Provides a large shield to all allied units. Absorbing damage and preventing knockback.
-divine_3,Divine Shield,Signature,,0,6000,,0,SHIELD,0,48,0,0,,300,30000,Calls to the gods for divine intervention. Blessing your castle and all allied units with complete invulnerability!
+divine_3,Divine Shield,Signature,,0,6000,,10000,SHIELD,0,48,0,0,,300,30000,Calls to the gods for divine intervention. Blessing your castle and all allied units with complete invulnerability!
 meteor,Meteor Strike,Signature,meteor_2,1,50,400,500,DMG,750,70,100000,0,BURN,90,10000,"Calls down a meteor from the sky, dealing damage to enemy units and setting them on fire."
 meteor_2,Mega Meteor Strike,Signature,meteor_3,1,500,700,2500,DMG,750,70,1500000,0,BURN,90,12000,"Calls down multiple huge meteors, dealing big damage to enemy units and setting them on fire."
 meteor_3,Meteor Shower,Signature,,1,9000,,2500,DMG,750,70,1500000,0,BURN,90,15000,Brings forth a deadly meteor shower to pummel the enemy forces!
