@@ -696,3 +696,62 @@ improves monotonically.
 price the defender would pay *if they chose to repair*; forced outflow is money they actually
 spent but not all of it was caused by this activation. Both are defensible as directional
 measures and neither is exact.
+
+### Re-scored with the attack's REAL window (Marc's definition)
+
+Marc: the window should run *"from the time the first attacking unit is spawned up until the last
+attacking unit dies"*, plus an end-of-attack flag when the last attacker is **pushed back behind
+their own castle**, because Wave + Freeze can stall a push indefinitely.
+
+Both implemented. The fixed 20-second window is gone.
+
+**A bug this found in my own implementation.** The first version tested `Position >= P2_CASTLE_WALL`
+(1800). But `GameEngine` spawns side 2 at `MAP_WIDTH - 100 = 1900` — *already behind the wall* —
+so every attack closed on the tick it opened, median duration **0.2s**. Units now have to COMMIT
+(advance past 1700) before being pushed back means anything.
+
+**The window was badly wrong in both directions.** Median attack duration is **5.4 seconds**, not
+20: for 111 of 119 attacks the old window over-attributed ~4× too much defender spending, and for
+the other 8 (up to 62.8s) it truncated the attack mid-fight.
+
+| how it ended | n | median duration | bot cost | damage $ | their outflow | **value/cost** |
+|---|---|---|---|---|---|---|
+| all-dead | 61 | 8.3s | $296,263 | $158,031 | $937,289 | **3.70** |
+| **pushed-back** | **32** | 3.8s | $80,263 | **$313** | $15,999 | **0.20** |
+| game-over | 26 | 0.6s | $173,768 | $147,948 | $58,223 | 1.19 |
+
+**A pushed-back attack returns 20 cents on the dollar.** 27% of all attacks end that way, costing
+$80,263 and producing $313 of damage value in total. This is the Wave/Freeze case, and it is not
+marginal.
+
+Re-scored by defender repair count, the direction holds but the breakeven moves **down**:
+
+| their repairs | n | old (20s window) | **new (real window)** |
+|---|---|---|---|
+| 0–1 | 31 | 0.63 | **0.43** |
+| 2–3 | 50 | 0.61 | **0.98** |
+| 4–5 | 33 | 3.48 | **3.28** |
+| 6+ | 5 | 9.90 | **7.19** |
+
+Breakeven now sits at 2–3 repairs rather than 4. Cumulative: firing only at repair count ≥2
+keeps 18 of 20 kills and saves $69,657 at 2.68× ratio; ≥3 gives 3.75× but drops to 12 kills.
+
+### The opponent's TEAM is the strongest single predictor found
+
+| Marc's team | attacks | pushed-back | **value/cost** |
+|---|---|---|---|
+| **White** | 36 | **0%** | **5.75** |
+| other | 39 | 3% | 1.19 |
+| Orange | 7 | 29% | 0.22 |
+| **Blue** | 37 | **78%** | **0.79** |
+
+**Against Blue the bot's attacks are shoved back 78% of the time and return 0.79×. Against White
+they are never pushed back and return 5.75×.** A seven-fold difference in attack profitability
+from the opponent's team alone — and the bot has no notion of it.
+
+This is the same lesson as the counter-matrix, from the other direction: Blue's wave is not just
+a defensive tool, it is a *tax on the opponent's entire attack budget*.
+
+**Cannot yet say whether `HazardAttackBlackout` fixes it.** Splitting the Blue games by arm gives
+26 / 6 / 0 / 5 attacks — the hazard arm has no Blue games at all and the others are far too small.
+That needs Marc to play several Blue games on the current build.

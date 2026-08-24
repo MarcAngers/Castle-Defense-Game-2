@@ -9,29 +9,37 @@ namespace CastleDefense.Simulation
     ///
     /// The flag is a deliberate bypass around the attack flow allowance, the gadget reserve and
     /// the disengage system all at once, on the argument "we are N seconds from winning, stop
-    /// saving and close it out". Three dissected losses showed it paying for nothing. That is not
-    /// the same as it always being wrong, and removing a mechanism because its failures are
-    /// visible is how you delete the thing that was winning the other games.
+    /// saving and close it out". Dissected losses showed it paying for nothing. That is not the
+    /// same as it always being wrong, and deleting a mechanism because its failures are visible
+    /// is how you delete the thing that was winning the other games.
     ///
-    /// So: replay recorded games faithfully, run a SHADOW HeuristicBot on a clone each tick to
-    /// see when the flag is up (the replay stores action ids, not reasons), and score each
-    /// activation on the two things Marc named as value:
+    /// Replays recorded games faithfully, runs a SHADOW HeuristicBot on a clone each tick to see
+    /// when the flag is up (the replay stores action ids, not reasons), and scores each attack.
     ///
-    ///   1. DAMAGE  -- enemy castle HP removed while the activation runs and shortly after,
-    ///                 with the kill as the best case.
-    ///   2. RESPONSE-- what the opponent had to spend to answer it. An attack that costs the
-    ///                 defender more than it cost to launch is profitable even with no damage.
+    /// WHEN IS AN ATTACK OVER? Marc's definition, 2026-08-24: from the first attacking unit
+    /// spawned until the last one dies. NOT a fixed window -- an earlier version used 20 seconds
+    /// flat, which is arbitrary and truncates exactly the long grinding pushes that matter.
     ///
-    /// Against the cost: money the bot spent on units during the activation.
+    /// With one addition he asked for: **Blue's Wave + Freeze can stall a push essentially
+    /// forever without killing it**, so a unit shoved back past the bot's OWN castle wall counts
+    /// as out of the fight whether it is alive or not. Without that clause a stalled attack never
+    /// closes, the window runs to the end of the game, and every later purchase and repair gets
+    /// attributed to it.
     ///
-    /// SHADOW SETTINGS MUST MATCH THE ARM THE GAME WAS PLAYED ON, or the shadow's internal state
-    /// diverges from the bot that actually played and the activations are fiction. Pass --arm.
+    /// VALUE, in dollars:
+    ///   DAMAGE   -- priced at what it costs the DEFENDER to undo, using their repair count at
+    ///               the moment the bot committed. That price rises ~3,230x from repair 0 to 7,
+    ///               so identical HP is worth wildly different money depending on who it lands on.
+    ///   OUTFLOW  -- everything they put back into the game over the window: income earned less
+    ///               what stayed banked, less any investment (a choice, not a forced response).
+    ///               Unit spend alone captured about a third of this.
+    /// COST: what the bot spent on units while the flag was up.
+    ///
+    /// SHADOW SETTINGS MUST MATCH THE ARM THE GAME WAS PLAYED ON, or the shadow's state diverges
+    /// from the bot that actually played and the activations are fiction.
     /// </summary>
     public static class KillerAudit
     {
-        // How long after an activation ends to keep attributing damage and response spend.
-        private const double WindowSeconds = 20.0;
-
         public static void Run(string[] args)
         {
             string dir = Arg(args, "--dir", "CastleDefenseGame2/recordings/singleplayer");
@@ -47,8 +55,10 @@ namespace CastleDefense.Simulation
                 }
 
             using var w = new StreamWriter(outPath);
-            w.WriteLine("game,arm,result,start_s,dur_s,cost,dmg,killed,response_spend,"
-                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_inv,push_dps,kill_secs,foe_repairs,foe_repair_hp,foe_repair_spend,foe_outflow,dmg_value");
+            w.WriteLine("game,arm,result,start_s,dur_s,cost,dmg,killed,foe_unit_spend,"
+                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_rc,"
+                      + "push_dps,kill_secs,foe_repairs,foe_repair_spend,foe_outflow,dmg_value,"
+                      + "attack_units,ended_by");
 
             int done = 0, acts = 0;
             foreach (var (id, arm) in games)
@@ -59,16 +69,47 @@ namespace CastleDefense.Simulation
                 acts += Audit(path, id, arm, w);
                 done++;
             }
-            Console.WriteLine($"\naudited {done} games, {acts} killerInstinct activations -> {Path.GetFullPath(outPath)}");
+            Console.WriteLine($"\naudited {done} games, {acts} attacks -> {Path.GetFullPath(outPath)}");
         }
 
         private static HeuristicBotSettings SettingsFor(string arm) => arm switch
         {
-            "heuristic_repairfix"      => HeuristicBotSettings.RepairFixProfile,
-            "heuristic_repair_hazard"  => HeuristicBotSettings.RepairFixPlusHazardProfile,
-            "heuristic_brake"          => HeuristicBotSettings.EconomyBrakeProfile,
-            _                          => null,   // "heuristic" -- the flagship
+            "heuristic_repairfix"     => HeuristicBotSettings.RepairFixProfile,
+            "heuristic_repair_hazard" => HeuristicBotSettings.RepairFixPlusHazardProfile,
+            "heuristic_brake"         => HeuristicBotSettings.EconomyBrakeProfile,
+            _                         => null,   // "heuristic" -- the flagship
         };
+
+        private static double RepairPrice(int c)
+        {
+            double p = Math.Exp(0.0109 * c * c * c + 0.0011 * c * c + 0.4351 * c + 0.5268)
+                     * (c * 5 + 5);
+            return c >= 8 ? p * 2 : p;
+        }
+
+        /// <summary>HP one repair buys -- PreviewRepairStep: max rises 11,000, heals 20 points of the new max.</summary>
+        private static double RepairHp(int c, double pct) => pct * 11000 + 0.2 * (1000 + 11000 * (c + 1));
+
+        /// <summary>
+        /// A bot unit is still in the fight if it is alive AND has not been shoved back past its
+        /// own castle wall. The second clause is what closes a Wave-stalled push.
+        ///
+        /// THE SPAWN POINT IS ALREADY BEHIND THE WALL. GameEngine spawns side 2 at
+        /// MAP_WIDTH - 100 = 1900, and P2_CASTLE_WALL is 1800, so a naive `Position >= wall`
+        /// test fires on the tick the unit appears and every attack closes instantly (measured:
+        /// median duration 0.2s, which is what caught it). A unit therefore has to COMMIT first
+        /// -- advance clear of the spawn zone -- before being pushed back means anything.
+        /// </summary>
+        private const float CommitLine = 1700f;
+
+        private static bool StillAttacking(Unit u, HashSet<Guid> committed)
+        {
+            if (u.CurrentHealth <= 0) return false;
+            if (u.Position < CommitLine) { committed.Add(u.InstanceId); return true; }
+            // Not yet advanced: still forming up, not pushed back.
+            if (!committed.Contains(u.InstanceId)) return true;
+            return u.Position < GameEngine.P2_CASTLE_WALL;
+        }
 
         private static int Audit(string path, string id, string arm, StreamWriter w)
         {
@@ -76,161 +117,151 @@ namespace CastleDefense.Simulation
             var (state, engine) = rf.BuildStart();
             var shadow = new HeuristicBot(2, SettingsFor(arm));
 
-            // One row per contiguous activation.
+            var committed = new HashSet<Guid>();
+            var open = new List<Attack>();
+            var closed = new List<Attack>();
             bool live = false;
-            double startT = 0, startSpend = 0, startFoeHp = 0, startMarcSpend = 0;
-            int sOwn = 0, sFoe = 0, sInv = 0, sFoeInv = 0;
-            double sMoney = 0, sMaxHp = 0;
-            var pending = new List<(double start, double dur, double cost, double hp0,
-                                   double marcSpend0, int own, int foe, double maxhp,
-                                   double money, int inv, int foeInv, float dps, float ksec)>();
-            float sDps = 0, sKsec = 0;
+            Attack cur = null;
 
             for (int i = 0; i < rf.TickCount && !state.IsGameOver; i++)
             {
                 int tick = (int)state.CurrentTick;
                 double sec = tick / 30.0;
 
-                // Shadow BEFORE the recorded actions -- it must see the state the bot decided on.
                 var probe = engine.Clone(unchecked(tick));
                 shadow.Update(probe);
                 bool ki = shadow.LastKillerInstinctRaw;
 
                 if (ki && !live)
                 {
-                    live = true; startT = sec;
-                    startSpend = engine.MoneySpentOnUnits[2];
-                    startMarcSpend = engine.MoneySpentOnUnits[1];
-                    startFoeHp = state.Player1.CastleHealth;
-                    sMaxHp = state.Player1.CastleMaxHealth;
-                    sOwn = state.Units.Count(u => u.Side == 2);
-                    sFoe = state.Units.Count(u => u.Side == 1);
-                    sMoney = state.Player2.Money;
-                    sInv = state.Player2.InvestmentCount;
-                    sFoeInv = state.Player1.InvestmentCount;
-                    sDps = shadow.LastOwnPushDps;
-                    sKsec = shadow.LastKillerSeconds;
+                    live = true;
+                    cur = new Attack
+                    {
+                        Start = sec,
+                        End = sec,
+                        Spend0 = engine.MoneySpentOnUnits[2],
+                        FoeUnitSpend0 = engine.MoneySpentOnUnits[1],
+                        FoeHp0 = state.Player1.CastleHealth,
+                        FoeMax0 = state.Player1.CastleMaxHealth,
+                        FoeMoney0 = state.Player1.Money,
+                        FoeInv0 = state.Player1.InvestmentCount,
+                        FoeIncome = state.Player1.Income,
+                        Own = state.Units.Count(u => u.Side == 2),
+                        Foe = state.Units.Count(u => u.Side == 1),
+                        Money = state.Player2.Money,
+                        Inv = state.Player2.InvestmentCount,
+                        Dps = shadow.LastOwnPushDps,
+                        KSec = shadow.LastKillerSeconds,
+                        FoeRc0 = (int)Math.Round((state.Player1.CastleMaxHealth - 1000) / 11000.0),
+                        LastFoeHp = state.Player1.CastleHealth,
+                        LastFoeMax = state.Player1.CastleMaxHealth,
+                    };
+                    open.Add(cur);
                 }
                 else if (!ki && live)
                 {
                     live = false;
-                    pending.Add((startT, sec - startT,
-                                 engine.MoneySpentOnUnits[2] - startSpend,
-                                 startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv,
-                                 sFoeInv, sDps, sKsec));
+                    if (cur != null) cur.Committing = false;
+                    cur = null;
                 }
+
+                var before = new HashSet<Guid>(
+                    state.Units.Where(u => u.Side == 2).Select(u => u.InstanceId));
 
                 byte a1 = rf.A1[i], a2 = rf.A2[i];
                 if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
                 if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
-                engine.Tick();
-            }
-            if (live)
-                pending.Add((startT, state.CurrentTick / 30.0 - startT,
-                             engine.MoneySpentOnUnits[2] - startSpend,
-                             startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv,
-                             sFoeInv, sDps, sKsec));
 
-            // Second pass: replay again to read the outcome window after each activation.
-            var (s2, e2) = rf.BuildStart();
-            // Money and investment count too, so the defender's TOTAL outflow can be
-            // reconstructed -- unit spend alone misses repairs and gadgets, and repairs are the
-            // dominant response (they happen in 55% of activations).
-            var hp = new List<(double t, double foeHp, double foeMax, double marcSpend,
-                               double money, double income, int inv, bool over)>();
-            for (int i = 0; i < rf.TickCount && !s2.IsGameOver; i++)
-            {
-                int tick = (int)s2.CurrentTick;
-                byte a1 = rf.A1[i], a2 = rf.A2[i];
-                if (a1 != 0) rf.ApplyRecorded(e2, 1, tick, a1);
-                if (a2 != 0) rf.ApplyRecorded(e2, 2, tick, a2);
-                e2.Tick();
-                hp.Add((s2.CurrentTick / 30.0, s2.Player1.CastleHealth, s2.Player1.CastleMaxHealth,
-                        e2.MoneySpentOnUnits[1], s2.Player1.Money, s2.Player1.Income,
-                        s2.Player1.InvestmentCount, s2.IsGameOver));
-            }
-            double EndHp(double t)
-            {
-                double best = hp[^1].foeHp;
-                foreach (var h in hp) if (h.t >= t) { best = h.foeHp; break; }
-                return best;
-            }
-            double EndSpend(double t)
-            {
-                double best = hp[^1].marcSpend;
-                foreach (var h in hp) if (h.t >= t) { best = h.marcSpend; break; }
-                return best;
-            }
-
-            // THE DEFENDER'S ESCAPE HATCH. killerInstinct divides by the enemy's CURRENT castle
-            // HP, and a repair multiplies that number for a price the defender chooses. In
-            // 54D732 Marc went from 955 HP to 17,840 in 0.9 seconds for $34 -- the estimate was
-            // right when it fired and irrelevant one second later. Count the repairs the
-            // defender makes while the bot is committed, and the HP they bought with them.
-            static double RepairPrice(int c)
-            {
-                double p = Math.Exp(0.0109 * c * c * c + 0.0011 * c * c + 0.4351 * c + 0.5268)
-                         * (c * 5 + 5);
-                return c >= 8 ? p * 2 : p;
-            }
-
-            // PreviewRepairStep: max rises 11,000 and the castle heals 20 points of the NEW max.
-            static double RepairHp(int c, double pct) => pct * 11000 + 0.2 * (1000 + 11000 * (c + 1));
-
-            (int n, double gained, double spent) FoeRepairs(double from, double to)
-            {
-                int n = 0; double gained = 0, spent = 0, prevMax = -1, prevHp = 0;
-                foreach (var h in hp)
+                // Units bought while the flag is up ARE the attack.
+                if (live && cur != null)
                 {
-                    if (h.t >= from && h.t <= to && prevMax >= 0 && h.foeMax > prevMax)
-                    {
-                        n++;
-                        gained += (h.foeHp - prevHp) + (h.foeMax - prevMax);
-                        spent += RepairPrice((int)Math.Round((prevMax - 1000) / 11000.0));
-                    }
-                    prevMax = h.foeMax; prevHp = h.foeHp;
+                    cur.Spend = engine.MoneySpentOnUnits[2] - cur.Spend0;
+                    foreach (var u in state.Units)
+                        if (u.Side == 2 && !before.Contains(u.InstanceId))
+                            cur.Units.Add(u.InstanceId);
                 }
-                return (n, gained, spent);
-            }
 
-            // Everything the defender put back in over the window: income earned less what
-            // stayed banked, minus any investment (a choice, not a forced response).
-            double FoeOutflow(double from, double to)
-            {
-                var a = hp.FirstOrDefault(h => h.t >= from);
-                var b = hp.LastOrDefault(h => h.t <= to);
-                if (b.t <= a.t) return 0;
-                double invested = 0;
-                for (int c = a.inv; c < b.inv; c++) invested += a.income * (c * 4 + 8);
-                return Math.Max(0, a.money + a.income * (b.t - a.t) - b.money - invested);
+                engine.Tick();
+
+                foreach (var atk in open)
+                {
+                    double hpNow = state.Player1.CastleHealth;
+                    double maxNow = state.Player1.CastleMaxHealth;
+                    if (maxNow > atk.LastFoeMax)
+                    {
+                        atk.FoeRepairs++;
+                        atk.FoeRepairSpend += RepairPrice(
+                            (int)Math.Round((atk.LastFoeMax - 1000) / 11000.0));
+                    }
+                    else if (hpNow < atk.LastFoeHp) atk.Damage += atk.LastFoeHp - hpNow;
+                    atk.LastFoeHp = hpNow;
+                    atk.LastFoeMax = maxNow;
+                    atk.End = state.CurrentTick / 30.0;
+                    atk.FoeMoney1 = state.Player1.Money;
+                    atk.FoeInv1 = state.Player1.InvestmentCount;
+                    atk.FoeUnitSpend = engine.MoneySpentOnUnits[1] - atk.FoeUnitSpend0;
+                }
+
+                foreach (var atk in open.ToList())
+                {
+                    if (atk.Committing || atk.Units.Count == 0) continue;
+                    int alive = 0, pushed = 0;
+                    foreach (var u in state.Units)
+                        if (u.Side == 2 && atk.Units.Contains(u.InstanceId))
+                        {
+                            if (StillAttacking(u, committed)) alive++;
+                            else if (u.CurrentHealth > 0) pushed++;
+                        }
+                    if (alive == 0)
+                    {
+                        atk.EndedBy = pushed > 0 ? "pushed-back" : "all-dead";
+                        closed.Add(atk);
+                        open.Remove(atk);
+                    }
+                }
             }
+            foreach (var atk in open) { atk.EndedBy = "game-over"; closed.Add(atk); }
 
             string result = rf.Winner == 2 ? "BOT" : rf.Winner == 1 ? "MARC" : "draw";
-            foreach (var p in pending)
+            int n = 0;
+            var durs = new List<double>();
+            foreach (var p in closed)
             {
-                double endT = p.start + p.dur + WindowSeconds;
-                // Castle damage is the DROP only -- a repair in the window must not be scored
-                // as the bot healing the enemy.
-                double dmg = Math.Max(0, p.hp0 - EndHp(endT));
-                bool killed = EndHp(endT) <= 0 && rf.Winner == 2;
-                double response = Math.Max(0, EndSpend(endT) - p.marcSpend0);
-                var rep = FoeRepairs(p.start, endT);
-                double outflow = FoeOutflow(p.start, endT);
-                // A point of damage is worth what it costs THEM to undo it, priced at the
-                // repair count they held when the bot committed. That price rises ~3,230x
-                // between repair 0 and repair 7.
-                int rc = (int)Math.Round((p.maxhp - 1000) / 11000.0);
-                double pct = p.maxhp > 0 ? p.hp0 / p.maxhp : 1;
-                double dmgValue = dmg * RepairPrice(rc) / Math.Max(1, RepairHp(rc, pct));
-                w.WriteLine($"{id},{arm},{result},{p.start:F1},{p.dur:F1},{p.cost:F0},{dmg:F0},"
-                          + $"{(killed ? 1 : 0)},{response:F0},{p.own},{p.foe},{p.hp0:F0},"
-                          + $"{(p.maxhp > 0 ? 100 * p.hp0 / p.maxhp : 0):F0},{p.maxhp:F0},"
-                          + $"{p.money:F0},{p.inv},{p.foeInv},{p.dps:F0},"
-                          + $"{(float.IsPositiveInfinity(p.ksec) ? 9999 : p.ksec):F1},{rep.n},{rep.gained:F0},"
-                          + $"{rep.spent:F0},{outflow:F0},{dmgValue:F0}");
+                if (p.Spend <= 0) continue;
+                double dur = p.End - p.Start;
+                double invested = 0;
+                for (int c = p.FoeInv0; c < p.FoeInv1; c++) invested += p.FoeIncome * (c * 4 + 8);
+                double outflow = Math.Max(0,
+                    p.FoeMoney0 + p.FoeIncome * dur - p.FoeMoney1 - invested);
+                double pct = p.FoeMax0 > 0 ? p.FoeHp0 / p.FoeMax0 : 1;
+                double dmgValue = p.Damage * RepairPrice(p.FoeRc0)
+                                / Math.Max(1, RepairHp(p.FoeRc0, pct));
+                bool killed = p.LastFoeHp <= 0 && rf.Winner == 2;
+                durs.Add(dur);
+                w.WriteLine($"{id},{arm},{result},{p.Start:F1},{dur:F1},{p.Spend:F0},{p.Damage:F0},"
+                          + $"{(killed ? 1 : 0)},{p.FoeUnitSpend:F0},{p.Own},{p.Foe},{p.FoeHp0:F0},"
+                          + $"{100 * pct:F0},{p.FoeMax0:F0},{p.Money:F0},{p.Inv},{p.FoeRc0},"
+                          + $"{p.Dps:F0},{(float.IsPositiveInfinity(p.KSec) ? 9999 : p.KSec):F1},"
+                          + $"{p.FoeRepairs},{p.FoeRepairSpend:F0},{outflow:F0},{dmgValue:F0},"
+                          + $"{p.Units.Count},{p.EndedBy}");
+                n++;
             }
-            Console.WriteLine($"  {id} [{arm}] {result,-4} {pending.Count} activations");
-            return pending.Count;
+            durs.Sort();
+            Console.WriteLine($"  {id} [{arm}] {result,-4} {n} attacks"
+                            + (n > 0 ? $"   median {durs[n / 2]:F0}s" : ""));
+            return n;
+        }
+
+        private sealed class Attack
+        {
+            public double Start, End, Spend0, Spend, FoeHp0, FoeMax0, FoeMoney0, FoeMoney1;
+            public double FoeIncome, Damage, FoeRepairSpend, LastFoeHp, LastFoeMax;
+            public double FoeUnitSpend0, FoeUnitSpend, Money;
+            public int Own, Foe, Inv, FoeInv0, FoeInv1, FoeRc0, FoeRepairs;
+            public float Dps, KSec;
+            public bool Committing = true;
+            public string EndedBy = "?";
+            public HashSet<Guid> Units = new();
         }
 
         private static string Arg(string[] a, string n, string f)
