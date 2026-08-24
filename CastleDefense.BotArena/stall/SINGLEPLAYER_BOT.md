@@ -556,3 +556,74 @@ high-damage activation alone.
 the bot was winning — some of the split between won and lost games is reverse causation. The
 state-conditioned splits above are the defensible part, since they compare activations by the
 board at the moment of firing rather than by how the game ended.
+
+### THE REAL CAUSE: the defender repairs out of it, and the bot cannot see that coming
+
+Marc: the White game's losing decision was still allowed by the castle-HP gate. Correct, and
+chasing it found the actual mechanism.
+
+**Clarification first: lost games were always in the audit** — 46 of the 145 activations come from
+the 16 games the bot lost, plus 7 from the draw. The earlier caveat was that the *won-vs-lost*
+comparison is contaminated by reverse causation, so the state-conditioned splits are the ones to
+read; every game is in all of those.
+
+**54D732 at 127.5s, traced tick by tick.** Marc's castle: **1,000/2,000 with 27 bot units on the
+field and ZERO defenders**. The flag's estimate — kill in 3.8 seconds — was *correct*. Then:
+
+```
+127.7s   repair    955  ->  6,995 / 12,000
+128.2s   repair         -> 17,840 / 23,000
+```
+
+**He multiplied his castle HP eighteen-fold in 0.9 seconds for $34** — repairs #0 and #1, the
+bottom of a ladder that reaches $63,195. The bot then spent $2,404 chasing a castle with 18× the
+HP it had committed against.
+
+`killerInstinct` divides by `enemy.CastleHealth`. **That denominator is a number the defender can
+change by an order of magnitude for pocket change**, and nothing in the estimate accounts for it.
+
+Measured across all 119 paid activations:
+
+| defender repairs during the window | n | kills | med dmg | did nothing |
+|---|---|---|---|---|
+| **none** | 54 | **20 (37%)** | **9,410** | **2%** |
+| 1 | 38 | 4 (11%) | 0 | 42% |
+| 2 | 19 | **0** | 0 | 37% |
+| 3+ | 8 | **0** | 0 | 38% |
+
+**Kill rate is 37% when the defender does not repair and 6% when they do**, and they repaired
+during **55%** of all activations. A repair inside the window is the single strongest signal of a
+wasted attack — and it is *not observable at commit time*, because it is a choice they make after.
+
+**But the proxy is observable.** Castle max HP encodes how many repairs someone has already taken,
+so it reads directly as "how much cheap repair is still available to them":
+
+| their castle max HP | repairs taken | n | kills | med dmg | did nothing |
+|---|---|---|---|---|---|
+| **≤ 12,000** | **0–1** | 31 | 4 | **0** | **55%** |
+| 12k–34k | 2–3 | 50 | 8 | 450 | 20% |
+| 34k–56k | 4–5 | 33 | 10 | 10,405 | **0%** |
+| 56k+ | 6+ | 5 | 2 | 22,540 | **0%** |
+
+Perfectly monotonic. **A defender who has barely repaired is a defender who can undo your push for
+$34.** One who has already taken five repairs faces a four-figure price and cannot.
+
+### The gate that catches both games
+
+| gate | blocks | $ saved | kills lost | blocked did-nothing | kept did-nothing |
+|---|---|---|---|---|---|
+| their max HP ≤ 12,000 | 31 | $69,657 | 4 | 55% | 11% |
+| castle > 70% AND own ≥ 90 | 18 | $60,544 | 1 | 56% | 17% |
+| **either** | **42** | **$105,157** | **4** | **52%** | **6%** |
+
+The union blocks 42 of 119 activations, saves $105,157, costs 4 of 24 kills, and **drops the
+did-nothing rate of what survives from 29% to 6%**.
+
+| game | cost | their max HP | own units | castle | dmg | caught by |
+|---|---|---|---|---|---|---|
+| 54D732 @127.5s | $2,404 | 2,000 | 36 | 48% | 0 | **cheap-repairs** |
+| C7F159 @167.2s | $6,198 | 23,000 | 136 | 92% | 0 | **saturation** |
+
+Two different failure modes, two different terms, both game-losing, both now covered. And the
+cheap-repair term is the first concrete instance of the *uncast potential* gap from the bait-wave
+note — the defender's unspent capacity, made observable through a number already on the board.

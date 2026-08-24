@@ -48,7 +48,7 @@ namespace CastleDefense.Simulation
 
             using var w = new StreamWriter(outPath);
             w.WriteLine("game,arm,result,start_s,dur_s,cost,dmg,killed,response_spend,"
-                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_inv");
+                      + "own_units,foe_units,foe_hp,foe_hp_pct,foe_maxhp,bot_money,bot_inv,foe_inv,push_dps,kill_secs,foe_repairs,foe_repair_hp");
 
             int done = 0, acts = 0;
             foreach (var (id, arm) in games)
@@ -83,7 +83,8 @@ namespace CastleDefense.Simulation
             double sMoney = 0, sMaxHp = 0;
             var pending = new List<(double start, double dur, double cost, double hp0,
                                    double marcSpend0, int own, int foe, double maxhp,
-                                   double money, int inv, int foeInv)>();
+                                   double money, int inv, int foeInv, float dps, float ksec)>();
+            float sDps = 0, sKsec = 0;
 
             for (int i = 0; i < rf.TickCount && !state.IsGameOver; i++)
             {
@@ -107,13 +108,16 @@ namespace CastleDefense.Simulation
                     sMoney = state.Player2.Money;
                     sInv = state.Player2.InvestmentCount;
                     sFoeInv = state.Player1.InvestmentCount;
+                    sDps = shadow.LastOwnPushDps;
+                    sKsec = shadow.LastKillerSeconds;
                 }
                 else if (!ki && live)
                 {
                     live = false;
                     pending.Add((startT, sec - startT,
                                  engine.MoneySpentOnUnits[2] - startSpend,
-                                 startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv, sFoeInv));
+                                 startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv,
+                                 sFoeInv, sDps, sKsec));
                 }
 
                 byte a1 = rf.A1[i], a2 = rf.A2[i];
@@ -124,11 +128,12 @@ namespace CastleDefense.Simulation
             if (live)
                 pending.Add((startT, state.CurrentTick / 30.0 - startT,
                              engine.MoneySpentOnUnits[2] - startSpend,
-                             startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv, sFoeInv));
+                             startFoeHp, startMarcSpend, sOwn, sFoe, sMaxHp, sMoney, sInv,
+                             sFoeInv, sDps, sKsec));
 
             // Second pass: replay again to read the outcome window after each activation.
             var (s2, e2) = rf.BuildStart();
-            var hp = new List<(double t, double foeHp, double marcSpend, bool over)>();
+            var hp = new List<(double t, double foeHp, double foeMax, double marcSpend, bool over)>();
             for (int i = 0; i < rf.TickCount && !s2.IsGameOver; i++)
             {
                 int tick = (int)s2.CurrentTick;
@@ -136,7 +141,7 @@ namespace CastleDefense.Simulation
                 if (a1 != 0) rf.ApplyRecorded(e2, 1, tick, a1);
                 if (a2 != 0) rf.ApplyRecorded(e2, 2, tick, a2);
                 e2.Tick();
-                hp.Add((s2.CurrentTick / 30.0, s2.Player1.CastleHealth,
+                hp.Add((s2.CurrentTick / 30.0, s2.Player1.CastleHealth, s2.Player1.CastleMaxHealth,
                         e2.MoneySpentOnUnits[1], s2.IsGameOver));
             }
             double EndHp(double t)
@@ -152,6 +157,23 @@ namespace CastleDefense.Simulation
                 return best;
             }
 
+            // THE DEFENDER'S ESCAPE HATCH. killerInstinct divides by the enemy's CURRENT castle
+            // HP, and a repair multiplies that number for a price the defender chooses. In
+            // 54D732 Marc went from 955 HP to 17,840 in 0.9 seconds for $34 -- the estimate was
+            // right when it fired and irrelevant one second later. Count the repairs the
+            // defender makes while the bot is committed, and the HP they bought with them.
+            (int n, double gained) FoeRepairs(double from, double to)
+            {
+                int n = 0; double gained = 0, prevMax = -1, prevHp = 0;
+                foreach (var h in hp)
+                {
+                    if (h.t >= from && h.t <= to && prevMax >= 0 && h.foeMax > prevMax)
+                    { n++; gained += (h.foeHp - prevHp) + (h.foeMax - prevMax); }
+                    prevMax = h.foeMax; prevHp = h.foeHp;
+                }
+                return (n, gained);
+            }
+
             string result = rf.Winner == 2 ? "BOT" : rf.Winner == 1 ? "MARC" : "draw";
             foreach (var p in pending)
             {
@@ -161,10 +183,12 @@ namespace CastleDefense.Simulation
                 double dmg = Math.Max(0, p.hp0 - EndHp(endT));
                 bool killed = EndHp(endT) <= 0 && rf.Winner == 2;
                 double response = Math.Max(0, EndSpend(endT) - p.marcSpend0);
+                var rep = FoeRepairs(p.start, endT);
                 w.WriteLine($"{id},{arm},{result},{p.start:F1},{p.dur:F1},{p.cost:F0},{dmg:F0},"
                           + $"{(killed ? 1 : 0)},{response:F0},{p.own},{p.foe},{p.hp0:F0},"
                           + $"{(p.maxhp > 0 ? 100 * p.hp0 / p.maxhp : 0):F0},{p.maxhp:F0},"
-                          + $"{p.money:F0},{p.inv},{p.foeInv}");
+                          + $"{p.money:F0},{p.inv},{p.foeInv},{p.dps:F0},"
+                          + $"{(float.IsPositiveInfinity(p.ksec) ? 9999 : p.ksec):F1},{rep.n},{rep.gained:F0}");
             }
             Console.WriteLine($"  {id} [{arm}] {result,-4} {pending.Count} activations");
             return pending.Count;
