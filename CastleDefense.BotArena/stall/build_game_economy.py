@@ -40,6 +40,32 @@ def inv_times(key):
 
 M, B = inv_times("inv"), inv_times("p2inv")
 
+# The Armageddon purchase shows up as a six-figure drop in the balance.
+def armageddon(key):
+    for i in range(1, len(R)):
+        if R[i-1][key] - R[i][key] > 100000:
+            return R[i]["t"]
+    return None
+
+
+M_ARM, B_ARM = armageddon("money"), armageddon("p2money")
+
+# The endgame waste: the last stretch where the bot bought units that removed no castle HP.
+COST = {1: 3, 2: 4, 3: 9, 4: 18, 5: 81, 6: 338, 7: 2066, 8: 23000}
+WASTE_FROM, WASTE = None, 0.0
+if B_ARM:
+    # The last moment the bot's attacking actually removed castle health. Everything it buys
+    # after that point, up to the Armageddon purchase, bought nothing.
+    last_dmg = 0.0
+    for i in range(1, len(R)):
+        if R[i]["t"] > B_ARM:
+            break
+        if R[i]["hp"] < R[i-1]["hp"] and R[i]["maxhp"] == R[i-1]["maxhp"]:
+            last_dmg = R[i]["t"]
+    WASTE_FROM = last_dmg
+    WASTE = sum(COST[int(r["p2act"])] for r in R
+                if WASTE_FROM <= r["t"] <= B_ARM and 1 <= int(r["p2act"]) <= 8)
+
 # The divergence: the first rung where the lead changes hands and never comes back.
 shared = sorted(set(M) & set(B))
 DIVERGE = next((k for k in shared if B[k] - M[k] > 10), max(shared))
@@ -49,7 +75,45 @@ BOT_SPEND_WIN = win[-1]["p2spent"] - win[0]["p2spent"]
 BOT_EARNED_WIN = win[0]["p2income"] * (D_TO - D_FROM)
 MWIN = [r for r in R if M[DIVERGE - 1] <= r["t"] <= M[DIVERGE]]
 MARC_SPEND_WIN = MWIN[-1]["p1spent"] - MWIN[0]["p1spent"]
-RUNG_PRICE = win[0]["p2income"] * ((DIVERGE - 1) * 4 + 8)
+# PlayerState.ApplyInvestmentStep overrides the generic formula at counts 7 and 8.
+RUNG_PRICE = (40000 if DIVERGE == 8 else ARMAGEDDON_PRICE if DIVERGE == 9
+              else win[0]["p2income"] * ((DIVERGE - 1) * 4 + 8))
+
+# Which story is this game? If the bot led the ladder and still lost, the rung narrative is
+# wrong and the Armageddon race is the subject.
+BOT_LED = sum(1 for k in set(M) & set(B) if B[k] <= M[k])
+RACE_GAME = M_ARM is not None and B_ARM is not None
+LATE = (B_ARM - M_ARM) if RACE_GAME else 0
+WASTE_SECS = WASTE / L["p2income"] if L["p2income"] else 0
+RACE = RACE_GAME and LATE > 0
+SHARED = len(set(M) & set(B))
+
+# Copy is built here, not inside the HTML f-string -- nesting f-strings inside an f-string is
+# a syntax error and the failure mode is a wall of unparseable output.
+if RACE:
+    HEADLINE = f"It led the whole game and lost the race by {LATE:.1f} seconds."
+    DEK = (f"The bot reached every investment rung ahead of Marc and fired Armageddon at "
+           f"{B_ARM:.0f}s &mdash; {LATE:.1f} seconds after Marc fired his at {M_ARM:.0f}s. In the "
+           f"final stretch it spent <strong>${WASTE:,.0f}</strong> on units that removed no castle "
+           f"health at all, which is <strong>{WASTE_SECS:.1f} seconds</strong> of its income.")
+    CTITLE = "The waste is bigger than the margin"
+    CEXTRA = (f"<p>Marc fired Armageddon at <strong>{M_ARM:.0f}s</strong>, the bot at "
+              f"<strong>{B_ARM:.0f}s</strong> &mdash; a margin of <strong>{LATE:.1f} seconds</strong>. "
+              f"In the shaded window the bot spent <strong>${WASTE:,.0f}</strong> on units while "
+              f"Marc's castle sat unchanged, and at ${L['p2income']:,.0f}/s that is "
+              f"<strong>{WASTE_SECS:.1f} seconds</strong> of income. Not spending it would have put "
+              f"the bot over the line first.</p>")
+    LPREFIX = f"It led the ladder at {BOT_LED} of {SHARED} shared rungs. "
+    TITLE = f"Losing by {LATE:.0f} Seconds"
+else:
+    HEADLINE = f"The bot led every rung until the {DIVERGE}th."
+    DEK = (f"It was ahead on the ladder for the first {DIVERGE-1} rungs, then took "
+           f"{D_TO-D_FROM:.0f} seconds to buy rung {DIVERGE} against Marc's "
+           f"{M[DIVERGE]-M[DIVERGE-1]:.0f}, and never bought another.")
+    CTITLE = f"Rung {DIVERGE} is the whole game"
+    CEXTRA = ""
+    LPREFIX = ""
+    TITLE = "Where the Bot Fell Behind"
 
 # ── geometry ────────────────────────────────────────────────────────────────
 W, PADL, PADR, PADT, PADB = 1000, 78, 22, 20, 34
@@ -58,6 +122,7 @@ IW = W - PADL - PADR
 MONEY_MAX = max(max(r["money"] for r in R), max(r["p2money"] for r in R))
 
 
+PADB = 46
 def x(t): return PADL + IW * (t / T_MAX)
 def y(v): return PADT + HF * (1 - v / MONEY_MAX)
 def fmt(v): return f"{v/1000:g}k" if v >= 1000 else str(int(v))
@@ -78,10 +143,32 @@ xaxis = "".join(
     f'<text class="ax" x="{x(t):.1f}" y="{PADT+HF+22}" text-anchor="middle">{t}s</text>'
     for t in [0, 60, 120, 180, 240, int(T_MAX)])
 
-band = (f'<rect class="band" x="{x(D_FROM):.1f}" y="{PADT}" '
-        f'width="{x(D_TO)-x(D_FROM):.1f}" height="{HF}"/>'
-        f'<text class="bandlab" x="{(x(D_FROM)+x(D_TO))/2:.1f}" y="{PADT+14}" '
-        f'text-anchor="middle">the bot spends {D_TO-D_FROM:.0f}s on rung {DIVERGE}</text>')
+armline = ""
+if MONEY_MAX >= ARMAGEDDON_PRICE * 0.9:
+    armline = (f'<line class="armline" x1="{PADL}" y1="{y(ARMAGEDDON_PRICE):.1f}" '
+               f'x2="{W-PADR}" y2="{y(ARMAGEDDON_PRICE):.1f}"/>'
+               f'<text class="armlab" x="{W-PADR-4}" y="{y(ARMAGEDDON_PRICE)-5:.1f}" '
+               f'text-anchor="end">ARMAGEDDON ${ARMAGEDDON_PRICE:,}</text>')
+
+fires = ""
+for t, cls, lab in ((M_ARM, "firemarc", "MARC fires"), (B_ARM, "firebot", "bot fires")):
+    if t is None:
+        continue
+    fires += (f'<line class="{cls}" x1="{x(t):.1f}" y1="{PADT}" x2="{x(t):.1f}" y2="{PADT+HF}"/>'
+              f'<text class="{cls}lab" x="{x(t):.1f}" y="{PADT+HF+32}" text-anchor="middle">'
+              f'{lab} {t:.0f}s</text>')
+
+band = ""
+if WASTE_FROM is not None and B_ARM and WASTE > 0:
+    band = (f'<rect class="band" x="{x(WASTE_FROM):.1f}" y="{PADT}" '
+            f'width="{max(2, x(B_ARM)-x(WASTE_FROM)):.1f}" height="{HF}"/>'
+            f'<text class="bandlab" x="{(x(WASTE_FROM)+x(B_ARM))/2:.1f}" y="{PADT+14}" '
+            f'text-anchor="middle">${WASTE:,.0f} spent, 0 damage</text>')
+else:
+    band = (f'<rect class="band" x="{x(D_FROM):.1f}" y="{PADT}" '
+            f'width="{x(D_TO)-x(D_FROM):.1f}" height="{HF}"/>'
+            f'<text class="bandlab" x="{(x(D_FROM)+x(D_TO))/2:.1f}" y="{PADT+14}" '
+            f'text-anchor="middle">the bot spends {D_TO-D_FROM:.0f}s on rung {DIVERGE}</text>')
 
 
 def marks(times, cls):
@@ -89,7 +176,7 @@ def marks(times, cls):
                    f'x2="{x(t):.1f}" y2="{PADT+HF}"/>' for t in times.values())
 
 
-fig = (grid + band + marks(B, "mbot") + marks(M, "mmarc")
+fig = (grid + band + armline + fires + marks(B, "mbot") + marks(M, "mmarc")
        + f'<path class="lbot" d="{path("p2money")}"/>'
        + f'<path class="lmarc" d="{path("money")}"/>' + xaxis)
 
@@ -109,7 +196,7 @@ for k in range(1, 9):
              f'<td>{f"{b:.0f}s" if b else "&mdash;"}</td>'
              f'<td class="{cls}">{gap}</td><td class="{cls}">{lead}</td></tr>')
 
-HTML = f"""<title>Where the Bot Fell Behind</title>
+HTML = f"""<title>{TITLE}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -155,7 +242,13 @@ figure{{margin:0;background:var(--surface);border:1px solid var(--rule);padding:
 .lmarc{{fill:none;stroke:var(--marc);stroke-width:2.3;stroke-linejoin:round}}
 .lbot{{fill:none;stroke:var(--bot);stroke-width:2;stroke-linejoin:round}}
 .mmarc{{stroke:var(--marc);stroke-width:2.5}} .mbot{{stroke:var(--bot);stroke-width:2.5}}
-.band{{fill:var(--warn);opacity:.10}}
+.band{{fill:var(--warn);opacity:.12}}
+.armline{{stroke:var(--warn);stroke-width:1.4;stroke-dasharray:6 4;opacity:.9}}
+.armlab{{fill:var(--warn);font-size:10px;font-weight:600}}
+.firemarc{{stroke:var(--marc);stroke-width:2;stroke-dasharray:3 2}}
+.firebot{{stroke:var(--bot);stroke-width:2;stroke-dasharray:3 2}}
+.firemarclab{{fill:var(--marc);font-size:10px;font-weight:600}}
+.firebotlab{{fill:var(--bot);font-size:10px;font-weight:600}}
 .bandlab{{fill:var(--warn);font-size:11px;font-weight:600;font-family:"Archivo",sans-serif}}
 .legend{{display:flex;flex-wrap:wrap;gap:18px;margin:10px 0 4px 4px;font-family:"Archivo",sans-serif;font-size:.78rem;color:var(--ink-soft)}}
 .legend i{{display:inline-block;width:16px;height:11px;border-radius:2px;margin-right:7px;vertical-align:middle}}
@@ -175,10 +268,8 @@ footer{{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);font-s
 <div class="wrap">
 <header>
   <div class="kicker"><span class="dot"></span><span class="lab">game {GID} &middot; White mirror &middot; Marc won in {T_MAX:.0f}s</span></div>
-  <h1>The bot led every rung until the seventh.</h1>
-  <p class="dek">It was ahead on the investment ladder for the first six rungs &mdash; by as much
-  as six seconds &mdash; then took <strong>{D_TO-D_FROM:.0f} seconds</strong> to buy rung
-  {DIVERGE} against Marc's {M[DIVERGE]-M[DIVERGE-1]:.0f}, and never bought another.</p>
+  <h1>{HEADLINE}</h1>
+  <p class="dek">{DEK}</p>
   <div class="stats">
     <div class="stat"><span class="stat-n">{D_TO-D_FROM:.0f}<span style="font-size:.5em">s</span></span>
       <span class="stat-t">On rung {DIVERGE}, against a pure-saving time of
@@ -222,10 +313,11 @@ footer{{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);font-s
     <tbody>{rows}</tbody>
   </table></div>
   <div class="callout">
-    <h3>Rung {DIVERGE} is the whole game</h3>
-    <p>Through rung {DIVERGE-1} the bot is <em>ahead every single time</em> &mdash; 9s, 21s, 38s,
-    53s, 78s, 114s against Marc's 9s, 21s, 39s, 59s, 81s, 117s. Nothing in the first two minutes
-    suggests it is losing.</p>
+    <h3>{CTITLE}</h3>
+    {CEXTRA}
+    <p>{LPREFIX}Through rung {DIVERGE-1} the bot reaches
+    {", ".join(f"{B[k]:.0f}s" for k in range(1, DIVERGE) if k in B)} against Marc's
+    {", ".join(f"{M[k]:.0f}s" for k in range(1, DIVERGE) if k in M)}.</p>
     <p>Rung {DIVERGE} costs <strong>${RUNG_PRICE:,.0f}</strong>, which is
     {RUNG_PRICE/win[0]['p2income']:.0f} seconds of pure saving at its income of
     ${win[0]['p2income']:,.0f}/s. It took <strong>{D_TO-D_FROM:.0f} seconds</strong>, because it
