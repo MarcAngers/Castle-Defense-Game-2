@@ -486,3 +486,73 @@ already saturated — count ALL own units, not just purchased ones, and require 
 purchases actually moved the enemy castle. Buying unit 136 against a castle that is gaining HP is
 not closing anything out. This is a different failure from both brakes already shipped and neither
 addresses it.
+
+## WHAT MAKES A killerInstinct ACTIVATION VALUABLE (145 activations, 42 games)
+
+`--killer-audit` replays every recorded game against a shadow HeuristicBot **matched to the arm
+the game was played on**, groups the decisions where the flag is up into activations, and scores
+each on the two things Marc named: castle damage (kill as the best case) and the spend it forced
+out of the opponent. Cost is the money the bot spent on units during the activation.
+
+Restricted to the 42 games whose seat-2 bot was a HeuristicBot variant — search-arm games had a
+different agent, so the shadow would be fiction there.
+
+**119 activations spent money, $550,294 in total, for 24 kills.** 29% of them did *nothing* —
+under 500 HP of damage and under $500 of forced response.
+
+### The three predictors
+
+| split | did nothing | median dmg | kills |
+|---|---|---|---|
+| **enemy castle under 40% HP** | **7%** | 3,202 | 11 |
+| enemy castle 40–69% | 19% | 4,200 | 10 |
+| **enemy castle 70–94%** | **37%** | **0** | 3 |
+| | | | |
+| **after 220s** | **0%** | **11,019** | 8 |
+| 160–220s | 20% | 3,037 | 11 |
+| **100–160s** | **40%** | **0** | 5 |
+| | | | |
+| own field under 90 units | 11–18% | 1,594–3,998 | 14 |
+| **own field 90+ units** | **41–50%** | **0–997** | 10 |
+
+Read together: **killerInstinct is valuable when the enemy castle is already hurt and the game is
+late, and wasted when it fires at a healthy castle early with a saturated field.** The
+100–160s window is the worst — 40% do nothing, median damage zero — and that is exactly the
+rung 6→7 climb where the economy stall happens.
+
+### The gate: a CONJUNCTION, not either condition alone
+
+| gate | blocks | $ saved | kills lost | blocked did-nothing | kept did-nothing |
+|---|---|---|---|---|---|
+| own units ≥ 90 alone | 31 | $173,610 | **10** | 45% | 15% |
+| castle > 70% alone | 45 | $111,924 | 3 | 38% | 14% |
+| castle > 80% alone | 23 | $55,296 | 2 | 39% | 19% |
+| **castle > 70% AND own units ≥ 90** | **18** | **$60,544** | **1** | **56%** | **17%** |
+
+**The conjunction is the answer.** It blocks 18 of 119 activations, saves $60,544, costs exactly
+**one kill out of 24**, and **56% of what it blocks did literally nothing** against 17% of what it
+keeps.
+
+**NEGATIVE RESULT, and it corrects the fix proposed from the Blue game alone: saturation by
+itself is a BAD gate.** At every threshold from 60 to 140 units it costs 6–11 of the 24 kills — a
+big army that is not getting through *right now* still converts often enough to matter. The Blue
+game was one instance and it did not generalise. It is only in combination with a healthy enemy
+castle that saturation identifies waste, and the reading is intuitive: *"I have a huge army, it
+is not getting through, and the castle is fine."*
+
+### Checked against the known cases
+
+| game | t | cost | own | castle | dmg | gated? |
+|---|---|---|---|---|---|---|
+| C7F159 | 167.2s | $6,198 | 136 | 92% | 0 | **BLOCKED** — the burst that lost the Blue game |
+| 0A7658 | 153.2s | $4,150 | 10 | 88% | 11,960 | allowed — productive, correctly kept |
+| 0A7658 | 146.2s | $4,132 | 62 | 77% | 0 | allowed — the near-invest brake already covers this one |
+| 54D732 | 127.5s | $2,404 | 36 | 48% | 0 | allowed |
+
+It catches the specific burst that cost the closest game while leaving the productive
+high-damage activation alone.
+
+**Caveat on the whole audit.** Activations in won games are followed by damage partly *because*
+the bot was winning — some of the split between won and lost games is reverse causation. The
+state-conditioned splits above are the defensible part, since they compare activations by the
+board at the moment of firing rather than by how the game ended.

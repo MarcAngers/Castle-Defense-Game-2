@@ -232,6 +232,12 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--killer-audit")
+            {
+                KillerAudit.Run(args);
+                return;
+            }
+
             if (args.Length >= 2 && args[0] == "--economy-dump")
             {
                 EconomyDump.Run(args[1], args.Skip(2).ToArray());
@@ -1394,6 +1400,8 @@ namespace CastleDefense.Simulation
                 RepairCount = src.RepairCount,
                 IsInvulnerable = src.IsInvulnerable,
                 InvulnerableUntilTick = src.InvulnerableUntilTick,
+                ArmageddonUsed = src.ArmageddonUsed,
+                ArmageddonShieldUntilTick = src.ArmageddonShieldUntilTick,
                 OffensiveGadget = src.OffensiveGadget,
                 DefensiveGadget = src.DefensiveGadget,
                 SignatureGadget = src.SignatureGadget,
