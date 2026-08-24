@@ -475,3 +475,14 @@ CastleDefense.BotArena/dashboard/archive_prev_sweep/
 
 # Per-tick replay rebuilds -- regenerate with --economy-dump, ~100MB of derived data
 CastleDefense.BotArena/stall/human/
+
+# Raw bot-checksum / sweep run logs -- regenerate with the commands in BOT_TUNING.md
+CastleDefense.BotArena/stall/ab_*.txt
+CastleDefense.BotArena/stall/fx_*.txt*
+CastleDefense.BotArena/stall/fix_*.txt
+CastleDefense.BotArena/stall/hz*.txt
+CastleDefense.BotArena/stall/brake.txt
+CastleDefense.BotArena/stall/repairfix.txt
+CastleDefense.BotArena/stall/rf*.txt
+CastleDefense.BotArena/stall/mirror_cd*.csv
+CastleDefense.BotArena/stall/mirror_fix.csv
