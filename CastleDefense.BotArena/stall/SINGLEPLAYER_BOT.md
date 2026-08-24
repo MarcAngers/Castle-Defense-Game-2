@@ -261,3 +261,74 @@ these are not predictions about Marc's win rate — a human plays nothing like t
 0%/100% cells these are. What transfers is the ordering and the existence of the holes, not the
 absolute rates. Treat "play White/freeze/reinforcements" as a hypothesis to test at the
 keyboard, not a guarantee.
+
+---
+
+## THE RUNG-7 STALL: it is `killerInstinct`, and the bot thought it was winning
+
+Game `0A7658`. The bot led every rung through 6 (9/21/38/53/78/114s against Marc's
+9/21/39/59/81/117s), then took **112 seconds** on rung 7 where Marc took 33, and never bought
+another. Asked directly — via a shadow HeuristicBot run on a clone of the engine each tick, so
+its reasoning can be read without its decisions touching the replay — it names the branch:
+
+```
+  146.0s  P2 would spawn  reason=attack           money=$7362  investPrice=$8080  own=62  foe= 0
+  146.2s  P2 would spawn  reason=killerInstinct   money=$5296  investPrice=$8080  own=63  foe= 1
+  146.3s  P2 would spawn  reason=killerInstinct   money=$3230  investPrice=$8080  own=64  foe= 1
+  153.2s  P2 would spawn  reason=killerInstinct   money=$2573  investPrice=$8080  own=11  foe= 0
+  153.3s  P2 would spawn  reason=killerInstinct   money=$ 507  investPrice=$8080  own=12  foe= 1
+```
+
+**At 146.0s it held $7,362 and rung 7 cost $8,080 — it was $718 short, under three seconds of
+income.** It then bought four tier-7 units at $2,066 each across two bursts, $8,264 total, more
+than the rung it was three seconds from affording.
+
+### What it was thinking, in its own terms
+
+```csharp
+float ownPushDps = EstimateOwnCastleDps(engine, myUnits, enemyUnits);
+killerInstinct = ownPushDps > 0.01f
+              && enemy.CastleHealth / ownPushDps <= _settings.KillerInstinctSeconds;   // 12s
+```
+
+The comment above it reads *"we are N seconds from winning, stop saving and close it out."*
+
+At 146s the bot had **62 units on the field and Marc had zero**. `EstimateOwnCastleDps` counts
+own units that are in contact with the enemy castle *and not engaged with enemy units* — with no
+defenders present, nothing was filtered out, so the estimate was huge and the bot concluded it
+was inside twelve seconds of victory. By its own rule that is precisely when saving stops.
+
+**The bot's own dominance is what triggered the spending.**
+
+### The four things wrong with that
+
+1. **It assumes the push persists.** There is no term for the defender clearing it. Marc did:
+   the bot's army went **64 → 11 units between 146.4s and 153.2s**.
+2. **It re-fires after the push dies.** At 153.2s, down to 11 units, it triggered again and spent
+   to $489.
+3. **It bypasses every spending limit.** `killerInstinct` skips both the attack flow-rate cap and
+   the reactive budget — `if (!preferDefense && !killerInstinct)` and
+   `else if (preferDefense && !killerInstinct)`. That is how $4,132 left the balance in 0.2s when
+   the banked attack allowance was about $1,062 ($42.5/s flow × 25s cap).
+4. **It cannot price what it is giving up.** `DeferForInvestment`, the only hard
+   "stop spending, you are saving" rule, is `me.InvestmentCount < 3` — it does not exist at
+   rung 7.
+
+### Why this is the right thing to fix next
+
+The stall is not repairs (this game: 5 repairs, $764) and not the attack budget (which was
+correctly throttling at ~$42/s). It is one rule that switches the discipline off entirely,
+triggered by a state the bot reaches *because it is winning*, using an estimate that ignores the
+only thing that can take the win away.
+
+Candidate fixes, cheapest first, none yet measured:
+
+- **Require the push to be unopposed for a sustained period**, not instantaneously — the estimate
+  already knows which of its units are engaged, so it can require the condition to hold across
+  several consecutive decisions rather than one.
+- **Do not let `killerInstinct` spend money that is within one rung of an investment**, or at
+  least cap it at `Money − InvestmentPrice` when the rung is close.
+- **Latch it once per push.** Re-firing at 153s with 11 units left is the clearest single defect.
+
+Instrument: `--economy-dump --explain <from>:<to>` runs the shadow and prints the reason behind
+every P2 spawn in the window.

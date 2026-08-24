@@ -30,6 +30,12 @@ namespace CastleDefense.Simulation
             // same play". Not a prediction -- the human would have reacted differently -- but
             // it isolates the bot's own decisions on an identical board history.
             string liveP2 = Arg(args, "--live-p2", null);
+            // SHADOW EXPLAIN. Replays the recorded actions faithfully, and additionally runs a
+            // warm HeuristicBot on a CLONE of the engine each tick so its reasoning can be read
+            // without its decisions touching the real game. The recorded P2 actions ARE this
+            // bot's, so the shadow tracks the bot that actually played -- it just also exposes
+            // LastSpawnReason, which the replay format does not store.
+            string explain = Arg(args, "--explain", null);   // e.g. 143:157
             int every = int.Parse(Arg(args, "--every", "3"));
 
             var rf = ReplayFile.Read(replayPath);
@@ -44,6 +50,15 @@ namespace CastleDefense.Simulation
                                 + "end-of-game loadout from tick 0. Treat the curve as indicative.");
 
             var (state, engine) = rf.BuildStart();
+            CastleDefense.Engine.Bot.HeuristicBot shadow = null;
+            double exFrom = 0, exTo = 0;
+            if (explain != null)
+            {
+                var p = explain.Split(':');
+                exFrom = double.Parse(p[0]); exTo = double.Parse(p[1]);
+                shadow = new CastleDefense.Engine.Bot.HeuristicBot(2);
+                Console.WriteLine($"  shadow HeuristicBot explaining P2 over {exFrom}-{exTo}s");
+            }
             CastleDefense.Engine.Bot.HeuristicBot bot2 = null;
             if (liveP2 != null)
             {
@@ -64,6 +79,20 @@ namespace CastleDefense.Simulation
                 if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
                 if (bot2 != null) bot2.Update(engine);
                 else if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
+                if (shadow != null)
+                {
+                    // Clone so the shadow's actions never reach the real game.
+                    var probe = engine.Clone(unchecked((int)state.CurrentTick));
+                    int before = probe._state.Units.Count(u => u.Side == 2);
+                    shadow.Update(probe);
+                    int after = probe._state.Units.Count(u => u.Side == 2);
+                    double sec = state.CurrentTick / 30.0;
+                    if (sec >= exFrom && sec <= exTo && after > before)
+                        Console.WriteLine($"    {sec,7:F1}s  P2 would spawn  reason={shadow.LastSpawnReason,-16} "
+                                        + $"money=${state.Player2.Money,8:F0}  investPrice=${state.Player2.InvestmentPrice,8:F0}  "
+                                        + $"ownUnits={state.Units.Count(u => u.Side == 2),3}  foeUnits={state.Units.Count(u => u.Side == 1),3}");
+                }
+
                 engine.Tick();
 
                 if (i % every == 0)
