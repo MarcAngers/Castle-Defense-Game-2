@@ -1,14 +1,15 @@
-"""Income + Armageddon-race report across several recorded games.
+"""Money-on-hand + Armageddon-race report across several recorded games.
 
     python build_income_panels.py GAME1 GAME2 ...
 
-Reads human/<GID>.csv (from `--economy-dump --every 1`) and writes income_panels.html:
-one income step-chart per game, plus how close the bot came to Armageddon.
+Reads human/<GID>.csv (from `--economy-dump --every 1`) and writes money_panels.html:
+one money-on-hand chart per game against the Armageddon threshold, plus how close the bot
+came to affording it.
 """
 import csv, io, math, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "income_panels.html")
+OUT = os.path.join(HERE, "money_panels.html")
 ARM = 121221
 GAMES = sys.argv[1:] or ["54D732", "2B69F2", "C7F159"]
 LABEL = {"54D732": "White", "2B69F2": "Orange", "C7F159": "Blue", "8F1A28": "White"}
@@ -49,9 +50,12 @@ for g in GAMES:
 
 # ── chart geometry ──────────────────────────────────────────────────────────
 W, PADL, PADR, PADT, PADB = 940, 66, 18, 16, 30
-HF = 150
+HF = 176
 IW = W - PADL - PADR
-INC_MAX = 2500.0
+# One shared vertical scale across every panel so the games are comparable at a glance, and
+# tall enough that the Armageddon threshold sits inside the frame rather than at the ceiling.
+MONEY_MAX = max(max(max(r["money"], r["p2money"]) for r in DATA[g]["R"]) for g in GAMES)
+MONEY_MAX = max(MONEY_MAX, ARM * 1.05)
 
 
 def panel(g):
@@ -59,31 +63,39 @@ def panel(g):
     tmax = L["t"]
 
     def x(t): return PADL + IW * (t / tmax)
-    def y(v): return PADT + HF * (1 - v / INC_MAX)
+    def y(v): return PADT + HF * (1 - v / MONEY_MAX)
 
+    ticks = [0, 40000, 80000, 120000]
     grid = "".join(
         f'<line class="grid" x1="{PADL}" y1="{y(v):.1f}" x2="{W-PADR}" y2="{y(v):.1f}"/>'
-        f'<text class="ax" x="{PADL-8}" y="{y(v)+3.5:.1f}" text-anchor="end">${v:,.0f}</text>'
-        for v in (0, 750, 2500))
+        f'<text class="ax" x="{PADL-8}" y="{y(v)+3.5:.1f}" text-anchor="end">${v//1000}k</text>'
+        for v in ticks)
 
-    def step(key, cls):
-        d, last = [], None
+    # THE LINE THAT MATTERS: cross it and the game is over.
+    arm = (f'<line class="armline" x1="{PADL}" y1="{y(ARM):.1f}" x2="{W-PADR}" y2="{y(ARM):.1f}"/>'
+           f'<text class="armlab" x="{W-PADR-4}" y="{y(ARM)-5:.1f}" text-anchor="end">'
+           f'ARMAGEDDON ${ARM:,}</text>')
+
+    def line(key, cls):
+        d = []
         for i in range(0, len(R), 2):
             r = R[i]
-            if last is None:
-                d.append(f"M{x(r['t']):.1f},{y(r[key]):.1f}")
-            elif r[key] != last:
-                d.append(f"L{x(r['t']):.1f},{y(last):.1f}L{x(r['t']):.1f},{y(r[key]):.1f}")
-            last = r[key]
-        d.append(f"L{x(tmax):.1f},{y(last):.1f}")
+            d.append(("M" if not d else "L") + f"{x(r['t']):.1f},{y(r[key]):.1f}")
         return f'<path class="{cls}" d="{"".join(d)}"/>'
+
+    # how short the bot finished, drawn as the gap it never closed
+    gap = ""
+    if L["p2money"] < ARM:
+        gap = (f'<line class="gap" x1="{x(tmax):.1f}" y1="{y(L["p2money"]):.1f}" '
+               f'x2="{x(tmax):.1f}" y2="{y(ARM):.1f}"/>'
+               f'<circle class="gapdot" cx="{x(tmax):.1f}" cy="{y(L["p2money"]):.1f}" r="4"/>')
 
     xa = "".join(f'<text class="ax" x="{x(t):.1f}" y="{PADT+HF+20}" text-anchor="middle">{t}s</text>'
                  for t in (0, 60, 120, 180, 240, int(tmax)))
-    return (f'<svg viewBox="0 0 {W} {PADT+HF+PADB}" role="img" aria-label="Income over time for '
-            f'both players in game {g}. Both step up through the same ladder; the lines track '
-            f'each other closely and both reach the top rate.">'
-            + grid + step("p2income", "lbot") + step("p1income", "lmarc") + xa + "</svg>")
+    return (f'<svg viewBox="0 0 {W} {PADT+HF+PADB}" role="img" aria-label="Money on hand over time '
+            f'for both players in game {g}. The bot banks steadily toward the Armageddon threshold '
+            f'and its line stops just below it when the castle falls.">'
+            + grid + arm + line("p2money", "lbot") + line("money", "lmarc") + gap + xa + "</svg>")
 
 
 cards = ""
@@ -94,7 +106,7 @@ for g in GAMES:
     cards += f"""
     <figure>
       <p class="figtitle">{g} &middot; Marc as {LABEL.get(g,'?')} &middot; {verdict} in {L['t']:.0f}s</p>
-      <p class="figsub">income per second, both players &mdash; the ladder is a step function</p>
+      <p class="figsub">money on hand, both players, against the Armageddon threshold</p>
       <div class="scroll">{panel(g)}</div>
       <div class="statline">
         <span><b>bot died holding</b> ${L['p2money']:,.0f}</span>
@@ -151,7 +163,11 @@ figure{{margin:0 0 20px;background:var(--surface);border:1px solid var(--rule);p
 .scroll{{overflow-x:auto}} svg{{display:block;width:100%;height:auto;font-family:"IBM Plex Mono",monospace}}
 .grid{{stroke:var(--rule-soft);stroke-width:1}} .ax{{fill:var(--ink-dim);font-size:10px}}
 .lmarc{{fill:none;stroke:var(--marc);stroke-width:2.2;stroke-linejoin:round}}
-.lbot{{fill:none;stroke:var(--bot);stroke-width:2;stroke-linejoin:round;stroke-dasharray:5 3}}
+.lbot{{fill:none;stroke:var(--bot);stroke-width:2;stroke-linejoin:round}}
+.armline{{stroke:var(--warn);stroke-width:1.4;stroke-dasharray:6 4;opacity:.85}}
+.armlab{{fill:var(--warn);font-size:10px;font-weight:600}}
+.gap{{stroke:var(--warn);stroke-width:3;opacity:.55}}
+.gapdot{{fill:var(--warn);stroke:var(--surface);stroke-width:1.5}}
 .statline{{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 2px 4px;font-family:"IBM Plex Mono",monospace;
 font-size:.79rem;color:var(--ink-soft);font-variant-numeric:tabular-nums}}
 .statline b{{color:var(--ink);font-weight:600}} .statline .dim{{color:var(--ink-dim)}}
@@ -180,15 +196,17 @@ footer{{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-s
 </header>
 
 <section>
-  <div class="shead"><span class="n">01</span><h2>Income, all three games</h2></div>
+  <div class="shead"><span class="n">01</span><h2>Money on hand, all three games</h2></div>
   <div class="prose">
-    <p>Income is a step function &mdash; each step is an investment. Both players climb the same
-    ladder, and in all three games <em>both reach the top rate of $2,500/s</em>. The bot is no
-    longer being left behind on the ladder; it is losing the last purchase.</p>
+    <p>The bot's balance climbs toward the one line that ends the game. In all three it gets
+    there and stops just underneath &mdash; the marked gap at the end of each line is the money it
+    never earned. The sawtooth drops are investments; the deep drop late in each game is
+    investment 8 at $40,000.</p>
   </div>
   <div class="legend">
     <span><i style="background:var(--marc)"></i>Marc</span>
     <span><i style="background:var(--bot)"></i>the bot</span>
+    <span><i style="background:var(--warn)"></i>Armageddon threshold &mdash; and the gap it died short of</span>
   </div>
   {cards}
 </section>
