@@ -371,3 +371,38 @@ action for that tick.
 **Measured, n=300 paired against the flagship: 51.7%** (SE 2.9pp — still not separable from 50).
 The brake fires in 79/300 games, median 33 decisions, and investments move +0.05. As with every
 other change in this series, self-play cannot resolve it; the situation is one a human creates.
+
+### The bait wave — why this is an exploit, not a misfire
+
+Marc, 2026-08-24: *"a really devious and effective tactic that I use is to send a 'bait' wave of
+attackers. I don't spend much on this, the entire goal is to get the opponent to spend on
+important gadgets or large defending units, at which point I can send my actual attack."*
+
+This reframes `killerInstinct` from a tuning error into an **exploitable trigger**, and the two
+are not the same problem:
+
+- A misfire happens at some rate and costs an expected amount.
+- A trigger a human can pull happens **whenever they choose**, at the moment of their choosing,
+  and the cost is paid at the worst time rather than the average time.
+
+The mechanism is symmetric and the bot is on the losing side of it both ways. Marc baits the bot
+into spending its *defensive* capacity; and `EstimateOwnCastleDps` reading an empty field baits
+the bot into spending its *economy*. Both work because neither side's model contains the other
+side's **uncast potential** — money in hand, gadgets off cooldown, units affordable but not yet
+bought.
+
+**Everything the bot reasons about is on the field.** `EstimateOwnCastleDps` counts units in
+contact. `ThreatModel` counts units present. `EstimateProjectedThreatDps` counts units touching
+the castle. There is no term anywhere for "what could my opponent do right now if they chose to",
+even though the state vector deliberately hides enemy money for the RL agent precisely because it
+is decisive information.
+
+**The three brakes shipped so far do not address this and were not meant to.** They limit the
+*consequences* — do not bypass the budget near a rung, do not re-press a dead push, do not attack
+into CC. A bait wave still fires the trigger; it just costs less when it does.
+
+**The direct fix, if it is ever wanted:** give the attack-commitment decision a model of the
+defender's uncast capacity — their visible gadget tiers and cooldown states, and a bound on their
+money from observed income and observed spending. That is real, observable signal that nothing in
+the bot currently uses. It is also a substantially bigger change than anything in this series, so
+it waits on whether the brakes move Marc's games.
