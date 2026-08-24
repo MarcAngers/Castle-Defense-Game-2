@@ -406,3 +406,27 @@ defender's uncast capacity — their visible gadget tiers and cooldown states, a
 money from observed income and observed spending. That is real, observable signal that nothing in
 the bot currently uses. It is also a substantially bigger change than anything in this series, so
 it waits on whether the brakes move Marc's games.
+
+### RESULT: the brakes worked. The bot now loses by seconds, not by rungs.
+
+Five games on the brake build. **The rung-7 stall is gone** — in every one the bot reaches
+investment 8 and finishes on $2,500/s, where pre-brake `0A7658` finished on $750/s and rung 7.
+
+| game | Marc | bot money at death | of Armageddon ($121,221) | seconds short | repairs |
+|---|---|---|---|---|---|
+| 54D732 | White | $117,841 | **97.2%** | **1.4s** | 6 / $2,560 |
+| C7F159 | Blue | $119,198 | **98.3%** | **0.8s** | 5 / $764 |
+| 2B69F2 | Orange | $107,748 | 88.9% | 5.4s | 5 / $764 |
+| 8F1A28 | White | — | **DRAW** — both reached Armageddon | — | 7 / $11,398 |
+
+**It is not refusing the purchase.** In `54D732` the balance crossed $121,221 for *exactly one
+tick*, at 297.0s — the final tick of the game. It died in the instant it could first afford the
+win. In the draw it crossed at 279.0s and bought Armageddon **0.1 seconds later**.
+
+Repair spend is $764–$2,560 against $11,398 pre-fix. The over-repair is gone and is no longer
+where the money goes.
+
+**Caveat: this is five games, all against one player, with three changes stacked.** The direction
+is unmistakable — a rung-7 stall to a photo finish is not a subtle effect — but which of the three
+brakes is carrying it is not separable from this sample, and self-play could not distinguish any
+of them from 50%.
