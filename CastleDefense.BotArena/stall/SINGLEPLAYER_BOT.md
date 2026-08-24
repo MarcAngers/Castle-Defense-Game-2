@@ -332,3 +332,42 @@ Candidate fixes, cheapest first, none yet measured:
 
 Instrument: `--economy-dump --explain <from>:<to>` runs the shadow and prints the reason behind
 every P2 spawn in the window.
+
+### The two brakes, implemented 2026-08-24
+
+Both default off; flag-off guard verified at `33DD370A7EA7E402F7B2DBBEDA76BFC8`.
+
+| setting | value in `EconomyBrakeProfile` | what it does |
+|---|---|---|
+| `KillerInstinctInvestLockoutSeconds` | **5.0** | suppress killerInstinct while the next rung is within 5s of income |
+| `KillerInstinctPushLatch` | **true** | after a push collapses (army more than halves), refuse to fire again until the bot holds an income advantage |
+
+Applied *after* the trigger rather than folded into it, so the raw signal stays readable in
+`LastKillerInstinctRaw` and each brake can be attributed separately via `LastKillerLockReason`.
+The latch reads `LastIncomeAdvantage` — the previous decision's value — because
+`hasIncomeAdvantage` is computed further down the same method; a 0.17s lag is not worth
+reordering that block for.
+
+**5 seconds is Marc's call**, and the trace supports it: the 0A7658 stall happened at **2.8
+seconds** from the rung, so 5 covers it with margin without blocking a genuine finish from
+further out.
+
+**Verified on the actual decision, via the shadow explainer:**
+
+```
+without   146.2s  reason=killerInstinct  killRaw=True  lock=-            money=$7362  price=$8080
+with      146.2s  reason=attack          killRaw=True  lock=near-invest  money=$7362  price=$8080
+```
+
+The brake fires exactly at the moment in question and the bot falls back to the *budgeted*
+attack path rather than the bypass.
+
+**A tooling bug this exposed, worth not repeating.** The shadow originally ran *after* the
+recorded actions were applied, so at 146.2s it evaluated with $5,296 — the balance already
+reduced by the very purchase being explained — which put the bot 11 seconds from the rung and
+made the brake look inert. Any shadow that explains a decision must run BEFORE the recorded
+action for that tick.
+
+**Measured, n=300 paired against the flagship: 51.7%** (SE 2.9pp — still not separable from 50).
+The brake fires in 79/300 games, median 33 decisions, and investments move +0.05. As with every
+other change in this series, self-play cannot resolve it; the situation is one a human creates.

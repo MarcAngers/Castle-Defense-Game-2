@@ -32,6 +32,7 @@ namespace CastleDefense.BotArena
             bool noCoverage = false;
             bool repairFix = false;
             bool hazardFix = false;
+            bool brakeFix = false;
             string loadout = null;   // e.g. White,nuke,reinforcements -- pins BOTH sides
             string dump = null;      // per-tick CSV of the traced game   // P1 defensive, P2 the shipped attacking bot -- the head-to-head
             for (int i = 1; i < args.Length; i++)
@@ -47,11 +48,13 @@ namespace CastleDefense.BotArena
                 // difference is attributable to repair alone.
                 if (args[i] == "--p1-repair-fix") { repairFix = true; p1Only = true; }
                 if (args[i] == "--p1-hazard-fix") { hazardFix = true; p1Only = true; }
+                if (args[i] == "--p1-brake") { brakeFix = true; p1Only = true; }
                 if (args[i] == "--loadout" && i + 1 < args.Length) loadout = args[++i];
                 if (args[i] == "--dump" && i + 1 < args.Length) dump = args[++i];
             }
 
-            var settings = hazardFix ? HeuristicBotSettings.RepairFixPlusHazardProfile
+            var settings = brakeFix ? HeuristicBotSettings.EconomyBrakeProfile
+                : hazardFix ? HeuristicBotSettings.RepairFixPlusHazardProfile
                 : repairFix ? HeuristicBotSettings.RepairFixProfile
                 : !defenceOnly ? null
                 : (engageDps >= 0f || wiperCd >= 0 || noCoverage)
@@ -237,7 +240,7 @@ namespace CastleDefense.BotArena
                 // purchase can match -- so "did each side actually fire its defensive
                 // gadget" is a first-order economic question, not a detail.
                 row += $"  REP p1={p1.ActionCounts[10]} p2={p2.ActionCounts[10]}";
-                row += $"  HZB={p1.HazardBlackoutDecisions} T1={state.Player1.Team} T2={state.Player2.Team}";
+                row += $"  HZB={p1.HazardBlackoutDecisions} KLOCK={p1.KillerLockedDecisions} T1={state.Player1.Team} T2={state.Player2.Team}";
                 row += $"  GAD p1 off={p1.ActionCounts[11]} def={p1.ActionCounts[12]} sig={p1.ActionCounts[13]}"
                      + $" | p2 off={p2.ActionCounts[11]} def={p2.ActionCounts[12]} sig={p2.ActionCounts[13]}";
                 // The CAST COUNT hides the tier, and the tier is the whole story: the same

@@ -54,9 +54,12 @@ namespace CastleDefense.Simulation
             double exFrom = 0, exTo = 0;
             if (explain != null)
             {
-                var p = explain.Split(':');
-                exFrom = double.Parse(p[0]); exTo = double.Parse(p[1]);
-                shadow = new CastleDefense.Engine.Bot.HeuristicBot(2);
+                var sset = explain.EndsWith("!brake")
+                    ? CastleDefense.Engine.Bot.HeuristicBotSettings.EconomyBrakeProfile : null;
+                if (sset != null) explain = explain.Replace("!brake", "");
+                var pp = explain.Split(':');
+                exFrom = double.Parse(pp[0]); exTo = double.Parse(pp[1]);
+                shadow = new CastleDefense.Engine.Bot.HeuristicBot(2, sset);
                 Console.WriteLine($"  shadow HeuristicBot explaining P2 over {exFrom}-{exTo}s");
             }
             CastleDefense.Engine.Bot.HeuristicBot bot2 = null;
@@ -76,9 +79,6 @@ namespace CastleDefense.Simulation
             {
                 int tick = (int)state.CurrentTick;
                 byte a1 = rf.A1[i], a2 = rf.A2[i];
-                if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
-                if (bot2 != null) bot2.Update(engine);
-                else if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
                 if (shadow != null)
                 {
                     // Clone so the shadow's actions never reach the real game.
@@ -89,10 +89,14 @@ namespace CastleDefense.Simulation
                     double sec = state.CurrentTick / 30.0;
                     if (sec >= exFrom && sec <= exTo && after > before)
                         Console.WriteLine($"    {sec,7:F1}s  P2 would spawn  reason={shadow.LastSpawnReason,-16} "
+                                        + $"killRaw={shadow.LastKillerInstinctRaw,-5} lock={shadow.LastKillerLockReason ?? "-",-12} "
                                         + $"money=${state.Player2.Money,8:F0}  investPrice=${state.Player2.InvestmentPrice,8:F0}  "
                                         + $"ownUnits={state.Units.Count(u => u.Side == 2),3}  foeUnits={state.Units.Count(u => u.Side == 1),3}");
                 }
 
+                if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
+                if (bot2 != null) bot2.Update(engine);
+                else if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
                 engine.Tick();
 
                 if (i % every == 0)
