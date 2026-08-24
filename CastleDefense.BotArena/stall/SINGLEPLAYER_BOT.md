@@ -430,3 +430,59 @@ where the money goes.
 is unmistakable — a rung-7 stall to a photo finish is not a subtle effect — but which of the three
 brakes is carrying it is not separable from this sample, and self-play could not distinguish any
 of them from 50%.
+
+### Three losses, three different causes (2026-08-24)
+
+Marc won each of the three brake-build games by a different route. Dissected via
+`--economy-dump --explain`, which names the branch behind every purchase.
+
+**ORANGE `2B69F2` — the drip, and it is not a bug.** No single mistake. Across the whole game
+the bot spent **$37,980 on units, 18% of everything it earned**; Marc spent **$5,933, 3%**. Six
+times the outlay for the same ladder. The bot actually *led* rungs 2–7 and lost only rung 8 (225s
+against 220s). The composition is the tell: T5×221 ($17,901) and T6×29 ($9,802) against Marc's
+T4×284 ($5,112) — the bot buys mid-tier pressure continuously, Marc buys the cheapest body that
+does a job.
+
+This is the constant-pressure stream working as designed and losing anyway. **It is not obviously
+correctable**: pressure is what makes the bot dangerous in most games, and a blanket reduction
+would trade away the games it currently wins. The honest framing is that 18% is a *policy*, not a
+mistake, and the question is whether it should be state-dependent — cheap when the opponent is
+also saving, expensive when they are not.
+
+**WHITE `54D732` — a 32% tax on the rung-7 climb.** Rung 6 at 115.0s, rung 7 at 164.0s: **49
+seconds** for a rung that is 32 seconds of pure saving. Marc did the same rung in 34.9s. Over that
+window the bot earned $12,372 and spent **$3,991 (32%)** on units:
+
+| tier | bought | spend | share |
+|---|---|---|---|
+| 7 | **1** | $2,066 | **52%** |
+| 4 | 53 | $954 | 24% |
+| 1 | 148 | $444 | 11% |
+| others | 14 | $527 | 13% |
+
+157 `attack` decisions against 2 `killerInstinct` in that window — this is a *drip*, not a burst,
+and **one tier-7 purchase is half of it**. Skipping that single unit alone would have brought the
+rung in around 40s. Marc: "the bot plays well enough that it almost makes up the entire deficit" —
+the ~10s it lost here is the whole margin.
+
+**BLUE `C7F159` — killerInstinct buying into a saturated field.** The bot took rung 7 at 149.0s
+against Marc's 159.7s, **10.7 seconds ahead**. Then at 167.2/167.4/167.5s it bought three tier-7
+units in 0.3 seconds for **$6,198** — `killerInstinct`, confirmed by the shadow. It reached rung 8
+at 230.0s against Marc's 221.5s: **8.5 seconds behind**. A 19-second swing bought with one burst.
+
+**What makes this one different from the 0A7658 stall:** the bot was **39.6 seconds** from rung 8
+($10,289 of $40,000 at $750/s), so the 5-second near-invest lockout correctly did not fire. The
+brake is not at fault and widening it would be wrong.
+
+**The actual defect is saturation.** At the moment it bought, the bot already had **135 units on
+the field against Marc's 1**. The three extra tier-7s changed nothing: over the following 18
+seconds Marc's castle went *up* (21,372 → 31,701 — he repaired through it) while the bot's army
+grew to 186 and never broke through. `SpendOnUnits` does cap at `MaxOwnUnitsOnField = 120`, but
+gadget-spawned reinforcements bypass the cap, so the real field size runs well past it and the
+purchase path never sees saturation.
+
+**Candidate fix, cheapest yet and narrow:** make `killerInstinct` refuse to buy when the field is
+already saturated — count ALL own units, not just purchased ones, and require that the last N
+purchases actually moved the enemy castle. Buying unit 136 against a castle that is gaining HP is
+not closing anything out. This is a different failure from both brakes already shipped and neither
+addresses it.
