@@ -8,6 +8,7 @@ namespace CastleDefense.Engine.Definitions
     {
         public string Id { get; set; }
         public string Name { get; set; }
+        public TeamColour Team { get; set; }
         public string Description { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }

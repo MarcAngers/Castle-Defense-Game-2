@@ -37,25 +37,39 @@ namespace CastleDefense.Engine.Gadgets
 
             engine.TriggerGadgetAnimation(_def.Id, side, position, target.InstanceId);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "snipe", baseXp);
+            engine.AddGadgetXp(side, "snipe", 100);
 
-            // Schedule the gadget effect to happen after the animation
-            engine.ScheduleAction(_def.Delay, () =>
+            // Schedule the gadget effect to happen after the animation.
+            // The target is stored by InstanceId rather than as an object reference —
+            // a captured reference would point into the original game after a clone.
+            engine.ScheduleEffect(_def.Delay, new PendingEffect
             {
-                int preHealth = target.CurrentHealth + Math.Max(0, target.CurrentShield);
-
-                engine.ApplyDamage(target, _def.BaseValue, Models.AttackType.Melee, _def.PushForce);
-
-                int postHealth = target.CurrentHealth + Math.Max(0, target.CurrentShield);
-
-                engine.AddGadgetXp(side, "snipe", (preHealth - postHealth) / 10);
-
-                if (postHealth <= 0)
-                {
-                    engine.AddGadgetXp(side, "snipe", 50);
-                }
+                GadgetId = _def.Id,
+                Phase = PhaseFire,
+                Side = side,
+                Position = position,
+                TargetId = target.InstanceId,
             });
+        }
+
+        private const int PhaseFire = 0;
+
+        public void ExecuteScheduled(GameEngine engine, in PendingEffect e)
+        {
+            if (e.Phase != PhaseFire) return;
+
+            // BEHAVIOUR CHANGE, deliberate (2026-07-28, agreed with Marc): if the target
+            // died during the delay it is gone from Units, so the shot now fizzles. The
+            // old closure held the Unit object directly and applied damage to a corpse
+            // that was no longer on the board. Fizzling is the correct reading of "the
+            // target got sniped" and the old behaviour was a latent bug.
+            // Copy out of the `in` parameter first — CS1628: an in/ref/out parameter
+            // cannot be captured by a lambda.
+            var targetId = e.TargetId;
+            var target = engine._state.Units.FirstOrDefault(u => u.InstanceId == targetId);
+            if (target == null) return;
+
+            engine.ApplyDamage(target, (int)_def.BaseValue, Models.AttackType.Melee, _def.PushForce);
         }
     }
 }

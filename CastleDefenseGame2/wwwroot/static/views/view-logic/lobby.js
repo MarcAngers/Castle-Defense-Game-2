@@ -1,11 +1,9 @@
 import { showScreen } from '../../../src/router.js';
-import View from '../../../src/view.js';
+import view from '../../../src/view.js';
 import connection from '../../../src/game-connection.js';
 
 export default function initLobby() {
-    let lobbyView = new View('bgCanvas');  
-    lobbyView.drawBackground('white');
-    lobbyView.drawForeground('white');
+    view.draw();
 
     document.getElementById('lobby-id-text').innerText = connection.currentGameId;
 

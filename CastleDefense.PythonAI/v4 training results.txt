@@ -1,0 +1,29 @@
+===========================================================
+               FINAL TRAINING RUN STATISTICS
+===========================================================
+[GLOBAL] Matches: 108964 | Total WR: 75.1% | Baseline: 72.0%
+
+--- BY OPPONENT ---
+[Anti-Spam Bot    ] Matches: 9899  | Total WR:  77.6% | Baseline:  34.0% | Final 100:  87.0%
+[Python Models    ] Matches: 49420 | Total WR:  67.0% | Baseline:  45.0% | Final 100:  76.0%
+[Random Dummy     ] Matches: 9945  | Total WR:  73.0% | Baseline:  65.0% | Final 100:  73.0%
+[Spam Bot T1      ] Matches: 15865 | Total WR:  93.4% | Baseline:  94.0% | Final 100:  98.0%
+[Spam Bot T2      ] Matches: 5519  | Total WR:  97.9% | Baseline:  85.0% | Final 100:  97.0%
+[Spam Bot T3      ] Matches: 3060  | Total WR:  90.4% | Baseline:  68.0% | Final 100:  90.0%
+[Spam Bot T4      ] Matches: 3101  | Total WR:  73.5% | Baseline:  50.0% | Final 100:  78.0%
+[Spam Bot T5      ] Matches: 3043  | Total WR:  67.6% | Baseline:  45.0% | Final 100:  85.0%
+[Spam Bot T6      ] Matches: 2948  | Total WR:  64.0% | Baseline:  49.0% | Final 100:  72.0%
+[Spam Bot T7      ] Matches: 2434  | Total WR:  60.7% | Baseline:  52.0% | Final 100:  57.0%
+[Spam Bot T8      ] Matches: 3730  | Total WR:  81.0% | Baseline:  49.0% | Final 100:  91.0%
+
+--- BY TIME SKIP ---
+[SKIP 0 ] Matches: 41594 | Total WR:  76.2% | Baseline:  55.0% | Final 100:  83.0%
+[SKIP 1 ] Matches: 8445  | Total WR:  78.1% | Baseline:  50.0% | Final 100:  91.0%
+[SKIP 2 ] Matches: 8443  | Total WR:  79.5% | Baseline:  52.0% | Final 100:  91.0%
+[SKIP 3 ] Matches: 8352  | Total WR:  80.6% | Baseline:  52.0% | Final 100:  86.0%
+[SKIP 4 ] Matches: 8405  | Total WR:  74.9% | Baseline:  64.0% | Final 100:  83.0%
+[SKIP 5 ] Matches: 8297  | Total WR:  61.3% | Baseline:  44.0% | Final 100:  74.0%
+[SKIP 6 ] Matches: 8418  | Total WR:  76.0% | Baseline:  77.0% | Final 100:  79.0%
+[SKIP 7 ] Matches: 8617  | Total WR:  71.1% | Baseline:  59.0% | Final 100:  72.0%
+[SKIP 8 ] Matches: 8393  | Total WR:  73.3% | Baseline:  35.0% | Final 100:  78.0%
+===========================================================

@@ -1,0 +1,12 @@
+human_team,human_off,human_def,counter_winrate,random_winrate,fixed_winrate,counter_pick
+Black,snipe,reinforcements,0.9000,0.9000,1.0000,Purple/freeze/wall
+Purple,firebomb,wall,1.0000,0.9000,1.0000,White/nuke/reinforcements
+Blue,firebomb,heal,1.0000,0.6000,1.0000,White/nuke/reinforcements
+Blue,nuke,heal,1.0000,0.8000,1.0000,White/nuke/heal
+Orange,freeze,wall,1.0000,0.9000,1.0000,White/nuke/reinforcements
+Red,freeze,speed,1.0000,0.6000,1.0000,White/nuke/reinforcements
+Green,nuke,speed,1.0000,0.9000,1.0000,White/nuke/reinforcements
+Black,freeze,speed,1.0000,0.7000,1.0000,White/nuke/reinforcements
+Purple,freeze,wall,1.0000,0.9000,1.0000,White/nuke/reinforcements
+Orange,snipe,wall,1.0000,0.9000,1.0000,White/nuke/reinforcements
+Blue,freeze,wall,1.0000,1.0000,1.0000,White/nuke/reinforcements

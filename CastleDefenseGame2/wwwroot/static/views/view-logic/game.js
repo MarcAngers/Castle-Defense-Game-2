@@ -1,6 +1,19 @@
-import View from '../../../src/view.js';
+import view from '../../../src/view.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
+import preGameSquad from '../../../src/pregame-squad.js';
+
+// --- Pre-game intro choreography -------------------------------------------------------
+// Against the server's 4-second window (GameHostingService.PreGameSeconds): a second looking
+// at the OPPONENT's castle, two seconds panning home, then a second to settle before the
+// battle opens. Timings are measured from the START of the window, so they are computed from
+// elapsed = total - remaining and stay correct for a client that joins mid-intro.
+const PAN_START_MS = 1000;
+const PAN_DURATION_MS = 2000;
+
+// Smoothstep: the pan eases out of the opponent's castle and into your own rather than
+// starting and stopping dead.
+const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export default function initGameScreen() {
     let startingCameraX = 0;
@@ -12,24 +25,84 @@ export default function initGameScreen() {
         myTeam = loader.assets.teamList[connection.latestState.player2.team];
         startingCameraX = 2000;
     }
-    const gameView = new View('gameCanvas', startingCameraX);
-    initShopUI(myTeam, gameView);
 
+    if (connection.mySide == 0) {
+        // Spectator (Training League watch mode): both sides are AI-controlled and
+        // there's nothing for a human to click, so skip the interactive shop UI
+        // entirely and show both players' stats side by side instead of just one.
+        startingCameraX = 1000;
+        document.getElementById('hud-bottom').style.display = 'none';
+        document.getElementById('hud-top').style.float = 'left';
+        document.getElementById('hud-top-label').style.display = 'block';
+        document.getElementById('hud-top-p2').style.display = 'block';
+    } else {
+        initShopUI(myTeam);
+    }
+
+    // Fill in the pause overlay's construction signs once, here, rather than from the frame
+    // loop. Guarded because a missing asset must cost two decorative images, not the game.
+    const constructionSign = loader.assets.tooltips?.construction;
+    if (constructionSign) {
+        document.querySelectorAll('#pause-overlay .pause-icon')
+                .forEach(img => img.src = constructionSign.src);
+    }
+
+    // Wired once per visit to this screen, alongside the rest of the UI, rather than from
+    // the frame loop -- which would reattach it thirty times a second.
+    const claimBtn = document.getElementById('btnClaimVictory');
+    if (claimBtn) claimBtn.onclick = () => {
+        claimBtn.disabled = true;
+        connection.claimVictory();
+    };
+
+    // The camera the player ends up at. During the intro it opens on the OPPONENT's castle
+    // instead and pans here; without an intro it just starts here, as it always did.
+    const homeCameraX = startingCameraX;
+    const awayCameraX = connection.mySide === 0 ? startingCameraX
+                      : (connection.mySide === 1 ? 2000 : 0);
+
+    view.panTo(connection.inPreGame ? awayCameraX : homeCameraX);
+
+    // Rebuilt per game, not per visit: coming back to this screen mid-game (a rejoin) must
+    // not repopulate a crowd the battle has already sent onto the field.
+    preGameSquad.ensure(connection.latestState, connection.currentGameId);
+
+    let lastCountdownLabel = null;
+    let lastFrameTime = performance.now();
     let animationFrameId;
 
     const gameLoop = () => {
-        if (connection.winnerSide != 0) {
+        // NOT `winnerSide != 0` -- a DRAW ends the game with winnerSide 0, which that
+        // test reads as "still playing", so the loop ran forever behind the game-over
+        // screen (a leaked rAF chain still calling updateUI every frame).
+        if (connection.gameOver) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
+            // The game-over screen draws the same state; a squad left in the list would be
+            // drawn standing at a castle that has just fallen.
+            view.preGameSquad = [];
+            preGameSquad.reset();
             return;
         }
         
-        gameView.clear();
+        view.clear();
+
+        const now = performance.now();
+        const deltaMs = now - lastFrameTime;
+        lastFrameTime = now;
+
+        // Must run BEFORE the draw: it sets the camera and the squad list the draw reads.
+        lastCountdownLabel = runIntro(deltaMs, homeCameraX, awayCameraX, lastCountdownLabel);
 
         if (connection.latestState) {
-            gameView.drawGameState(connection.latestState);
+            view.drawGameState(connection.latestState);
             updateUI(connection.latestState);
         }
+
+        // Pulled every frame rather than pushed from the SignalR handler: this screen is
+        // torn down and rebuilt by the router, so a subscription taken out here would
+        // outlive the elements it writes to.
+        syncPauseOverlay();
 
         animationFrameId = requestAnimationFrame(gameLoop);
     };
@@ -37,22 +110,156 @@ export default function initGameScreen() {
     requestAnimationFrame(gameLoop);
 }
 
+// Drives everything that happens before the battle opens: which castle the camera is
+// looking at, the squad waiting outside them, and the countdown banner.
+//
+// Runs EVERY frame, not just during the intro, because two of its three jobs outlive the
+// window: the squad keeps thinning out over the first seconds of the battle as its members
+// run onto the field, and "BATTLE!!" plays out after the intro has ended.
+//
+// Returns the label currently shown, which the caller threads back in -- the banner has to
+// restart its animation only when the label CHANGES, and this function holds no state.
+function runIntro(deltaMs, homeCameraX, awayCameraX, lastLabel) {
+    const inPreGame = connection.inPreGame;
+    const remaining = connection.preGameRemaining();
+
+    // --- Camera ---
+    if (inPreGame) {
+        const total = connection.preGameTotalMs || 0;
+        const elapsed = total - remaining;
+        if (elapsed <= PAN_START_MS) {
+            view.panTo(awayCameraX);
+        } else {
+            const t = Math.min(1, (elapsed - PAN_START_MS) / PAN_DURATION_MS);
+            view.panTo(awayCameraX + (homeCameraX - awayCameraX) * smoothstep(t));
+        }
+    }
+
+    // --- The squad outside the castles ---
+    preGameSquad.ensure(connection.latestState, connection.currentGameId);
+    preGameSquad.update(deltaMs);
+    view.preGameSquad = preGameSquad.visible(connection.latestState, inPreGame);
+
+    // --- Countdown banner ---
+    // 3, 2 and 1 come off the remaining time; BATTLE!! is triggered by the window closing,
+    // and is held for its animation rather than for a slice of the countdown.
+    let label = null;
+    if (inPreGame) {
+        if (remaining <= 1000) label = '1';
+        else if (remaining <= 2000) label = '2';
+        else if (remaining <= 3000) label = '3';
+    } else if (connection.battleStartedAt
+               && performance.now() - connection.battleStartedAt < 1200) {
+        label = 'BATTLE!!';
+    }
+
+    if (label !== lastLabel) showCountdown(label);
+    return label;
+}
+
+// Restarting a CSS animation needs the class removed, a reflow forced, and the class put
+// back -- assigning the same class again does nothing on its own.
+function showCountdown(label) {
+    const el = document.getElementById('countdown-text');
+    if (!el) return;
+
+    el.classList.remove('show', 'digit', 'battle');
+    if (!label) { el.innerText = ''; return; }
+
+    el.innerText = label;
+    void el.offsetWidth;                       // force reflow
+    el.classList.add('show', label === 'BATTLE!!' ? 'battle' : 'digit');
+}
+
+// The server has frozen the game because the other player's connection went away. The
+// state keeps drawing -- it simply stops changing -- so the overlay is what tells the
+// player the game is paused rather than merely quiet.
+function syncPauseOverlay() {
+    const overlay = document.getElementById('pause-overlay');
+    if (!overlay) return;
+
+    const countdown = overlay.querySelector('.pause-countdown');
+    const note = document.getElementById('pause-note');
+    const subtitle = document.getElementById('pause-subtitle');
+    const claimBtn = document.getElementById('btnClaimVictory');
+
+    // THIS end dropped, and SignalR is retrying. No server message can arrive to explain
+    // the freeze, so the overlay has to be raised locally -- and it must NOT show the
+    // 60-second countdown, which belongs to the opponent's clock and is not what this
+    // player is waiting on.
+    if (connection.reconnecting) {
+        document.getElementById('pause-title').innerText = 'CONNECTION LOST';
+        if (subtitle) subtitle.innerText = 'RECONNECTING...';
+        if (countdown) countdown.style.display = 'none';
+        if (note) note.innerText = 'YOUR SEAT IS BEING HELD';
+        if (claimBtn) claimBtn.classList.add('hidden');
+        overlay.classList.remove('hidden');
+        return;
+    }
+
+    if (!connection.paused) {
+        overlay.classList.add('hidden');
+        return;
+    }
+
+    const title = document.getElementById('pause-title');
+    if (title) {
+        // A spectator sees which side dropped; a player only cares that it was the
+        // opponent. mySide is 0 for spectators, so this never mislabels one as the other.
+        title.innerText = connection.mySide === 0
+            ? `P${connection.pausedSide} DISCONNECTED`
+            : 'OPPONENT DISCONNECTED';
+    }
+
+    if (countdown) countdown.style.display = '';
+
+    if (connection.pauseClaimable) {
+        // The 60 seconds are up and nothing has happened on its own -- by design. What the
+        // player watches now is how long they have waited, and the decision to end it is
+        // theirs. Spectators get no button: there is no seat for them to win with.
+        if (subtitle) subtitle.innerText = 'THEY HAVE NOT COME BACK YET';
+        if (countdown) countdown.innerText = formatWait(connection.pauseWaitedSeconds);
+        if (note) note.innerText = 'KEEP WAITING, OR TAKE THE WIN';
+        if (claimBtn) claimBtn.classList.toggle('hidden', connection.mySide === 0);
+    } else {
+        if (subtitle) subtitle.innerText = 'GAME PAUSED — WAITING FOR THEM TO RECONNECT';
+        if (countdown) countdown.innerText = connection.pauseSecondsRemaining + 's';
+        if (note) note.innerText = 'IF THEY DO NOT RETURN, YOU CAN CLAIM THE WIN';
+        if (claimBtn) claimBtn.classList.add('hidden');
+    }
+
+    overlay.classList.remove('hidden');
+}
+
+// mm:ss past a minute -- a bare second count is unreadable once someone has been waiting
+// for twenty of them.
+function formatWait(seconds) {
+    const s = Math.max(0, seconds | 0);
+    if (s < 60) return s + 's';
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
 function updateUI(state) {
+    if (connection.mySide == 0) {
+        // Spectator: no shop to keep in sync, just both sides' money/income readout.
+        document.getElementById('money').innerHTML = Math.floor(state.player1.money);
+        document.getElementById('income').innerHTML = state.player1.income.toFixed(1);
+        document.getElementById('money-p2').innerHTML = Math.floor(state.player2.money);
+        document.getElementById('income-p2').innerHTML = state.player2.income.toFixed(1);
+        return;
+    }
+
     const pState = connection.mySide == 1 ? state.player1 : state.player2;
     const money = document.getElementById('money');
     const income = document.getElementById('income');
-    const investment = document.getElementById('investment-price');
     const repair = document.getElementById('repair-price');
 
     money.innerHTML = Math.floor(pState.money);
     income.innerHTML = pState.income.toFixed(1);
-    investment.innerHTML = Math.ceil(pState.investmentPrice);
-    repair.innerHTML = pState.repairPrice;
+    repair.innerHTML = pState.repairPrice.toFixed(0);
 
     // -------- UPDATE SHOP --------
-    // --- Update Invest/Repair Affordability ---
-    const btnInvest = document.getElementById('btnInvest');
-    if (btnInvest) btnInvest.disabled = pState.money < pState.investmentPrice;
+    updateInvestButton(pState);
 
     const btnRepair = document.getElementById('btnRepair');
     if (btnRepair) btnRepair.disabled = pState.money < pState.repairPrice;
@@ -108,8 +315,8 @@ function updateUI(state) {
             
             // Failsafe: If they are currently targeting with a gadget they 
             // suddenly can't afford/use, cancel their targeting!
-            if (window.gameView && window.gameView.gadgetManager && window.gameView.gadgetManager.activeGadgetId === gadgetId) {
-                window.gameView.gadgetManager.cancelTargeting();
+            if (window.view && window.view.gadgetManager && window.view.gadgetManager.activeGadgetId === gadgetId) {
+                window.view.gadgetManager.cancelTargeting();
             }
         } else {
             button.disabled = false;
@@ -137,7 +344,34 @@ function updateUI(state) {
     updateGadgetButton('btnGadgetSignature', pState.signatureGadget);
 }
 
-function initShopUI(team, gameView) {
+// Mirrors PlayerState.ArmageddonInvestmentCount. At the top of the economy ladder the
+// invest button stops buying income and becomes the ARMAGEDDON purchase; once bought it
+// is spent for good and reads "INVEST: MAX".
+const ARMAGEDDON_INVESTMENT_COUNT = 8;
+
+function updateInvestButton(pState) {
+    const btn = document.getElementById('btnInvest');
+    const label = document.getElementById('invest-label');
+    const price = document.getElementById('investment-price');
+    if (!btn || !label || !price) return;
+
+    if (pState.armageddonUsed) {
+        label.innerHTML = 'INVEST';
+        price.innerHTML = 'MAX';
+        btn.disabled = true;
+        btn.classList.remove('armageddon-ready');
+        return;
+    }
+
+    const isArmageddon = pState.investmentCount >= ARMAGEDDON_INVESTMENT_COUNT;
+
+    label.innerHTML = isArmageddon ? 'ARMAGEDDON' : 'INVEST';
+    price.innerHTML = '$' + Math.ceil(pState.investmentPrice);
+    btn.disabled = pState.money < pState.investmentPrice;
+    btn.classList.toggle('armageddon-ready', isArmageddon);
+}
+
+function initShopUI(team) {
     if (connection.mySide == 1) {
         document.getElementById('hud-top').style.float = 'left';
     }
@@ -169,28 +403,116 @@ function initShopUI(team, gameView) {
         character.innerHTML = '';
 
         if (teamImages[index]) {
-            // Check if your array contains URL strings or Image Objects
             const source = teamImages[index];
-            
             const img = document.createElement('img');
             
-            // Handle both String URLs and Image Objects
             if (typeof source === 'string') {
                 img.src = source;
             } else {
-                img.src = source.src; // If it's already a new Image() object
+                img.src = source.src; 
             }
+            img.draggable = false; 
 
             character.id = loader.assets.unitList[team][index];
             character.appendChild(img);
 
-            character.addEventListener('click', (e) => {
-                if (character.classList.contains('disabled')) return;
+            // --- 1. BUILD THE TOOLTIP DOM ---
+            const stats = loader.getUnitStats(character.id);
+            const wrapper = character.parentElement; // The .character-icon-wrapper
 
-                connection.spawnUnit(e.target.parentElement.id);
+            const tooltip = document.createElement('div');
+            tooltip.className = 'unit-tooltip';
+            // "?" on the stats this unit rolls fresh on every spawn -- the numbers here are
+            // its base row, not what the player will actually get. See loader.isRandomStatUnit.
+            const rolled = loader.isRandomStatUnit(character.id) ? '?' : '';
+            tooltip.innerHTML = `
+                <div class="tooltip-name">${(stats.name || character.id).toUpperCase()}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.heart.src}" alt="HP"> ${stats.health}${rolled}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.sword.src}" alt="DMG"> ${stats.damage}${rolled}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.boot.src}" alt="SPD"> ${stats.speed}${rolled}</div>
+            `;
+            wrapper.appendChild(tooltip);
+
+            // --- 2. DESKTOP HOVER LOGIC ---
+            // GUARDED TWICE, and both guards earn their place.
+            //
+            // The bug: a tap on a touch screen leaves a PHANTOM CURSOR parked on whatever
+            // was tapped. The browser follows touchend with a synthetic mouse sequence, so
+            // the old `mouseenter` listener re-added `visible` immediately after the touch
+            // handler below removed it -- and no mouseleave ever arrived, because there is
+            // no finger to move away. The tooltip then sat open until the next tap
+            // somewhere else moved the phantom cursor. Tapping to BUY a unit therefore
+            // left that unit's tooltip on screen.
+            //
+            // `hover: hover` is the load-bearing guard: a phone answers false, so no
+            // hover path exists there at all no matter what the synthetic events claim to
+            // be. It is deliberately the SAME query that gates button:hover in
+            // global-styles.css, so the CSS and JS hover stories cannot drift apart.
+            //
+            // pointerType is the second guard, for the device the first one cannot settle:
+            // a touchscreen laptop answers `hover: hover` truthfully and still takes taps.
+            // Pointer events carry the pointerType, so there a real mouse is told from a
+            // finger PER INTERACTION rather than per device.
+            const canHover = () => window.matchMedia('(hover: hover)').matches;
+            wrapper.addEventListener('pointerenter', (e) => {
+                if (e.pointerType !== 'mouse' || !canHover()) return;
+                tooltip.classList.add('visible');
+            });
+            wrapper.addEventListener('pointerleave', (e) => {
+                if (e.pointerType !== 'mouse' || !canHover()) return;
+                tooltip.classList.remove('visible');
             });
 
-            priceElements[index].innerHTML = '$' + loader.getUnitStats(character.id).price;
+            // --- 3. MOBILE LONG-PRESS LOGIC ---
+            let pressTimer;
+            let isLongPress = false;
+
+            wrapper.addEventListener('touchstart', (e) => {
+                isLongPress = false; // Reset on every new touch
+                pressTimer = setTimeout(() => {
+                    isLongPress = true; // Timer reached 1 second!
+                    tooltip.classList.add('visible');
+                }, 1000);
+            }, { passive: true });
+
+            wrapper.addEventListener('touchend', (e) => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+                
+                // THE LIFESAVER: If they held it long enough to see the tooltip, 
+                // we destroy the synthetic click so they don't buy the unit!
+                if (isLongPress) {
+                    e.preventDefault(); 
+                }
+            });
+
+            // If the user drags their finger away, cancel the timer
+            wrapper.addEventListener('touchmove', () => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+            }, { passive: true });
+            
+            wrapper.addEventListener('touchcancel', () => {
+                clearTimeout(pressTimer);
+                tooltip.classList.remove('visible');
+            });
+
+            // --- 4. THE SPAWN LOGIC ---
+            // The unit id comes from `character` -- the element the listener is attached
+            // to -- and NOT from walking up from e.target. It used to read
+            // `e.target.parentElement.id`, which is only the right element when the click
+            // landed on the <img>. A tap on the button's own area (its padding, or the gap
+            // around the sprite) made e.target the .character div itself, so parentElement
+            // was the .character-icon-wrapper, whose id is empty, and spawnUnit("") no-oped
+            // silently -- no unit, no money spent, no error. On a phone the sprite covers
+            // most of the button, which is exactly what made this easy to miss and
+            // miserable to hit: "I tapped it and nothing happened", intermittently.
+            character.addEventListener('click', () => {
+                if (character.classList.contains('disabled')) return;
+                connection.spawnUnit(character.id);
+            });
+
+            priceElements[index].innerHTML = '$' + stats.price; // Re-used the stats object here!
         }
     });
 
@@ -198,41 +520,51 @@ function initShopUI(team, gameView) {
     const btnGadgetOffense = document.getElementById('btnGadgetOffense');
     const btnGadgetDefence = document.getElementById('btnGadgetDefence');
 
-    // Set image and price for offensive gadget button
+    // Set image and price for gadget buttons.
+    // Gadget IDs may be versioned (e.g. "nuke_2") when starting from a time-machine state,
+    // so use the base ID for asset lookups but the full ID for level calculation.
+    const getBaseId = (id) => id ? id.split('_')[0].toLowerCase() : '';
+
     const loadout0 = connection.selectedLoadout[0];
+    const base0 = getBaseId(loadout0);
+    const data0 = loader.assets.gadgetData[loadout0] || loader.assets.gadgetData[base0];
     buildGadgetDOM(
-        btnGadgetOffense, 
-        loader.assets.gadgetData[loadout0].cost || loader.assets.gadgetData[loadout0].Cost, 
-        loader.assets.gadgets[loadout0],
+        btnGadgetOffense,
+        data0?.cost || data0?.Cost,
+        loader.assets.gadgets[loadout0] || loader.assets.gadgets[base0],
         getGadgetLevel(loadout0)
     );
 
     const loadout1 = connection.selectedLoadout[1];
+    const base1 = getBaseId(loadout1);
+    const data1 = loader.assets.gadgetData[loadout1] || loader.assets.gadgetData[base1];
     buildGadgetDOM(
-        btnGadgetDefence, 
-        loader.assets.gadgetData[loadout1].cost || loader.assets.gadgetData[loadout1].Cost, 
-        loader.assets.gadgets[loadout1],
+        btnGadgetDefence,
+        data1?.cost || data1?.Cost,
+        loader.assets.gadgets[loadout1] || loader.assets.gadgets[base1],
         getGadgetLevel(loadout1)
     );
 
     const loadout2 = connection.selectedLoadout[2];
+    const base2 = getBaseId(loadout2);
+    const data2 = loader.assets.gadgetData[loadout2] || loader.assets.gadgetData[base2];
     buildGadgetDOM(
-        btnGadgetSignature, 
-        loader.assets.gadgetData[loadout2].cost || loader.assets.gadgetData[loadout2].Cost, 
-        loader.assets.gadgets[loadout2],
+        btnGadgetSignature,
+        data2?.cost || data2?.Cost,
+        loader.assets.gadgets[loadout2] || loader.assets.gadgets[base2],
         getGadgetLevel(loadout2)
     );
 
     btnGadgetSignature.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[2]);
     });
 
     btnGadgetOffense.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[0]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[0]);
     });
 
     btnGadgetDefence.addEventListener('click', () => {
-        gameView.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
+        view.gadgetManager.activateTargeting(connection.selectedLoadout[1]);
     });
 
     connection.onGadgetUpgraded((side, newGadgetDef) => {

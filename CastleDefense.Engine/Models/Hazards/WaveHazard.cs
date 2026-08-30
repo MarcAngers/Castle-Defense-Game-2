@@ -46,11 +46,17 @@ namespace CastleDefense.Engine.Models.Hazards
                     {
                         continue;
                     }
+                    if (enemy.Tier == 8 && enemy.Statuses.Exists(s => s.Name == "Knockback"))
+                    {
+                        continue;
+                    }
+
+                    // Only launch tier 8 units a little bit
+                    if (enemy.Tier == 8)
+                        knockbackDist = 25;
 
                     // Launch the unit
                     enemy.PendingKnockback += (knockbackDist * direction);
-
-                    player.AddGadgetXp("wave", 10);
                 }
             }
 

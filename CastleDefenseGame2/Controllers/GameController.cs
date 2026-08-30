@@ -17,13 +17,13 @@ namespace CastleDefense.Api.Controllers
 
         public class CreateGameRequest
         {
-            public TeamColour Team { get; set; }
+            public string GameMode { get; set; }
         }
 
         [HttpPost]
-        public IActionResult CreateGame()
+        public IActionResult CreateGame([FromBody] CreateGameRequest request)
         {
-            string gameId = _gameService.CreateGame();
+            string gameId = _gameService.CreateGame(request?.GameMode ?? "mp");
 
             return Ok(new { gameId = gameId });
         }
@@ -46,6 +46,13 @@ namespace CastleDefense.Api.Controllers
         {
             var games = _gameService.GetAllGameIds();
             return Ok(games);
+        }
+
+        [HttpGet("practice-opponents")]
+        public IActionResult GetPracticeOpponents()
+        {
+            var (spamTiers, antiSpamAvailable, modelNames) = _gameService.GetPracticeOpponentOptions();
+            return Ok(new { spamTiers, antiSpamAvailable, modelNames });
         }
     }
 }

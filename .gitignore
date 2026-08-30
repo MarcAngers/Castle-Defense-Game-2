@@ -426,3 +426,63 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Python Virtual Environments
+venv/
+.env/
+env/
+ai_env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Machine Learning Models
+*.zip
+*.onnx
+
+# C# Build Artifacts
+bin/
+obj/
+
+# Recorded games (interim local storage -- see comment on dbPath in
+# CastleDefenseGame2/Program.cs; not meant to be checked into git)
+CastleDefenseGame2/recordings/
+# ── Regenerable analysis output ──────────────────────────────────────────────
+# All of this is produced by BotArena/Simulation modes or the Python scorers and
+# can be rebuilt on demand. Some of it is large (human_eval.csv is 27MB,
+# calib_heuristic.csv 11MB) and it is rewritten every time the evaluator or the
+# bots are touched, so committing it would bloat history fast for no benefit.
+
+# Evaluator calibration + replay exports  (calib-collect, --export-eval)
+CastleDefense.PythonAI/calib_heuristic.csv
+CastleDefense.PythonAI/calib_search.csv
+CastleDefense.PythonAI/human_eval.csv
+CastleDefense.PythonAI/invest_dump_*.csv
+
+# Benchmark and training logs
+CastleDefense.PythonAI/checkpoint_benchmark_log*.csv
+CastleDefense.PythonAI/training_progress_*ARCHIVE*.csv
+CastleDefense.PythonAI/training_progress_heuristic_pressure_test*
+CastleDefense.PythonAI/*.pid
+
+# Dashboard sweeps (dashboard mode rewrites these in place)
+CastleDefense.BotArena/dashboard/archive_prev_sweep/
+
+# Stray sweep output that lands in the repo root
+/round1_*.csv
+/triage_*.csv
+
+# Per-tick replay rebuilds -- regenerate with --economy-dump, ~100MB of derived data
+CastleDefense.BotArena/stall/human/
+
+# Raw bot-checksum / sweep run logs -- regenerate with the commands in BOT_TUNING.md
+CastleDefense.BotArena/stall/ab_*.txt
+CastleDefense.BotArena/stall/fx_*.txt*
+CastleDefense.BotArena/stall/fix_*.txt
+CastleDefense.BotArena/stall/hz*.txt
+CastleDefense.BotArena/stall/brake.txt
+CastleDefense.BotArena/stall/repairfix.txt
+CastleDefense.BotArena/stall/rf*.txt
+CastleDefense.BotArena/stall/mirror_cd*.csv
+CastleDefense.BotArena/stall/mirror_fix.csv

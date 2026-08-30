@@ -1,16 +1,24 @@
 import loader from './asset-loader.js';
 import AnimationManager from './animation-manager.js';
 import GadgetManager from './gadget-manager.js';
-import VisualUnit from './visual-unit.js';
+import VisualUnit, { KNOCKBACK_DURATION_MS, LOW_GRAVITY_KNOCKBACK_DURATION_MS } from './visual-unit.js';
 import connection from './game-connection.js';
+import atmosphere from './atmosphere.js';
 
-export default class View {
-    constructor(canvasId, cameraX = 0) {
+// The look of a shadow map. Defined once and used by every layer that has to match it --
+// background, foreground and the ambient layer between them -- because a layer left out of
+// the greying is instantly obvious, and three hand-copied filter strings is how that
+// happens. The Collection's shadow tile carries its own copy in map-info.css, which is
+// noted there.
+const SHADOW_FILTER = 'grayscale(100%) brightness(50%) contrast(140%)';
+
+class View {
+    constructor() {
         this.visualUnits = {};
         this.currentTime = performance.now();
         this.lastTime = performance.now();
 
-        this.canvas = document.getElementById(canvasId);
+        this.canvas = document.getElementById('bgCanvas');
 
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
@@ -20,7 +28,10 @@ export default class View {
 
         this.MAP_WIDTH = 2000;
         // One-liner to do essentially the same math as movePan() and resize()
-        this.cameraX = Math.max(0, Math.min(cameraX, Math.max(0, this.MAP_WIDTH - window.innerWidth / (window.innerHeight / 500))));;
+        this.cameraX = 0;
+        // Decorative units drawn at the castles during the pre-game countdown. Set by the
+        // game screen each frame; empty at every other time, including on every other screen.
+        this.preGameSquad = [];
 
         // Input State for Panning
         this.isDragging = false;
@@ -38,9 +49,10 @@ export default class View {
         window.addEventListener('touchend', this.endPan);
 
         this.latestState = null;
+        this.mapColour = null;
+
 
         window.addEventListener('resize', this.resize);
-        this.resize();
 
         this.gadgetManager = new GadgetManager(this);
 
@@ -68,6 +80,8 @@ export default class View {
             "Slow": [112, 146, 190, 0.5],       // Blue-Gray
             "Blackhole": [0, 0, 0, 0.5],        // Black
         };
+
+        this.tierColourCache = {};
     }
 
     startPan = (e) => {
@@ -104,6 +118,11 @@ export default class View {
         this.isDragging = false;
     }
 
+    panTo = (targetLogicalX) => {
+        const maxScroll = Math.max(0, this.MAP_WIDTH - this.logicalScreenWidth);
+        this.cameraX = Math.max(0, Math.min(targetLogicalX, maxScroll));
+    }
+
     // Helper for Mouse vs Touch coordinates
     getX = (e) => {
         if (!e) return 0;
@@ -129,9 +148,25 @@ export default class View {
     draw = () => {
         if (this.latestState) {
             this.drawGameState(this.latestState);
+        } else if (this.mapColour) {
+            this.ctx.save();
+            this.ctx.translate(-this.cameraX / 2, 0);
+            this.drawBackground(this.mapColour);
+            // Menu atmosphere. This runs for whichever map a menu screen has put up -- the
+            // main menu's white and the Collection's purple -- and animates because those
+            // screens are the ones menu-meander keeps a rAF loop running for. A menu with
+            // no loop simply shows a still sky, which is what it showed before.
+            atmosphere.render(this.ctx, this.mapColour, this.activeShadowFilter());
+            this.ctx.restore();
+            this.drawForeground(this.mapColour);
+            atmosphere.renderOverlay(this.ctx, this.mapColour, this.logicalScreenWidth,
+                                     this.cameraX, this.activeShadowFilter());
         } else {
             this.drawBackground('white');
+            atmosphere.render(this.ctx, 'white', this.activeShadowFilter());
             this.drawForeground('white');
+            atmosphere.renderOverlay(this.ctx, 'white', this.logicalScreenWidth,
+                                     this.cameraX, this.activeShadowFilter());
         }
     }
 
@@ -144,12 +179,17 @@ export default class View {
         this.lastTime = this.currentTime;
 
         // --- Draw Background (Paralax) ---
+        const mapColour = loader.assets.teamList[this.latestState.map];
         this.ctx.save();
         this.ctx.translate(-this.cameraX / 2, 0);
-        this.drawBackground(loader.assets.teamList[this.latestState.map]);
+        this.drawBackground(mapColour);
+        // Ambient layer, inside the SAME transform as the background: it should scroll with
+        // the sky it belongs to, sit behind the foreground and the units, and grey out with
+        // the rest of the scene on a shadow map.
+        atmosphere.render(this.ctx, mapColour, this.activeShadowFilter());
         this.ctx.restore();
 
-        this.animationManager.update(deltaTime);
+        this.animationManager.update(deltaTime, state);
 
         this.ctx.save();
         
@@ -169,13 +209,34 @@ export default class View {
         this.drawCastle(state.player1, 1); 
         this.drawCastle(state.player2, 2);
 
+        // The pre-game squad waiting outside each castle. Drawn HERE, inside the camera
+        // transform, because they stand at fixed world positions and the intro pans across
+        // them -- drawMenuUnit's other caller (menu-meander) draws in screen space, where
+        // there is no camera to follow. Behind the real units on purpose: once the battle
+        // opens, a unit running out should pass in front of the ones still waiting.
+        for (const squadUnit of this.preGameSquad) this.drawMenuUnit(squadUnit);
+
         // Draw Units
+        //
+        // Black is the low-gravity map (MapEffects.LowGravityKnockback), where the server
+        // staggers a knocked-back unit for two seconds instead of one -- so the flight arc
+        // has to be drawn over two seconds to match, or units act while still in the air.
+        // A shadow map is never Black (GameState's constructor rules it out), so the shadow
+        // flag has to be checked rather than the colour alone.
+        const lowGravity = loader.assets.teamList[state.map] === 'black' && !state.shadowMap;
+        const knockbackMs = lowGravity ? LOW_GRAVITY_KNOCKBACK_DURATION_MS : KNOCKBACK_DURATION_MS;
+
         state.units.forEach(unit => {
             if (!this.visualUnits[unit.instanceId]) {
                 this.visualUnits[unit.instanceId] = new VisualUnit(unit);
             }
-            this.visualUnits[unit.instanceId].update(unit, deltaTime);
-            this.drawUnit(unit, this.visualUnits[unit.instanceId]);
+            const visualUnit = this.visualUnits[unit.instanceId];
+            visualUnit.knockbackDuration = knockbackMs;
+            visualUnit.update(unit, deltaTime);
+
+            // Losers that have run off the map after the game ended stay in the state
+            // (nothing is sending updates any more) but must stop being drawn.
+            if (!visualUnit.hidden) this.drawUnit(unit, visualUnit);
         });
 
         // --- 1. DRAW TARGETED CROSSHAIR (World Space) ---
@@ -201,6 +262,15 @@ export default class View {
 
         // --- RESTORE CAMERA ---
         this.ctx.restore(); // Go back to "Screen" coords (0,0 is top left)
+
+        // Weather between the player and the world -- rain. Screen space on purpose: it has
+        // to fill the view wherever the camera is pointed, where a world-space sheet would
+        // slide sideways every time the player panned. Before the gadget cursor below, so
+        // the cursor stays on top of the storm.
+        // cameraX is passed because the splash marks are world-anchored -- they belong to
+        // the plank they landed on, not to a place on the screen.
+        atmosphere.renderOverlay(this.ctx, mapColour, this.logicalScreenWidth, this.cameraX,
+                                 this.activeShadowFilter());
 
         // --- 2. DRAW UNTARGETED ICON (Screen Space) ---
         // Drawn AFTER the camera is restored so it ignores panning and perfectly follows the mouse!
@@ -233,11 +303,23 @@ export default class View {
     drawUnit(unit, visualUnit) {
         const img = loader.assets[unit.definitionId];
     
-        const x = unit.position + (visualUnit ? visualUnit.visualOffsetX : 0);
-        const y = unit.yPosition + (visualUnit ? visualUnit.visualOffsetY : 0);
+        const x = unit.position + (visualUnit ? visualUnit.visualOffsetX + visualUnit.endGameOffsetX : 0);
+        const y = unit.yPosition + (visualUnit ? visualUnit.visualOffsetY + visualUnit.endGameOffsetY : 0);
         const width = unit.width || 50;
         const height = unit.height || 50;
         const rotation = visualUnit ? visualUnit.visualRotation : 0;
+
+        // APPEARANCE ONLY. width/height above are the unit's LOGICAL size -- what the engine
+        // fights with -- and must not be scaled: making them per-instance broke combat
+        // outright (see Unit.Width). visualScale only changes how big the sprite is drawn,
+        // so a big weirdo's edges deliberately do not line up with where it actually
+        // reaches. 1 for every other unit.
+        const scale = unit.visualScale || 1;
+        const drawW = width * scale;
+        const drawH = height * scale;
+        // Anchored at the BOTTOM of the logical box rather than its centre, so a scaled
+        // sprite keeps its feet on the ground instead of sinking or floating.
+        const drawTop = (height / 2) - drawH;
 
         let isInvulnerable = false;
 
@@ -291,19 +373,20 @@ export default class View {
                 imageToDraw = this.scratchCanvas;
             }
             
-            if (unit.side === 1) {
-                // Player 1: Face Right
-                this.ctx.drawImage(imageToDraw, -width / 2, -height / 2, width, height);
-            } else {
-                // Player 2: Face Left
-                this.ctx.scale(-1, 1);
-                this.ctx.drawImage(imageToDraw, -width / 2, -height / 2, width, height);
-            }            
+            // Player 1 faces right and player 2 faces left, unless the end-game show has
+            // taken over -- losers turn tail, winners dance, a draw leaves them looking about.
+            const facing = (visualUnit && visualUnit.facingOverride)
+                ? visualUnit.facingOverride
+                : (unit.side === 1 ? 1 : -1);
+
+            if (facing === -1) this.ctx.scale(-1, 1);
+            this.ctx.drawImage(imageToDraw, -drawW / 2, drawTop, drawW, drawH);
+            
             this.ctx.restore();
         } else {
             // Fallback Box
             this.ctx.fillStyle = unit.side === 1 ? 'red' : 'blue';
-            this.ctx.fillRect(x, y, width, width);
+            this.ctx.fillRect(x + (width - drawW) / 2, y + height - drawH, drawW, drawH);
         }
 
         // --- DRAW STATUS PARTICLES ---
@@ -338,23 +421,41 @@ export default class View {
         }
 
         // Health Bar
-        this.drawHealthBar(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth, unit.currentShield);
+        // Sits above the SPRITE, not above the logical box, so a scaled unit's bar still
+        // reads as belonging to it rather than cutting across its head.
+        this.drawHealthBar(x + (width - drawW) / 2 - 5, y + height - drawH - 10, drawW,
+            unit.currentHealth, unit.maxHealth, unit.currentShield, unit.tier,
+            loader.getUnitStats(unit.definitionId).team);
         // Draw health text for units? (might prefer 100hp segments similar to)
         // this.drawHealthText(x - 5, y - 10, width, unit.currentHealth, unit.maxHealth);
 
-        // If the unit has shield health, draw a shield over it
-        if (unit.currentShield > 0) {
-            const shieldImage = loader.assets.gadgets['shield'];
-            this.ctx.drawImage(shieldImage, x, y, width, height);
-        }
-        // If the unit is invulnerable, draw a divine shield over it
+        // Invulnerability (divine_3) gets its own art and outranks a plain shield layer,
+        // so a unit that has both shows the invulnerable one rather than two stacked overlays.
         if (isInvulnerable) {
-            const divineShieldImage = loader.assets.gadgets['divine'];
+            const divineShieldImage = loader.assets.gadgets['divine_3'];
             this.ctx.drawImage(divineShieldImage, x, y, width, height);
+        } else if (unit.currentShield > 0) {
+            const shieldImage = loader.assets.gadgets['divine'];
+            this.ctx.drawImage(shieldImage, x, y, width, height);
         }
     }
 
-    drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield) {
+    // Main-menu background wanderers (see menu-meander.js). Deliberately NOT drawUnit:
+    // these are set dressing, not combatants, so they get no health bar, no tier number
+    // and no status tinting -- just the sprite, flipped to face the way they are walking.
+    drawMenuUnit = (unit) => {
+        const img = loader.assets[unit.definitionId];
+        if (!img) return;
+
+        this.ctx.save();
+        this.ctx.translate(unit.x + unit.width / 2, unit.y + unit.height / 2 + unit.hopOffset);
+        // Sprites are drawn facing right, so only a leftward walk needs the flip.
+        if (unit.facing === -1) this.ctx.scale(-1, 1);
+        this.ctx.drawImage(img, -unit.width / 2, -unit.height / 2, unit.width, unit.height);
+        this.ctx.restore();
+    }
+
+    drawHealthBar(x, y, spriteSize, currentHealth, maxHealth, currentShield, tier, colour) {
         let pct = currentHealth/maxHealth;
         let width = (spriteSize + 10) * pct;
 
@@ -373,7 +474,22 @@ export default class View {
 
         this.ctx.fillRect(x, y, width, 5);
 
+        if (tier) {
+            this.drawNumber(x - 8, y + 12, tier, colour);
+        }
+
         // Draw shield
+        //
+        // The bar is a PROPORTION OF MAX HEALTH, not of the shield's own grant, so the
+        // same 1,000 HP shield reads as half a bar on a 2,000 HP castle and a twelfth of
+        // one after repairs take it to 12,000 -- the shield value itself never moves, only
+        // how much of the castle it now covers.
+        //
+        // THE 30px OVERHANG IS DELIBERATE. The cap sits past the health bar's own width
+        // (spriteSize + 10) so that a shield worth MORE than max health visibly spills
+        // over the end of the bar rather than sitting flush with it -- that overhang is
+        // the only cue distinguishing "shielded to full" from "shielded beyond full",
+        // which stacked divine casts reach easily.
         if (currentShield > 0) {
             let shieldPct = currentShield / maxHealth;
             let shieldWidth = Math.min((spriteSize + 10) * shieldPct, (spriteSize + 30));
@@ -397,7 +513,7 @@ export default class View {
 
             this.ctx.restore(); // Restore coordinate system for the health bar
 
-            this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthBar(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth, playerState.castleShield);
             this.drawHealthText(x, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         } else {
             x = this.MAP_WIDTH - 50;
@@ -408,15 +524,41 @@ export default class View {
             
             this.ctx.restore(); // Restore coordinate system for the health bar
             
-            this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
+            this.drawHealthBar(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth, playerState.castleShield);
             this.drawHealthText(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         }
 
         // If the player is invulnerable, draw a divine shield over their castle:
         if (playerState.isInvulnerable) {
-            const shieldImage = loader.assets.gadgets['divine'];
+            const shieldImage = loader.assets.gadgets['divine_3'];
             if (x > 1000) x -= 200;
             this.ctx.drawImage(shieldImage, x, y, 200, 200);
+        }
+    }
+
+    drawNumber(x, y, tier, colour) {
+        if (tier) {
+            this.ctx.save();
+            
+            this.ctx.translate(x, y);
+
+            this.ctx.font = '18px "Press Start 2P", cursive'; 
+            
+            // Call the new method using 'this'
+            this.ctx.fillStyle = this.getTierColor(colour, tier);
+            
+            this.ctx.strokeStyle = 'white';  
+            if (colour === 'white' || colour === 'yellow')
+                this.ctx.strokeStyle = 'black';  
+            this.ctx.lineWidth = 4;
+            this.ctx.textAlign = 'center';
+
+            const textString = `${tier}`;
+            
+            this.ctx.strokeText(textString, 0, 0);
+            this.ctx.fillText(textString, 0, 0);
+
+            this.ctx.restore();
         }
     }
 
@@ -446,21 +588,66 @@ export default class View {
         this.ctx.restore();
     }
 
+    /// The canvas filter for the map currently being drawn, or null. ONE place decides, so
+    /// the background, the foreground and the ambient layer between them can never disagree
+    /// about whether they are on a shadow map -- a layer left out of the greying is the most
+    /// obvious bug this could have.
+    ///
+    /// The server is the only authority on it: menu screens have no state and are therefore
+    /// never shadowed.
+    activeShadowFilter = () => (this.latestState?.shadowMap ? SHADOW_FILTER : null)
+
+    /// Map art that has not loaded yet, warned about ONCE per bucket+colour.
+    ///
+    /// Once per key rather than per call, because these run inside the draw loop: a plain
+    /// console.warn here would print sixty lines a second. Same reasoning the atmosphere
+    /// manifest is built on -- see loadAtmosphere.
+    #missingArtWarned = new Set();
+
+    /// Fetch one map layer, or null if it is not loaded.
+    ///
+    /// WHY THIS GUARD EXISTS: `resize` is wired up in the constructor, which runs at module
+    /// import time -- BEFORE script.js has started loader.loadAll(). Any resize event during
+    /// the asset load (a tab being laid out, a phone rotating, a window being dragged while
+    /// the loading screen is up) therefore reached draw() with no images loaded at all. With
+    /// no latestState and no mapColour, draw() falls through to its 'white' fallback, and
+    /// `loader.get('background')['white']` was undefined -- so drawImage threw
+    /// "The provided value is not of type (CSSImageValue or ...)" and the error escaped the
+    /// resize handler uncaught. Reproducible on a clean page load.
+    ///
+    /// The guard is worth more than silencing that. drawBackground runs EARLY in
+    /// drawGameState, so a throw there aborts the whole frame -- no atmosphere, no
+    /// foreground, no units, no castles. Skipping one missing layer degrades to a missing
+    /// backdrop instead of a blank screen.
+    #mapLayer = (bucket, colour) => {
+        const img = loader.get(bucket)?.[colour];
+        if (img) return img;
+        const key = `${bucket}/${colour}`;
+        if (!this.#missingArtWarned.has(key)) {
+            this.#missingArtWarned.add(key);
+            console.warn(`[view] map art not loaded yet, skipping: ${key}`);
+        }
+        return null;
+    }
+
     drawBackground = (colour) => {
-        // Logic for "shadow" maps
-        if (this.latestState != null)
-            if (this.latestState.shadowMap)
-                this.ctx.filter = 'grayscale(100%) brightness(50%) contrast(140%)';
-        
-        this.ctx.drawImage(loader.get('background')[colour], 0, 0);
+        const img = this.#mapLayer('background', colour);
+        if (!img) return;
+
+        const filter = this.activeShadowFilter();
+        if (filter) this.ctx.filter = filter;
+
+        this.ctx.drawImage(img, 0, 0);
         this.ctx.filter = 'none';
     }
     drawForeground = (colour) => {
-        if (this.latestState != null)
-            if (this.latestState.shadowMap)
-                this.ctx.filter = 'grayscale(100%) brightness(50%) contrast(140%)';
+        const img = this.#mapLayer('foreground', colour);
+        if (!img) return;
 
-        this.ctx.drawImage(loader.get('foreground')[colour], 0, 0);
+        const filter = this.activeShadowFilter();
+        if (filter) this.ctx.filter = filter;
+
+        this.ctx.drawImage(img, 0, 0);
         this.ctx.filter = 'none';
     }
 
@@ -497,4 +684,34 @@ export default class View {
             height: logicalHeight 
         };
     }
+
+    // Helper function to get tier number colours
+    getTierColor(baseColor, tier) {
+        // Access the cache using 'this'
+        let rgb = this.tierColourCache[baseColor];
+        
+        if (!rgb) {
+            const offscreenCtx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+            offscreenCtx.fillStyle = baseColor;
+            offscreenCtx.fillRect(0, 0, 1, 1);
+            const data = offscreenCtx.getImageData(0, 0, 1, 1).data;
+            
+            rgb = [data[0], data[1], data[2]];
+            this.tierColourCache[baseColor] = rgb; 
+        }
+
+        const tierDiff = Math.max(0, 8 - tier);
+        let increment = 34 * tierDiff;
+        // White units should start as gray and become more white
+        if (baseColor === 'white') increment *= -1;
+
+        const r = Math.min(255, rgb[0] + increment);
+        const g = Math.min(255, rgb[1] + increment);
+        const b = Math.min(255, rgb[2] + increment);
+
+        return `rgb(${r}, ${g}, ${b})`;
+    }
 }
+
+const view = new View();
+export default view;

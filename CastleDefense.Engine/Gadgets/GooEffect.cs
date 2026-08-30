@@ -13,28 +13,45 @@ namespace CastleDefense.Engine.Gadgets
             _def = def;
         }
 
+        /// <summary>Goo heals allies standing in it. The enemy slow is a bonus, not the anchor.</summary>
+        public GadgetAim Aim => GadgetAim.Ally;
+
         public void Execute(GameEngine engine, int side, int position)
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);
 
-            var baseXp = _def.Level == 2 ? 1000 : 100;
-            engine.AddGadgetXp(side, "goo", baseXp);
+            engine.AddGadgetXp(side, "goo", 100);
 
             // Schedule the gadget effect to happen after the animation
-            engine.ScheduleAction(_def.Delay, () =>
+            engine.ScheduleEffect(_def.Delay, new PendingEffect
             {
-                var gooZone = new GooHazard
-                {
-                    Type = "Goo",
-                    Side = side,
-                    BaseValue = _def.BaseValue,
-                    Position = position - _def.Radius,
-                    Width = _def.Radius * 2,
-                    ExpiresAtTick = (int)engine._state.CurrentTick + _def.HazardDuration
-                };
-
-                engine._state.Hazards.Add(gooZone);
+                GadgetId = _def.Id,
+                Phase = PhaseSpawnHazard,
+                Side = side,
+                Position = position,
             });
+        }
+
+        private const int PhaseSpawnHazard = 0;
+
+        public void ExecuteScheduled(GameEngine engine, in PendingEffect e)
+        {
+            if (e.Phase != PhaseSpawnHazard) return;
+
+            int side = e.Side;
+            int position = e.Position;
+
+            var gooZone = new GooHazard
+            {
+                Type = "Goo",
+                Side = side,
+                BaseValue = _def.BaseValue,
+                Position = position - _def.Radius,
+                Width = _def.Radius * 2,
+                ExpiresAtTick = (int)engine._state.CurrentTick + _def.HazardDuration
+            };
+
+            engine._state.Hazards.Add(gooZone);
         }
     }
 }

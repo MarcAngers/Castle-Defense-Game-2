@@ -1,5 +1,18 @@
 import StatusParticleMap from "./status-particle-map.js";
 
+// How long a knocked-back unit is drawn flying through the air, in ms.
+//
+// This MUST match the server's stagger window (MapEffects.KnockbackStaggerTicks): the engine
+// moves a knocked-back unit instantly and holds it under hard CC for that long, and this arc
+// is the animation covering exactly that gap. Draw it for longer than the server staggers and
+// units walk and swing while still drawn mid-flight.
+//
+// Black's low gravity doubles both. view.js sets this per frame from the map being played --
+// the map cannot change mid-game, so the value is constant in practice and never changes
+// under a flight already in progress.
+export const KNOCKBACK_DURATION_MS = 1000;
+export const LOW_GRAVITY_KNOCKBACK_DURATION_MS = 2000;
+
 export default class VisualUnit {
     constructor(serverUnit) {
         this.id = serverUnit.instanceId;
@@ -11,7 +24,7 @@ export default class VisualUnit {
         
         // Animation Timers
         this.knockbackTimer = 0;
-        this.knockbackDuration = 1000; // ms
+        this.knockbackDuration = KNOCKBACK_DURATION_MS;
         this.knockbackStartX = 0;
         this.knockbackTargetX = 0;
         
@@ -22,6 +35,15 @@ export default class VisualUnit {
 
         // Status Effects
         this.particles = [];
+
+        // --- END-GAME SHOW ---
+        // Driven by end-game-show.js once the match is over. Kept separate from
+        // visualOffsetX/Y because processAnimations() zeroes those every frame, and
+        // deliberately untouched by anything in this class.
+        this.endGameOffsetX = 0;
+        this.endGameOffsetY = 0;
+        this.facingOverride = null;   // null = face the way this side normally does
+        this.hidden = false;          // a loser that has run off the map
     }
 
     update(serverUnit, deltaTime) {

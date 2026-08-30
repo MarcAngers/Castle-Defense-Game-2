@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Castle Defense — Heuristic Bot Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #0ca30c;
+    --critical:       #d03b3b;
+    --seq-100: #cde2fb; --seq-150: #b7d3f6; --seq-200: #9ec5f4; --seq-250: #86b6ef;
+    --seq-300: #6da7ec; --seq-350: #5598e7; --seq-400: #3987e5; --seq-450: #2a78d6;
+    --seq-500: #256abf; --seq-550: #1c5cab; --seq-600: #184f95; --seq-650: #104281; --seq-700: #0d366b;
+  }
+  :root[data-theme="dark"] {
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --good:           #0ca30c;
+    --critical:       #e66767;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --good:           #0ca30c;
+      --critical:       #e66767;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+  }
+  body { padding: 24px 16px 64px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 13px; }
+  .meta { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+  button.theme-toggle {
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button.theme-toggle:hover { border-color: var(--text-muted); }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .desc { color: var(--text-secondary); font-size: 12.5px; margin-bottom: 14px; }
+
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .stat-tile {
+    flex: 1 1 130px; background: var(--page-plane); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .stat-tile .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+  .stat-tile .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .stat-tile .sub { font-size: 11.5px; color: var(--text-secondary); margin-top: 1px; }
+
+  select {
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 13.5px; min-width: 220px;
+  }
+
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--text-primary); }
+  svg .axis-label { fill: var(--text-muted); font-size: 10.5px; }
+  svg .bar-label { fill: var(--text-primary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  svg .gridline { stroke: var(--gridline); stroke-width: 1; }
+  svg .baseline { stroke: var(--baseline); stroke-width: 1; }
+  svg .goal-line { stroke: var(--critical); stroke-width: 1.5; stroke-dasharray: 4 3; }
+
+  .bar-row { cursor: default; }
+  .bar-row rect.bar { transition: opacity .1s; }
+  .bar-row:hover rect.bar { opacity: .82; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 10px 0 4px; font-size: 12px; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid var(--border); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+
+  .heatmap-scroll { overflow-x: auto; }
+  .heatmap-cell-label { font-size: 10px; }
+
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.data-table th, table.data-table td {
+    text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  table.data-table th { color: var(--text-muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .02em; }
+
+  .toggle-table-btn {
+    background: none; border: none; color: var(--text-secondary); font-size: 12px; cursor: pointer;
+    text-decoration: underline; padding: 0; margin-top: 8px;
+  }
+  .hidden { display: none; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1);
+    font-size: 11.5px; padding: 5px 8px; border-radius: 6px; opacity: 0; transition: opacity .08s;
+    z-index: 50; max-width: 220px; font-variant-numeric: tabular-nums;
+  }
+  .low-n { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Castle Defense — Heuristic Bot Dashboard</h1>
+      <div class="subtitle">Decisive win rate by opponent, team, and gadget loadout</div>
+      <div class="meta" id="metaLine"></div>
+    </div>
+    <button class="theme-toggle" id="themeToggle">Toggle theme</button>
+  </header>
+
+  <div class="card">
+    <h2>Win rate by opponent</h2>
+    <div class="desc">Decisive-only win rate (a timeout win — higher HP at the 10-minute mark, castle never destroyed — counts far less than an actual kill, so it's excluded here). Dashed line marks the 90% target.</div>
+    <div id="overviewChart"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h2 style="margin-bottom:6px;">Matchup breakdown</h2>
+      </div>
+      <select id="opponentSelect"></select>
+      <div id="aggregateNote" class="desc hidden">Pooled across every opponent in this run. Opponents differ enormously in difficulty and are not equally weighted &mdash; the mirror carries most of the games &mdash; so this tracks the run's opponent mix as well as the bot. Compare like-for-like runs only.</div>
+    </div>
+    <div class="stat-row" id="statTiles"></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h2>Win rate by team</h2>
+      <div class="desc">Same opponent, bot's team varied (gadgets random).</div>
+      <div id="teamChart"></div>
+    </div>
+    <div class="card">
+      <h2>Win rate by gadget</h2>
+      <div class="desc">Offense (top) and defense (bottom) loadout slot, team random.</div>
+      <div id="offenseChart"></div>
+      <div id="defenseChart" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Team &times; gadget-combo heatmap</h2>
+    <div class="desc">Every cell is its own small sample (see sample count in each cell) — dashed cell borders mark cells with fewer than 5 games, read those loosely.</div>
+    <div class="heatmap-scroll" id="heatmapChart"></div>
+    <button class="toggle-table-btn" id="toggleTableBtn">Show as table</button>
+    <div id="tableView" class="hidden"></div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/*__DASHBOARD_DATA__*/
+
+const TEAM_COLOR = {
+  Black:  { light: '#6b6b68', dark: '#8a8a86' },
+  Blue:   { light: '#2a78d6', dark: '#3987e5' },
+  Green:  { light: '#008300', dark: '#1a9e1a' },
+  Orange: { light: '#eb6834', dark: '#d95926' },
+  Purple: { light: '#4a3aa7', dark: '#9085e9' },
+  Red:    { light: '#e34948', dark: '#e66767' },
+  White:  { light: '#c9c8c0', dark: '#e8e7e0' },
+  Yellow: { light: '#eda100', dark: '#c98500' },
+};
+const OFFENSE_COLOR = {
+  nuke:     { light: '#2a78d6', dark: '#3987e5' },
+  firebomb: { light: '#e34948', dark: '#e66767' },
+  snipe:    { light: '#eb6834', dark: '#d95926' },
+  freeze:   { light: '#1baf7a', dark: '#199e70' },
+};
+const DEFENSE_COLOR = {
+  heal:           { light: '#008300', dark: '#1a9e1a' },
+  reinforcements: { light: '#4a3aa7', dark: '#9085e9' },
+  speed:          { light: '#eda100', dark: '#c98500' },
+  wall:           { light: '#e87ba4', dark: '#d55181' },
+};
+const SEQ_STEPS = ['seq-100','seq-150','seq-200','seq-250','seq-300','seq-350','seq-400','seq-450','seq-500','seq-550','seq-600','seq-650','seq-700'];
+
+function currentTheme() {
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'dark' || attr === 'light') return attr;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function teamColor(team) { return TEAM_COLOR[team] ? TEAM_COLOR[team][currentTheme()] : '#888'; }
+function offenseColor(g) { return OFFENSE_COLOR[g] ? OFFENSE_COLOR[g][currentTheme()] : '#888'; }
+function defenseColor(g) { return DEFENSE_COLOR[g] ? DEFENSE_COLOR[g][currentTheme()] : '#888'; }
+function seqColor(winRate) {
+  const idx = Math.max(0, Math.min(SEQ_STEPS.length - 1, Math.floor((winRate / 100) * SEQ_STEPS.length)));
+  return `var(--${SEQ_STEPS[idx]})`;
+}
+
+const svgNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(svgNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+const tooltip = document.getElementById('tooltip');
+function showTooltip(evt, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.opacity = '1';
+  tooltip.style.left = (evt.clientX + 14) + 'px';
+  tooltip.style.top = (evt.clientY + 12) + 'px';
+}
+function hideTooltip() { tooltip.style.opacity = '0'; }
+
+// Horizontal bar chart. rows: [{label, value, n, color}]
+function renderBarChart(container, rows, opts) {
+  opts = opts || {};
+  container.innerHTML = '';
+  const width = opts.width || 720;
+  const rowH = opts.rowH || 26;
+  const labelW = opts.labelW || 130;
+  const chartW = width - labelW - 60;
+  const height = rows.length * rowH + 10;
+  const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, style: 'display:block;max-width:100%;' }, container);
+
+  // gridlines at 0/25/50/75/100
+  [0, 25, 50, 75, 100].forEach(g => {
+    const x = labelW + (g / 100) * chartW;
+    el('line', { x1: x, x2: x, y1: 2, y2: height - 8, class: g === 0 ? 'baseline' : 'gridline' }, svg);
+    el('text', { x, y: height - 1, class: 'axis-label', 'text-anchor': 'middle' }, svg).textContent = g + '%';
+  });
+  if (opts.goalLine) {
+    const x = labelW + (opts.goalLine / 100) * chartW;
+    el('line', { x1: x, x2: x, y1: 2, y2: height - 8, class: 'goal-line' }, svg);
+  }
+
+  rows.forEach((r, i) => {
+    const y = i * rowH + 4;
+    const g = el('g', { class: 'bar-row' }, svg);
+    el('text', { x: labelW - 8, y: y + rowH / 2 + 4, 'text-anchor': 'end', class: 'bar-label' }, g).textContent = r.label;
+    const barW = Math.max(2, (r.value / 100) * chartW);
+    el('rect', { x: labelW, y: y + 3, width: barW, height: rowH - 12, rx: 4, ry: 4, fill: r.color, class: 'bar' }, g);
+    el('text', { x: labelW + barW + 6, y: y + rowH / 2 + 4, class: 'bar-label' }, g).textContent = `${r.value.toFixed(1)}%`;
+    const hit = el('rect', { x: 0, y, width, height: rowH, fill: 'transparent' }, g);
+    hit.addEventListener('mousemove', (e) => showTooltip(e, `<b>${r.label}</b><br>${r.value.toFixed(1)}% decisive win rate<br>n=${r.n} games`));
+    hit.addEventListener('mouseleave', hideTooltip);
+  });
+}
+
+const ALL_NAME = '__ALL__';
+const ALL_LABEL = 'All opponents';
+
+// Sums every opponent into one synthetic entry so the default view is the WHOLE run.
+// Built client-side rather than in the C# so an EXISTING results.json gains the new view
+// without re-running the sweep -- a search-mirror sweep is hours of CPU.
+//
+// Stored under a reserved name, after which every existing render function works on it
+// unchanged, because they all key off DASHBOARD_DATA.<section>[oppName].
+function buildAggregate() {
+  if (DASHBOARD_DATA.opponents.some(o => o.name === ALL_NAME)) return;
+  const names = DASHBOARD_DATA.opponents.map(o => o.name);
+  const FIELDS = ['decisiveWins', 'decisiveLosses', 'timeoutWins', 'timeoutLosses', 'draws', 'total'];
+
+  const addInto = (dst, src) => {
+    if (!src) return dst;
+    dst = dst || { decisiveWins: 0, decisiveLosses: 0, timeoutWins: 0, timeoutLosses: 0, draws: 0, total: 0, winRate: 0 };
+    FIELDS.forEach(f => { dst[f] += (src[f] || 0); });
+    // Matches how the C# defines it for every other row: decisive wins over TOTAL games,
+    // not over decisive games. Recomputed from the sums rather than averaged, so cells
+    // with different game counts cannot be silently equally weighted.
+    dst.winRate = dst.total ? 100 * dst.decisiveWins / dst.total : 0;
+    return dst;
+  };
+
+  ['byTeam', 'byOffense', 'byDefense'].forEach(section => {
+    const sec = DASHBOARD_DATA[section];
+    if (!sec) return;
+    const out = {};
+    names.forEach(n => {
+      const per = sec[n] || {};
+      Object.keys(per).forEach(k => { out[k] = addInto(out[k], per[k]); });
+    });
+    sec[ALL_NAME] = out;
+  });
+
+  if (DASHBOARD_DATA.byCombo) {
+    const out = {};
+    names.forEach(n => {
+      const perTeam = DASHBOARD_DATA.byCombo[n] || {};
+      Object.keys(perTeam).forEach(team => {
+        out[team] = out[team] || {};
+        Object.keys(perTeam[team]).forEach(combo => {
+          out[team][combo] = addInto(out[team][combo], perTeam[team][combo]);
+        });
+      });
+    });
+    DASHBOARD_DATA.byCombo[ALL_NAME] = out;
+  }
+
+  let tot = null;
+  DASHBOARD_DATA.opponents.forEach(o => { tot = addInto(tot, o); });
+  tot.name = ALL_NAME; tot.kind = 'all';
+  tot.opponentCount = DASHBOARD_DATA.opponents.length;
+  tot.gamesPerCell = DASHBOARD_DATA.opponents.reduce((a, o) => a + (o.gamesPerCell || 0), 0);
+  DASHBOARD_DATA.opponents.push(tot);
+}
+
+function statsOf(node) {
+  if (!node) return { decisiveWins: 0, decisiveLosses: 0, timeoutWins: 0, timeoutLosses: 0, draws: 0, total: 0, winRate: 0 };
+  return node;
+}
+
+function renderOverview() {
+  const rows = DASHBOARD_DATA.opponents
+    .filter(o => o.name !== ALL_NAME)   // it is the SUM of the other bars, not a peer
+    .slice()
+    .sort((a, b) => b.winRate - a.winRate)
+    .map(o => ({ label: o.name, value: o.winRate, n: o.total, color: seqColor(o.winRate) }));
+  renderBarChart(document.getElementById('overviewChart'), rows, { width: 1080, rowH: 24, labelW: 180, goalLine: 90 });
+}
+
+function renderStatTiles(opp) {
+  const el2 = document.getElementById('statTiles');
+  // The aggregate pools opponents of very different difficulty -- in the 2026-08-06 run
+  // the spam tiers sit at 91-100% while the mirror is 42.3%, and the mirror is two thirds
+  // of the games. The combined number therefore moves with a run's OPPONENT MIX as much
+  // as with the bot, and two runs only compare if their mixes match. Said on screen
+  // rather than in a comment nobody reading the chart will ever see.
+  const note = document.getElementById('aggregateNote');
+  if (note) note.classList.toggle('hidden', opp.name !== ALL_NAME);
+  const decisiveTotal = opp.decisiveWins + opp.decisiveLosses;
+  el2.innerHTML = `
+    <div class="stat-tile"><div class="label">Decisive win rate</div><div class="value">${opp.winRate.toFixed(1)}%</div><div class="sub">${opp.decisiveWins}/${decisiveTotal} decisive games</div></div>
+    <div class="stat-tile"><div class="label">Total games</div><div class="value">${opp.total.toLocaleString()}</div><div class="sub">${opp.name === ALL_NAME ? `${opp.opponentCount} opponents combined` : `${opp.gamesPerCell} per team&times;gadget cell`}</div></div>
+    <div class="stat-tile"><div class="label">Timeout results</div><div class="value">${opp.timeoutWins + opp.timeoutLosses}</div><div class="sub">${opp.timeoutWins} win / ${opp.timeoutLosses} loss</div></div>
+    <div class="stat-tile"><div class="label">Draws</div><div class="value">${opp.draws}</div></div>
+  `;
+}
+
+function renderTeamChart(oppName) {
+  const data = DASHBOARD_DATA.byTeam[oppName];
+  const rows = DASHBOARD_DATA.teams.map(t => {
+    const s = statsOf(data[t]);
+    return { label: t, value: s.winRate, n: s.total, color: teamColor(t) };
+  });
+  renderBarChart(document.getElementById('teamChart'), rows, { width: 520, rowH: 26, labelW: 70 });
+}
+
+function renderGadgetCharts(oppName) {
+  const off = DASHBOARD_DATA.byOffense[oppName];
+  const def = DASHBOARD_DATA.byDefense[oppName];
+  const offRows = DASHBOARD_DATA.offenseOptions.map(g => {
+    const s = statsOf(off[g]);
+    return { label: g, value: s.winRate, n: s.total, color: offenseColor(g) };
+  });
+  const defRows = DASHBOARD_DATA.defenseOptions.map(g => {
+    const s = statsOf(def[g]);
+    return { label: g, value: s.winRate, n: s.total, color: defenseColor(g) };
+  });
+  renderBarChart(document.getElementById('offenseChart'), offRows, { width: 520, rowH: 26, labelW: 90 });
+  renderBarChart(document.getElementById('defenseChart'), defRows, { width: 520, rowH: 26, labelW: 90 });
+}
+
+function comboLabel(combo) {
+  const [o, d] = combo.split('|');
+  return `${o} / ${d}`;
+}
+
+function renderHeatmap(oppName) {
+  const container = document.getElementById('heatmapChart');
+  container.innerHTML = '';
+  const combos = [];
+  DASHBOARD_DATA.offenseOptions.forEach(o => DASHBOARD_DATA.defenseOptions.forEach(d => combos.push(`${o}|${d}`)));
+  const teams = DASHBOARD_DATA.teams;
+  const cellW = 78, cellH = 40, labelW = 74, headerH = 60;
+  const width = labelW + combos.length * cellW;
+  const height = headerH + teams.length * cellH;
+  const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, width, height, style: 'display:block;' }, container);
+
+  combos.forEach((combo, ci) => {
+    const x = labelW + ci * cellW + cellW / 2;
+    const [o, d] = combo.split('|');
+    const t1 = el('text', { x, y: headerH - 30, class: 'axis-label', 'text-anchor': 'middle' }, svg);
+    t1.textContent = o;
+    const t2 = el('text', { x, y: headerH - 18, class: 'axis-label', 'text-anchor': 'middle' }, svg);
+    t2.textContent = d;
+  });
+
+  const byCombo = DASHBOARD_DATA.byCombo[oppName];
+  teams.forEach((team, ri) => {
+    const y = headerH + ri * cellH;
+    el('text', { x: labelW - 8, y: y + cellH / 2 + 4, 'text-anchor': 'end', class: 'bar-label' }, svg).textContent = team;
+    const teamCombos = byCombo[team] || {};
+    combos.forEach((combo, ci) => {
+      const x = labelW + ci * cellW;
+      const s = statsOf(teamCombos[combo]);
+      const lowN = s.total > 0 && s.total < 5;
+      const rect = el('rect', {
+        x: x + 2, y: y + 2, width: cellW - 4, height: cellH - 4, rx: 5, ry: 5,
+        fill: s.total > 0 ? seqColor(s.winRate) : 'var(--gridline)',
+        class: lowN ? 'low-n' : '',
+      }, svg);
+      el('text', {
+        x: x + cellW / 2, y: y + cellH / 2 + 4, 'text-anchor': 'middle', class: 'heatmap-cell-label',
+        fill: s.total > 0 && s.winRate >= 45 ? '#fff' : 'var(--text-primary)',
+      }, svg).textContent = s.total > 0 ? s.winRate.toFixed(0) + '%' : '—';
+      rect.addEventListener('mousemove', (e) => showTooltip(e, `<b>${team}</b> / ${comboLabel(combo)}<br>${s.winRate.toFixed(1)}% decisive win rate<br>n=${s.total} games (${s.decisiveWins}W-${s.decisiveLosses}L decisive, ${s.timeoutWins + s.timeoutLosses} timeout, ${s.draws} draw)`));
+      rect.addEventListener('mouseleave', hideTooltip);
+    });
+  });
+}
+
+function renderTableView(oppName) {
+  const byCombo = DASHBOARD_DATA.byCombo[oppName];
+  const combos = [];
+  DASHBOARD_DATA.offenseOptions.forEach(o => DASHBOARD_DATA.defenseOptions.forEach(d => combos.push(`${o}|${d}`)));
+  let rowsHtml = '';
+  DASHBOARD_DATA.teams.forEach(team => {
+    const teamCombos = byCombo[team] || {};
+    combos.forEach(combo => {
+      const s = statsOf(teamCombos[combo]);
+      if (s.total === 0) return;
+      rowsHtml += `<tr><td>${team}</td><td>${comboLabel(combo)}</td><td>${s.winRate.toFixed(1)}%</td><td>${s.decisiveWins}</td><td>${s.decisiveLosses}</td><td>${s.timeoutWins}</td><td>${s.timeoutLosses}</td><td>${s.draws}</td><td>${s.total}</td></tr>`;
+    });
+  });
+  document.getElementById('tableView').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Team</th><th>Gadgets</th><th>Win rate</th><th>Dec. W</th><th>Dec. L</th><th>TO W</th><th>TO L</th><th>Draw</th><th>Total</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+}
+
+function renderAll(oppName) {
+  const opp = DASHBOARD_DATA.opponents.find(o => o.name === oppName);
+  renderStatTiles(opp);
+  renderTeamChart(oppName);
+  renderGadgetCharts(oppName);
+  renderHeatmap(oppName);
+  renderTableView(oppName);
+}
+
+function init() {
+  document.getElementById('metaLine').textContent =
+    `${DASHBOARD_DATA.totalGames.toLocaleString()} games total · generated ${new Date(DASHBOARD_DATA.generatedAt).toLocaleString()}`;
+
+  buildAggregate();
+
+  const select = document.getElementById('opponentSelect');
+
+  // WHOLE-RUN aggregate first, and it is the default view.
+  const allGroup = document.createElement('optgroup'); allGroup.label = 'Whole run';
+  const allOpp = DASHBOARD_DATA.opponents.find(o => o.name === ALL_NAME);
+  const allOpt = document.createElement('option');
+  allOpt.value = ALL_NAME; allOpt.textContent = `${ALL_LABEL} (${allOpp.winRate.toFixed(1)}%)`;
+  allGroup.appendChild(allOpt); select.appendChild(allGroup);
+
+  // GROUPED BY KIND, driven by the data instead of a hardcoded pair. The previous version
+  // filtered to kind==='spam' and kind==='model' only, so the SearchMirror rows -- 1,536
+  // of the 2,304 games in the 2026-08-06 run, two thirds of it -- were simulated, written
+  // into results.json, and then silently unreachable from the UI. Anything carrying a new
+  // kind now appears automatically rather than vanishing.
+  const KIND_LABELS = { search: 'Mirror (self-play)', spam: 'Spam tiers', model: 'ONNX models' };
+  const KIND_ORDER = ['search', 'spam', 'model'];
+  const kinds = [...new Set(DASHBOARD_DATA.opponents.filter(o => o.name !== ALL_NAME).map(o => o.kind))];
+  kinds.sort((a, b) => {
+    const ia = KIND_ORDER.indexOf(a), ib = KIND_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  kinds.forEach(kind => {
+    const opps = DASHBOARD_DATA.opponents
+      .filter(o => o.kind === kind && o.name !== ALL_NAME)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (!opps.length) return;
+    const g = document.createElement('optgroup');
+    g.label = KIND_LABELS[kind] || kind;
+    opps.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.name; opt.textContent = `${o.name} (${o.winRate.toFixed(1)}%)`;
+      g.appendChild(opt);
+    });
+    select.appendChild(g);
+  });
+
+  const defaultOpp = ALL_NAME;
+  select.value = defaultOpp;
+  select.addEventListener('change', () => renderAll(select.value));
+
+  document.getElementById('toggleTableBtn').addEventListener('click', () => {
+    const tv = document.getElementById('tableView');
+    const showing = !tv.classList.contains('hidden');
+    tv.classList.toggle('hidden');
+    document.getElementById('toggleTableBtn').textContent = showing ? 'Show as table' : 'Hide table';
+  });
+
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const cur = currentTheme();
+    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+    renderOverview();
+    renderAll(select.value);
+  });
+
+  renderOverview();
+  renderAll(defaultOpp);
+}
+
+init();
+</script>
+</body>
+</html>

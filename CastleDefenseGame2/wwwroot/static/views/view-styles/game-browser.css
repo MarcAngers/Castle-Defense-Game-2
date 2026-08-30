@@ -1,5 +1,5 @@
 button {
-    font-size: 11px;
+    font-size: 1rem;
 }
 
 #game-browser {
@@ -57,9 +57,12 @@ button {
     transition: background-color 0.2s;
 }
 
-/* Hover effect so they know it's clickable */
-.game-list-item:hover {
-    background-color: #f0f0f0;
+/* Hover effect so they know it's clickable.
+   (hover: hover) -- see the note on button:hover in global-styles.css. */
+@media (hover: hover) {
+    .game-list-item:hover {
+        background-color: #f0f0f0;
+    }
 }
 
 /* Remove the border from the very last item */

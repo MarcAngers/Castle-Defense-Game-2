@@ -73,6 +73,7 @@ export default async function initSelectTeam() {
     const btnSelect = document.getElementById('btnSelect');
 
     btnBack.onclick = () => {
+        connection.selectedTeam = selectedTeam;
         showScreen('main-menu');
     };
     btnSelect.onclick = async () => {

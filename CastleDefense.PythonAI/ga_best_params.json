@@ -1,0 +1,12 @@
+{
+  "WinReward": 35163.984171,
+  "InvestReward": 2186.2745,
+  "InvestDecay": 930.472668,
+  "AntiSpend": 1112.638858,
+  "SavingsWeight": 0.084655,
+  "CombatScale": 0.508727,
+  "GadgetUpgrade": 1565.649421,
+  "GadgetUse": 27.741259,
+  "BoardShaperStart": 21.677585,
+  "BoardShaperEnd": 21.308428
+}

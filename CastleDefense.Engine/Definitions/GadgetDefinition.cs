@@ -20,7 +20,7 @@ namespace CastleDefense.Engine.Definitions
         public int CooldownMs { get; set; }
 
         // Data-Driven Effects
-        public int BaseValue { get; set; }      // Damage/Heal/Cash amount/etc.
+        public float BaseValue { get; set; }      // Damage/Heal/Cash amount/etc.
         public int Radius { get; set; }
         public int Delay { get; set; }
         public int HazardDuration { get; set; }

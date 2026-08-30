@@ -19,6 +19,10 @@
 
             foreach (var unit in state.Units)
             {
+                // Evilguy is immune to the effects of the black hole!
+                if (unit.DefinitionId == "evilguy")
+                    continue;
+
                 float pullDirection = 1f;
 
                 // 1D Hitbox overlap check
@@ -37,7 +41,13 @@
                         }
                     }
                     // --- 3. PULL THE UNIT IN ---
-                    else
+                    // Walls are immovable and are deliberately NOT pulled. Note this
+                    // writes Position directly rather than going through PendingKnockback,
+                    // so the immovability rule in MoveAndFight does not cover it and the
+                    // exemption has to be repeated here. Falling through to section 4
+                    // rather than skipping the unit is the point: a wall inside a black
+                    // hole still takes the damage-over-time, it just does not move.
+                    else if (!unit.IsWall)
                     {
                         if (unitCenter > hazardCenter)
                         {
@@ -89,14 +99,25 @@
 
             foreach (var unit in state.Units)
             {
+                // Evilguy is immune to the effects of the black hole!
+                if (unit.DefinitionId == "evilguy")
+                    continue;
+
+                // Walls do not get flung when the black hole collapses. The queued impulse
+                // would be discarded in MoveAndFight anyway; skipping it here keeps the
+                // intent visible at the callsite.
+                if (unit.IsWall) continue;
+
                 // If they are inside the black hole when it vanishes...
                 if (unit.Position + unit.Width >= this.Position && unit.Position <= this.Position + this.Width)
                 {
                     // Push them violently AWAY from the center
-                    float pushDirection = (unit.Position + unit.Width / 2 > hazardCenter) ? 1f : -1f;
+                    float pushDirection = (unit.Side == 1) ? -1f : 1f;
 
-                    // 1500 is a massive knockback, adjust as needed!
-                    unit.PendingKnockback += (500 * pushDirection);
+                    if (unit.Tier == 8)
+                        unit.PendingKnockback += (25 * pushDirection);
+                    else
+                        unit.PendingKnockback += (500 * pushDirection);
                 }
             }
         }
