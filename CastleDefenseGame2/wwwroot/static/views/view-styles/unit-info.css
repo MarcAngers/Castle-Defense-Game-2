@@ -55,9 +55,13 @@ h2 {
     box-shadow: none;
 }
 
-#previous:hover:not(:disabled), #next:hover:not(:disabled) {
-    color: #FFFF00; /* Add a nice gold highlight on hover */
-    transform: scale(1.2);
+/* (hover: hover) -- see the note on button:hover in global-styles.css. On a phone
+   this would stick to whichever arrow was tapped last. */
+@media (hover: hover) {
+    #previous:hover:not(:disabled), #next:hover:not(:disabled) {
+        color: #FFFF00; /* Add a nice gold highlight on hover */
+        transform: scale(1.2);
+    }
 }
 
 /* The Grayed-out state at the ends of the array */
@@ -109,4 +113,43 @@ h2 {
     -webkit-user-drag: none; /* Ghost-drag prevention */
     /* Optional: Adds a tiny shadow directly to your heart/sword PNGs to make them pop */
     filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); 
+}
+/* ============================================================
+   SHORT VIEWPORTS (landscape phones)
+   At 812x375 this screen scrolled: 8 of the 64 unit cards ran past the bottom edge, the
+   worst (blue 8 / orange 8) by 18px. The variable is the DESCRIPTION -- a one-line blurb
+   makes a 226px card and a four-line one makes a 250px card -- so sizing for the common
+   case is what left the long ones hanging off the screen.
+
+   Nothing here is a redesign; it is the same card with its spacing taken in, sized so the
+   WORST card fits rather than the average one. The savings are spread across every gap
+   (halved margins around the carousel and the Back button, the card's own padding, and
+   the gaps above the title, image and description) plus a small trim to the sprite, so no
+   single element carries the whole 30px and the layout still reads the same.
+   ============================================================ */
+@media (max-height: 500px) {
+    #character-carousel {
+        margin: 1vh 0;
+    }
+
+    button {
+        margin: 1vh;
+    }
+
+    h1 {
+        margin: 0.25rem 0;
+    }
+
+    .collection-card {
+        padding: 1vh;
+    }
+
+    .collection-image {
+        height: 17vh;
+        margin-bottom: 1vh;
+    }
+
+    .collection-desc {
+        margin-top: 1vh;
+    }
 }

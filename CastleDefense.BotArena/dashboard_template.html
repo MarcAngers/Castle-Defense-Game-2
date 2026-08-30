@@ -155,6 +155,7 @@
         <h2 style="margin-bottom:6px;">Matchup breakdown</h2>
       </div>
       <select id="opponentSelect"></select>
+      <div id="aggregateNote" class="desc hidden">Pooled across every opponent in this run. Opponents differ enormously in difficulty and are not equally weighted &mdash; the mirror carries most of the games &mdash; so this tracks the run's opponent mix as well as the bot. Compare like-for-like runs only.</div>
     </div>
     <div class="stat-row" id="statTiles"></div>
   </div>
@@ -275,6 +276,64 @@ function renderBarChart(container, rows, opts) {
   });
 }
 
+const ALL_NAME = '__ALL__';
+const ALL_LABEL = 'All opponents';
+
+// Sums every opponent into one synthetic entry so the default view is the WHOLE run.
+// Built client-side rather than in the C# so an EXISTING results.json gains the new view
+// without re-running the sweep -- a search-mirror sweep is hours of CPU.
+//
+// Stored under a reserved name, after which every existing render function works on it
+// unchanged, because they all key off DASHBOARD_DATA.<section>[oppName].
+function buildAggregate() {
+  if (DASHBOARD_DATA.opponents.some(o => o.name === ALL_NAME)) return;
+  const names = DASHBOARD_DATA.opponents.map(o => o.name);
+  const FIELDS = ['decisiveWins', 'decisiveLosses', 'timeoutWins', 'timeoutLosses', 'draws', 'total'];
+
+  const addInto = (dst, src) => {
+    if (!src) return dst;
+    dst = dst || { decisiveWins: 0, decisiveLosses: 0, timeoutWins: 0, timeoutLosses: 0, draws: 0, total: 0, winRate: 0 };
+    FIELDS.forEach(f => { dst[f] += (src[f] || 0); });
+    // Matches how the C# defines it for every other row: decisive wins over TOTAL games,
+    // not over decisive games. Recomputed from the sums rather than averaged, so cells
+    // with different game counts cannot be silently equally weighted.
+    dst.winRate = dst.total ? 100 * dst.decisiveWins / dst.total : 0;
+    return dst;
+  };
+
+  ['byTeam', 'byOffense', 'byDefense'].forEach(section => {
+    const sec = DASHBOARD_DATA[section];
+    if (!sec) return;
+    const out = {};
+    names.forEach(n => {
+      const per = sec[n] || {};
+      Object.keys(per).forEach(k => { out[k] = addInto(out[k], per[k]); });
+    });
+    sec[ALL_NAME] = out;
+  });
+
+  if (DASHBOARD_DATA.byCombo) {
+    const out = {};
+    names.forEach(n => {
+      const perTeam = DASHBOARD_DATA.byCombo[n] || {};
+      Object.keys(perTeam).forEach(team => {
+        out[team] = out[team] || {};
+        Object.keys(perTeam[team]).forEach(combo => {
+          out[team][combo] = addInto(out[team][combo], perTeam[team][combo]);
+        });
+      });
+    });
+    DASHBOARD_DATA.byCombo[ALL_NAME] = out;
+  }
+
+  let tot = null;
+  DASHBOARD_DATA.opponents.forEach(o => { tot = addInto(tot, o); });
+  tot.name = ALL_NAME; tot.kind = 'all';
+  tot.opponentCount = DASHBOARD_DATA.opponents.length;
+  tot.gamesPerCell = DASHBOARD_DATA.opponents.reduce((a, o) => a + (o.gamesPerCell || 0), 0);
+  DASHBOARD_DATA.opponents.push(tot);
+}
+
 function statsOf(node) {
   if (!node) return { decisiveWins: 0, decisiveLosses: 0, timeoutWins: 0, timeoutLosses: 0, draws: 0, total: 0, winRate: 0 };
   return node;
@@ -282,6 +341,7 @@ function statsOf(node) {
 
 function renderOverview() {
   const rows = DASHBOARD_DATA.opponents
+    .filter(o => o.name !== ALL_NAME)   // it is the SUM of the other bars, not a peer
     .slice()
     .sort((a, b) => b.winRate - a.winRate)
     .map(o => ({ label: o.name, value: o.winRate, n: o.total, color: seqColor(o.winRate) }));
@@ -290,10 +350,17 @@ function renderOverview() {
 
 function renderStatTiles(opp) {
   const el2 = document.getElementById('statTiles');
+  // The aggregate pools opponents of very different difficulty -- in the 2026-08-06 run
+  // the spam tiers sit at 91-100% while the mirror is 42.3%, and the mirror is two thirds
+  // of the games. The combined number therefore moves with a run's OPPONENT MIX as much
+  // as with the bot, and two runs only compare if their mixes match. Said on screen
+  // rather than in a comment nobody reading the chart will ever see.
+  const note = document.getElementById('aggregateNote');
+  if (note) note.classList.toggle('hidden', opp.name !== ALL_NAME);
   const decisiveTotal = opp.decisiveWins + opp.decisiveLosses;
   el2.innerHTML = `
     <div class="stat-tile"><div class="label">Decisive win rate</div><div class="value">${opp.winRate.toFixed(1)}%</div><div class="sub">${opp.decisiveWins}/${decisiveTotal} decisive games</div></div>
-    <div class="stat-tile"><div class="label">Total games</div><div class="value">${opp.total}</div><div class="sub">${opp.gamesPerCell} per team&times;gadget cell</div></div>
+    <div class="stat-tile"><div class="label">Total games</div><div class="value">${opp.total.toLocaleString()}</div><div class="sub">${opp.name === ALL_NAME ? `${opp.opponentCount} opponents combined` : `${opp.gamesPerCell} per team&times;gadget cell`}</div></div>
     <div class="stat-tile"><div class="label">Timeout results</div><div class="value">${opp.timeoutWins + opp.timeoutLosses}</div><div class="sub">${opp.timeoutWins} win / ${opp.timeoutLosses} loss</div></div>
     <div class="stat-tile"><div class="label">Draws</div><div class="value">${opp.draws}</div></div>
   `;
@@ -405,16 +472,45 @@ function init() {
   document.getElementById('metaLine').textContent =
     `${DASHBOARD_DATA.totalGames.toLocaleString()} games total · generated ${new Date(DASHBOARD_DATA.generatedAt).toLocaleString()}`;
 
-  const select = document.getElementById('opponentSelect');
-  const spamOpps = DASHBOARD_DATA.opponents.filter(o => o.kind === 'spam').sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const modelOpps = DASHBOARD_DATA.opponents.filter(o => o.kind === 'model').sort((a, b) => a.name.localeCompare(b.name));
-  const spamGroup = document.createElement('optgroup'); spamGroup.label = 'Spam tiers';
-  spamOpps.forEach(o => { const opt = document.createElement('option'); opt.value = o.name; opt.textContent = `${o.name} (${o.winRate.toFixed(1)}%)`; spamGroup.appendChild(opt); });
-  const modelGroup = document.createElement('optgroup'); modelGroup.label = 'ONNX models';
-  modelOpps.forEach(o => { const opt = document.createElement('option'); opt.value = o.name; opt.textContent = `${o.name} (${o.winRate.toFixed(1)}%)`; modelGroup.appendChild(opt); });
-  select.appendChild(spamGroup); select.appendChild(modelGroup);
+  buildAggregate();
 
-  const defaultOpp = DASHBOARD_DATA.opponents.some(o => o.name === 'Tier4Spam') ? 'Tier4Spam' : DASHBOARD_DATA.opponents[0].name;
+  const select = document.getElementById('opponentSelect');
+
+  // WHOLE-RUN aggregate first, and it is the default view.
+  const allGroup = document.createElement('optgroup'); allGroup.label = 'Whole run';
+  const allOpp = DASHBOARD_DATA.opponents.find(o => o.name === ALL_NAME);
+  const allOpt = document.createElement('option');
+  allOpt.value = ALL_NAME; allOpt.textContent = `${ALL_LABEL} (${allOpp.winRate.toFixed(1)}%)`;
+  allGroup.appendChild(allOpt); select.appendChild(allGroup);
+
+  // GROUPED BY KIND, driven by the data instead of a hardcoded pair. The previous version
+  // filtered to kind==='spam' and kind==='model' only, so the SearchMirror rows -- 1,536
+  // of the 2,304 games in the 2026-08-06 run, two thirds of it -- were simulated, written
+  // into results.json, and then silently unreachable from the UI. Anything carrying a new
+  // kind now appears automatically rather than vanishing.
+  const KIND_LABELS = { search: 'Mirror (self-play)', spam: 'Spam tiers', model: 'ONNX models' };
+  const KIND_ORDER = ['search', 'spam', 'model'];
+  const kinds = [...new Set(DASHBOARD_DATA.opponents.filter(o => o.name !== ALL_NAME).map(o => o.kind))];
+  kinds.sort((a, b) => {
+    const ia = KIND_ORDER.indexOf(a), ib = KIND_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  kinds.forEach(kind => {
+    const opps = DASHBOARD_DATA.opponents
+      .filter(o => o.kind === kind && o.name !== ALL_NAME)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (!opps.length) return;
+    const g = document.createElement('optgroup');
+    g.label = KIND_LABELS[kind] || kind;
+    opps.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.name; opt.textContent = `${o.name} (${o.winRate.toFixed(1)}%)`;
+      g.appendChild(opt);
+    });
+    select.appendChild(g);
+  });
+
+  const defaultOpp = ALL_NAME;
   select.value = defaultOpp;
   select.addEventListener('change', () => renderAll(select.value));
 

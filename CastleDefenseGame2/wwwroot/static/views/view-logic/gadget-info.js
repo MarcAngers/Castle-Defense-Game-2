@@ -1,7 +1,11 @@
 import { showScreen } from '../../../src/router.js';
 import loader from '../../../src/asset-loader.js';
+import meander from '../../../src/menu-meander.js';
 
 export default async function initGadgetInfo() {
+    // Same scene as Collection, so this keeps the existing wanderers rather than respawning.
+    meander.start('collection');
+
     let selectedGadget = null;
     let currentLevelIndex = 0; // 0 = Lvl 1, 1 = Lvl 2, 2 = Lvl 3
 

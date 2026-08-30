@@ -46,6 +46,42 @@ ai_env\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## The game must work on mobile, in LANDSCAPE
+
+This game is meant to be playable on a phone held sideways. **Any front-end change has to
+be verified at a mobile LANDSCAPE viewport before it is called done** — 812x375 is the
+reference size. Check for text or UI clipping off the edges, page scroll, and controls
+that have become too cramped to tap.
+
+Portrait is not a supported layout and is not worth designing for: the game asks the
+player to rotate instead (see below). Landscape is the target because it supplies the
+width the pixel font needs — at 812 wide all 11 `h1` headings fit with room to spare,
+while at 375 wide 8 of them overflow the screen.
+
+**Height is the scarce resource in landscape, not width.** A landscape phone is only
+375px tall, and the main menu already fills it to within 3px (last button ends at 372).
+Anything that adds vertical space to a screen — a heading line, a button, a margin — is
+what will break first. Check the bottom edge.
+
+`index.html` sets `maximum-scale=1.0, user-scalable=no`, so the player CANNOT pinch-zoom
+out to rescue a layout that overflows. Anything that runs off the edge is simply lost.
+
+**If a requested change does not look right on mobile, say so** rather than shipping it
+quietly. Report what breaks and offer the fix; do not silently redesign around it.
+
+### Portrait lock
+
+A touch device held in portrait gets a full-screen "ROTATE YOUR DEVICE" overlay
+(`#rotate-prompt` in `index.html`, styled in `global-styles.css`) and the game underneath
+is hidden. It is **pure CSS** — a `@media (orientation: portrait) and (pointer: coarse)`
+query — so it re-evaluates on rotation with no JS, no listener and no state to get stuck.
+
+Two deliberate details: the `pointer: coarse` gate is what keeps a merely narrow or tall
+DESKTOP window from being blocked, since such a window matches `orientation: portrait`
+too; and `#bgCanvas` / `#app-container` are set `visibility: hidden` under the same query
+so nothing peeks past the overlay or catches a stray tap. On the way back to landscape,
+`view.js`'s existing `resize` listener re-fits the canvas on its own.
+
 ## Architecture
 
 ### Data Flow: Training
@@ -92,7 +128,7 @@ This is the core shared library used by both the web game and the training simul
 - Own units: up to 50 × 3 floats (position [0=own castle, 1=enemy castle], HP%, tier/8)
 - Enemy units: same format
 
-`InvestmentPrice` replaced `InvestmentCount` (GameState.cs:116) — it's directly
+`InvestmentPrice` replaced `InvestmentCount` (in `GameState.GetStateVector`) — it's directly
 actionable for savings decisions, and `InvestmentCount` is derivable from it plus
 income. Gadget cooldown timers are still absent from the state.
 
@@ -333,13 +369,110 @@ bot's loadout a function of his, which confounds play with loadout in exactly th
 It is not a strength setting — it reopens the deterministic holes counter-picking closed.
 Clear it for normal play.
 
-**White/nuke/reinforcements is a genuinely clean mirror: `mirror-fixed White nuke
-reinforcements 100` returns 100/100 DRAWS**, no seat advantage either way. This refines the
-2026-08-11 seat-bias table above, which recorded "P2 always wins for Black/Red/White" — that
-was measured at nuke/wall. **Seat bias is a property of (team, gadgets), not of team alone**,
-so the per-team summary cannot be read as applying to every loadout of that team. It also
-makes this particular pairing an unusually honest instrument: the mirror Marc will play has
-no built-in seat edge to explain away a result.
+White/nuke/reinforcements was chosen because `mirror-fixed White nuke reinforcements 100`
+returned 100/100 DRAWS, no seat advantage either way. That refined the 2026-08-11 seat-bias
+table above, which recorded "P2 always wins for Black/Red/White" — measured at nuke/wall.
+**Seat bias is a property of (team, gadgets), not of team alone**, so the per-team summary
+cannot be read as applying to every loadout of that team.
+
+**STALE SINCE 2026-08-27 — THE LOADOUT IS NO LONGER ENOUGH TO PIN.** Map effects made the map
+a gameplay input, and the same command now returns 14 / 23 / 63 draws because each game rolls
+a different map. The draw was a KNIFE EDGE, not robustness: measured per map at n=40, it
+survives on White, Blue, Orange, Yellow, Black and shadow-White, and collapses to a 40-0 sweep
+on Purple (+10% speed, P1) and Green (−10% speed, P2), with Red (heal pulse) landing 21/12/7.
+
+**This is not a side-dependent bug in the map code** — a control that rewrites every unit's
+speed by ±10% from plainly side-independent code, on a map with no speed effect and without
+touching MapEffects at all, breaks the same mirror the same way (40-0). Any perturbation of
+unit speed tips the equilibrium into the seat bias the engine already has.
+
+Consequence for the mirror recordings this section exists for: **pinning the loadout no longer
+pins the rules** on its own, because the map varies game to game. Pin it too:
+`appsettings.json` -> `Map:ForcedMap` (a team colour, empty for the normal random roll), read
+in `Program.cs` and applied in `GameHostingService.CreateGame` -- the single place every hosted
+game is born, so it covers multiplayer, singleplayer, league and practice alike. It also clears
+`ShadowMap`, since a pinned map that is sometimes greyed out is not a pinned map, and the
+server prints `[map] FORCED map active: ...` on startup as the reminder it is set.
+
+**It is gameplay-affecting, not cosmetic**, for exactly the reason this section exists: while
+it is set, every game is played under one map's rules, so nothing measured with it set is
+comparable to anything measured with it clear. Pick one of the maps the mirror survives on
+(White, Blue, Orange, Yellow, Black, shadow-White) and clear it afterwards.
+
+## Map effects (the map is now a gameplay input)
+
+Added 2026-08-27. Until then `GameState.Map` / `ShadowMap` picked which art the client drew
+and NOTHING else. Every map now changes the rules, symmetrically for both players.
+
+| map | name | effect |
+|---|---|---|
+| White | Calm Hills | +10% HP |
+| Purple | Warehouse | +10% movement speed |
+| Blue | Rainy Dock | −25% fire damage |
+| Green | Marshy Swamp | −10% movement speed |
+| Yellow | Sunbaked Desert | −10% damage |
+| Orange | Rumbling Volcano | +10% fire damage |
+| Red | Cherry Forest | every 10–30s, heal every unit 10–50% of max HP |
+| Black | Distant Planet | knockback ×1.5 and DOUBLE flight time |
+| *shadow* | Shadow Maps | +10% damage, multiplied on top of the underlying map |
+
+`MapEffects` (Engine/Models) is the single source of truth. The numbers are HAND-SYNCED with
+the Effect column of `wwwroot/assets/master_maps.csv`, which is the text the Collection screen
+shows the player — the engine never reads that CSV, so changing one without the other makes
+the game lie about its own rules.
+
+**Every effect is applied at exactly one choke point**, which is what makes "no caller has to
+remember" true rather than hopeful:
+
+- **Spawn stats** (HP/damage/speed) in `SpawnUnit`. Every unit that reaches the field goes
+  through it, so the Reinforcements squad, a Wall gadget's wall and the free opening squad all
+  pick the effect up without knowing map effects exist. Applied AFTER the weirdo roll, so the
+  two compose.
+- **Fire** in `ProcessStatuses`, as the Burn tick lands — covering the firebomb's zone, the
+  meteor's ignite and anything added later. Poison/Heal/Blackhole are deliberately untouched.
+- **Knockback** where displacement happens in `MoveAndFight`, AFTER the anti-stunlock clamps,
+  so low gravity throws units farther without reopening the stunlock those clamps close.
+- **The heal pulse** in `ProcessMapHealPulse`, off `GameState.NextHealPulseTick`.
+
+Four details that are load-bearing rather than incidental:
+
+- **HP and damage round; speed does not.** Speed is a float everywhere in the engine and is
+  already scaled fractionally by Slow/Speed statuses every tick. Rounding it would also make
+  the effect wildly uneven — speeds run 1 to 23, so ±10% rounds to NO CHANGE for a speed-1 or
+  speed-2 unit while moving a speed-5 unit a full 20%.
+- **`MapEffects.ScaleStat` keeps 0 at 0.** `WallDefinition` sets Damage = 0, and a blanket
+  floor of 1 would hand every wall a point of damage. Same trap the random-stat unit records.
+  A multiplier of exactly 1 returns the input with no arithmetic, so a map without an effect
+  is byte-identical to before this feature by construction.
+- **Rounding is per application, so small numbers quantise.** A burn of 12 on Orange becomes
+  round(13.2) = 13, i.e. +8.3% and not +10%. Unavoidable while damage is an int; it bites
+  hardest on the smallest values.
+- **The heal pulse draws from `Rng`, the seeded stream**, and ONLY on the Red map — so every
+  other map's RNG sequence is untouched and existing per-map results stay comparable. One roll
+  per pulse shared by every unit, walls included. The 1s "Heal" status it attaches has VALUE 0
+  and is purely the visual marker: the client spawns heal particles from a status's name and
+  ignores its value, and a non-zero value would be re-applied by ProcessStatuses every pass for
+  the whole second.
+
+**Black's doubled flight time is split across the server and the client and they must agree.**
+The engine moves a knocked-back unit instantly and holds it under hard CC for
+`MapEffects.KnockbackStaggerTicks`; the client animates the arc over
+`VisualUnit.knockbackDuration` (view.js sets it per frame from the map). Draw the arc for
+longer than the server staggers and units act while still drawn mid-flight. The re-knockback
+immunity window is deliberately NOT doubled — it stops juggling, and doubling it would change
+the map's stunlock economics rather than its gravity.
+
+### What this invalidates
+
+- **Every benchmark that does not pin the map**, in the same way the 2026-08-26 opening-squad
+  change made everything before it stale. A sweep over random maps now averages eight rule
+  sets. The clean-mirror claim in the ForcedLoadout section above is the first casualty.
+- **The AI cannot see any of this.** The map is not among GetStateVector's 348 floats, so the
+  trained policy plays every map identically and cannot learn map-specific play. Deliberately
+  deferred: adding it grows the vector and invalidates every ONNX checkpoint. HeuristicBot
+  reads GameState directly and COULD be made map-aware with no retraining; it is not.
+- v3 replays already record Map and ShadowMap, so reconstruction reproduces the effects. v2
+  replays do not, and already played on a different map than the recorded game.
 
 ## Chump-blocking (stalling big units with tier-1 bodies)
 
@@ -479,6 +612,191 @@ razes it in comparable time to a single tier 8 for a median **28× less money** 
 7–23 px/tick against a tier 8's 1–5, and its attack speed clamps at the TOP of the range (5.0/s)
 where a tier 8's clamps at the BOTTOM (0.2/s). Untested against a defended castle.
 
+## Disconnection, rejoin, and WINS BY DEFAULT
+
+Closing the tab, reloading, crashing or dropping the network used to be an instant loss:
+players were identified by their SignalR ConnectionId, which is per-socket, so a returning
+browser matched neither seat and could not act -- while the game kept ticking, undefended.
+There was no way back into a game at all.
+
+```
+browser  --token (localStorage)-->  ReconnectService  <-- pause/resolve --  GameHostingService
+```
+
+- **Identity is a TOKEN, not a socket.** `ReconnectService.RegisterSeat` mints one per human
+  seat, sends it to that browser alone (`SessionToken`), and the browser keeps it in
+  localStorage. `RejoinGame(gameId, token)` re-points `PlayerState.ConnectionId` at the new
+  socket. **The token is deliberately NOT in PlayerState**: the loop broadcasts the whole
+  GameState to the group every tick, so anything stored there is handed to the opponent.
+- **A game with an empty human seat is not stepped at all** -- no tick, no bot decisions, no
+  recorded actions, no state broadcast. The remaining player sees a pause overlay with a
+  countdown broadcast BY THE SERVER once per second, because the server's deadline is the
+  one that actually ends the game.
+- **Actions are dropped while paused, not queued.** `GameEngine.Tick` drains the action
+  queue, and a paused game is not ticked, so without the guard in GameHub every click made
+  during the overlay would fire in one burst on resume.
+- **60 seconds (`ClaimAfterSeconds`) is when the win becomes CLAIMABLE, not when it is
+  taken.** Ending the game automatically would force a result on someone who would rather
+  wait for their friend's router to come back, so at 60s the waiting player is offered a
+  **Claim Win** button and the game stays paused until they press it. Three things resolve a
+  pause instead: the claim, the missing player pressing **Abandon**, and the
+  `MaxPauseSeconds` ceiling (30 min) that stops a doubly-abandoned game living forever.
+- **A pause with nobody connected resolves as soon as it is claimable**, because no one
+  could ever claim it. That is every singleplayer disconnect: exactly one human still
+  connected wins **by default**, nobody connected is **abandoned** with no winner -- so the
+  bot is never handed a win, there being no human to award it to.
+- Spectator modes (`league`, `defwatch`) get no token, so a spectator closing their tab
+  pauses nothing. A lobby that has not started is discarded rather than paused.
+- **A defaulted game gets the NEUTRAL end-game show** (`game-over.js` passes winner 0 to
+  `endGameShow`) whether or not it has a winner: no castle fell and nothing on the field was
+  decided, so the armies mill about rather than one side celebrating an opponent who left.
+  Only the scoreboard knows there was a winner.
+
+### The storage trap this hit twice
+
+The browser side is per-SEAT, not per-browser, and both bugs here were the same shape.
+
+`localStorage` is shared by every tab on the origin. A single session key meant that with
+both seats of one game open in one browser -- exactly how this gets tested -- the second
+join OVERWROTE the first, so player 1 reloaded, was handed player 2's token, rejoined into
+player 2's SEAT, and lost the game they were winning while their own seat sat empty. Sessions
+are now a LIST keyed by (gameId, side), with a `sessionStorage` pointer naming which entry
+belongs to THIS tab -- per-tab and reload-surviving, which is the one distinction
+`localStorage` cannot make. `CheckRejoin` additionally refuses a seat that is currently
+connected, so even a tab that lost its pointer skips the occupied seat and finds the empty one.
+
+The second bug was the fix's own cleanup pass: a page load asked about another tab's session,
+got "not valid" because that game was still in a LOBBY, and **deleted a live session belonging
+to a different tab**. A tab may only prune its OWN seat. Anything touching these keys has to
+assume other tabs are using them concurrently.
+
+### A WIN BY DEFAULT IS NOT A WIN -- exclude it from analysis
+
+`games.end_reason` is NULL/`"normal"` for a game decided by play, `"disconnect"` for one
+awarded because the loser never came back, and `"abandoned"` for one nobody came back to.
+
+**Every tool that reads recordings must exclude `disconnect` and `abandoned` games unless
+Marc explicitly asks for them.** `ReplayFile.SelectHumanGames` already does, via
+`ReplayFile.IsRealResult`, and prints how many it dropped; `--all` is the deliberate
+opt-in. Anything new that reads `game_records.db` or the replay folder has to make the same
+check -- and must make it against the DB, because **nothing in the replay file marks
+either case**: the winner byte of a default win is byte-identical to an earned one, the
+action stream merely stops early, and a game that paused and resumed looks exactly like one
+that never paused.
+
+The reason is not bookkeeping tidiness. Such a game measures a network, not a player: its
+duration is however long someone played before their wifi dropped, its ending was not
+fought, and counting it drags win rate, game length and earned investments toward whatever
+a disconnection happens to look like. The human play record in this file
+(92.1% vs HeuristicBot, 84.3% vs SearchBot) is exactly the kind of number that would rot.
+
+## The random-stat unit (Black tier 4, "weirdo")
+
+One unit does not read its stats off its roster row. Every time a `weirdo` spawns,
+`GameEngine.SpawnUnit` rolls a uniform multiplier in [0.5, 2.0] for **health, damage and
+speed** independently, and sets `Unit.VisualScale` to the **mean of the three** -- so it is
+drawn anywhere from 27px to 99px around a 50px base and the size advertises the roll.
+Keyed on `GameEngine.RandomStatUnitId`, the same way the "monky" half-health case is.
+
+### SIZE IS APPEARANCE ONLY, AND THAT IS NOT A SHORTCUT -- IT IS THE FIX
+
+The first cut scaled the unit's real `Width`/`Height`, and it broke combat. `ClampToContact`
+stopped a unit using its INSTANCE width while `FindTargetsFast` measured reach from the
+DEFINITION's, so an 83px weirdo halted 33px short of what its own targeting believed it
+could reach and **stood there never attacking**, while its opponent hit it without being hit
+back. `FindTargetsFast`'s own doc comment already warns that this error is signed and runs
+the opposite way for each seat.
+
+**The engine is not size-aware and was never designed to be**: half of it reads
+`UnitDefinition.Width`. So the logical size of every unit is now always its definition's, and
+only the sprite scales. Scaled sprites therefore do not line up with where the unit actually
+fights -- a deliberate, cheap trade.
+
+**The invariant to protect is `unit.Width == def.Width` for every spawned unit.** That is
+what a guard should assert; the downstream "can they hit each other" symptom does NOT
+reliably reproduce (verified by reinstating the bug -- a head-to-head damage test still
+passed, while the width invariant caught it immediately).
+
+### What IS per-instance
+
+`Unit.Damage` and the new `Unit.BaseSpeed` are read by the combat loop instead of the
+definition. `BaseSpeed` exists because `CurrentSpeed` is the LIVE value -- MoveAndFight
+zeroes it in contact and rewrites it every tick -- so it cannot hold a stat. For every
+ordinary unit instance and definition are equal by construction, so the distinction is
+invisible until it is wrong. `ScoreUnit` in HeuristicBot still takes a definition on
+purpose: it asks "how good is this unit type to buy", which has no instance, and so prices a
+weirdo at its base row rather than its 1.25x expected roll.
+
+Two traps worth keeping:
+
+- **The rolls come from `Rng`, the engine's seeded stream.** An unseeded `new Random()`
+  would break replay reconstruction and search-rollout determinism at once -- the exact bug
+  class the measurement-pitfalls section already records twice. `clone-check` passes.
+- **Every other unit takes its definition's values verbatim** -- no multiply, no rounding, no
+  clamping, and the RNG is not drawn from at all. A blanket `Math.Max(1, ...)` damage floor
+  would have handed every WALL 1 damage (`WallDefinition` sets `Damage = 0`), quietly turning
+  defensive scenery into an attacker.
+
+### Consequence for measurement: BLACK MIRRORS ARE NO LONGER DETERMINISTIC
+
+A perfect mirror used to be decided entirely by seat geometry (see the seat-bias entry
+below). Black now fields a unit with random stats, so that tie is broken by real variance.
+`mirror-fixed Black nuke reinforcements 100`, HeuristicBot both seats, all three arms run in
+the same build with only the feature toggled:
+
+| arm | result | avg length |
+|---|---|---|
+| randomisation off (control) | P2 100/100 | 366.2s |
+| stats + logical size (BUGGY, withdrawn) | P1 87 / P2 13 | 285.6s |
+| stats only, size visual (shipped) | **P1 19 / P2 75 / 6 draws** | 339.9s |
+
+**The 87/13 was the collision bug, not a balance finding** -- it is retracted. With the bug
+fixed the mirror sits near the control's P2-favoured bias, with variance breaking some of
+the determinism, which is what adding noise to a knife-edge should look like.
+`mirror-fixed White nuke reinforcements 100` returns 100/100 draws at 298.6s in every arm,
+confirming non-Black play is untouched.
+
+**The seat-bias table below is stale for Black**, and any Black measurement now needs a real
+sample size where it previously needed n=1. Whether Black's overall strength moved against
+other teams has not been measured.
+
+## Game opening: pre-game, the opening squad, and starting money
+
+Added 2026-08-26. Two of these three are BALANCE CHANGES, not presentation.
+
+**Pre-game (presentation only).** `GameHostingService.PreGameSeconds` = 4 seconds during
+which the game exists and is broadcast but is **not stepped** -- no tick, no bots, no
+recorded actions -- and the hub refuses actions exactly as it does during a disconnect
+pause. The client opens the camera on the OPPONENT's castle, holds a second, pans home over
+two, settles for one, and drops a "3 / 2 / 1 / BATTLE!!" banner over the last three.
+
+The remaining time is pushed from the server every loop pass and the client anchors a local
+deadline against it, so the pan interpolates smoothly between updates and a browser that
+joins mid-intro lands in the middle of it rather than missing it. **In multiplayer both
+browsers must open the battle on the same tick**, which is why none of this is client-timed.
+Spectator modes (`league`, `defwatch`, `watch`) get no pre-game -- there is nobody to
+introduce the battle to.
+
+**The opening squad (BALANCE).** `GameEngine.OpeningSquadSize` = 5 free tier-1 units per
+side, spawned one per second on ticks 1, 31, 61, 91, 121 -- so the first runs on as the
+battle opens rather than after a second of nothing. Spawned with `ignoreCost`, which keeps
+them out of the action recording, the purchase counters and the money-spent totals: nobody
+decided them, and a replay that recorded them as spawn actions would replay them twice.
+
+Keyed on absolute `CurrentTick`, so a league game (which starts at `30*30*timeSkip`) gets no
+squad. The client's decorative crowd derives its count from the same tick rather than a
+local timer, so the units standing outside the castle empty onto the field exactly in step.
+
+**Starting money (BALANCE).** `PlayerState` now starts at **$10**, not $0.
+
+### Every benchmark taken before 2026-08-26 is stale
+
+Ten free units on the field and $10 in hand move every opening. Both changes are symmetric
+and cannot favour a seat, but nothing measured before this date is comparable to anything
+measured after it -- win rates, game lengths, earned investments, the counter table, the
+human play record. `OpeningSquadSize = 0` and the money constant are the two knobs to
+restore the old opening if a historical comparison is needed.
+
 ## Cleanup backlog
 
 Deferred tidy-up work lives in `CLEANUP_BACKLOG.md` — stale comments, measurement tools
@@ -511,7 +829,7 @@ with suspicion.
   ⇒ **E = 2.118**, SD 2.74. Always report invests as **earned (end − start)**, never as
   the raw end-of-game count. `invest-stats` now does this; older numbers in the log do not.
 - **`EvaluateBoard()` is in the RL reward loop**, not just a diagnostic —
-  `Simulation/Program.cs:446` feeds it to `batchEval` for N-step potential-based reward
+  `Simulation/Program.cs` feeds it to `batchEval` for N-step potential-based reward
   shaping. Changing `EvalWeight*` changes the training signal.
 - **Evaluator weights are fit to the deployed `(w·x)/sum(w)` form** by
   `train_evaluator.py`. Do not reintroduce a no-intercept logistic on the raw [0,1]
@@ -545,13 +863,28 @@ with suspicion.
   diverges from the real game at his first cast. `gadget_uses` in the DB has the id and
   tick but still no position, so this cannot be repaired from existing recordings — the
   recorder has to change first.
-- **12 of the 153 files in `recordings/singleplayer/` are league-watch bot-vs-bot
-  games.** Anything treating seat 1 as "the human" must exclude them
-  (`ReplayFile.SelectHumanGames` does, via `game_mode`). 141 are real human games.
+- **A WIN BY DEFAULT IS NOT A WIN.** A game whose loser disconnected and never came back
+  is awarded to the survivor after a 60-second grace window (`games.end_reason =
+  "disconnect"`), and one nobody came back to is `"abandoned"`. Neither was decided by
+  play, and NOTHING IN THE REPLAY FILE MARKS EITHER -- the winner byte is identical to an
+  earned one. Exclude both from any analysis of recordings unless Marc asks for them;
+  `ReplayFile.IsRealResult` is the single place that decision is made. See "Disconnection,
+  rejoin, and WINS BY DEFAULT" above.
+- **`recordings/singleplayer/` contains games seat 1 did NOT play, and they must be
+  excluded.** Anything treating seat 1 as "the human" has to filter them out;
+  `ReplayFile.SelectHumanGames` does, via `ReplayFile.IsHumanPlayed` (drops `game_mode`
+  `watch`/`league` and any `leaguewatch:` opponent) and then `IsRealResult`.
+  **Re-counted 2026-08-29: 267 replay files**, not the 153 this entry used to claim —
+  12 league-watch, 255 human-played, of which 252 survive the default-win filter. The mode
+  mix is now 196 `sp`, 58 `practice`, 12 `league`, 1 `accept`. **Do not quote these numbers
+  either**; they move every time Marc plays. Re-derive them from the DB, which is the whole
+  point of the filter living in code rather than in a list here.
 - **The engine CAN now be cloned** — this entry used to say it could not, and that is
   stale. The PendingEffect refactor converted delayed gadget effects from `Action`
-  closures to data records, so `GameEngine.Clone(rngSeed)` produces an independent copy
-  (GameEngine.cs:143). It deliberately drops event subscribers, the queued input actions,
-  and the RNG stream; `_scheduledEvents` (the legacy closure list) still exists and Clone
-  THROWS if any are pending, but `ScheduleAction` has no callers. `RolloutSearchBot` and
-  `--divergence` both depend on this working; `CloneCheck.cs` in BotArena is the guard.
+  closures to data records, so `GameEngine.Clone(rngSeed)` produces an independent copy.
+  It deliberately drops event subscribers, the queued input actions, and the RNG stream.
+  `RolloutSearchBot` and `--divergence` both depend on this working; `CloneCheck.cs` in
+  BotArena is the guard. **Updated 2026-08-29:** the legacy closure list (`_scheduledEvents`,
+  `ScheduledEvent`, `ScheduleAction`) and the `Clone()` guard that threw on a pending legacy
+  event have all been DELETED, having had zero callers since the migration finished. An
+  earlier version of this entry described them as still present.

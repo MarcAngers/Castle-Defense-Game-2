@@ -22,7 +22,14 @@ namespace CastleDefense.Engine.Gadgets
     /// Each phase re-arms itself at the END of its handler and every handler bails on
     /// IsGameOver. That guard is load bearing, not defensive padding: GameEngine.Tick
     /// drains the scheduled-effect list BEFORE it checks IsGameOver, so without it the
-    /// cascade would keep firing nukes into a finished game forever.
+    /// cascade would keep firing nukes into a finished game forever. The one exception is
+    /// the shield phase, which stops re-arming at the end of its own window.
+    ///
+    /// THE SHIELD IS THE PART THAT DECIDES WHO WINS when both players get here. It runs for
+    /// <see cref="ShieldDuration"/> over the castle and every allied unit, present or bought
+    /// during the window; a SECOND ARMAGEDDON inherits the first one's expiry rather than
+    /// starting a fresh window, so the two shields drop together. See
+    /// <see cref="ClaimShieldWindow"/> for why arriving second used to be the winning move.
     ///
     /// The individual gadget values are read back out of the real definitions (meteor_3,
     /// nuke_3, wave_3, …) via GameEngine.GetGadgetDefinition, so rebalancing those rows in
@@ -54,12 +61,31 @@ namespace CastleDefense.Engine.Gadgets
         private const int WaveInterval      = 90;  // 3s
         private const int NukeInterval      = 30;  // 1s
 
+        /// <summary>
+        /// How long the divine shield lasts: 10s, castle and every allied unit alike.
+        ///
+        /// Deliberately NOT divine_3's StatusDuration, which is what this used to read.
+        /// The shield window is a TIMELINE value now — it is the thing two competing casts
+        /// have to agree on (see <see cref="ClaimShieldWindow"/>), and the timeline is the
+        /// one thing this class owns. Rebalancing the divine_3 CSV row should not silently
+        /// move it. The status VALUE still comes from that definition, as before.
+        /// </summary>
+        private const int ShieldDuration = 10 * GameEngine.TICKS_PER_SECOND;
+
         // Ally buffs are re-applied on a cadence rather than cast once with a giant
         // duration, so units bought AFTER the cascade starts are swept in too. The status
         // lasts 3x the refresh interval purely so a missed refresh cannot make buffs
         // visibly flicker off.
         private const int BuffRefreshInterval = 30;
         private const int BuffDuration        = 90;
+
+        // The SHIELD sweep runs ten times more often than the other buffs. Its job is to
+        // cover units bought DURING the window, and unlike a missed rage tick a missed
+        // shield tick is a unit that can be killed while it is supposed to be immortal, so
+        // the gap between a unit appearing and being shielded is held to 100ms. Unlike the
+        // buffs it does NOT re-arm forever: it stops at the window end, and every status it
+        // writes carries that same absolute expiry rather than a rolling one.
+        private const int ShieldRefreshInterval = 3;
 
         private const int PhaseMeteor      = 0;
         private const int PhaseFirebomb    = 1;
@@ -78,7 +104,15 @@ namespace CastleDefense.Engine.Gadgets
 
             // Divine shield keeps its normal animation lead-in.
             var divine = engine.GetGadgetDefinition("divine_3");
-            engine.ScheduleEffect(divine?.Delay ?? 0, Effect(PhaseShieldFirst, side));
+            int shieldLeadIn = divine?.Delay ?? 0;
+
+            // Decide when the shield ENDS right now, at cast time, rather than when it
+            // lands. Two ARMAGEDDONs bought on the same tick have to agree on that tick,
+            // and they only can if the second one sees the first one's claim before either
+            // shield is actually applied.
+            ClaimShieldWindow(engine, side, shieldLeadIn);
+
+            engine.ScheduleEffect(shieldLeadIn, Effect(PhaseShieldFirst, side));
             if (divine != null) engine.TriggerGadgetAnimation(divine.Id, side, position);
 
             // Phase one's two bombardments start immediately.
@@ -113,23 +147,37 @@ namespace CastleDefense.Engine.Gadgets
                     break;
 
                 case PhaseShieldFirst:
-                    // The castle half of divine_3 fires ONCE, for its normal duration.
+                {
+                    // The castle half fires ONCE, for the window claimed at cast time.
                     // Refreshing it forever would make the caster's castle permanently
                     // immune, including to their own phase-three nukes, and ARMAGEDDON is
                     // meant to stay capable of backfiring on a caster who is behind on HP.
-                    var player = side == 1 ? engine._state.Player1 : engine._state.Player2;
-                    var divine = engine.GetGadgetDefinition("divine_3");
-                    if (divine != null)
-                    {
-                        player.IsInvulnerable = true;
-                        player.InvulnerableUntilTick = engine._state.CurrentTick + divine.StatusDuration;
-                    }
+                    var castle = side == 1 ? engine._state.Player1 : engine._state.Player2;
+
+                    // The window can already be spent: an ARMAGEDDON bought inside the last
+                    // few frames of the enemy's shield inherits whatever is left of it,
+                    // which may be nothing. Arriving second never buys shield time the first
+                    // player does not also get.
+                    if (castle.ArmageddonShieldUntilTick <= engine._state.CurrentTick) break;
+
+                    castle.IsInvulnerable = true;
+                    castle.InvulnerableUntilTick = castle.ArmageddonShieldUntilTick;
                     goto case PhaseShield;
+                }
 
                 case PhaseShield:
-                    ApplyShield(engine, side);
-                    engine.ScheduleEffect(BuffRefreshInterval, Effect(PhaseShield, side));
+                {
+                    var shielded = side == 1 ? engine._state.Player1 : engine._state.Player2;
+                    long until = shielded.ArmageddonShieldUntilTick;
+
+                    // Window over: stop re-arming. This is the one recurring phase that
+                    // ends on its own rather than running until the game does.
+                    if (engine._state.CurrentTick >= until) break;
+
+                    ApplyShield(engine, side, until);
+                    engine.ScheduleEffect(ShieldRefreshInterval, Effect(PhaseShield, side));
                     break;
+                }
 
                 case PhaseBuffs:
                     ApplyBuffs(engine, side);
@@ -234,12 +282,46 @@ namespace CastleDefense.Engine.Gadgets
 
         // ── Ally buffs ───────────────────────────────────────────────────────────
 
-        private static void ApplyShield(GameEngine engine, int side)
+        /// <summary>
+        /// Sweeps every allied unit onto the shield with an ABSOLUTE expiry rather than a
+        /// rolling one. That is what makes a unit bought nine seconds into the window lose
+        /// its shield at the same instant as one that was on the field when it started —
+        /// and, when both players have cast, at the same instant as the enemy's units.
+        /// </summary>
+        private static void ApplyShield(GameEngine engine, int side, long until)
         {
             var divine = engine.GetGadgetDefinition("divine_3");
             if (divine == null) return;
 
-            RefreshAllyStatus(engine, side, "Invulnerable", divine.BaseValue);
+            RefreshAllyStatus(engine, side, "Invulnerable", divine.BaseValue, until);
+        }
+
+        /// <summary>
+        /// Fixes the tick this side's shield expires on and writes it to the player.
+        ///
+        /// THE SECOND ARMAGEDDON DOES NOT GET ITS OWN TEN SECONDS. If the enemy's shield is
+        /// still live when this one is bought, this one ends on the enemy's tick instead.
+        /// Without that rule, reaching ARMAGEDDON second was the WINNING move: survive the
+        /// first player's cascade for a few seconds, buy your own, and your shield outlasts
+        /// theirs by exactly the gap between the two purchases — so their castle is exposed
+        /// to your nukes while yours is still immune. Ending together puts both castles back
+        /// on the board at the same moment and lets the two cascades decide it.
+        ///
+        /// An enemy shield that has ALREADY expired is not inherited, so a player who
+        /// reaches ARMAGEDDON long after the first cascade burned out still gets a full
+        /// window.
+        /// </summary>
+        private static void ClaimShieldWindow(GameEngine engine, int side, int animationLeadIn)
+        {
+            var self  = side == 1 ? engine._state.Player1 : engine._state.Player2;
+            var enemy = side == 1 ? engine._state.Player2 : engine._state.Player1;
+
+            long naturalEnd = engine._state.CurrentTick + animationLeadIn + ShieldDuration;
+
+            self.ArmageddonShieldUntilTick =
+                enemy.ArmageddonShieldUntilTick > engine._state.CurrentTick
+                    ? enemy.ArmageddonShieldUntilTick
+                    : naturalEnd;
         }
 
         private static void ApplyBuffs(GameEngine engine, int side)
@@ -248,10 +330,12 @@ namespace CastleDefense.Engine.Gadgets
             var speed = engine.GetGadgetDefinition("speed_3");
             var rage  = engine.GetGadgetDefinition("rage_3");
 
+            long expires = engine._state.CurrentTick + BuffDuration;
+
             // Heal is stored negative because ProcessStatuses runs it through ApplyDamage.
-            if (heal  != null) RefreshAllyStatus(engine, side, "Heal",  -1f * heal.BaseValue);
-            if (speed != null) RefreshAllyStatus(engine, side, "Speed", speed.BaseValue);
-            if (rage  != null) RefreshAllyStatus(engine, side, "Rage",  rage.BaseValue);
+            if (heal  != null) RefreshAllyStatus(engine, side, "Heal",  -1f * heal.BaseValue, expires);
+            if (speed != null) RefreshAllyStatus(engine, side, "Speed", speed.BaseValue, expires);
+            if (rage  != null) RefreshAllyStatus(engine, side, "Rage",  rage.BaseValue, expires);
         }
 
         /// <summary>
@@ -265,10 +349,8 @@ namespace CastleDefense.Engine.Gadgets
         /// same way. Matching on SourceGadgetId keeps this separate from a rage_3 the
         /// player casts themselves, which is still allowed to stack on top as it always has.
         /// </summary>
-        private static void RefreshAllyStatus(GameEngine engine, int side, string statusName, float value)
+        private static void RefreshAllyStatus(GameEngine engine, int side, string statusName, float value, long expires)
         {
-            long expires = engine._state.CurrentTick + BuffDuration;
-
             foreach (var ally in engine._state.Units)
             {
                 if (ally.Side != side) continue;

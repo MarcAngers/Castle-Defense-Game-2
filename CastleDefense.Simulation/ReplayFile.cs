@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -36,6 +36,39 @@ namespace CastleDefense.Simulation
         public byte[] A1, A2;               // one action id per tick, per side
         public int TickCount => A1.Length;
 
+        // ── v3 fields. Version < 3 leaves these at their defaults and HasV3 is false. ──
+        public byte Version;
+        public bool HasV3 => Version >= 3;
+        public TeamColour Map;
+        public bool ShadowMap;
+        public int EngineSeed;
+        /// <summary>Loadout as it was at game START. The P1Off/P1Def/... fields above are
+        /// the END-of-game loadout, which is what v2 recorded and what the DB row uses.</summary>
+        public string P1StartOff, P1StartDef, P1StartSig;
+        public string P2StartOff, P2StartDef, P2StartSig;
+        /// <summary>Resolved gadget target per cast, keyed by (tick, side).</summary>
+        public Dictionary<(int tick, int side), short> GadgetTargets = new();
+
+        /// <summary>
+        /// Applies one recorded action, using the RECORDED gadget target when the file has
+        /// one. This is the whole point of v3: for actions 11/12/13 a v2 rebuild called
+        /// ApplyAction, which routes to UseGadget(-1) and re-aims the cast with the engine
+        /// auto-targeter. Every tool that reconstructs a game should call this rather than
+        /// engine.ApplyAction so it gets exact aim on v3 files and the old behaviour on v2.
+        /// </summary>
+        public bool ApplyRecorded(GameEngine engine, int side, int tick, byte action)
+        {
+            if (action >= 11 && action <= 13 && GadgetTargets.TryGetValue((tick, side), out short pos))
+            {
+                var p = side == 1 ? engine._state.Player1 : engine._state.Player2;
+                string id = action == 11 ? p.OffensiveGadget?.Id
+                          : action == 12 ? p.DefensiveGadget?.Id
+                                         : p.SignatureGadget?.Id;
+                if (id != null) return engine.UseGadget(side, id, pos);
+            }
+            return engine.ApplyAction(side, action);
+        }
+
         /// <summary>True when the human in seat 1 never acted. Marc re-rolls until he gets
         /// the matchup he wants and the discarded attempts still record; 11 were quarantined
         /// on 2026-08-05 but the pattern recurs, and such a game is all "wait".</summary>
@@ -52,6 +85,7 @@ namespace CastleDefense.Simulation
 
             var f = new ReplayFile();
             byte version = r.ReadByte();
+            f.Version = version;
             f.GameId = Encoding.ASCII.GetString(r.ReadBytes(6));
             r.ReadInt64();          // timestamp
             ReadStr(r);             // game_version
@@ -73,6 +107,26 @@ namespace CastleDefense.Simulation
             f.A1 = new byte[tickCount];
             f.A2 = new byte[tickCount];
             for (uint t = 0; t < tickCount; t++) { f.A1[t] = r.ReadByte(); f.A2[t] = r.ReadByte(); }
+
+            // ── v3 tail. Everything above is byte-identical to v2, so an old file simply
+            // stops here and HasV3 stays false. Guarded on stream position as well as
+            // version so a truncated write cannot throw.
+            if (version >= 3 && stream.Position < stream.Length)
+            {
+                f.Map = (TeamColour)r.ReadByte();
+                f.ShadowMap = r.ReadByte() != 0;
+                f.EngineSeed = r.ReadInt32();
+                f.P1StartOff = ReadStr(r); f.P1StartDef = ReadStr(r); f.P1StartSig = ReadStr(r);
+                f.P2StartOff = ReadStr(r); f.P2StartDef = ReadStr(r); f.P2StartSig = ReadStr(r);
+                uint casts = r.ReadUInt32();
+                for (uint i = 0; i < casts; i++)
+                {
+                    int tick = r.ReadInt32();
+                    int side = r.ReadByte();
+                    short pos = r.ReadInt16();
+                    f.GadgetTargets[(tick, side)] = pos;
+                }
+            }
             return f;
         }
 
@@ -92,7 +146,10 @@ namespace CastleDefense.Simulation
         public (GameState state, GameEngine engine) BuildStart()
         {
             int timeSkip = (int)(StartingTick / (30 * 30));
-            var state = new GameState();
+            // v3 records the map that was actually rolled; v2 did not, so a v2 rebuild has
+            // always played on a DIFFERENT randomly-drawn map than the recorded game.
+            var state = HasV3 ? new GameState(Map, new Random(EngineSeed)) : new GameState();
+            if (HasV3) { state.Map = Map; state.ShadowMap = ShadowMap; }
             state.Player1 = new PlayerState(timeSkip);
             state.Player2 = new PlayerState(timeSkip);
             state.Player1.Side = 1;
@@ -102,11 +159,21 @@ namespace CastleDefense.Simulation
             state.CurrentTick = StartingTick;
             state.Player1.Team = Enum.Parse<TeamColour>(P1Team, ignoreCase: true);
             state.Player2.Team = Enum.Parse<TeamColour>(P2Team, ignoreCase: true);
-            var l1 = new[] { P1Off, P1Def, P1Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
-            var l2 = new[] { P2Off, P2Def, P2Sig }.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            // START loadout on v3. The P1Off/... fields are the END-of-game loadout, so on a
+            // v2 file a gadget that upgraded mid-game is equipped at its final tier from tick
+            // 0 -- which for FC1462 meant a $4000 nuke_3 in a game that began on a $20 nuke,
+            // and every cast then failed the money check. Callers working with v2 files
+            // should keep stripping the tier suffix themselves; there is nothing better
+            // available for those.
+            var l1 = (HasV3 ? new[] { P1StartOff, P1StartDef, P1StartSig }
+                            : new[] { P1Off, P1Def, P1Sig }).Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var l2 = (HasV3 ? new[] { P2StartOff, P2StartDef, P2StartSig }
+                            : new[] { P2Off, P2Def, P2Sig }).Where(s => !string.IsNullOrEmpty(s)).ToArray();
             if (l1.Length == 3) state.Player1.SetLoadout(l1);
             if (l2.Length == 3) state.Player2.SetLoadout(l2);
-            return (state, new GameEngine(state, null, SeedFor(GameId)));
+            // v3 replays the ACTUAL engine stream; v2 falls back to the game-id hash, which
+            // is stable and independent per game but is not the stream the game was played on.
+            return (state, new GameEngine(state, null, HasV3 ? EngineSeed : SeedFor(GameId)));
         }
 
         /// <summary>Stable hash of the 6-char game id. String.GetHashCode is randomised per
@@ -141,9 +208,31 @@ namespace CastleDefense.Simulation
             return true;
         }
 
-        public static Dictionary<string, (string mode, string opponent)> LoadGameModes(string replayDir, string tag)
+        /// <summary>
+        /// Was this game DECIDED BY PLAY? A game whose loser disconnected and never came
+        /// back is awarded to the survivor after a 60-second grace window, and one where
+        /// nobody came back is abandoned with no winner at all -- see ReconnectService.
+        ///
+        /// NOTHING IN THE REPLAY FILE MARKS EITHER. The winner byte of a default win is
+        /// byte-identical to an earned one, the action stream just stops early, and a game
+        /// that was paused and resumed looks exactly like one that never paused. So this is
+        /// the ONLY place the distinction can be made, and it is made from the DB's
+        /// end_reason column.
+        ///
+        /// Such a game says nothing about how well either side plays: it measures a network,
+        /// and its short duration and un-fought ending would drag every aggregate --
+        /// win rate, game length, earned investments -- toward whatever a disconnection
+        /// happens to look like. They are excluded from every corpus selection by default
+        /// and included only when `--all` is passed deliberately.
+        /// </summary>
+        public static bool IsRealResult(string endReason)
+            => string.IsNullOrEmpty(endReason)
+            || endReason.Equals("normal", StringComparison.OrdinalIgnoreCase);
+
+        public static Dictionary<string, (string mode, string opponent, string endReason)>
+            LoadGameModes(string replayDir, string tag)
         {
-            var result = new Dictionary<string, (string, string)>();
+            var result = new Dictionary<string, (string, string, string)>();
             foreach (var candidate in new[]
                      {
                          Path.Combine(replayDir, "game_records.db"),
@@ -155,7 +244,8 @@ namespace CastleDefense.Simulation
                 try
                 {
                     var db = new GameDatabase(full);
-                    foreach (var g in db.GetAllGames()) result[g.Id] = (g.GameMode, g.OpponentType);
+                    foreach (var g in db.GetAllGames())
+                        result[g.Id] = (g.GameMode, g.OpponentType, g.EndReason);
                 }
                 catch (Exception ex)
                 {
@@ -186,12 +276,14 @@ namespace CastleDefense.Simulation
         {
             var meta = LoadGameModes(replayDir, tag);
             var selected = new List<string>();
-            int droppedNonHuman = 0, droppedFilter = 0;
+            int droppedNonHuman = 0, droppedFilter = 0, droppedDefault = 0;
             foreach (var f in Directory.GetFiles(replayDir, "*.replay").OrderBy(x => x))
             {
                 string id = Path.GetFileNameWithoutExtension(f);
                 meta.TryGetValue(id, out var m);
                 if (!all && m.Item1 != null && !IsHumanPlayed(m.Item1, m.Item2)) { droppedNonHuman++; continue; }
+                // A win by default is not a win. See IsRealResult.
+                if (!all && !IsRealResult(m.Item3)) { droppedDefault++; continue; }
                 if (filter != null &&
                     !($"{m.Item1} {m.Item2}").Contains(filter, StringComparison.OrdinalIgnoreCase))
                 { droppedFilter++; continue; }
@@ -200,6 +292,9 @@ namespace CastleDefense.Simulation
             if (droppedNonHuman > 0)
                 Console.WriteLine($"[{tag}] excluded {droppedNonHuman} non-human recording(s) " +
                                   "(league-watch / spectator); pass --all to include them");
+            if (droppedDefault > 0)
+                Console.WriteLine($"[{tag}] excluded {droppedDefault} recording(s) decided by " +
+                                  "DISCONNECT rather than play; pass --all to include them");
             if (droppedFilter > 0) Console.WriteLine($"[{tag}] excluded {droppedFilter} by --filter {filter}");
 
             if (half == "a" || half == "b")

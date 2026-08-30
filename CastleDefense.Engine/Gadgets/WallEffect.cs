@@ -12,13 +12,35 @@ namespace CastleDefense.Engine.Gadgets
         {
             _def = def;
         }
+        /// <summary>A wall must stand in OUR line to tank for us; dropped on the enemy it blocks nothing.</summary>
+        public GadgetAim Aim => GadgetAim.Ally;
+
         public void Execute(GameEngine engine, int side, int position)
         {
             var yposition = _def.Level == 2 ? 180 : -180;
 
             if (_def.Level == 1)
             {
-                position = (side == 1) ? 600 : 1400;
+                // Level 1 is UNTARGETED, so the engine places it: a fixed distance out in
+                // front of the caster's own castle.
+                //
+                // REFLECT THE GEOMETRY, NOT THE COORDINATE. Position is the sprite's LEFT
+                // EDGE, so the mirror of a left edge at 600 is `MAP_WIDTH - 600 - Width`,
+                // not `MAP_WIDTH - 600`. This line used to read a bare `1400`, which left
+                // P2's wall its own width closer to P2's castle than P1's was to P1's --
+                // 75px at level 1, a third of the 225px gap the wall is meant to leave.
+                // Measured before the fix: P1's wall stood 400px clear of its castle wall
+                // and P2's only 325px.
+                //
+                // Same class of bug as the three fixed on 2026-07-31
+                // (GetDistanceToEnemyCastle, SpawnUnit's default position and
+                // FindTargetsFast), every one of which flipped a SIGN where it should have
+                // reflected the geometry. This was the last one left on that list.
+                const int WallGapFromCastle = 600;
+                int wallWidth = GameDataManager.WallDefinition(1).Width;
+                position = (side == 1)
+                    ? WallGapFromCastle
+                    : GameEngine.MAP_WIDTH - WallGapFromCastle - wallWidth;
                 yposition = 240;
             }
             else

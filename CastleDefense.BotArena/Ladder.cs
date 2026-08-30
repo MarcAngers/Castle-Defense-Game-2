@@ -237,7 +237,10 @@ namespace CastleDefense.BotArena
             // reference scored 44.83/47.67 nostart and 46.00/50.83 headstart across two
             // seeds), so comparing two SEPARATE runs risks attributing seed noise to the
             // flag. Paired inside one run, both contenders face identical setups.
-            string? variant = null;
+            // Repeatable: several candidate profiles and the committed reference all play
+            // the SAME specs inside ONE run, which is what makes both the win-rate deltas
+            // and the throughput ratio paired rather than cross-run.
+            var variants = new List<string>();
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -246,7 +249,7 @@ namespace CastleDefense.BotArena
                     case "--seed" when i + 1 < args.Length: seed = int.Parse(args[++i]); break;
                     case "--csv" when i + 1 < args.Length: csvPath = args[++i]; break;
                     case "--only" when i + 1 < args.Length: only = args[++i]; break;
-                    case "--variant" when i + 1 < args.Length: variant = args[++i]; break;
+                    case "--variant" when i + 1 < args.Length: variants.Add(args[++i]); break;
                     // Loadout pins. Applied AFTER BuildSpecs so the rng stream is untouched
                     // and a pinned run stays directly comparable to an unpinned one on the
                     // same seed -- everything except the pinned slot is the same game.
@@ -309,7 +312,7 @@ namespace CastleDefense.BotArena
                 ("SavingHeuristic@0.25", side => new SavingHeuristicBaseline(side, 0.25)),
             };
 
-            if (variant != null)
+            foreach (var variant in variants)
             {
                 var fld = typeof(HeuristicBotSettings).GetField(variant,
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
@@ -350,7 +353,8 @@ namespace CastleDefense.BotArena
 
             using var csv = new StreamWriter(csvPath);
             csv.WriteLine("mode,seed,contender,opponent,games,wins,losses,draws," +
-                          "win_rate,ci_lo,ci_hi,earned_invests,opp_earned_invests,avg_ticks");
+                          "win_rate,ci_lo,ci_hi,earned_invests,opp_earned_invests,avg_ticks," +
+                          "elapsed_s,ticks_per_s");
 
             foreach (var m in modes)
             {
@@ -381,6 +385,16 @@ namespace CastleDefense.BotArena
                                       $"invests below are EARNED only)");
                 Console.WriteLine(new string('=', 100));
 
+                // UNTIMED WARM-UP. Without it the first contender pays JIT for the whole
+                // engine and every later contender looks faster: an n=20 smoke run reported
+                // 260k / 345k / 377k ticks/s in run order for three contenders whose real
+                // costs are within a few percent. Throughput is a headline number of this
+                // run, so the warm-up is not optional.
+                var warmSpecs = specs.Take(Math.Min(4, specs.Count)).ToList();
+                foreach (var (_, wMake) in contenders)
+                    foreach (var (_, oMake) in ladder)
+                        PlayMatchup(wMake, oMake, warmSpecs);
+
                 foreach (var (cName, cMake) in contenders)
                 {
                     Console.WriteLine($"\n  {cName}");
@@ -388,9 +402,22 @@ namespace CastleDefense.BotArena
                     Console.WriteLine("    " + new string('-', 70));
 
                     int totWins = 0, totGames = 0;
+                    // WALL CLOCK PER CONTENDER. Both contenders play the SAME pre-generated
+                    // specs against the same opponents inside one run on one machine, so the
+                    // ratio of these totals is a paired throughput comparison -- the only
+                    // honest way to price a change that adds per-decision work. Reported as
+                    // simulated ticks/sec because contenders whose games run to different
+                    // lengths would make raw seconds incomparable.
+                    double contenderSeconds = 0;
+                    double contenderTicks = 0;
                     foreach (var (oName, oMake) in ladder)
                     {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
                         var r = PlayMatchup(cMake, oMake, specs);
+                        sw.Stop();
+                        double rungSeconds = sw.Elapsed.TotalSeconds;
+                        contenderSeconds += rungSeconds;
+                        contenderTicks += r.Ticks;
                         var (lo, hi) = WilsonInterval(r.Wins, r.Games);
                         totWins += r.Wins;
                         totGames += r.Games;
@@ -404,7 +431,9 @@ namespace CastleDefense.BotArena
                                       $"{r.Draws},{r.WinRate:F4},{lo:F4},{hi:F4}," +
                                       $"{r.EarnedInvests / r.Games:F4}," +
                                       $"{r.OppEarnedInvests / r.Games:F4}," +
-                                      $"{r.Ticks / r.Games:F1}");
+                                      $"{r.Ticks / r.Games:F1}," +
+                                      $"{rungSeconds:F2}," +
+                                      $"{(rungSeconds > 0 ? r.Ticks / rungSeconds : 0):F0}");
                         csv.Flush();
                     }
 
@@ -412,6 +441,8 @@ namespace CastleDefense.BotArena
                     Console.WriteLine("    " + new string('-', 70));
                     Console.WriteLine($"    {"OVERALL",-16} {(double)totWins / Math.Max(totGames, 1),7:P1} " +
                                       $"[{alo,6:P1},{ahi,6:P1}]   ({totGames} games)");
+                    Console.WriteLine($"    {"THROUGHPUT",-16} {contenderSeconds,7:F1}s  " +
+                                      $"{(contenderSeconds > 0 ? contenderTicks / contenderSeconds : 0),12:N0} ticks/s");
                 }
             }
 

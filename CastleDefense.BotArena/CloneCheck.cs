@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
@@ -43,7 +43,7 @@ namespace CastleDefense.BotArena
             {
                 sb.Append($"|P{p.Side}:money={p.Money:F4},inc={p.Income:F4},invPrice={p.InvestmentPrice:F4},");
                 sb.Append($"inv={p.InvestmentCount},arma={p.ArmageddonUsed},hp={p.CastleHealth},maxhp={p.CastleMaxHealth},");
-                sb.Append($"repPrice={p.RepairPrice:F4},rep={p.RepairCount},invuln={p.IsInvulnerable}@{p.InvulnerableUntilTick},");
+                sb.Append($"repPrice={p.RepairPrice:F4},rep={p.RepairCount},invuln={p.IsInvulnerable}@{p.InvulnerableUntilTick},armaShield={p.ArmageddonShieldUntilTick},");
                 sb.Append($"off={p.OffensiveGadget?.Id},def={p.DefensiveGadget?.Id},sig={p.SignatureGadget?.Id},");
                 foreach (var kv in p.GadgetCooldowns.OrderBy(k => k.Key)) sb.Append($"cd[{kv.Key}]={kv.Value},");
                 foreach (var kv in p.GadgetXp.OrderBy(k => k.Key)) sb.Append($"xp[{kv.Key}]={kv.Value},");
@@ -104,6 +104,58 @@ namespace CastleDefense.BotArena
                 if (args[i] == "--seed" && i + 1 < args.Length) seed = int.Parse(args[++i]);
                 else if (args[i] == "--advance" && i + 1 < args.Length) advance = int.Parse(args[++i]);
                 else if (int.TryParse(args[i], out var g)) games = g;
+            }
+
+            // ── EVENT-SUBSCRIBER LEAK GUARD (added 2026-08-20) ──────────────────────
+            //
+            // An event is a mutable reference field, so a shallow Clone inherits its whole
+            // subscriber list and every rollout raises it on the REAL game's handlers. Not
+            // hypothetical: OnGadgetCast was added for replay v3 and not nulled in Clone, so
+            // game 9A60C6 recorded 49,448 gadget casts for a game containing 50 -- a 357KB
+            // replay and 30% of the entire gadget_uses table, all from search's rollouts.
+            //
+            // Delegates cannot be synthesised generically by reflection, so each event is
+            // subscribed explicitly. The COUNT ASSERTION below is what makes this a real
+            // guard rather than a snapshot: add a fourth event to GameEngine and this test
+            // fails until someone decides whether Clone should null it.
+            {
+                var probeState = new GameState();
+                probeState.Player1 = new PlayerState(); probeState.Player1.Side = 1;
+                probeState.Player2 = new PlayerState(); probeState.Player2.Side = 2;
+                probeState.Player1.Team = TeamColour.White; probeState.Player2.Team = TeamColour.White;
+                probeState.Player1.SetLoadout(new[] { "nuke", "reinforcements", "cash" });
+                probeState.Player2.SetLoadout(new[] { "nuke", "reinforcements", "cash" });
+                var probe = new GameEngine(probeState, null, 1);
+
+                probe.OnGadgetAnimation += (a, b, c, d) => { };
+                probe.OnGadgetUpgraded  += (a, b) => { };
+                probe.OnGadgetCast      += (a, b, c) => { };
+
+                var clone = probe.Clone(2);
+                int leaked = 0;
+                foreach (string name in new[] { "OnGadgetAnimation", "OnGadgetUpgraded", "OnGadgetCast" })
+                {
+                    var f = typeof(GameEngine).GetField(name,
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (f != null && f.GetValue(clone) != null)
+                    {
+                        leaked++;
+                        Console.WriteLine($"  [FAIL] event '{name}' SURVIVED Clone -- null it in "
+                                        + "GameEngine.Clone or every rollout will raise it");
+                    }
+                }
+                int evCount = typeof(GameEngine).GetEvents(System.Reflection.BindingFlags.Public
+                                                         | System.Reflection.BindingFlags.Instance).Length;
+                if (evCount != 3)
+                {
+                    leaked++;
+                    Console.WriteLine($"  [FAIL] GameEngine now has {evCount} public events, not 3. "
+                                    + "Decide whether the new one must be nulled in Clone, then update "
+                                    + "this guard.");
+                }
+                Console.WriteLine(leaked == 0
+                    ? "  [PASS] event leak       : no subscribers survive Clone (3 events checked)"
+                    : $"  *** {leaked} EVENT LEAK FAILURE(S) -- recordings made now will be polluted ***");
             }
 
             var rng = new Random(seed);

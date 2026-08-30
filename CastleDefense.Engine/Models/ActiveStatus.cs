@@ -2,7 +2,17 @@
 {
     public class ActiveStatus
     {
-        public string Name { get; set; } // "Freeze", "Burn", "Poison", "SpeedBuff"
+        /// The status kind, as a bare string. The COMPLETE set the engine constructs or
+        /// tests for is: "Blackhole", "Burn", "Freeze", "Heal", "Invulnerable", "Knockback",
+        /// "Poison", "Rage", "Slow", "Speed", "Stun".
+        ///
+        /// Corrected 2026-08-29: this line used to read `"Freeze", "Burn", "Poison",
+        /// "SpeedBuff"` -- and "SpeedBuff" has never existed; the speed status is "Speed".
+        /// That matters beyond tidiness, because the name is a LOOKUP KEY on both sides:
+        /// ProcessStatuses switches on it, and the client picks a particle effect from it
+        /// (wwwroot/src/status-particle-map.js). A status constructed under a name nothing
+        /// recognises applies no effect and draws nothing, silently.
+        public string Name { get; set; }
         public string SourceGadgetId { get; set; }
         public long ExpiresAtTick { get; set; }
         public float Value { get; set; }   // e.g., Burn Damage amount, or Speed % boost

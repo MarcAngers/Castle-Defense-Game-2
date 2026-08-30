@@ -7,8 +7,10 @@ class AssetLoader {
             buildings: {},      // Castles and possibly gadget attachments
             foreground: {},     // Map assets
             background: {},
+            atmosphere: {},     // Ambient map animation frames, nested by map colour
             gadgets: {},        // Gadget animation assets
             gadgetData: {},     // Store the CSV gadget stats for the UI to use
+            mapData: {},        // Map names and effect text for the UI to use
             hazards: {},        // Hazard animation assets
             particles: {},      // Particles for status effects and map ambience
             tooltips: {},       // Tooltip icons
@@ -19,6 +21,7 @@ class AssetLoader {
         // 1. Fetch and parse the CSV as the absolute first step
         await this.loadMasterCSV();
         await this.loadMasterGadgetsCSV();
+        await this.loadMasterMapsCSV();
 
         // 2. Loop through the dynamically generated team list to load their images
         for (const team of this.assets.teamList) {
@@ -110,6 +113,39 @@ class AssetLoader {
         }
     }
 
+    // Map names and their "map effect" blurbs, keyed by the same colour id the map art
+    // folders use (../assets/env/{ID}/). Unlike the roster and gadget CSVs this one has NO
+    // copy in CastleDefense.Engine/Data: nothing server-side reads a map name, so a second
+    // copy would only be a duplicate to keep in sync.
+    async loadMasterMapsCSV() {
+        const response = await fetch('../assets/master_maps.csv');
+        const csvText = await response.text();
+
+        // Strip the invisible BOM character if it exists
+        const cleanText = csvText.replace(/^\uFEFF/, '');
+        const rows = this.parseCSV(cleanText);
+
+        if (rows.length < 2) return;
+
+        // Map header indices so we aren't guessing column numbers
+        const headers = rows[0].map(h => h.toLowerCase());
+        const idIdx = headers.indexOf('id');
+
+        // Parse the data rows
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.length < headers.length) continue;
+
+            const mapId = row[idIdx].toLowerCase();
+
+            const mapStats = {};
+            for (let j = 0; j < headers.length; j++) {
+                mapStats[headers[j]] = row[j];
+            }
+            this.assets.mapData[mapId] = mapStats;
+        }
+    }
+
     async loadAssets(colour) {
         // Load Map assets:
         await this.loadMap(colour);
@@ -127,8 +163,25 @@ class AssetLoader {
     async loadMap(colour) {
         await this.loadImage('foreground', colour, `../assets/env/${colour}/foreground.png`);
         await this.loadImage('background', colour, `../assets/env/${colour}/background.png`);
+        await this.loadAtmosphere(colour);
         // Later: Load map animation components
         // await this.loadImage('env', colour, `../assets/env/effects.png`);
+    }
+
+    // Ambient animation art for a map -- clouds, and whatever the other maps grow.
+    //
+    // Driven by a MANIFEST rather than by probing for known filenames. These files exist
+    // only for maps that have an atmosphere, so blindly requesting cloud1..4 for all eight
+    // colours would print a console error per miss on every single page load. Add a map's
+    // row here when its art lands; a map with no row simply has no atmosphere.
+    async loadAtmosphere(colour) {
+        const frames = AssetLoader.AtmosphereAssets[colour];
+        if (!frames) return;
+
+        const bucket = this.assets.atmosphere[colour] = {};
+        for (const id of frames) {
+            await this.loadImageInto(bucket, id, `../assets/env/${colour}/${id}.png`);
+        }
     }
 
     async loadGadgets() {
@@ -205,6 +258,7 @@ class AssetLoader {
             'slow',
             'speed',
             'poison',
+            'star',      // main-menu intro confetti
         ];
 
         for (const particleId of particleAssetList) {
@@ -217,11 +271,30 @@ class AssetLoader {
             'sword',
             'heart',
             'boot',
+            // Not a tooltip icon -- it flanks the pause overlay's title when a player has
+            // dropped (see game.js). It lives in this folder, so it loads with this group
+            // rather than earning a category of its own for one image.
+            'construction',
         ];
 
         for (const tooltipId of tooltipAssetList) {
             await this.loadImage('tooltips', tooltipId, `../assets/tooltips/${tooltipId}.png`);
         }
+    }
+
+    // --- HELPER: Promise-Wrapped Image Loader, into an arbitrary target ---
+    // loadImage below writes into this.assets[category], which is one level deep. The
+    // atmosphere art is nested by colour AND frame, so it needs to say where it goes.
+    loadImageInto(target, key, src) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => { target[key] = img; resolve(); };
+            img.onerror = () => {
+                console.error(`Failed to load image: ${src}`);
+                resolve();   // one missing frame must not freeze the whole load
+            };
+            img.src = src;
+        });
     }
 
     // --- HELPER: Promise-Wrapped Image Loader ---
@@ -284,12 +357,45 @@ class AssetLoader {
         return this.assets[key];
     }
 
+    /// Does this unit roll its stats fresh on every spawn? The roster row holds its BASE
+    /// values, which is what every stat readout in the UI shows, so those screens mark the
+    /// rolled stats with a "?" rather than presenting a number the player will not get.
+    ///
+    /// The id is duplicated from GameEngine.RandomStatUnitId, which is the source of truth
+    /// -- the client has no other way to know, since the roster CSV carries no flag for it.
+    /// Kept here so the string lives in ONE place on this side of the wire.
+    isRandomStatUnit(unitId) {
+        return unitId === 'weirdo';
+    }
+
     // New Accessor! Use this to get stats for menus
     getUnitStats(unitId) {
         if (this.assets.unitData[unitId])
             return this.assets.unitData[unitId];
         else
             return { 'team': 'white' };
+    }
+
+    /// Name and map-effect text for one map, keyed by its colour.
+    ///
+    /// The Effect column is the text the Collection screen shows the player, and it is
+    /// POPULATED -- this comment used to say it was "expected to be BLANK for now, the
+    /// effects themselves are not written yet", which stopped being true when map effects
+    /// shipped on 2026-08-27.
+    ///
+    /// It is also the half of a HAND-SYNCED PAIR: the engine never reads this CSV, it reads
+    /// MapEffects (Engine/Models). Editing one without the other makes the game describe
+    /// rules it does not play by. See the map-effects section of CLAUDE.md.
+    ///
+    /// Both fields still fall back to something printable rather than letting `undefined`
+    /// reach the screen, so a map with no row at all renders as its colour with no effect
+    /// text -- a missing CSV row rather than a crash.
+    getMapStats(colour) {
+        const data = this.assets.mapData[colour] || {};
+        return {
+            name: data.name || colour,
+            effect: data.effect || ''
+        };
     }
 
     getTeam(colour) {
@@ -309,6 +415,13 @@ class AssetLoader {
         );
     }
 }
+
+// Which maps have ambient animation art, and what its frames are called. See
+// loadAtmosphere -- kept OUTSIDE the class as a static so the manifest reads as data.
+AssetLoader.AtmosphereAssets = {
+    white: ['cloud1', 'cloud2', 'cloud3', 'cloud4'],
+    red: ['leaf'],
+};
 
 const loader = new AssetLoader();
 export default loader;

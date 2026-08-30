@@ -23,3 +23,19 @@
     font-weight: bold;
     font-size: 1.2rem;
 }
+
+
+/* Win-by-default qualifier. Sits under the title as a small line rather than lengthening
+   the h1: at 3rem the pixel font is ~41px per character, so an 18-character headline is
+   742px of an 812px landscape phone, and a second h1 line costs 47px of the height this
+   screen has least of. */
+#game-over-note {
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: #000;
+    margin: -0.5rem 0 0.5rem;
+}
+
+#game-over-note.hidden {
+    display: none;
+}

@@ -1,0 +1,1013 @@
+      113.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     250  investPrice=$    8080  ownUnits= 17  foeUnits=  1
+      114.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     500  investPrice=$    8080  ownUnits= 18  foeUnits=  1
+      114.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     497  investPrice=$    8080  ownUnits= 20  foeUnits=  1
+      114.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     479  investPrice=$    8080  ownUnits= 21  foeUnits=  1
+      114.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     476  investPrice=$    8080  ownUnits= 23  foeUnits=  1
+      114.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     473  investPrice=$    8080  ownUnits= 24  foeUnits=  1
+      114.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     470  investPrice=$    8080  ownUnits= 26  foeUnits=  1
+      115.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     704  investPrice=$    8080  ownUnits= 27  foeUnits=  1
+      115.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     701  investPrice=$    8080  ownUnits= 29  foeUnits=  1
+      115.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     698  investPrice=$    8080  ownUnits= 30  foeUnits=  1
+      115.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     695  investPrice=$    8080  ownUnits= 31  foeUnits=  1
+      115.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     677  investPrice=$    8080  ownUnits= 32  foeUnits=  2
+      116.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     903  investPrice=$    8080  ownUnits= 33  foeUnits=  3
+      116.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     885  investPrice=$    8080  ownUnits= 34  foeUnits=  3
+      116.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     882  investPrice=$    8080  ownUnits= 35  foeUnits=  4
+      116.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     879  investPrice=$    8080  ownUnits= 36  foeUnits=  4
+      117.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1129  investPrice=$    8080  ownUnits= 37  foeUnits=  5
+      117.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1111  investPrice=$    8080  ownUnits= 38  foeUnits=  5
+      117.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1108  investPrice=$    8080  ownUnits= 39  foeUnits=  5
+      117.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1105  investPrice=$    8080  ownUnits= 40  foeUnits=  5
+      117.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1102  investPrice=$    8080  ownUnits= 41  foeUnits=  5
+      117.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1084  investPrice=$    8080  ownUnits= 42  foeUnits=  5
+      118.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1333  investPrice=$    8080  ownUnits= 43  foeUnits=  5
+      118.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1330  investPrice=$    8080  ownUnits= 44  foeUnits=  5
+      118.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1327  investPrice=$    8080  ownUnits= 45  foeUnits=  5
+      118.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1309  investPrice=$    8080  ownUnits= 46  foeUnits=  5
+      118.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1306  investPrice=$    8080  ownUnits= 47  foeUnits=  5
+      118.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1303  investPrice=$    8080  ownUnits= 48  foeUnits=  5
+      119.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1538  investPrice=$    8080  ownUnits= 49  foeUnits=  5
+      119.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1535  investPrice=$    8080  ownUnits= 50  foeUnits=  5
+      119.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1532  investPrice=$    8080  ownUnits= 50  foeUnits=  5
+      119.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1529  investPrice=$    8080  ownUnits= 51  foeUnits=  5
+      119.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1511  investPrice=$    8080  ownUnits= 52  foeUnits=  5
+      119.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1508  investPrice=$    8080  ownUnits= 52  foeUnits=  4
+      120.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1757  investPrice=$    8080  ownUnits= 52  foeUnits=  4
+      120.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1754  investPrice=$    8080  ownUnits= 53  foeUnits=  3
+      120.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1736  investPrice=$    8080  ownUnits= 54  foeUnits=  1
+      120.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1733  investPrice=$    8080  ownUnits= 55  foeUnits=  1
+      120.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1730  investPrice=$    8080  ownUnits= 56  foeUnits=  1
+      120.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1727  investPrice=$    8080  ownUnits= 57  foeUnits=  0
+      121.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1962  investPrice=$    8080  ownUnits= 58  foeUnits=  0
+      121.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1959  investPrice=$    8080  ownUnits= 59  foeUnits=  0
+      121.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1956  investPrice=$    8080  ownUnits= 60  foeUnits=  0
+      121.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1938  investPrice=$    8080  ownUnits= 61  foeUnits=  0
+      121.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1935  investPrice=$    8080  ownUnits= 62  foeUnits=  0
+      122.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2001  investPrice=$    8080  ownUnits= 65  foeUnits=  0
+      122.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1983  investPrice=$    8080  ownUnits= 66  foeUnits=  0
+      122.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1980  investPrice=$    8080  ownUnits= 68  foeUnits=  0
+      122.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1977  investPrice=$    8080  ownUnits= 69  foeUnits=  0
+      122.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1974  investPrice=$    8080  ownUnits= 71  foeUnits=  0
+      122.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1956  investPrice=$    8080  ownUnits= 72  foeUnits=  0
+      123.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2206  investPrice=$    8080  ownUnits= 74  foeUnits=  0
+      123.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2203  investPrice=$    8080  ownUnits= 75  foeUnits=  0
+      123.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2200  investPrice=$    8080  ownUnits= 77  foeUnits=  0
+      123.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2182  investPrice=$    8080  ownUnits= 78  foeUnits=  0
+      123.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2179  investPrice=$    8080  ownUnits= 79  foeUnits=  0
+      123.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2176  investPrice=$    8080  ownUnits= 80  foeUnits=  0
+      124.0s  P2 would spawn  reason=killerInstinct   killRaw=True  lock=-            hazBlackout=False money=$    2410  investPrice=$    8080  ownUnits= 81  foeUnits=  0
+      124.2s  P2 would spawn  reason=killerInstinct   killRaw=True  lock=-            hazBlackout=False money=$     344  investPrice=$    8080  ownUnits= 82  foeUnits=  1
+      124.3s  P2 would spawn  reason=killerInstinct   killRaw=True  lock=-            hazBlackout=False money=$       6  investPrice=$    8080  ownUnits= 83  foeUnits=  1
+      125.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     256  investPrice=$    8080  ownUnits= 78  foeUnits=  2
+      125.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     238  investPrice=$    8080  ownUnits= 74  foeUnits=  3
+      125.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     235  investPrice=$    8080  ownUnits= 75  foeUnits=  3
+      125.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     217  investPrice=$    8080  ownUnits= 76  foeUnits=  4
+      125.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     214  investPrice=$    8080  ownUnits= 77  foeUnits=  4
+      125.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     211  investPrice=$    8080  ownUnits= 78  foeUnits=  4
+      126.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     445  investPrice=$    8080  ownUnits= 79  foeUnits=  4
+      126.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     442  investPrice=$    8080  ownUnits= 80  foeUnits=  4
+      126.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     439  investPrice=$    8080  ownUnits= 81  foeUnits=  4
+      126.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     436  investPrice=$    8080  ownUnits= 82  foeUnits=  4
+      126.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     418  investPrice=$    8080  ownUnits= 83  foeUnits=  4
+      126.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     415  investPrice=$    8080  ownUnits= 84  foeUnits=  4
+      127.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     665  investPrice=$    8080  ownUnits= 85  foeUnits=  4
+      127.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     662  investPrice=$    8080  ownUnits= 86  foeUnits=  4
+      127.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     644  investPrice=$    8080  ownUnits= 87  foeUnits=  4
+      127.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     641  investPrice=$    8080  ownUnits= 88  foeUnits=  4
+      127.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     638  investPrice=$    8080  ownUnits= 89  foeUnits=  4
+      127.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     620  investPrice=$    8080  ownUnits= 90  foeUnits=  4
+      128.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     869  investPrice=$    8080  ownUnits= 91  foeUnits=  4
+      129.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     144  investPrice=$    8080  ownUnits= 92  foeUnits=  4
+      129.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$      63  investPrice=$    8080  ownUnits= 93  foeUnits=  4
+      129.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$      45  investPrice=$    8080  ownUnits= 94  foeUnits=  4
+      129.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$      27  investPrice=$    8080  ownUnits= 95  foeUnits=  4
+      129.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$       9  investPrice=$    8080  ownUnits= 96  foeUnits=  4
+      130.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$      40  investPrice=$    8080  ownUnits= 99  foeUnits=  4
+      130.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$      22  investPrice=$    8080  ownUnits=100  foeUnits=  4
+      130.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$       4  investPrice=$    8080  ownUnits=102  foeUnits=  4
+      130.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1501  investPrice=$    8080  ownUnits=103  foeUnits=  4
+      130.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1498  investPrice=$    8080  ownUnits=105  foeUnits=  1
+      131.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1733  investPrice=$    8080  ownUnits=106  foeUnits=  1
+      131.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1730  investPrice=$    8080  ownUnits=108  foeUnits=  1
+      131.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1727  investPrice=$    8080  ownUnits=109  foeUnits=  1
+      131.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1724  investPrice=$    8080  ownUnits=111  foeUnits=  1
+      131.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1706  investPrice=$    8080  ownUnits= 70  foeUnits=  1
+      131.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1703  investPrice=$    8080  ownUnits= 71  foeUnits=  1
+      132.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1952  investPrice=$    8080  ownUnits= 72  foeUnits=  1
+      132.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1949  investPrice=$    8080  ownUnits= 73  foeUnits=  1
+      132.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1931  investPrice=$    8080  ownUnits= 74  foeUnits=  1
+      132.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1928  investPrice=$    8080  ownUnits= 75  foeUnits=  1
+      132.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1925  investPrice=$    8080  ownUnits= 76  foeUnits=  1
+      132.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1907  investPrice=$    8080  ownUnits= 77  foeUnits=  1
+      133.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2157  investPrice=$    8080  ownUnits= 78  foeUnits=  1
+      133.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2154  investPrice=$    8080  ownUnits= 76  foeUnits=  1
+      133.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2151  investPrice=$    8080  ownUnits= 76  foeUnits=  1
+      133.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2133  investPrice=$    8080  ownUnits= 77  foeUnits=  2
+      133.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2130  investPrice=$    8080  ownUnits= 78  foeUnits=  2
+      133.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2127  investPrice=$    8080  ownUnits= 79  foeUnits=  3
+      134.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2376  investPrice=$    8080  ownUnits= 79  foeUnits=  3
+      134.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2358  investPrice=$    8080  ownUnits= 80  foeUnits=  6
+      135.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2530  investPrice=$    8080  ownUnits= 81  foeUnits=  6
+      135.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2527  investPrice=$    8080  ownUnits= 82  foeUnits=  6
+      135.3s  P2 would spawn  reason=wiper            killRaw=False lock=-            hazBlackout=False money=$    2509  investPrice=$    8080  ownUnits= 83  foeUnits=  6
+      135.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2500  investPrice=$    8080  ownUnits= 84  foeUnits=  5
+      135.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2497  investPrice=$    8080  ownUnits= 85  foeUnits=  6
+      135.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2494  investPrice=$    8080  ownUnits= 86  foeUnits=  7
+      136.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2743  investPrice=$    8080  ownUnits= 87  foeUnits=  8
+      136.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2725  investPrice=$    8080  ownUnits= 88  foeUnits= 10
+      136.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2722  investPrice=$    8080  ownUnits= 87  foeUnits= 11
+      136.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2719  investPrice=$    8080  ownUnits= 88  foeUnits= 12
+      136.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2701  investPrice=$    8080  ownUnits= 89  foeUnits= 13
+      136.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2698  investPrice=$    8080  ownUnits= 89  foeUnits= 15
+      137.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2948  investPrice=$    8080  ownUnits= 90  foeUnits= 16
+      137.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2945  investPrice=$    8080  ownUnits= 84  foeUnits= 16
+      137.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2927  investPrice=$    8080  ownUnits= 85  foeUnits= 17
+      137.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2924  investPrice=$    8080  ownUnits= 83  foeUnits= 17
+      137.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2921  investPrice=$    8080  ownUnits= 84  foeUnits= 18
+      137.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2918  investPrice=$    8080  ownUnits= 84  foeUnits= 18
+      138.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3152  investPrice=$    8080  ownUnits= 85  foeUnits= 19
+      138.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2966  investPrice=$    8080  ownUnits= 84  foeUnits= 17
+      138.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2963  investPrice=$    8080  ownUnits= 85  foeUnits= 17
+      138.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2945  investPrice=$    8080  ownUnits= 83  foeUnits= 14
+      138.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2936  investPrice=$    8080  ownUnits= 83  foeUnits= 14
+      139.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3186  investPrice=$    8080  ownUnits= 83  foeUnits= 15
+      139.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3177  investPrice=$    8080  ownUnits= 82  foeUnits= 14
+      139.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3168  investPrice=$    8080  ownUnits= 79  foeUnits= 14
+      139.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3165  investPrice=$    8080  ownUnits= 78  foeUnits= 14
+      139.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3156  investPrice=$    8080  ownUnits= 79  foeUnits= 15
+      139.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3147  investPrice=$    8080  ownUnits= 76  foeUnits= 12
+      140.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3396  investPrice=$    8080  ownUnits= 73  foeUnits= 11
+      140.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3387  investPrice=$    8080  ownUnits= 73  foeUnits= 11
+      140.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3378  investPrice=$    8080  ownUnits= 69  foeUnits=  9
+      140.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3375  investPrice=$    8080  ownUnits= 66  foeUnits=  9
+      140.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3366  investPrice=$    8080  ownUnits= 67  foeUnits=  8
+      140.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3357  investPrice=$    8080  ownUnits= 68  foeUnits=  8
+      141.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3607  investPrice=$    8080  ownUnits= 69  foeUnits=  9
+      141.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3598  investPrice=$    8080  ownUnits= 68  foeUnits=  9
+      141.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3589  investPrice=$    8080  ownUnits= 69  foeUnits=  9
+      141.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3586  investPrice=$    8080  ownUnits= 70  foeUnits=  8
+      141.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3577  investPrice=$    8080  ownUnits= 63  foeUnits=  7
+      141.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3568  investPrice=$    8080  ownUnits= 64  foeUnits=  7
+      142.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3817  investPrice=$    8080  ownUnits= 65  foeUnits=  7
+      142.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3808  investPrice=$    8080  ownUnits= 65  foeUnits=  7
+      142.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3799  investPrice=$    8080  ownUnits= 64  foeUnits=  5
+      142.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3790  investPrice=$    8080  ownUnits= 64  foeUnits=  5
+      142.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3787  investPrice=$    8080  ownUnits= 60  foeUnits=  4
+      142.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3784  investPrice=$    8080  ownUnits= 61  foeUnits=  4
+      143.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4034  investPrice=$    8080  ownUnits= 62  foeUnits=  3
+      143.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4016  investPrice=$    8080  ownUnits= 63  foeUnits=  5
+      143.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4013  investPrice=$    8080  ownUnits= 64  foeUnits=  7
+      143.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4010  investPrice=$    8080  ownUnits= 65  foeUnits=  9
+      143.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4007  investPrice=$    8080  ownUnits= 66  foeUnits=  9
+      143.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3989  investPrice=$    8080  ownUnits= 63  foeUnits= 11
+      144.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4238  investPrice=$    8080  ownUnits= 61  foeUnits= 11
+      144.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3257  investPrice=$    8080  ownUnits= 61  foeUnits= 12
+      144.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3239  investPrice=$    8080  ownUnits= 62  foeUnits= 12
+      144.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3236  investPrice=$    8080  ownUnits= 57  foeUnits= 13
+      144.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3233  investPrice=$    8080  ownUnits= 53  foeUnits= 12
+      145.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3468  investPrice=$    8080  ownUnits= 53  foeUnits= 13
+      145.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3465  investPrice=$    8080  ownUnits= 52  foeUnits= 12
+      145.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3462  investPrice=$    8080  ownUnits= 53  foeUnits= 12
+      145.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3459  investPrice=$    8080  ownUnits= 54  foeUnits= 10
+      145.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3441  investPrice=$    8080  ownUnits= 55  foeUnits=  9
+      145.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4938  investPrice=$    8080  ownUnits= 56  foeUnits= 10
+      146.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5187  investPrice=$    8080  ownUnits= 55  foeUnits=  9
+      146.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5184  investPrice=$    8080  ownUnits= 54  foeUnits=  8
+      146.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4983  investPrice=$    8080  ownUnits= 56  foeUnits=  7
+      146.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4980  investPrice=$    8080  ownUnits= 57  foeUnits=  4
+      146.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4977  investPrice=$    8080  ownUnits= 57  foeUnits=  4
+      147.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5212  investPrice=$    8080  ownUnits= 58  foeUnits=  4
+      147.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5209  investPrice=$    8080  ownUnits= 57  foeUnits=  4
+      147.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5206  investPrice=$    8080  ownUnits= 55  foeUnits=  4
+      147.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5188  investPrice=$    8080  ownUnits= 57  foeUnits=  2
+      147.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5185  investPrice=$    8080  ownUnits= 58  foeUnits=  2
+      147.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5182  investPrice=$    8080  ownUnits= 60  foeUnits=  2
+      148.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5431  investPrice=$    8080  ownUnits= 61  foeUnits=  2
+      148.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5413  investPrice=$    8080  ownUnits= 62  foeUnits=  2
+      148.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5410  investPrice=$    8080  ownUnits= 63  foeUnits=  2
+      148.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5407  investPrice=$    8080  ownUnits= 64  foeUnits=  2
+      148.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5404  investPrice=$    8080  ownUnits= 65  foeUnits=  2
+      148.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5386  investPrice=$    8080  ownUnits= 66  foeUnits=  2
+      149.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5636  investPrice=$    8080  ownUnits= 67  foeUnits=  2
+      149.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5633  investPrice=$    8080  ownUnits= 68  foeUnits=  2
+      149.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5630  investPrice=$    8080  ownUnits= 69  foeUnits=  2
+      149.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5612  investPrice=$    8080  ownUnits= 70  foeUnits=  2
+      149.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5609  investPrice=$    8080  ownUnits= 71  foeUnits=  2
+      149.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5606  investPrice=$    8080  ownUnits= 72  foeUnits=  2
+      150.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5840  investPrice=$    8080  ownUnits= 73  foeUnits=  2
+      150.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5837  investPrice=$    8080  ownUnits= 74  foeUnits=  2
+      150.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5834  investPrice=$    8080  ownUnits= 75  foeUnits=  2
+      150.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5831  investPrice=$    8080  ownUnits= 76  foeUnits=  2
+      150.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5813  investPrice=$    8080  ownUnits= 77  foeUnits=  2
+      150.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5810  investPrice=$    8080  ownUnits= 78  foeUnits=  2
+      151.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6060  investPrice=$    8080  ownUnits= 79  foeUnits=  3
+      151.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6057  investPrice=$    8080  ownUnits= 80  foeUnits=  3
+      151.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6039  investPrice=$    8080  ownUnits= 81  foeUnits=  4
+      151.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6036  investPrice=$    8080  ownUnits= 82  foeUnits=  4
+      151.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6033  investPrice=$    8080  ownUnits= 83  foeUnits=  5
+      151.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6030  investPrice=$    8080  ownUnits= 84  foeUnits=  5
+      152.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6264  investPrice=$    8080  ownUnits= 85  foeUnits=  6
+      152.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6261  investPrice=$    8080  ownUnits= 86  foeUnits=  6
+      152.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6258  investPrice=$    8080  ownUnits= 86  foeUnits=  7
+      152.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6240  investPrice=$    8080  ownUnits= 87  foeUnits=  7
+      152.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6237  investPrice=$    8080  ownUnits= 88  foeUnits=  7
+      152.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6234  investPrice=$    8080  ownUnits= 89  foeUnits=  6
+      153.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6484  investPrice=$    8080  ownUnits= 90  foeUnits=  6
+      153.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6466  investPrice=$    8080  ownUnits= 91  foeUnits=  6
+      153.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6463  investPrice=$    8080  ownUnits= 92  foeUnits=  5
+      153.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6460  investPrice=$    8080  ownUnits= 93  foeUnits=  5
+      153.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6457  investPrice=$    8080  ownUnits= 94  foeUnits=  5
+      153.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6439  investPrice=$    8080  ownUnits= 95  foeUnits=  5
+      154.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6688  investPrice=$    8080  ownUnits= 96  foeUnits=  5
+      154.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6685  investPrice=$    8080  ownUnits= 97  foeUnits=  5
+      154.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6682  investPrice=$    8080  ownUnits= 96  foeUnits=  5
+      154.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6481  investPrice=$    8080  ownUnits= 98  foeUnits=  5
+      154.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6478  investPrice=$    8080  ownUnits= 99  foeUnits=  5
+      155.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6713  investPrice=$    8080  ownUnits=101  foeUnits=  5
+      155.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6710  investPrice=$    8080  ownUnits=101  foeUnits=  5
+      155.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6707  investPrice=$    8080  ownUnits=102  foeUnits=  5
+      155.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6704  investPrice=$    8080  ownUnits=103  foeUnits=  5
+      155.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6686  investPrice=$    8080  ownUnits=103  foeUnits=  5
+      155.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6683  investPrice=$    8080  ownUnits=104  foeUnits=  5
+      156.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6932  investPrice=$    8080  ownUnits=106  foeUnits=  5
+      156.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6929  investPrice=$    8080  ownUnits=107  foeUnits=  5
+      156.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6911  investPrice=$    8080  ownUnits=108  foeUnits=  5
+      156.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6908  investPrice=$    8080  ownUnits=109  foeUnits=  5
+      156.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6905  investPrice=$    8080  ownUnits=109  foeUnits=  5
+      156.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6887  investPrice=$    8080  ownUnits=110  foeUnits=  5
+      157.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7056  investPrice=$    8080  ownUnits=112  foeUnits=  5
+      157.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7053  investPrice=$    8080  ownUnits=113  foeUnits=  1
+      157.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7050  investPrice=$    8080  ownUnits=114  foeUnits=  1
+      157.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7032  investPrice=$    8080  ownUnits=115  foeUnits=  1
+      157.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7029  investPrice=$    8080  ownUnits=116  foeUnits=  1
+      157.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7026  investPrice=$    8080  ownUnits=117  foeUnits=  1
+      158.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7275  investPrice=$    8080  ownUnits=118  foeUnits=  1
+      158.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7257  investPrice=$    8080  ownUnits=118  foeUnits=  1
+      158.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7254  investPrice=$    8080  ownUnits=119  foeUnits=  1
+      158.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7251  investPrice=$    8080  ownUnits=120  foeUnits=  0
+      158.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7248  investPrice=$    8080  ownUnits=121  foeUnits=  0
+      158.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7230  investPrice=$    8080  ownUnits=122  foeUnits=  0
+      159.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7480  investPrice=$    8080  ownUnits=123  foeUnits=  0
+      159.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7477  investPrice=$    8080  ownUnits=124  foeUnits=  1
+      159.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6481  investPrice=$    8080  ownUnits=126  foeUnits=  4
+      159.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6472  investPrice=$    8080  ownUnits=127  foeUnits=  4
+      159.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6463  investPrice=$    8080  ownUnits=128  foeUnits=  4
+      160.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6712  investPrice=$    8080  ownUnits=129  foeUnits=  5
+      160.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6709  investPrice=$    8080  ownUnits=130  foeUnits=  5
+      160.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6706  investPrice=$    8080  ownUnits=131  foeUnits=  5
+      160.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6688  investPrice=$    8080  ownUnits=132  foeUnits=  5
+      160.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6685  investPrice=$    8080  ownUnits=133  foeUnits=  6
+      160.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6682  investPrice=$    8080  ownUnits=132  foeUnits=  6
+      161.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     352  investPrice=$   40000  ownUnits=132  foeUnits=  7
+      161.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     334  investPrice=$   40000  ownUnits=129  foeUnits=  9
+      161.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     316  investPrice=$   40000  ownUnits=130  foeUnits=  9
+      161.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     298  investPrice=$   40000  ownUnits=131  foeUnits=  9
+      161.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     280  investPrice=$   40000  ownUnits=132  foeUnits= 10
+      162.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1012  investPrice=$   40000  ownUnits=133  foeUnits= 11
+      162.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     994  investPrice=$   40000  ownUnits=131  foeUnits= 10
+      162.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     976  investPrice=$   40000  ownUnits=132  foeUnits= 10
+      162.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     958  investPrice=$   40000  ownUnits=133  foeUnits= 10
+      162.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     940  investPrice=$   40000  ownUnits=130  foeUnits=  9
+      162.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     922  investPrice=$   40000  ownUnits=131  foeUnits=  9
+      163.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1654  investPrice=$   40000  ownUnits=128  foeUnits=  9
+      163.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1636  investPrice=$   40000  ownUnits=129  foeUnits=  8
+      163.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1618  investPrice=$   40000  ownUnits=130  foeUnits=  8
+      163.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1600  investPrice=$   40000  ownUnits=131  foeUnits=  8
+      163.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1582  investPrice=$   40000  ownUnits=132  foeUnits=  8
+      163.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1564  investPrice=$   40000  ownUnits=133  foeUnits=  8
+      164.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2296  investPrice=$   40000  ownUnits=134  foeUnits=  8
+      164.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2215  investPrice=$   40000  ownUnits=135  foeUnits=  8
+      164.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2197  investPrice=$   40000  ownUnits=136  foeUnits=  8
+      164.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    2179  investPrice=$   40000  ownUnits=137  foeUnits=  8
+      164.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$     703  investPrice=$   40000  ownUnits=140  foeUnits=  8
+      165.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1435  investPrice=$   40000  ownUnits=141  foeUnits=  8
+      165.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1417  investPrice=$   40000  ownUnits=143  foeUnits=  8
+      165.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    1399  investPrice=$   40000  ownUnits=144  foeUnits=  8
+      165.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1381  investPrice=$   40000  ownUnits=146  foeUnits=  8
+      165.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1363  investPrice=$   40000  ownUnits=147  foeUnits=  8
+      165.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1345  investPrice=$   40000  ownUnits=149  foeUnits=  8
+      166.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2014  investPrice=$   40000  ownUnits=150  foeUnits=  8
+      166.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1996  investPrice=$   40000  ownUnits=152  foeUnits=  8
+      166.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1978  investPrice=$   40000  ownUnits=153  foeUnits=  8
+      166.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1960  investPrice=$   40000  ownUnits=154  foeUnits=  8
+      166.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1879  investPrice=$   40000  ownUnits=155  foeUnits=  9
+      166.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1861  investPrice=$   40000  ownUnits=156  foeUnits= 10
+      167.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2593  investPrice=$   40000  ownUnits=157  foeUnits= 11
+      167.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2512  investPrice=$   40000  ownUnits=158  foeUnits= 11
+      167.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2494  investPrice=$   40000  ownUnits=159  foeUnits= 11
+      167.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2476  investPrice=$   40000  ownUnits=160  foeUnits= 11
+      167.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2395  investPrice=$   40000  ownUnits=161  foeUnits= 11
+      167.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2377  investPrice=$   40000  ownUnits=162  foeUnits= 11
+      168.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3107  investPrice=$   40000  ownUnits=162  foeUnits= 11
+      168.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3089  investPrice=$   40000  ownUnits=162  foeUnits= 11
+      168.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3008  investPrice=$   40000  ownUnits=163  foeUnits= 11
+      168.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2990  investPrice=$   40000  ownUnits=164  foeUnits= 11
+      168.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2972  investPrice=$   40000  ownUnits=160  foeUnits= 11
+      168.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2954  investPrice=$   40000  ownUnits=161  foeUnits= 10
+      169.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3623  investPrice=$   40000  ownUnits=162  foeUnits=  9
+      169.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3605  investPrice=$   40000  ownUnits=154  foeUnits=  4
+      169.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3587  investPrice=$   40000  ownUnits=155  foeUnits=  4
+      169.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3569  investPrice=$   40000  ownUnits=156  foeUnits=  4
+      169.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3551  investPrice=$   40000  ownUnits=156  foeUnits=  4
+      169.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    3533  investPrice=$   40000  ownUnits=157  foeUnits=  3
+      170.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4265  investPrice=$   40000  ownUnits= 94  foeUnits=  2
+      170.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4247  investPrice=$   40000  ownUnits= 95  foeUnits=  2
+      170.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4229  investPrice=$   40000  ownUnits= 96  foeUnits=  2
+      170.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4211  investPrice=$   40000  ownUnits= 97  foeUnits=  2
+      170.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4193  investPrice=$   40000  ownUnits= 98  foeUnits=  2
+      170.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4175  investPrice=$   40000  ownUnits= 99  foeUnits=  2
+      171.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4907  investPrice=$   40000  ownUnits=100  foeUnits=  2
+      171.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4889  investPrice=$   40000  ownUnits=101  foeUnits=  2
+      171.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4871  investPrice=$   40000  ownUnits=102  foeUnits=  2
+      171.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4853  investPrice=$   40000  ownUnits=103  foeUnits=  3
+      171.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4772  investPrice=$   40000  ownUnits=104  foeUnits=  3
+      171.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4754  investPrice=$   40000  ownUnits=105  foeUnits=  4
+      172.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5486  investPrice=$   40000  ownUnits=106  foeUnits=  3
+      172.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5468  investPrice=$   40000  ownUnits=107  foeUnits=  6
+      172.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5450  investPrice=$   40000  ownUnits=108  foeUnits=  7
+      172.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5432  investPrice=$   40000  ownUnits=109  foeUnits=  9
+      172.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5414  investPrice=$   40000  ownUnits=110  foeUnits= 10
+      172.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5396  investPrice=$   40000  ownUnits=111  foeUnits= 13
+      173.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6128  investPrice=$   40000  ownUnits=112  foeUnits= 14
+      173.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6110  investPrice=$   40000  ownUnits=113  foeUnits= 15
+      173.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6092  investPrice=$   40000  ownUnits=114  foeUnits= 16
+      173.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6074  investPrice=$   40000  ownUnits=112  foeUnits= 17
+      173.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6056  investPrice=$   40000  ownUnits=113  foeUnits= 19
+      173.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6038  investPrice=$   40000  ownUnits=113  foeUnits= 20
+      174.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6770  investPrice=$   40000  ownUnits=114  foeUnits= 21
+      174.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6752  investPrice=$   40000  ownUnits=114  foeUnits= 22
+      174.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6734  investPrice=$   40000  ownUnits=115  foeUnits= 24
+      174.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5723  investPrice=$   40000  ownUnits=115  foeUnits= 24
+      175.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4997  investPrice=$   40000  ownUnits=109  foeUnits= 22
+      175.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4916  investPrice=$   40000  ownUnits=108  foeUnits= 20
+      175.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4898  investPrice=$   40000  ownUnits=104  foeUnits= 18
+      175.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4880  investPrice=$   40000  ownUnits=105  foeUnits= 15
+      175.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4862  investPrice=$   40000  ownUnits=100  foeUnits= 17
+      175.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    4844  investPrice=$   40000  ownUnits=101  foeUnits= 15
+      176.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    5576  investPrice=$   40000  ownUnits=103  foeUnits= 14
+      176.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7058  investPrice=$   40000  ownUnits=102  foeUnits= 13
+      176.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7040  investPrice=$   40000  ownUnits=103  foeUnits= 13
+      176.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7022  investPrice=$   40000  ownUnits=104  foeUnits= 11
+      176.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7004  investPrice=$   40000  ownUnits=100  foeUnits= 10
+      176.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    6986  investPrice=$   40000  ownUnits=100  foeUnits= 10
+      177.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7718  investPrice=$   40000  ownUnits=101  foeUnits=  9
+      177.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7700  investPrice=$   40000  ownUnits=102  foeUnits=  7
+      177.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7682  investPrice=$   40000  ownUnits=102  foeUnits=  9
+      177.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7664  investPrice=$   40000  ownUnits=103  foeUnits=  8
+      177.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7646  investPrice=$   40000  ownUnits=104  foeUnits=  7
+      177.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    7628  investPrice=$   40000  ownUnits=105  foeUnits=  9
+      178.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8360  investPrice=$   40000  ownUnits=106  foeUnits= 10
+      178.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8342  investPrice=$   40000  ownUnits=107  foeUnits= 10
+      178.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8324  investPrice=$   40000  ownUnits=108  foeUnits= 11
+      178.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8306  investPrice=$   40000  ownUnits=109  foeUnits= 11
+      178.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8288  investPrice=$   40000  ownUnits=110  foeUnits= 12
+      178.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8270  investPrice=$   40000  ownUnits=111  foeUnits= 12
+      179.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9002  investPrice=$   40000  ownUnits=112  foeUnits= 12
+      179.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8984  investPrice=$   40000  ownUnits=109  foeUnits= 13
+      179.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8966  investPrice=$   40000  ownUnits=110  foeUnits= 12
+      179.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8948  investPrice=$   40000  ownUnits=111  foeUnits= 11
+      179.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8930  investPrice=$   40000  ownUnits=108  foeUnits=  9
+      179.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8912  investPrice=$   40000  ownUnits=109  foeUnits=  7
+      180.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9644  investPrice=$   40000  ownUnits=110  foeUnits=  6
+      180.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9626  investPrice=$   40000  ownUnits=111  foeUnits=  6
+      180.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9608  investPrice=$   40000  ownUnits=112  foeUnits=  6
+      180.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9590  investPrice=$   40000  ownUnits=111  foeUnits=  6
+      180.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9572  investPrice=$   40000  ownUnits=112  foeUnits=  4
+      180.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    9554  investPrice=$   40000  ownUnits=113  foeUnits=  3
+      181.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10286  investPrice=$   40000  ownUnits=114  foeUnits=  3
+      181.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10268  investPrice=$   40000  ownUnits=115  foeUnits=  3
+      181.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10250  investPrice=$   40000  ownUnits=116  foeUnits=  4
+      181.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10169  investPrice=$   40000  ownUnits=117  foeUnits=  4
+      181.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10151  investPrice=$   40000  ownUnits=118  foeUnits=  5
+      181.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10133  investPrice=$   40000  ownUnits=119  foeUnits=  5
+      182.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10865  investPrice=$   40000  ownUnits=120  foeUnits=  7
+      182.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10847  investPrice=$   40000  ownUnits=121  foeUnits=  9
+      182.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10829  investPrice=$   40000  ownUnits=122  foeUnits= 11
+      182.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10811  investPrice=$   40000  ownUnits=123  foeUnits= 13
+      182.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10730  investPrice=$   40000  ownUnits=124  foeUnits= 14
+      182.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10712  investPrice=$   40000  ownUnits=125  foeUnits= 14
+      183.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11444  investPrice=$   40000  ownUnits=126  foeUnits= 14
+      184.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   12176  investPrice=$   40000  ownUnits=126  foeUnits= 14
+      184.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   12158  investPrice=$   40000  ownUnits=127  foeUnits= 14
+      185.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   11369  investPrice=$   40000  ownUnits=130  foeUnits= 14
+      185.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   11288  investPrice=$   40000  ownUnits=131  foeUnits= 14
+      185.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11207  investPrice=$   40000  ownUnits=133  foeUnits= 14
+      185.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   11189  investPrice=$   40000  ownUnits=134  foeUnits= 14
+      185.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11108  investPrice=$   40000  ownUnits=136  foeUnits= 14
+      186.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11840  investPrice=$   40000  ownUnits=137  foeUnits= 14
+      186.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11822  investPrice=$   40000  ownUnits=139  foeUnits= 14
+      186.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11804  investPrice=$   40000  ownUnits=140  foeUnits= 14
+      186.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11786  investPrice=$   40000  ownUnits=142  foeUnits= 14
+      186.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11768  investPrice=$   40000  ownUnits=143  foeUnits= 14
+      186.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11750  investPrice=$   40000  ownUnits=144  foeUnits= 14
+      187.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12482  investPrice=$   40000  ownUnits=144  foeUnits= 13
+      187.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12464  investPrice=$   40000  ownUnits=145  foeUnits= 13
+      187.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12446  investPrice=$   40000  ownUnits=145  foeUnits= 13
+      187.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12428  investPrice=$   40000  ownUnits=146  foeUnits= 13
+      187.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12410  investPrice=$   40000  ownUnits=147  foeUnits= 13
+      187.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12392  investPrice=$   40000  ownUnits=148  foeUnits= 13
+      188.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13124  investPrice=$   40000  ownUnits=145  foeUnits= 13
+      188.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13106  investPrice=$   40000  ownUnits=142  foeUnits= 13
+      188.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13088  investPrice=$   40000  ownUnits=142  foeUnits= 13
+      188.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13070  investPrice=$   40000  ownUnits=142  foeUnits=  0
+      188.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13052  investPrice=$   40000  ownUnits=143  foeUnits=  0
+      188.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13034  investPrice=$   40000  ownUnits=144  foeUnits=  0
+      189.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13766  investPrice=$   40000  ownUnits=145  foeUnits=  0
+      189.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13748  investPrice=$   40000  ownUnits=146  foeUnits=  0
+      189.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13730  investPrice=$   40000  ownUnits=147  foeUnits=  0
+      189.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13712  investPrice=$   40000  ownUnits=148  foeUnits=  0
+      189.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   12701  investPrice=$   40000  ownUnits=130  foeUnits=  0
+      190.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13433  investPrice=$   40000  ownUnits=131  foeUnits=  1
+      190.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13415  investPrice=$   40000  ownUnits=132  foeUnits=  2
+      190.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13397  investPrice=$   40000  ownUnits=133  foeUnits=  3
+      190.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13379  investPrice=$   40000  ownUnits=134  foeUnits=  5
+      190.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13361  investPrice=$   40000  ownUnits=135  foeUnits=  6
+      190.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13343  investPrice=$   40000  ownUnits=136  foeUnits=  8
+      191.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   14075  investPrice=$   40000  ownUnits=137  foeUnits=  9
+      191.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   14057  investPrice=$   40000  ownUnits=138  foeUnits=  9
+      191.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15539  investPrice=$   40000  ownUnits=139  foeUnits=  9
+      191.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15521  investPrice=$   40000  ownUnits=140  foeUnits=  9
+      191.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15503  investPrice=$   40000  ownUnits=141  foeUnits=  9
+      191.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15485  investPrice=$   40000  ownUnits=142  foeUnits= 10
+      192.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16217  investPrice=$   40000  ownUnits=143  foeUnits= 10
+      192.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15881  investPrice=$   40000  ownUnits=145  foeUnits= 11
+      192.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15863  investPrice=$   40000  ownUnits=146  foeUnits= 12
+      192.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15845  investPrice=$   40000  ownUnits=147  foeUnits= 12
+      192.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   15827  investPrice=$   40000  ownUnits=148  foeUnits= 13
+      193.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16559  investPrice=$   40000  ownUnits=149  foeUnits= 13
+      193.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16541  investPrice=$   40000  ownUnits=150  foeUnits= 14
+      193.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16523  investPrice=$   40000  ownUnits=151  foeUnits= 14
+      193.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16505  investPrice=$   40000  ownUnits=152  foeUnits= 14
+      193.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16487  investPrice=$   40000  ownUnits=153  foeUnits= 13
+      193.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16469  investPrice=$   40000  ownUnits=154  foeUnits= 13
+      194.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17192  investPrice=$   40000  ownUnits=153  foeUnits= 11
+      194.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17174  investPrice=$   40000  ownUnits=153  foeUnits=  9
+      194.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17156  investPrice=$   40000  ownUnits=154  foeUnits=  7
+      194.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17138  investPrice=$   40000  ownUnits=154  foeUnits=  7
+      194.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17120  investPrice=$   40000  ownUnits=155  foeUnits=  7
+      194.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17102  investPrice=$   40000  ownUnits=156  foeUnits=  9
+      195.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17834  investPrice=$   40000  ownUnits=157  foeUnits= 10
+      195.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16358  investPrice=$   40000  ownUnits=160  foeUnits= 12
+      195.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16340  investPrice=$   40000  ownUnits=161  foeUnits= 12
+      195.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16322  investPrice=$   40000  ownUnits=161  foeUnits= 12
+      195.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16304  investPrice=$   40000  ownUnits=162  foeUnits= 12
+      196.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17036  investPrice=$   40000  ownUnits=164  foeUnits= 12
+      196.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17018  investPrice=$   40000  ownUnits=165  foeUnits= 11
+      196.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17000  investPrice=$   40000  ownUnits=167  foeUnits= 12
+      196.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16982  investPrice=$   40000  ownUnits=168  foeUnits= 13
+      196.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16964  investPrice=$   40000  ownUnits=158  foeUnits= 14
+      196.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16946  investPrice=$   40000  ownUnits=159  foeUnits= 15
+      197.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17678  investPrice=$   40000  ownUnits=159  foeUnits= 17
+      197.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17660  investPrice=$   40000  ownUnits=160  foeUnits= 18
+      197.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17642  investPrice=$   40000  ownUnits=156  foeUnits= 15
+      197.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17624  investPrice=$   40000  ownUnits=152  foeUnits= 13
+      197.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17606  investPrice=$   40000  ownUnits=150  foeUnits= 12
+      197.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17588  investPrice=$   40000  ownUnits=133  foeUnits= 12
+      198.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18320  investPrice=$   40000  ownUnits=125  foeUnits= 11
+      198.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18302  investPrice=$   40000  ownUnits=126  foeUnits= 11
+      198.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18284  investPrice=$   40000  ownUnits=127  foeUnits= 11
+      198.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18266  investPrice=$   40000  ownUnits=128  foeUnits= 11
+      198.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18248  investPrice=$   40000  ownUnits=129  foeUnits= 11
+      198.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18230  investPrice=$   40000  ownUnits=127  foeUnits= 10
+      199.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18962  investPrice=$   40000  ownUnits=128  foeUnits= 10
+      199.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18944  investPrice=$   40000  ownUnits=129  foeUnits= 10
+      199.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18926  investPrice=$   40000  ownUnits=127  foeUnits=  8
+      199.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18908  investPrice=$   40000  ownUnits=100  foeUnits=  8
+      199.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18890  investPrice=$   40000  ownUnits=101  foeUnits=  7
+      199.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18872  investPrice=$   40000  ownUnits=102  foeUnits=  5
+      200.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19604  investPrice=$   40000  ownUnits= 98  foeUnits=  5
+      200.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19586  investPrice=$   40000  ownUnits= 98  foeUnits=  2
+      200.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19568  investPrice=$   40000  ownUnits= 99  foeUnits=  2
+      200.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19550  investPrice=$   40000  ownUnits=100  foeUnits=  2
+      200.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19532  investPrice=$   40000  ownUnits=101  foeUnits=  2
+      200.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   19514  investPrice=$   40000  ownUnits=102  foeUnits=  2
+      201.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20246  investPrice=$   40000  ownUnits=103  foeUnits=  2
+      201.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20228  investPrice=$   40000  ownUnits=104  foeUnits=  2
+      201.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20210  investPrice=$   40000  ownUnits=105  foeUnits=  2
+      201.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20192  investPrice=$   40000  ownUnits=106  foeUnits=  2
+      201.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20174  investPrice=$   40000  ownUnits=107  foeUnits=  2
+      201.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20156  investPrice=$   40000  ownUnits=108  foeUnits=  2
+      202.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20888  investPrice=$   40000  ownUnits=109  foeUnits=  2
+      202.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20870  investPrice=$   40000  ownUnits=110  foeUnits=  2
+      202.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20534  investPrice=$   40000  ownUnits=112  foeUnits=  3
+      202.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20516  investPrice=$   40000  ownUnits=113  foeUnits=  4
+      202.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20498  investPrice=$   40000  ownUnits=114  foeUnits=  4
+      203.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21230  investPrice=$   40000  ownUnits=115  foeUnits=  5
+      203.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21212  investPrice=$   40000  ownUnits=116  foeUnits=  6
+      203.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21194  investPrice=$   40000  ownUnits=117  foeUnits=  8
+      203.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21176  investPrice=$   40000  ownUnits=118  foeUnits=  8
+      203.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21158  investPrice=$   40000  ownUnits=119  foeUnits=  9
+      203.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21140  investPrice=$   40000  ownUnits=120  foeUnits=  9
+      204.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21872  investPrice=$   40000  ownUnits=121  foeUnits=  7
+      204.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21854  investPrice=$   40000  ownUnits=122  foeUnits=  8
+      204.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21836  investPrice=$   40000  ownUnits=123  foeUnits=  9
+      204.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21818  investPrice=$   40000  ownUnits=124  foeUnits= 10
+      204.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21800  investPrice=$   40000  ownUnits=125  foeUnits= 12
+      205.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21539  investPrice=$   40000  ownUnits=127  foeUnits= 14
+      205.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   21521  investPrice=$   40000  ownUnits=128  foeUnits= 15
+      205.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20045  investPrice=$   40000  ownUnits=131  foeUnits= 18
+      207.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   23027  investPrice=$   40000  ownUnits=136  foeUnits= 19
+      207.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   23009  investPrice=$   40000  ownUnits=137  foeUnits= 19
+      207.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   22991  investPrice=$   40000  ownUnits=138  foeUnits= 19
+      207.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   22973  investPrice=$   40000  ownUnits=139  foeUnits= 20
+      207.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   22955  investPrice=$   40000  ownUnits=140  foeUnits= 21
+      208.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   23687  investPrice=$   40000  ownUnits=141  foeUnits= 22
+      208.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   23669  investPrice=$   40000  ownUnits=142  foeUnits= 22
+      208.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   23651  investPrice=$   40000  ownUnits=143  foeUnits= 22
+      208.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   23633  investPrice=$   40000  ownUnits=144  foeUnits= 22
+      208.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   23615  investPrice=$   40000  ownUnits=145  foeUnits= 22
+      208.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   23597  investPrice=$   40000  ownUnits=146  foeUnits= 22
+      209.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24329  investPrice=$   40000  ownUnits=147  foeUnits= 20
+      209.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24311  investPrice=$   40000  ownUnits=148  foeUnits= 20
+      209.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24293  investPrice=$   40000  ownUnits=149  foeUnits= 18
+      209.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24275  investPrice=$   40000  ownUnits=150  foeUnits= 19
+      209.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24257  investPrice=$   40000  ownUnits=151  foeUnits= 19
+      209.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24239  investPrice=$   40000  ownUnits=152  foeUnits= 18
+      210.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   24971  investPrice=$   40000  ownUnits=151  foeUnits= 19
+      210.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   24953  investPrice=$   40000  ownUnits=152  foeUnits= 18
+      210.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24935  investPrice=$   40000  ownUnits= 45  foeUnits= 18
+      210.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24917  investPrice=$   40000  ownUnits= 46  foeUnits= 19
+      210.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24899  investPrice=$   40000  ownUnits= 47  foeUnits= 20
+      210.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   24881  investPrice=$   40000  ownUnits= 48  foeUnits= 21
+      211.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25613  investPrice=$   40000  ownUnits= 49  foeUnits= 23
+      211.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25595  investPrice=$   40000  ownUnits= 50  foeUnits= 23
+      211.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25577  investPrice=$   40000  ownUnits= 51  foeUnits= 23
+      211.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25559  investPrice=$   40000  ownUnits= 52  foeUnits= 24
+      211.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25541  investPrice=$   40000  ownUnits= 53  foeUnits= 24
+      211.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   25523  investPrice=$   40000  ownUnits= 54  foeUnits= 25
+      212.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26255  investPrice=$   40000  ownUnits= 55  foeUnits= 26
+      212.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26237  investPrice=$   40000  ownUnits= 56  foeUnits= 27
+      212.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26219  investPrice=$   40000  ownUnits= 57  foeUnits= 26
+      212.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26201  investPrice=$   40000  ownUnits= 58  foeUnits= 26
+      212.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26183  investPrice=$   40000  ownUnits= 59  foeUnits= 26
+      212.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26165  investPrice=$   40000  ownUnits= 60  foeUnits= 27
+      213.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26897  investPrice=$   40000  ownUnits= 61  foeUnits= 26
+      213.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26879  investPrice=$   40000  ownUnits= 62  foeUnits= 25
+      213.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26861  investPrice=$   40000  ownUnits= 61  foeUnits= 25
+      213.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26843  investPrice=$   40000  ownUnits= 62  foeUnits= 27
+      213.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26825  investPrice=$   40000  ownUnits= 62  foeUnits= 28
+      213.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26807  investPrice=$   40000  ownUnits= 63  foeUnits= 30
+      214.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27539  investPrice=$   40000  ownUnits= 63  foeUnits= 32
+      214.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27521  investPrice=$   40000  ownUnits= 64  foeUnits= 33
+      214.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27503  investPrice=$   40000  ownUnits= 62  foeUnits= 34
+      214.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27485  investPrice=$   40000  ownUnits= 61  foeUnits= 34
+      214.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27467  investPrice=$   40000  ownUnits= 62  foeUnits= 33
+      214.8s  P2 would spawn  reason=wiper            killRaw=False lock=-            hazBlackout=False money=$   27449  investPrice=$   40000  ownUnits= 62  foeUnits= 35
+      215.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28118  investPrice=$   40000  ownUnits= 63  foeUnits= 36
+      215.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28100  investPrice=$   40000  ownUnits= 62  foeUnits= 35
+      215.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28082  investPrice=$   40000  ownUnits= 63  foeUnits= 33
+      215.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26606  investPrice=$   40000  ownUnits= 63  foeUnits= 33
+      215.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   26588  investPrice=$   40000  ownUnits= 64  foeUnits= 33
+      216.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27320  investPrice=$   40000  ownUnits= 65  foeUnits= 33
+      216.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27302  investPrice=$   40000  ownUnits= 66  foeUnits= 33
+      216.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27284  investPrice=$   40000  ownUnits= 67  foeUnits= 32
+      216.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27266  investPrice=$   40000  ownUnits= 67  foeUnits= 32
+      216.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27248  investPrice=$   40000  ownUnits= 69  foeUnits= 33
+      216.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27230  investPrice=$   40000  ownUnits= 69  foeUnits= 33
+      217.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27962  investPrice=$   40000  ownUnits= 67  foeUnits= 34
+      217.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27944  investPrice=$   40000  ownUnits= 68  foeUnits= 33
+      217.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27926  investPrice=$   40000  ownUnits= 69  foeUnits= 33
+      217.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27908  investPrice=$   40000  ownUnits= 65  foeUnits= 35
+      217.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27890  investPrice=$   40000  ownUnits= 66  foeUnits= 35
+      217.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   27872  investPrice=$   40000  ownUnits= 61  foeUnits= 36
+      218.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28604  investPrice=$   40000  ownUnits= 62  foeUnits= 36
+      218.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28586  investPrice=$   40000  ownUnits= 63  foeUnits= 34
+      218.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28568  investPrice=$   40000  ownUnits= 61  foeUnits= 34
+      218.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   28550  investPrice=$   40000  ownUnits= 62  foeUnits= 33
+      219.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   29282  investPrice=$   40000  ownUnits= 61  foeUnits= 33
+      219.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   29264  investPrice=$   40000  ownUnits= 61  foeUnits= 33
+      221.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   29771  investPrice=$   40000  ownUnits= 57  foeUnits= 23
+      221.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31253  investPrice=$   40000  ownUnits= 58  foeUnits= 25
+      221.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31235  investPrice=$   40000  ownUnits= 59  foeUnits= 24
+      222.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31967  investPrice=$   40000  ownUnits= 60  foeUnits= 22
+      222.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31949  investPrice=$   40000  ownUnits= 61  foeUnits= 21
+      222.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31931  investPrice=$   40000  ownUnits= 62  foeUnits= 21
+      222.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31913  investPrice=$   40000  ownUnits= 63  foeUnits= 19
+      222.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31895  investPrice=$   40000  ownUnits= 62  foeUnits= 18
+      222.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31877  investPrice=$   40000  ownUnits= 63  foeUnits= 19
+      223.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32609  investPrice=$   40000  ownUnits= 63  foeUnits= 20
+      223.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32591  investPrice=$   40000  ownUnits= 60  foeUnits= 21
+      223.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32573  investPrice=$   40000  ownUnits= 60  foeUnits= 19
+      223.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32555  investPrice=$   40000  ownUnits= 49  foeUnits= 19
+      223.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32537  investPrice=$   40000  ownUnits= 50  foeUnits= 19
+      223.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32519  investPrice=$   40000  ownUnits= 44  foeUnits= 19
+      224.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33251  investPrice=$   40000  ownUnits= 45  foeUnits= 18
+      224.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33233  investPrice=$   40000  ownUnits= 46  foeUnits= 18
+      224.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33215  investPrice=$   40000  ownUnits= 43  foeUnits= 19
+      224.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33197  investPrice=$   40000  ownUnits= 44  foeUnits= 19
+      224.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33179  investPrice=$   40000  ownUnits= 45  foeUnits= 20
+      224.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33161  investPrice=$   40000  ownUnits= 46  foeUnits= 18
+      225.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33893  investPrice=$   40000  ownUnits= 46  foeUnits= 19
+      225.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33875  investPrice=$   40000  ownUnits= 46  foeUnits= 19
+      225.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33857  investPrice=$   40000  ownUnits= 47  foeUnits= 20
+      225.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33839  investPrice=$   40000  ownUnits= 48  foeUnits= 20
+      225.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32363  investPrice=$   40000  ownUnits= 48  foeUnits= 21
+      226.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33095  investPrice=$   40000  ownUnits= 48  foeUnits= 22
+      226.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33077  investPrice=$   40000  ownUnits= 50  foeUnits= 23
+      226.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33059  investPrice=$   40000  ownUnits= 51  foeUnits= 24
+      226.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33041  investPrice=$   40000  ownUnits= 51  foeUnits= 25
+      226.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33023  investPrice=$   40000  ownUnits= 52  foeUnits= 26
+      226.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33005  investPrice=$   40000  ownUnits= 54  foeUnits= 27
+      227.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33737  investPrice=$   40000  ownUnits= 50  foeUnits= 27
+      227.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33719  investPrice=$   40000  ownUnits= 52  foeUnits= 28
+      227.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33701  investPrice=$   40000  ownUnits= 50  foeUnits= 24
+      227.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33683  investPrice=$   40000  ownUnits= 51  foeUnits= 25
+      227.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33665  investPrice=$   40000  ownUnits= 52  foeUnits= 26
+      227.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33647  investPrice=$   40000  ownUnits= 53  foeUnits= 27
+      228.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34379  investPrice=$   40000  ownUnits= 54  foeUnits= 27
+      228.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34361  investPrice=$   40000  ownUnits= 55  foeUnits= 27
+      228.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34343  investPrice=$   40000  ownUnits= 56  foeUnits= 26
+      228.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34325  investPrice=$   40000  ownUnits= 52  foeUnits= 26
+      228.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34307  investPrice=$   40000  ownUnits= 53  foeUnits= 26
+      228.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34289  investPrice=$   40000  ownUnits= 54  foeUnits= 26
+      229.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35021  investPrice=$   40000  ownUnits= 55  foeUnits= 26
+      229.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35003  investPrice=$   40000  ownUnits= 54  foeUnits= 23
+      229.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34985  investPrice=$   40000  ownUnits= 55  foeUnits= 22
+      229.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34967  investPrice=$   40000  ownUnits= 56  foeUnits= 23
+      229.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34949  investPrice=$   40000  ownUnits= 56  foeUnits= 18
+      229.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34931  investPrice=$   40000  ownUnits= 30  foeUnits= 19
+      230.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35663  investPrice=$   40000  ownUnits= 31  foeUnits= 20
+      230.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35645  investPrice=$   40000  ownUnits= 32  foeUnits= 20
+      230.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35627  investPrice=$   40000  ownUnits= 31  foeUnits= 21
+      230.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35609  investPrice=$   40000  ownUnits= 32  foeUnits= 22
+      230.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35591  investPrice=$   40000  ownUnits= 33  foeUnits= 23
+      230.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35573  investPrice=$   40000  ownUnits= 34  foeUnits= 24
+      231.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36305  investPrice=$   40000  ownUnits= 35  foeUnits= 25
+      231.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36287  investPrice=$   40000  ownUnits= 36  foeUnits= 26
+      231.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36269  investPrice=$   40000  ownUnits= 37  foeUnits= 26
+      231.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36251  investPrice=$   40000  ownUnits= 38  foeUnits= 27
+      231.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36233  investPrice=$   40000  ownUnits= 38  foeUnits= 28
+      231.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36215  investPrice=$   40000  ownUnits= 38  foeUnits= 28
+      232.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36947  investPrice=$   40000  ownUnits= 39  foeUnits= 30
+      232.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36929  investPrice=$   40000  ownUnits= 40  foeUnits= 30
+      232.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36911  investPrice=$   40000  ownUnits= 41  foeUnits= 31
+      232.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36893  investPrice=$   40000  ownUnits= 42  foeUnits= 32
+      232.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36875  investPrice=$   40000  ownUnits= 43  foeUnits= 32
+      232.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36857  investPrice=$   40000  ownUnits= 42  foeUnits= 33
+      233.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37589  investPrice=$   40000  ownUnits= 42  foeUnits= 34
+      233.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37571  investPrice=$   40000  ownUnits= 43  foeUnits= 35
+      233.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37553  investPrice=$   40000  ownUnits= 44  foeUnits= 36
+      233.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37535  investPrice=$   40000  ownUnits= 42  foeUnits= 36
+      233.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37517  investPrice=$   40000  ownUnits= 41  foeUnits= 31
+      233.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37499  investPrice=$   40000  ownUnits= 42  foeUnits= 31
+      234.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38231  investPrice=$   40000  ownUnits= 41  foeUnits= 32
+      234.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38213  investPrice=$   40000  ownUnits= 41  foeUnits= 32
+      234.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38195  investPrice=$   40000  ownUnits= 42  foeUnits= 31
+      234.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38177  investPrice=$   40000  ownUnits= 42  foeUnits= 31
+      234.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38159  investPrice=$   40000  ownUnits= 42  foeUnits= 31
+      234.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38141  investPrice=$   40000  ownUnits= 43  foeUnits= 30
+      235.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38873  investPrice=$   40000  ownUnits= 43  foeUnits= 31
+      235.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37862  investPrice=$   40000  ownUnits= 44  foeUnits= 30
+      235.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37844  investPrice=$   40000  ownUnits= 44  foeUnits= 31
+      235.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37826  investPrice=$   40000  ownUnits= 44  foeUnits= 31
+      236.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37100  investPrice=$   40000  ownUnits= 46  foeUnits= 31
+      236.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37082  investPrice=$   40000  ownUnits= 46  foeUnits= 31
+      236.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37064  investPrice=$   40000  ownUnits= 45  foeUnits= 31
+      236.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37046  investPrice=$   40000  ownUnits= 44  foeUnits= 32
+      236.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   37028  investPrice=$   40000  ownUnits= 46  foeUnits= 33
+      236.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38510  investPrice=$   40000  ownUnits= 45  foeUnits= 32
+      237.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39242  investPrice=$   40000  ownUnits= 46  foeUnits= 33
+      237.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39224  investPrice=$   40000  ownUnits= 47  foeUnits= 33
+      237.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39206  investPrice=$   40000  ownUnits= 47  foeUnits= 32
+      237.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39188  investPrice=$   40000  ownUnits= 48  foeUnits= 31
+      237.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39170  investPrice=$   40000  ownUnits= 49  foeUnits= 27
+      237.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39152  investPrice=$   40000  ownUnits= 49  foeUnits= 27
+      238.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39884  investPrice=$   40000  ownUnits= 49  foeUnits= 28
+      238.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39866  investPrice=$   40000  ownUnits= 50  foeUnits= 26
+      238.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39848  investPrice=$   40000  ownUnits= 28  foeUnits= 26
+      238.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39830  investPrice=$   40000  ownUnits= 29  foeUnits= 26
+      238.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39812  investPrice=$   40000  ownUnits= 30  foeUnits= 27
+      238.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   39794  investPrice=$   40000  ownUnits= 31  foeUnits= 27
+      239.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     526  investPrice=$  121221  ownUnits= 31  foeUnits= 26
+      239.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     508  investPrice=$  121221  ownUnits= 32  foeUnits= 27
+      239.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     490  investPrice=$  121221  ownUnits= 33  foeUnits= 28
+      239.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     472  investPrice=$  121221  ownUnits= 34  foeUnits= 27
+      239.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     454  investPrice=$  121221  ownUnits= 34  foeUnits= 27
+      240.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    2936  investPrice=$  121221  ownUnits= 34  foeUnits= 28
+      240.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     870  investPrice=$  121221  ownUnits= 34  foeUnits= 28
+      240.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     852  investPrice=$  121221  ownUnits= 34  foeUnits= 27
+      240.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     834  investPrice=$  121221  ownUnits= 35  foeUnits= 28
+      240.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     816  investPrice=$  121221  ownUnits= 36  foeUnits= 28
+      240.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$     798  investPrice=$  121221  ownUnits= 34  foeUnits= 27
+      241.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3280  investPrice=$  121221  ownUnits= 34  foeUnits= 27
+      241.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3262  investPrice=$  121221  ownUnits= 31  foeUnits= 26
+      241.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3244  investPrice=$  121221  ownUnits= 29  foeUnits= 25
+      241.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3226  investPrice=$  121221  ownUnits= 30  foeUnits= 25
+      241.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3208  investPrice=$  121221  ownUnits= 29  foeUnits= 24
+      241.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    1142  investPrice=$  121221  ownUnits= 29  foeUnits= 23
+      242.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3624  investPrice=$  121221  ownUnits= 28  foeUnits= 21
+      242.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3606  investPrice=$  121221  ownUnits= 29  foeUnits= 22
+      242.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3588  investPrice=$  121221  ownUnits= 30  foeUnits= 22
+      242.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3570  investPrice=$  121221  ownUnits= 31  foeUnits= 23
+      242.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3552  investPrice=$  121221  ownUnits= 32  foeUnits= 24
+      242.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    3534  investPrice=$  121221  ownUnits= 33  foeUnits= 23
+      243.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    5698  investPrice=$  121221  ownUnits= 32  foeUnits= 21
+      243.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    5680  investPrice=$  121221  ownUnits= 33  foeUnits= 22
+      243.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    5662  investPrice=$  121221  ownUnits= 33  foeUnits= 19
+      243.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    5644  investPrice=$  121221  ownUnits= 34  foeUnits= 20
+      243.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    5626  investPrice=$  121221  ownUnits= 34  foeUnits= 18
+      244.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    8108  investPrice=$  121221  ownUnits= 34  foeUnits= 20
+      244.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    8090  investPrice=$  121221  ownUnits= 35  foeUnits= 20
+      244.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    8072  investPrice=$  121221  ownUnits= 36  foeUnits= 21
+      244.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8054  investPrice=$  121221  ownUnits= 36  foeUnits= 21
+      244.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$    8036  investPrice=$  121221  ownUnits= 37  foeUnits= 15
+      244.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$    8018  investPrice=$  121221  ownUnits= 38  foeUnits= 15
+      245.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10500  investPrice=$  121221  ownUnits= 39  foeUnits= 15
+      245.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10482  investPrice=$  121221  ownUnits= 34  foeUnits= 16
+      245.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10464  investPrice=$  121221  ownUnits= 35  foeUnits= 17
+      245.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10446  investPrice=$  121221  ownUnits= 36  foeUnits= 18
+      245.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10428  investPrice=$  121221  ownUnits= 37  foeUnits= 19
+      245.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   10410  investPrice=$  121221  ownUnits= 38  foeUnits= 20
+      246.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11434  investPrice=$  121221  ownUnits= 41  foeUnits= 23
+      246.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11416  investPrice=$  121221  ownUnits= 42  foeUnits= 23
+      246.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11398  investPrice=$  121221  ownUnits= 44  foeUnits= 23
+      246.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11380  investPrice=$  121221  ownUnits= 45  foeUnits= 24
+      246.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11362  investPrice=$  121221  ownUnits= 47  foeUnits= 25
+      247.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13844  investPrice=$  121221  ownUnits= 48  foeUnits= 26
+      247.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13826  investPrice=$  121221  ownUnits= 47  foeUnits= 27
+      247.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13808  investPrice=$  121221  ownUnits= 48  foeUnits= 27
+      247.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13790  investPrice=$  121221  ownUnits= 50  foeUnits= 27
+      247.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13772  investPrice=$  121221  ownUnits= 51  foeUnits= 27
+      247.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13754  investPrice=$  121221  ownUnits= 51  foeUnits= 27
+      248.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16236  investPrice=$  121221  ownUnits= 52  foeUnits= 27
+      248.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16218  investPrice=$  121221  ownUnits= 53  foeUnits= 28
+      248.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16200  investPrice=$  121221  ownUnits= 50  foeUnits= 28
+      248.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16182  investPrice=$  121221  ownUnits= 51  foeUnits= 29
+      248.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16164  investPrice=$  121221  ownUnits= 52  foeUnits= 29
+      248.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16146  investPrice=$  121221  ownUnits= 48  foeUnits= 27
+      249.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18628  investPrice=$  121221  ownUnits= 44  foeUnits= 28
+      249.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16562  investPrice=$  121221  ownUnits= 44  foeUnits= 28
+      249.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16544  investPrice=$  121221  ownUnits= 13  foeUnits= 29
+      249.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16526  investPrice=$  121221  ownUnits= 14  foeUnits= 30
+      249.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16508  investPrice=$  121221  ownUnits= 15  foeUnits= 31
+      249.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   16490  investPrice=$  121221  ownUnits= 16  foeUnits= 32
+      250.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18972  investPrice=$  121221  ownUnits= 17  foeUnits= 33
+      250.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18954  investPrice=$  121221  ownUnits= 18  foeUnits= 34
+      250.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11118  investPrice=$  121221  ownUnits= 20  foeUnits= 37
+      250.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11100  investPrice=$  121221  ownUnits= 21  foeUnits= 38
+      250.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   11082  investPrice=$  121221  ownUnits= 22  foeUnits= 39
+      251.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13564  investPrice=$  121221  ownUnits= 23  foeUnits= 40
+      251.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13546  investPrice=$  121221  ownUnits= 24  foeUnits= 41
+      251.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13528  investPrice=$  121221  ownUnits= 25  foeUnits= 42
+      251.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13510  investPrice=$  121221  ownUnits= 26  foeUnits= 43
+      251.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13492  investPrice=$  121221  ownUnits= 27  foeUnits= 44
+      251.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   13474  investPrice=$  121221  ownUnits= 28  foeUnits= 44
+      252.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17456  investPrice=$  121221  ownUnits= 29  foeUnits= 45
+      252.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   17438  investPrice=$  121221  ownUnits= 30  foeUnits= 46
+      252.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18920  investPrice=$  121221  ownUnits= 31  foeUnits= 46
+      252.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   18902  investPrice=$  121221  ownUnits= 32  foeUnits= 47
+      252.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20384  investPrice=$  121221  ownUnits= 32  foeUnits= 48
+      252.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   20366  investPrice=$  121221  ownUnits= 33  foeUnits= 49
+      253.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   24348  investPrice=$  121221  ownUnits= 31  foeUnits= 48
+      253.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   24330  investPrice=$  121221  ownUnits= 32  foeUnits= 34
+      253.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   25812  investPrice=$  121221  ownUnits= 32  foeUnits= 34
+      253.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   25794  investPrice=$  121221  ownUnits= 32  foeUnits= 33
+      253.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   27276  investPrice=$  121221  ownUnits= 31  foeUnits= 32
+      253.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   27258  investPrice=$  121221  ownUnits= 31  foeUnits= 31
+      254.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   31240  investPrice=$  121221  ownUnits= 31  foeUnits= 32
+      254.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   31222  investPrice=$  121221  ownUnits= 31  foeUnits= 31
+      254.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   32704  investPrice=$  121221  ownUnits= 32  foeUnits= 32
+      254.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   30638  investPrice=$  121221  ownUnits= 32  foeUnits= 31
+      254.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   30620  investPrice=$  121221  ownUnits= 32  foeUnits= 25
+      254.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   30602  investPrice=$  121221  ownUnits= 33  foeUnits= 26
+      255.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33084  investPrice=$  121221  ownUnits= 34  foeUnits= 23
+      255.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33066  investPrice=$  121221  ownUnits= 30  foeUnits= 24
+      255.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   33048  investPrice=$  121221  ownUnits= 27  foeUnits= 27
+      255.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   33030  investPrice=$  121221  ownUnits= 28  foeUnits= 28
+      255.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   33012  investPrice=$  121221  ownUnits= 25  foeUnits= 28
+      255.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   32994  investPrice=$  121221  ownUnits= 25  foeUnits= 25
+      256.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   35476  investPrice=$  121221  ownUnits= 25  foeUnits= 26
+      256.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34000  investPrice=$  121221  ownUnits= 24  foeUnits= 27
+      256.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33982  investPrice=$  121221  ownUnits= 25  foeUnits= 28
+      256.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33964  investPrice=$  121221  ownUnits= 27  foeUnits= 29
+      256.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   33946  investPrice=$  121221  ownUnits= 25  foeUnits= 30
+      257.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36428  investPrice=$  121221  ownUnits= 27  foeUnits= 29
+      257.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34362  investPrice=$  121221  ownUnits= 28  foeUnits= 30
+      257.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34344  investPrice=$  121221  ownUnits= 29  foeUnits= 30
+      257.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34326  investPrice=$  121221  ownUnits= 29  foeUnits= 29
+      257.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34308  investPrice=$  121221  ownUnits= 31  foeUnits= 30
+      257.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   34290  investPrice=$  121221  ownUnits= 31  foeUnits= 30
+      258.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36772  investPrice=$  121221  ownUnits= 32  foeUnits= 31
+      258.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36754  investPrice=$  121221  ownUnits= 33  foeUnits= 32
+      258.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36736  investPrice=$  121221  ownUnits= 34  foeUnits= 34
+      258.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36400  investPrice=$  121221  ownUnits= 36  foeUnits= 35
+      258.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   36382  investPrice=$  121221  ownUnits= 37  foeUnits= 33
+      259.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38864  investPrice=$  121221  ownUnits= 37  foeUnits= 34
+      259.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38846  investPrice=$  121221  ownUnits= 36  foeUnits= 34
+      259.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38828  investPrice=$  121221  ownUnits= 36  foeUnits= 35
+      259.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38810  investPrice=$  121221  ownUnits= 36  foeUnits= 30
+      259.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38792  investPrice=$  121221  ownUnits= 37  foeUnits= 31
+      259.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   38774  investPrice=$  121221  ownUnits= 36  foeUnits= 30
+      260.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41256  investPrice=$  121221  ownUnits= 36  foeUnits= 29
+      260.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41238  investPrice=$  121221  ownUnits= 37  foeUnits=  5
+      260.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41172  investPrice=$  121221  ownUnits= 37  foeUnits=  6
+      260.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41154  investPrice=$  121221  ownUnits= 38  foeUnits=  7
+      260.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41136  investPrice=$  121221  ownUnits= 39  foeUnits=  8
+      260.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   41118  investPrice=$  121221  ownUnits= 40  foeUnits=  8
+      261.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43600  investPrice=$  121221  ownUnits= 40  foeUnits=  8
+      261.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43582  investPrice=$  121221  ownUnits= 41  foeUnits=  7
+      261.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43564  investPrice=$  121221  ownUnits= 38  foeUnits=  7
+      261.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43546  investPrice=$  121221  ownUnits= 38  foeUnits=  7
+      261.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43528  investPrice=$  121221  ownUnits= 39  foeUnits=  7
+      261.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43510  investPrice=$  121221  ownUnits= 40  foeUnits=  7
+      262.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45992  investPrice=$  121221  ownUnits= 39  foeUnits=  7
+      262.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45974  investPrice=$  121221  ownUnits= 40  foeUnits=  8
+      262.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45956  investPrice=$  121221  ownUnits= 41  foeUnits= 10
+      262.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45938  investPrice=$  121221  ownUnits= 42  foeUnits= 11
+      262.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45920  investPrice=$  121221  ownUnits= 43  foeUnits= 10
+      262.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45902  investPrice=$  121221  ownUnits= 44  foeUnits= 11
+      263.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48384  investPrice=$  121221  ownUnits= 44  foeUnits= 11
+      263.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48366  investPrice=$  121221  ownUnits= 45  foeUnits= 13
+      263.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48348  investPrice=$  121221  ownUnits= 46  foeUnits= 14
+      263.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48330  investPrice=$  121221  ownUnits= 47  foeUnits= 15
+      263.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48312  investPrice=$  121221  ownUnits= 47  foeUnits= 15
+      263.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48294  investPrice=$  121221  ownUnits= 46  foeUnits= 15
+      264.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48728  investPrice=$  121221  ownUnits= 47  foeUnits= 15
+      264.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48710  investPrice=$  121221  ownUnits= 48  foeUnits= 14
+      264.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48692  investPrice=$  121221  ownUnits= 49  foeUnits= 14
+      264.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48674  investPrice=$  121221  ownUnits= 50  foeUnits= 14
+      264.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48656  investPrice=$  121221  ownUnits= 51  foeUnits= 14
+      264.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48638  investPrice=$  121221  ownUnits= 52  foeUnits= 15
+      265.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   51120  investPrice=$  121221  ownUnits= 53  foeUnits= 14
+      265.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   51102  investPrice=$  121221  ownUnits= 54  foeUnits= 14
+      265.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   51084  investPrice=$  121221  ownUnits= 52  foeUnits= 15
+      265.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43248  investPrice=$  121221  ownUnits= 53  foeUnits= 13
+      265.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   43230  investPrice=$  121221  ownUnits= 54  foeUnits= 13
+      266.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45712  investPrice=$  121221  ownUnits= 55  foeUnits= 12
+      266.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   45694  investPrice=$  121221  ownUnits= 55  foeUnits= 13
+      266.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   44218  investPrice=$  121221  ownUnits= 58  foeUnits= 14
+      266.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   44200  investPrice=$  121221  ownUnits= 59  foeUnits= 16
+      266.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   44182  investPrice=$  121221  ownUnits= 61  foeUnits= 16
+      267.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   46664  investPrice=$  121221  ownUnits= 53  foeUnits= 16
+      267.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48146  investPrice=$  121221  ownUnits= 54  foeUnits= 16
+      267.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   48128  investPrice=$  121221  ownUnits= 53  foeUnits= 15
+      267.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   49610  investPrice=$  121221  ownUnits= 54  foeUnits= 13
+      267.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   49592  investPrice=$  121221  ownUnits= 55  foeUnits= 13
+      267.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   51074  investPrice=$  121221  ownUnits= 57  foeUnits= 13
+      268.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   53556  investPrice=$  121221  ownUnits= 58  foeUnits= 12
+      268.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   55038  investPrice=$  121221  ownUnits= 59  foeUnits= 12
+      268.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   55020  investPrice=$  121221  ownUnits= 60  foeUnits= 12
+      268.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   56502  investPrice=$  121221  ownUnits= 61  foeUnits= 12
+      268.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   56484  investPrice=$  121221  ownUnits= 62  foeUnits= 12
+      268.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   57966  investPrice=$  121221  ownUnits= 63  foeUnits= 12
+      269.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   60448  investPrice=$  121221  ownUnits= 64  foeUnits= 12
+      269.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   61930  investPrice=$  121221  ownUnits= 65  foeUnits= 12
+      269.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   61912  investPrice=$  121221  ownUnits= 66  foeUnits= 12
+      269.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   63394  investPrice=$  121221  ownUnits= 67  foeUnits= 12
+      269.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   63376  investPrice=$  121221  ownUnits= 68  foeUnits= 14
+      269.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   63358  investPrice=$  121221  ownUnits= 69  foeUnits= 15
+      270.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   65840  investPrice=$  121221  ownUnits= 70  foeUnits= 16
+      270.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   65822  investPrice=$  121221  ownUnits= 71  foeUnits= 17
+      270.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   65804  investPrice=$  121221  ownUnits= 72  foeUnits= 18
+      270.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   65786  investPrice=$  121221  ownUnits= 73  foeUnits= 19
+      270.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   63720  investPrice=$  121221  ownUnits= 74  foeUnits= 21
+      270.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   63702  investPrice=$  121221  ownUnits= 75  foeUnits= 22
+      271.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   66184  investPrice=$  121221  ownUnits= 76  foeUnits= 23
+      271.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   66166  investPrice=$  121221  ownUnits= 77  foeUnits= 24
+      271.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   66148  investPrice=$  121221  ownUnits= 78  foeUnits= 25
+      271.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   66130  investPrice=$  121221  ownUnits= 79  foeUnits= 26
+      271.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   66112  investPrice=$  121221  ownUnits= 80  foeUnits= 27
+      271.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   66094  investPrice=$  121221  ownUnits= 81  foeUnits= 28
+      272.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   68576  investPrice=$  121221  ownUnits= 82  foeUnits= 30
+      272.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   68558  investPrice=$  121221  ownUnits= 83  foeUnits= 31
+      272.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   68540  investPrice=$  121221  ownUnits= 84  foeUnits= 32
+      272.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   68522  investPrice=$  121221  ownUnits= 85  foeUnits= 33
+      272.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   68504  investPrice=$  121221  ownUnits= 86  foeUnits= 34
+      272.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   68486  investPrice=$  121221  ownUnits= 87  foeUnits= 35
+      273.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   70968  investPrice=$  121221  ownUnits= 88  foeUnits= 36
+      273.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70630  investPrice=$  121221  ownUnits= 89  foeUnits= 37
+      273.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70231  investPrice=$  121221  ownUnits= 91  foeUnits= 40
+      273.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70213  investPrice=$  121221  ownUnits= 92  foeUnits= 41
+      273.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70195  investPrice=$  121221  ownUnits= 93  foeUnits= 42
+      274.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   72677  investPrice=$  121221  ownUnits= 94  foeUnits= 43
+      274.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70611  investPrice=$  121221  ownUnits= 95  foeUnits= 45
+      274.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70593  investPrice=$  121221  ownUnits= 96  foeUnits= 46
+      274.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70575  investPrice=$  121221  ownUnits= 97  foeUnits= 47
+      274.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70557  investPrice=$  121221  ownUnits= 98  foeUnits= 48
+      274.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   70539  investPrice=$  121221  ownUnits= 99  foeUnits= 49
+      275.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   73021  investPrice=$  121221  ownUnits= 98  foeUnits= 20
+      275.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72940  investPrice=$  121221  ownUnits= 99  foeUnits= 21
+      275.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72922  investPrice=$  121221  ownUnits=100  foeUnits= 22
+      275.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72841  investPrice=$  121221  ownUnits=101  foeUnits= 22
+      275.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72760  investPrice=$  121221  ownUnits=102  foeUnits= 23
+      275.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   72679  investPrice=$  121221  ownUnits=103  foeUnits= 25
+      276.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75161  investPrice=$  121221  ownUnits=104  foeUnits= 25
+      276.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75143  investPrice=$  121221  ownUnits=105  foeUnits= 25
+      276.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75125  investPrice=$  121221  ownUnits=106  foeUnits= 25
+      276.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73649  investPrice=$  121221  ownUnits=109  foeUnits= 24
+      276.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73631  investPrice=$  121221  ownUnits=110  foeUnits= 24
+      277.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76113  investPrice=$  121221  ownUnits=112  foeUnits= 24
+      277.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76095  investPrice=$  121221  ownUnits=113  foeUnits= 23
+      277.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76077  investPrice=$  121221  ownUnits=115  foeUnits= 24
+      277.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76059  investPrice=$  121221  ownUnits=116  foeUnits= 24
+      277.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76041  investPrice=$  121221  ownUnits=118  foeUnits= 25
+      277.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76023  investPrice=$  121221  ownUnits=119  foeUnits= 25
+      278.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78505  investPrice=$  121221  ownUnits= 29  foeUnits= 26
+      278.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76439  investPrice=$  121221  ownUnits= 30  foeUnits= 28
+      278.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76421  investPrice=$  121221  ownUnits= 31  foeUnits= 30
+      278.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76403  investPrice=$  121221  ownUnits= 32  foeUnits= 31
+      278.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76385  investPrice=$  121221  ownUnits= 33  foeUnits= 32
+      278.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76367  investPrice=$  121221  ownUnits= 34  foeUnits= 33
+      279.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78849  investPrice=$  121221  ownUnits= 33  foeUnits= 34
+      279.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78831  investPrice=$  121221  ownUnits= 34  foeUnits= 35
+      279.3s  P2 would spawn  reason=wiper            killRaw=False lock=-            hazBlackout=False money=$   78813  investPrice=$  121221  ownUnits= 35  foeUnits= 36
+      279.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78732  investPrice=$  121221  ownUnits= 36  foeUnits= 37
+      279.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78714  investPrice=$  121221  ownUnits= 36  foeUnits= 37
+      279.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78696  investPrice=$  121221  ownUnits= 37  foeUnits= 37
+      280.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81178  investPrice=$  121221  ownUnits= 37  foeUnits= 37
+      280.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81160  investPrice=$  121221  ownUnits= 38  foeUnits= 37
+      280.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81142  investPrice=$  121221  ownUnits= 39  foeUnits= 38
+      280.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81124  investPrice=$  121221  ownUnits= 37  foeUnits= 39
+      280.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73288  investPrice=$  121221  ownUnits= 39  foeUnits= 41
+      281.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75770  investPrice=$  121221  ownUnits= 40  foeUnits= 42
+      281.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75752  investPrice=$  121221  ownUnits= 40  foeUnits= 41
+      281.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75734  investPrice=$  121221  ownUnits= 41  foeUnits= 41
+      281.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73668  investPrice=$  121221  ownUnits= 40  foeUnits= 39
+      281.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73650  investPrice=$  121221  ownUnits= 40  foeUnits= 34
+      281.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73632  investPrice=$  121221  ownUnits= 40  foeUnits= 35
+      282.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76114  investPrice=$  121221  ownUnits= 41  foeUnits= 36
+      282.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76096  investPrice=$  121221  ownUnits= 42  foeUnits= 37
+      282.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   77578  investPrice=$  121221  ownUnits= 41  foeUnits= 38
+      282.5s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   77560  investPrice=$  121221  ownUnits= 42  foeUnits= 39
+      282.7s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   79042  investPrice=$  121221  ownUnits= 42  foeUnits= 38
+      282.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   79024  investPrice=$  121221  ownUnits= 42  foeUnits= 37
+      283.0s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   83006  investPrice=$  121221  ownUnits= 43  foeUnits= 37
+      283.2s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   82988  investPrice=$  121221  ownUnits= 43  foeUnits= 37
+      283.3s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   84470  investPrice=$  121221  ownUnits= 44  foeUnits= 38
+      283.8s  P2 would spawn  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   85952  investPrice=$  121221  ownUnits= 43  foeUnits= 36
+      285.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95434  investPrice=$  121221  ownUnits= 38  foeUnits= 30
+      285.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95353  investPrice=$  121221  ownUnits= 36  foeUnits= 29
+      285.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95272  investPrice=$  121221  ownUnits= 37  foeUnits= 29
+      286.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97754  investPrice=$  121221  ownUnits= 38  foeUnits= 30
+      286.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97673  investPrice=$  121221  ownUnits= 38  foeUnits= 31
+      286.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97592  investPrice=$  121221  ownUnits= 39  foeUnits= 31
+      286.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97511  investPrice=$  121221  ownUnits= 39  foeUnits= 29
+      286.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95972  investPrice=$  121221  ownUnits= 39  foeUnits= 28
+      287.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98391  investPrice=$  121221  ownUnits= 39  foeUnits= 28
+      287.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98310  investPrice=$  121221  ownUnits= 40  foeUnits= 29
+      287.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98229  investPrice=$  121221  ownUnits= 41  foeUnits= 27
+      287.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98148  investPrice=$  121221  ownUnits= 43  foeUnits= 25
+      287.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98130  investPrice=$  121221  ownUnits= 44  foeUnits= 25
+      287.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98049  investPrice=$  121221  ownUnits= 46  foeUnits= 23
+      288.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100468  investPrice=$  121221  ownUnits= 47  foeUnits= 22
+      288.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100387  investPrice=$  121221  ownUnits= 47  foeUnits= 21
+      288.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100306  investPrice=$  121221  ownUnits= 41  foeUnits= 20
+      288.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100225  investPrice=$  121221  ownUnits= 42  foeUnits= 19
+      288.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100207  investPrice=$  121221  ownUnits= 41  foeUnits= 19
+      288.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100126  investPrice=$  121221  ownUnits= 42  foeUnits= 20
+      289.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102545  investPrice=$  121221  ownUnits= 43  foeUnits= 21
+      289.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102464  investPrice=$  121221  ownUnits= 43  foeUnits= 22
+      289.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102383  investPrice=$  121221  ownUnits= 44  foeUnits= 18
+      289.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102365  investPrice=$  121221  ownUnits= 42  foeUnits= 20
+      289.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102284  investPrice=$  121221  ownUnits= 43  foeUnits= 19
+      289.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102203  investPrice=$  121221  ownUnits= 44  foeUnits= 20
+      290.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104622  investPrice=$  121221  ownUnits= 45  foeUnits= 21
+      290.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104541  investPrice=$  121221  ownUnits= 46  foeUnits= 22
+      290.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104460  investPrice=$  121221  ownUnits= 47  foeUnits= 23
+      290.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104442  investPrice=$  121221  ownUnits= 46  foeUnits= 24
+      290.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104361  investPrice=$  121221  ownUnits= 47  foeUnits= 25
+      290.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104280  investPrice=$  121221  ownUnits= 48  foeUnits= 24
+      291.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106699  investPrice=$  121221  ownUnits= 49  foeUnits= 22
+      291.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106618  investPrice=$  121221  ownUnits= 50  foeUnits= 21
+      291.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106600  investPrice=$  121221  ownUnits= 51  foeUnits= 20
+      291.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106519  investPrice=$  121221  ownUnits= 52  foeUnits= 19
+      291.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106438  investPrice=$  121221  ownUnits= 53  foeUnits= 19
+      291.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106357  investPrice=$  121221  ownUnits= 54  foeUnits= 19
+      292.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108776  investPrice=$  121221  ownUnits= 55  foeUnits= 19
+      292.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108695  investPrice=$  121221  ownUnits= 52  foeUnits= 18
+      292.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108677  investPrice=$  121221  ownUnits= 53  foeUnits= 18
+      292.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108596  investPrice=$  121221  ownUnits= 54  foeUnits= 19
+      292.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108515  investPrice=$  121221  ownUnits= 55  foeUnits= 20
+      292.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108434  investPrice=$  121221  ownUnits= 56  foeUnits= 20
+      293.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110853  investPrice=$  121221  ownUnits= 57  foeUnits= 21
+      293.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110835  investPrice=$  121221  ownUnits= 58  foeUnits= 22
+      293.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110754  investPrice=$  121221  ownUnits= 59  foeUnits= 19
+      293.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110673  investPrice=$  121221  ownUnits= 60  foeUnits= 19
+      293.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110592  investPrice=$  121221  ownUnits= 60  foeUnits= 17
+      293.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110511  investPrice=$  121221  ownUnits= 61  foeUnits= 17
+      294.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112930  investPrice=$  121221  ownUnits= 62  foeUnits= 18
+      294.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112912  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112831  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112750  investPrice=$  121221  ownUnits= 64  foeUnits= 17
+      294.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112669  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112588  investPrice=$  121221  ownUnits= 64  foeUnits= 17
+      295.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  115070  investPrice=$  121221  ownUnits= 65  foeUnits= 18
+      295.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114989  investPrice=$  121221  ownUnits= 55  foeUnits= 18
+      295.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114908  investPrice=$  121221  ownUnits= 51  foeUnits= 17
+      295.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114827  investPrice=$  121221  ownUnits= 51  foeUnits= 15
+      295.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114746  investPrice=$  121221  ownUnits= 48  foeUnits= 15
+      296.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109347  investPrice=$  121221  ownUnits= 50  foeUnits= 13
+      296.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109266  investPrice=$  121221  ownUnits= 50  foeUnits= 12
+      296.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109185  investPrice=$  121221  ownUnits= 51  foeUnits= 12
+      296.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109104  investPrice=$  121221  ownUnits= 52  foeUnits= 11
+      296.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109023  investPrice=$  121221  ownUnits= 53  foeUnits= 12
+      297.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109984  investPrice=$  121221  ownUnits= 56  foeUnits= 13
+      297.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109903  investPrice=$  121221  ownUnits= 57  foeUnits= 14
+      297.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109822  investPrice=$  121221  ownUnits= 59  foeUnits= 14
+      297.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  111241  investPrice=$  121221  ownUnits= 60  foeUnits= 14
+      297.7s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  111223  investPrice=$  121221  ownUnits= 58  foeUnits= 14
+      297.8s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112642  investPrice=$  121221  ownUnits= 59  foeUnits= 14
+      298.0s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  115061  investPrice=$  121221  ownUnits= 28  foeUnits= 14
+      298.2s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  116480  investPrice=$  121221  ownUnits=  7  foeUnits= 14
+      298.3s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  116399  investPrice=$  121221  ownUnits=  9  foeUnits= 14
+      298.5s  P2 would spawn  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  117818  investPrice=$  121221  ownUnits= 10  foeUnits= 14

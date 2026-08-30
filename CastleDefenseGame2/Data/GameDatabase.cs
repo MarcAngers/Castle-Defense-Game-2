@@ -80,6 +80,16 @@ public class GameDatabase
         AddColumnIfMissing(conn, "games", "p2_final_money", "REAL");
         AddColumnIfMissing(conn, "games", "p1_final_hp_pct", "REAL");
         AddColumnIfMissing(conn, "games", "p2_final_hp_pct", "REAL");
+
+        // HOW THE GAME ENDED, and specifically whether the winner actually EARNED it.
+        // NULL/"normal" is a real result: a castle fell or the tick limit ran out.
+        // "disconnect" means the loser's browser went away and never came back inside the
+        // 60-second grace window, so the survivor was awarded the game without playing it
+        // out; "abandoned" means nobody was left to award it to. Neither is evidence about
+        // strength, and a win rate that counts them is measuring network reliability.
+        // ReplayFile.SelectHumanGames drops both from the analysis corpus by default --
+        // see IsRealResult, which is the single place that decision is made.
+        AddColumnIfMissing(conn, "games", "end_reason", "TEXT");
     }
 
     private static void AddColumnIfMissing(SqliteConnection conn, string table, string column, string type)
@@ -105,7 +115,8 @@ public class GameDatabase
         int winner, long durationTicks, string gameMode = null, string opponentType = null,
         double? p1FinalIncome = null, double? p2FinalIncome = null,
         double? p1FinalMoney = null, double? p2FinalMoney = null,
-        double? p1FinalHpPct = null, double? p2FinalHpPct = null)
+        double? p1FinalHpPct = null, double? p2FinalHpPct = null,
+        string endReason = null)
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
@@ -115,12 +126,12 @@ public class GameDatabase
                 p2_team, p2_gadget_off, p2_gadget_def, p2_gadget_sig,
                 winner, duration_ticks, game_mode, opponent_type,
                 p1_final_income, p2_final_income, p1_final_money, p2_final_money,
-                p1_final_hp_pct, p2_final_hp_pct)
+                p1_final_hp_pct, p2_final_hp_pct, end_reason)
             VALUES ($id, $ver, $at,
                 $p1t, $p1o, $p1d, $p1s,
                 $p2t, $p2o, $p2d, $p2s,
                 $win, $dur, $mode, $opp,
-                $p1inc, $p2inc, $p1mon, $p2mon, $p1hp, $p2hp)
+                $p1inc, $p2inc, $p1mon, $p2mon, $p1hp, $p2hp, $end)
             """;
         cmd.Parameters.AddWithValue("$id",  id);
         cmd.Parameters.AddWithValue("$ver", gameVersion);
@@ -143,6 +154,7 @@ public class GameDatabase
         cmd.Parameters.AddWithValue("$p2mon", (object)p2FinalMoney ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$p1hp", (object)p1FinalHpPct ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$p2hp", (object)p2FinalHpPct ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$end", (object)endReason ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
@@ -169,7 +181,7 @@ public class GameDatabase
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, game_version, played_at, p1_team, p2_team, winner, duration_ticks, game_mode, opponent_type FROM games ORDER BY played_at DESC";
+        cmd.CommandText = "SELECT id, game_version, played_at, p1_team, p2_team, winner, duration_ticks, game_mode, opponent_type, end_reason FROM games ORDER BY played_at DESC";
         using var reader = cmd.ExecuteReader();
         var results = new List<GameSummary>();
         while (reader.Read())
@@ -183,7 +195,8 @@ public class GameDatabase
                 reader.GetInt32(5),
                 reader.GetInt64(6),
                 reader.IsDBNull(7) ? null : reader.GetString(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8)));
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
         }
         return results;
     }
@@ -199,5 +212,5 @@ public class GameDatabase
 
     public record GameSummary(string Id, string GameVersion, long PlayedAt,
         string P1Team, string P2Team, int Winner, long DurationTicks,
-        string GameMode = null, string OpponentType = null);
+        string GameMode = null, string OpponentType = null, string EndReason = null);
 }

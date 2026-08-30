@@ -233,7 +233,9 @@ namespace CastleDefense.Engine.Models
                 // GameDataManager derives it, and `isAce ? Siege : ...` with isAce defaulting
                 // to (tier == 8) makes EVERY tier-8 unit Siege. Rage scales castle damage
                 // too, matching GameEngine's castle branch.
-                double dps = (double)def.Damage * def.AttackSpeed;
+                // u.Damage, not def.Damage: the random-stat unit's roll lives on the instance, and
+                // this model is about the units actually on the field.
+                double dps = (double)u.Damage * def.AttackSpeed;
                 if (def.AttackType == AttackType.Siege) dps *= 2.0;
                 if (u.Statuses != null)
                     for (int s = 0; s < u.Statuses.Count; s++)
@@ -253,7 +255,7 @@ namespace CastleDefense.Engine.Models
                         var st = u.Statuses[s];
                         if (st.Name == "Slow" || st.Name == "Speed") speedMod *= st.Value;
                     }
-                double effSpeed = def.MoveSpeed * speedMod;   // px per tick
+                double effSpeed = u.BaseSpeed * speedMod;    // px per tick, this unit's own
                 if (effSpeed <= 0) continue;                 // frozen: never arrives
 
                 // Distance to the defender's wall, mirroring GetDistanceToEnemyCastle's

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
@@ -14,7 +14,7 @@ namespace CastleDefense.BotArena
     /// WHICH decisions it fires on, and that ~3/4 of its firings are decisions where the
     /// investment is not yet affordable — i.e. search is choosing when to HOLD. That choice
     /// is currently made from a 300-tick truncated rollout scored by a 6-feature logistic,
-    /// and horizon is a known cliff (250 -> 30%, 200 -> 1.5%) because below ~300 an
+    /// and horizon has a floor (250 -> 30%, 200 -> 1.5%) because below ~270 an
     /// investment does not repay inside the window. The INFERENCE is that the decision
     /// carrying all the bot's margin is evaluated right where the estimator breaks down.
     /// That inference has never been measured. This measures it.

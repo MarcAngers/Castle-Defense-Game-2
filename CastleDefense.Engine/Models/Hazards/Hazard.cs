@@ -2,7 +2,15 @@
 {
     public abstract class Hazard
     {
-        public string Type { get; set; } // "Fire", "Ice", "PoisonCloud", etc.
+        /// The hazard kind. The COMPLETE set the engine creates is: "Blackhole", "Fire",
+        /// "Goo", "Poison", "Wave".
+        ///
+        /// Corrected 2026-08-29: this line used to read `"Fire", "Ice", "PoisonCloud", etc.`
+        /// Neither "Ice" nor "PoisonCloud" has ever existed -- the poison cloud's Type is
+        /// plain "Poison", and there is no ice hazard at all (freeze is a unit STATUS, not a
+        /// ground hazard). The "etc." was doing real damage too: it implied the list was
+        /// open, when ProcessHazards dispatches on exactly these five.
+        public string Type { get; set; }
         public string SourceGadgetId { get; set; }
         public int Side { get; set; }
         public float BaseValue { get; set; }

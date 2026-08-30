@@ -68,9 +68,13 @@ h3 {
     box-shadow: none;
 }
 
-#previous:hover:not(:disabled), #next:hover:not(:disabled) {
-    color: #FFFF00; 
-    transform: scale(1.2);
+/* (hover: hover) -- see the note on button:hover in global-styles.css. On a phone
+   this would stick to whichever arrow was tapped last. */
+@media (hover: hover) {
+    #previous:hover:not(:disabled), #next:hover:not(:disabled) {
+        color: #FFFF00; 
+        transform: scale(1.2);
+    }
 }
 
 #previous:disabled, #next:disabled {
@@ -123,4 +127,42 @@ h3 {
 }
 #blackhole img {
     height: auto;
+}
+/* ============================================================
+   SHORT VIEWPORTS (landscape phones)
+   Same defect the Units screen had, and the same cause: the card is sized for a typical
+   gadget, so the ones with the longest text hang off the bottom. At 812x375 the signature
+   screen ran 22px past the fold (blackhole L3) and the offensive screen 12px (firebomb L1);
+   tactical fit, but only just.
+
+   These cards carry a LEVEL heading the unit cards do not, so there is less room to give,
+   and the icon is the whole point of the screen -- so unlike unit-info this trims spacing
+   ONLY and leaves the gadget art at its full 20vh. The 5vh above the gadget bar is the
+   single biggest saving and the least missed; the rest comes off the gaps around the
+   carousel, title, card, icon and description.
+   ============================================================ */
+@media (max-height: 500px) {
+    #gadget-bar {
+        margin-top: 2vh;
+    }
+
+    #character-carousel {
+        margin: 1vh 0;
+    }
+
+    h1 {
+        margin: 0.25rem 0;
+    }
+
+    .collection-card {
+        padding: 1vh;
+    }
+
+    .collection-image {
+        margin-bottom: 1vh;
+    }
+
+    .collection-desc {
+        margin-top: 1vh;
+    }
 }

@@ -1,0 +1,126 @@
+      275.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   73021  investPrice=$  121221  ownUnits= 98  foeUnits= 20
+      275.2s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72940  investPrice=$  121221  ownUnits= 99  foeUnits= 21
+      275.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72922  investPrice=$  121221  ownUnits=100  foeUnits= 22
+      275.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72841  investPrice=$  121221  ownUnits=101  foeUnits= 22
+      275.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   72760  investPrice=$  121221  ownUnits=102  foeUnits= 23
+      275.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   72679  investPrice=$  121221  ownUnits=103  foeUnits= 25
+      276.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75161  investPrice=$  121221  ownUnits=104  foeUnits= 25
+      276.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75143  investPrice=$  121221  ownUnits=105  foeUnits= 25
+      276.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75125  investPrice=$  121221  ownUnits=106  foeUnits= 25
+      276.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73649  investPrice=$  121221  ownUnits=109  foeUnits= 24
+      276.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73631  investPrice=$  121221  ownUnits=110  foeUnits= 24
+      277.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76113  investPrice=$  121221  ownUnits=112  foeUnits= 24
+      277.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76095  investPrice=$  121221  ownUnits=113  foeUnits= 23
+      277.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76077  investPrice=$  121221  ownUnits=115  foeUnits= 24
+      277.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76059  investPrice=$  121221  ownUnits=116  foeUnits= 24
+      277.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76041  investPrice=$  121221  ownUnits=118  foeUnits= 25
+      277.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76023  investPrice=$  121221  ownUnits=119  foeUnits= 25
+      278.0s  P2 BUYS $  2066  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78505  investPrice=$  121221  ownUnits= 29  foeUnits= 26
+      278.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76439  investPrice=$  121221  ownUnits= 30  foeUnits= 28
+      278.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76421  investPrice=$  121221  ownUnits= 31  foeUnits= 30
+      278.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76403  investPrice=$  121221  ownUnits= 32  foeUnits= 31
+      278.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76385  investPrice=$  121221  ownUnits= 33  foeUnits= 32
+      278.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76367  investPrice=$  121221  ownUnits= 34  foeUnits= 33
+      279.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78849  investPrice=$  121221  ownUnits= 33  foeUnits= 34
+      279.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78831  investPrice=$  121221  ownUnits= 34  foeUnits= 35
+      279.3s  P2 BUYS $    81  reason=wiper            killRaw=False lock=-            hazBlackout=False money=$   78813  investPrice=$  121221  ownUnits= 35  foeUnits= 36
+      279.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78732  investPrice=$  121221  ownUnits= 36  foeUnits= 37
+      279.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78714  investPrice=$  121221  ownUnits= 36  foeUnits= 37
+      279.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   78696  investPrice=$  121221  ownUnits= 37  foeUnits= 37
+      280.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81178  investPrice=$  121221  ownUnits= 37  foeUnits= 37
+      280.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81160  investPrice=$  121221  ownUnits= 38  foeUnits= 37
+      280.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81142  investPrice=$  121221  ownUnits= 39  foeUnits= 38
+      280.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   81124  investPrice=$  121221  ownUnits= 37  foeUnits= 39
+      280.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73288  investPrice=$  121221  ownUnits= 39  foeUnits= 41
+      281.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75770  investPrice=$  121221  ownUnits= 40  foeUnits= 42
+      281.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75752  investPrice=$  121221  ownUnits= 40  foeUnits= 41
+      281.3s  P2 BUYS $  2066  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   75734  investPrice=$  121221  ownUnits= 41  foeUnits= 41
+      281.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73668  investPrice=$  121221  ownUnits= 40  foeUnits= 39
+      281.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73650  investPrice=$  121221  ownUnits= 40  foeUnits= 34
+      281.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   73632  investPrice=$  121221  ownUnits= 40  foeUnits= 35
+      282.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76114  investPrice=$  121221  ownUnits= 41  foeUnits= 36
+      282.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   76096  investPrice=$  121221  ownUnits= 42  foeUnits= 37
+      282.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   77578  investPrice=$  121221  ownUnits= 41  foeUnits= 38
+      282.5s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   77560  investPrice=$  121221  ownUnits= 42  foeUnits= 39
+      282.7s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   79042  investPrice=$  121221  ownUnits= 42  foeUnits= 38
+      282.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   79024  investPrice=$  121221  ownUnits= 42  foeUnits= 37
+      283.0s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   83006  investPrice=$  121221  ownUnits= 43  foeUnits= 37
+      283.2s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   82988  investPrice=$  121221  ownUnits= 43  foeUnits= 37
+      283.3s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   84470  investPrice=$  121221  ownUnits= 44  foeUnits= 38
+      283.8s  P2 BUYS $    18  reason=reactive         killRaw=False lock=-            hazBlackout=False money=$   85952  investPrice=$  121221  ownUnits= 43  foeUnits= 36
+      285.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95434  investPrice=$  121221  ownUnits= 38  foeUnits= 30
+      285.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95353  investPrice=$  121221  ownUnits= 36  foeUnits= 29
+      285.8s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95272  investPrice=$  121221  ownUnits= 37  foeUnits= 29
+      286.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97754  investPrice=$  121221  ownUnits= 38  foeUnits= 30
+      286.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97673  investPrice=$  121221  ownUnits= 38  foeUnits= 31
+      286.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97592  investPrice=$  121221  ownUnits= 39  foeUnits= 31
+      286.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   97511  investPrice=$  121221  ownUnits= 39  foeUnits= 29
+      286.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   95972  investPrice=$  121221  ownUnits= 39  foeUnits= 28
+      287.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98391  investPrice=$  121221  ownUnits= 39  foeUnits= 28
+      287.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98310  investPrice=$  121221  ownUnits= 40  foeUnits= 29
+      287.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98229  investPrice=$  121221  ownUnits= 41  foeUnits= 27
+      287.5s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98148  investPrice=$  121221  ownUnits= 43  foeUnits= 25
+      287.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98130  investPrice=$  121221  ownUnits= 44  foeUnits= 25
+      287.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$   98049  investPrice=$  121221  ownUnits= 46  foeUnits= 23
+      288.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100468  investPrice=$  121221  ownUnits= 47  foeUnits= 22
+      288.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100387  investPrice=$  121221  ownUnits= 47  foeUnits= 21
+      288.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100306  investPrice=$  121221  ownUnits= 41  foeUnits= 20
+      288.5s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100225  investPrice=$  121221  ownUnits= 42  foeUnits= 19
+      288.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100207  investPrice=$  121221  ownUnits= 41  foeUnits= 19
+      288.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  100126  investPrice=$  121221  ownUnits= 42  foeUnits= 20
+      289.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102545  investPrice=$  121221  ownUnits= 43  foeUnits= 21
+      289.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102464  investPrice=$  121221  ownUnits= 43  foeUnits= 22
+      289.3s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102383  investPrice=$  121221  ownUnits= 44  foeUnits= 18
+      289.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102365  investPrice=$  121221  ownUnits= 42  foeUnits= 20
+      289.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102284  investPrice=$  121221  ownUnits= 43  foeUnits= 19
+      289.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  102203  investPrice=$  121221  ownUnits= 44  foeUnits= 20
+      290.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104622  investPrice=$  121221  ownUnits= 45  foeUnits= 21
+      290.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104541  investPrice=$  121221  ownUnits= 46  foeUnits= 22
+      290.3s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104460  investPrice=$  121221  ownUnits= 47  foeUnits= 23
+      290.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104442  investPrice=$  121221  ownUnits= 46  foeUnits= 24
+      290.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104361  investPrice=$  121221  ownUnits= 47  foeUnits= 25
+      290.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  104280  investPrice=$  121221  ownUnits= 48  foeUnits= 24
+      291.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106699  investPrice=$  121221  ownUnits= 49  foeUnits= 22
+      291.2s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106618  investPrice=$  121221  ownUnits= 50  foeUnits= 21
+      291.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106600  investPrice=$  121221  ownUnits= 51  foeUnits= 20
+      291.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106519  investPrice=$  121221  ownUnits= 52  foeUnits= 19
+      291.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106438  investPrice=$  121221  ownUnits= 53  foeUnits= 19
+      291.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  106357  investPrice=$  121221  ownUnits= 54  foeUnits= 19
+      292.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108776  investPrice=$  121221  ownUnits= 55  foeUnits= 19
+      292.2s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108695  investPrice=$  121221  ownUnits= 52  foeUnits= 18
+      292.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108677  investPrice=$  121221  ownUnits= 53  foeUnits= 18
+      292.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108596  investPrice=$  121221  ownUnits= 54  foeUnits= 19
+      292.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108515  investPrice=$  121221  ownUnits= 55  foeUnits= 20
+      292.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  108434  investPrice=$  121221  ownUnits= 56  foeUnits= 20
+      293.0s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110853  investPrice=$  121221  ownUnits= 57  foeUnits= 21
+      293.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110835  investPrice=$  121221  ownUnits= 58  foeUnits= 22
+      293.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110754  investPrice=$  121221  ownUnits= 59  foeUnits= 19
+      293.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110673  investPrice=$  121221  ownUnits= 60  foeUnits= 19
+      293.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110592  investPrice=$  121221  ownUnits= 60  foeUnits= 17
+      293.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  110511  investPrice=$  121221  ownUnits= 61  foeUnits= 17
+      294.0s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112930  investPrice=$  121221  ownUnits= 62  foeUnits= 18
+      294.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112912  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112831  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112750  investPrice=$  121221  ownUnits= 64  foeUnits= 17
+      294.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112669  investPrice=$  121221  ownUnits= 63  foeUnits= 17
+      294.8s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112588  investPrice=$  121221  ownUnits= 64  foeUnits= 17
+      295.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  115070  investPrice=$  121221  ownUnits= 65  foeUnits= 18
+      295.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114989  investPrice=$  121221  ownUnits= 55  foeUnits= 18
+      295.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114908  investPrice=$  121221  ownUnits= 51  foeUnits= 17
+      295.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114827  investPrice=$  121221  ownUnits= 51  foeUnits= 15
+      295.7s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  114746  investPrice=$  121221  ownUnits= 48  foeUnits= 15
+      296.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109347  investPrice=$  121221  ownUnits= 50  foeUnits= 13
+      296.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109266  investPrice=$  121221  ownUnits= 50  foeUnits= 12
+      296.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109185  investPrice=$  121221  ownUnits= 51  foeUnits= 12
+      296.5s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109104  investPrice=$  121221  ownUnits= 52  foeUnits= 11
+      296.7s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109023  investPrice=$  121221  ownUnits= 53  foeUnits= 12
+      297.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109984  investPrice=$  121221  ownUnits= 56  foeUnits= 13
+      297.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109903  investPrice=$  121221  ownUnits= 57  foeUnits= 14
+      297.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  109822  investPrice=$  121221  ownUnits= 59  foeUnits= 14
+      297.5s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  111241  investPrice=$  121221  ownUnits= 60  foeUnits= 14
+      297.7s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  111223  investPrice=$  121221  ownUnits= 58  foeUnits= 14
+      297.8s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  112642  investPrice=$  121221  ownUnits= 59  foeUnits= 14
+      298.0s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  115061  investPrice=$  121221  ownUnits= 28  foeUnits= 14
+      298.2s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  116480  investPrice=$  121221  ownUnits=  7  foeUnits= 14
+      298.3s  P2 BUYS $    81  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  116399  investPrice=$  121221  ownUnits=  9  foeUnits= 14
+      298.5s  P2 BUYS $    18  reason=attack           killRaw=False lock=-            hazBlackout=False money=$  117818  investPrice=$  121221  ownUnits= 10  foeUnits= 14

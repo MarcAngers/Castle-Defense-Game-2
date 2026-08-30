@@ -22,8 +22,34 @@ namespace CastleDefense.Engine.Models
         public bool IsWall => DefinitionId != null && DefinitionId.StartsWith("wall");
 
         // --- DRAWING & HITBOX ---
+
+        /// <summary>
+        /// The unit's LOGICAL size, always its definition's. Every distance in the engine is
+        /// measured with it -- contact clamping, targeting range, spawn placement, distance
+        /// to the enemy castle.
+        ///
+        /// DO NOT MAKE THIS PER-INSTANCE. It was briefly scaled per spawn for the
+        /// random-stat unit and the result was broken combat: ClampToContact stopped a unit
+        /// using its instance width while FindTargetsFast measured reach from the
+        /// DEFINITION's, so a large one halted 33px short of what its own targeting thought
+        /// it could reach and simply stood there, while its opponent could hit it without
+        /// being hit back. The two must agree, and half the engine reads the definition.
+        /// See <see cref="VisualScale"/> for the appearance-only version.
+        /// </summary>
         public int Width { get; set; }
         public int Height { get; set; }
+
+        /// <summary>
+        /// Multiplier the CLIENT draws this unit at. Purely cosmetic: nothing in the engine
+        /// reads it, so a unit that looks twice the size still occupies, reaches and is
+        /// reached exactly as its <see cref="Width"/> says.
+        ///
+        /// 1.0 for every unit except <see cref="GameEngine.RandomStatUnitId"/>, whose roll it
+        /// advertises. The deliberate trade is that a scaled sprite's edges do not line up
+        /// with where it actually fights -- accepted as much cheaper and far less bug-prone
+        /// than making the whole engine size-aware, which it was never designed to be.
+        /// </summary>
+        public float VisualScale { get; set; } = 1f;
 
 
         // --- HEALTH ---
@@ -34,6 +60,21 @@ namespace CastleDefense.Engine.Models
         // --- POSITION & MOVEMENT ---
         public float Position { get; set; }
         public int YPosition { get; set; }
+
+        /// <summary>
+        /// This unit's own movement speed before status effects, in px/tick.
+        ///
+        /// SEPARATE FROM <see cref="CurrentSpeed"/> BECAUSE CurrentSpeed IS NOT A STAT --
+        /// it is the live value, and MoveAndFight rewrites it every tick (to 0 while in
+        /// contact, to speed x modifier otherwise). Anything written to it at spawn is gone
+        /// on the next tick, which is why a per-unit speed needs a field of its own.
+        ///
+        /// Initialised from UnitDefinition.MoveSpeed, so for every ordinary unit this is
+        /// exactly the definition's value and reading one or the other is the same thing.
+        /// Only <see cref="GameEngine.RandomStatUnitId"/> differs.
+        /// </summary>
+        public float BaseSpeed { get; set; }
+
         public float CurrentSpeed { get; set; }
         public float PendingKnockback { get; set; }
         public long LastKnockbackTick { get; set; }

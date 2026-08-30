@@ -13,6 +13,9 @@ namespace CastleDefense.Engine.Gadgets
             _def = def;
         }
 
+        /// <summary>Goo heals allies standing in it. The enemy slow is a bonus, not the anchor.</summary>
+        public GadgetAim Aim => GadgetAim.Ally;
+
         public void Execute(GameEngine engine, int side, int position)
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);

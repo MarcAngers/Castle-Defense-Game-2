@@ -1,0 +1,164 @@
+/* A flex column so the art can give up height to the effect text rather than the text
+   pushing the Back button off the bottom of the screen. The effect blurbs are not written
+   yet -- whatever length they turn out to be, the art absorbs it (see .map-art). */
+#map-info {
+    padding-top: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#team-bar,
+#map-info > div:last-child {
+    flex: 0 0 auto;
+}
+
+button {
+    font-size: 0.6rem;
+    margin: 2vh;
+}
+
+h1 {
+    font-size: 1.1rem;
+    margin: 0.5rem 0;
+}
+
+/* The top margin is what separates the effect section from the art above it -- without it
+   the heading sits right against the picture's border and reads as a caption on it rather
+   than as its own section. The art gives up the height for it (see .collection-card). */
+h3 {
+    font-size: 0.7rem;
+    margin: 1rem 0 0.5rem 0;
+}
+
+/* The Units screen's colour selector with a NINTH tile for the shadow maps, which is the
+   whole reason for the vw terms below. Nine tiles at the Units screen's flat 15vh do not
+   fit a 16:10 desktop -- flexbox absorbs the overflow by shrinking them, and since only
+   the width shrinks the tiles stop being square (158x171 at 1440x900). Capping against
+   the viewport WIDTH as well keeps them square at every shape, at the cost of them being
+   a little smaller here than on the Units screen. Both halves of the border use the same
+   expression so a tile does not change size when it becomes selected. */
+#team-bar {
+    display: flex;
+    justify-content: space-evenly;
+    padding: 0.5em;
+}
+
+.team {
+    height: min(15vh, 8vw); width: min(15vh, 8vw);
+    border: min(2vh, 1vw) solid black;
+}
+.selected {
+    border: min(2vh, 1vw) solid lightgreen;
+}
+
+/* min-height: 0 is what actually lets the card shrink -- a flex item's default
+   min-height: auto refuses to go below its content, which is exactly the overflow this
+   column is here to prevent. */
+.character {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;   /* the card is as tall as its content, not the whole column */
+    margin: 1vh 0;
+}
+
+/* The art is the point of this screen, so the card is sized FROM it rather than the other
+   way round -- every map is 2000x500, and the card's width is what sets the art's.
+   The three terms are three different limits, and on a landscape phone the LAST one binds:
+   a 4:1 picture wide enough to fill the screen would be 203px tall, over half the 375px a
+   landscape phone has, so the vh term caps the art's height instead and gives up some
+   width for it. On a desktop the rem or vw term binds first and the art fills the card.
+
+   The vh term is set BELOW what the height budget allows on purpose. The slack it leaves
+   is the effect section's: the margin above its heading, and room for the blurb to run to
+   several lines before it has to start taking height back off the art. */
+.collection-card {
+    background-color: #222;
+    border: 2px solid #444;
+    border-radius: 12px;
+    padding: 1.5vh;
+    text-align: center;
+    color: white;
+    width: min(90vw, 54rem, 148vh);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    box-sizing: border-box;
+}
+
+/* Background and foreground are separate PNGs of the same 2000x500 canvas, drawn one on
+   top of the other exactly as view.js layers them in game -- minus the parallax offset,
+   which only means anything while a camera is moving.
+
+   `flex: 0 1 auto` -- never grow, always allowed to shrink. The aspect ratio is the art's
+   PREFERRED height, which is what it gets whenever the card has room; a long effect blurb
+   takes its lines out of the art instead of off the bottom of the screen. object-fit
+   keeps the picture's own 4:1 shape when that happens, so it letterboxes rather than
+   stretching. */
+.map-art {
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 0;
+    width: 100%;
+    aspect-ratio: 4 / 1;
+    border: 2px solid #444;
+    background: #000;
+    overflow: hidden;
+}
+
+.map-art img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Kept character-for-character identical to the ctx.filter string in view.js's
+   drawBackground/drawForeground -- this tile is a preview of that effect, so if the two
+   ever drift the Collection would be advertising a look the game does not produce. */
+.map-art.shadow img {
+    filter: grayscale(100%) brightness(50%) contrast(140%);
+}
+
+/* The effect text is not written yet, so this reserves its line whether or not the CSV
+   has anything to put in it -- the card keeps the same height as the player clicks
+   through the colours instead of jumping about. */
+.map-effect {
+    flex: 0 0 auto;
+    margin: 0;
+    min-height: 1.4em;
+    color: #aaa;
+    font-size: 0.6rem;
+    line-height: 1.4;
+}
+
+/* ============================================================
+   SHORT VIEWPORTS (landscape phones)
+   The map art is 4:1, so every pixel of height the rest of the screen takes costs it FOUR
+   pixels of width. At 812x375 the full-size colour bar alone is 84px -- 22% of the screen
+   for a control that is eight squares -- and it held the art down to 379px wide, a third
+   of the pane. Shrinking the bar (and tightening the title and Back button) here buys the
+   art ~280px of width without changing how the selector looks on a desktop, where there is
+   height to spare and it stays identical to the one on the Units screen.
+   ============================================================ */
+@media (max-height: 500px) {
+    .team {
+        height: 9vh; width: 9vh;
+        border: 1.5vh solid black;
+    }
+    .selected {
+        border: 1.5vh solid lightgreen;
+    }
+
+    h1 {
+        margin: 0.25rem 0;
+    }
+
+    button {
+        margin: 1vh;
+    }
+}

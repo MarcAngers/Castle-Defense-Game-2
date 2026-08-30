@@ -1,6 +1,7 @@
-using CastleDefense.Engine.Data;
+﻿using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Models.Hazards;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -68,6 +69,58 @@ namespace CastleDefense.Engine.Bot
         public bool ClampProjectionToCastle { get; init; } = true;
 
         public float NukeSelfDamageMargin { get; init; } = 2.0f;
+
+        // INCOMING-NUKE REPAIR (Marc's report, 2026-08-20). The margin above stops the bot
+        // killing itself with its OWN nuke. Nothing looked at the ENEMY'S -- and a nuke
+        // damages BOTH castles equally, so the exact blast that the suicide guard refuses
+        // to self-inflict is one the opponent can hand us for free by casting it themselves.
+        //
+        // The bot's whole danger model is a DAMAGE-RATE model: time-to-death is HP divided
+        // by an observed or projected drain from units in contact. A nuke is not a rate. It
+        // is a single instantaneous 100 / 1500 / 12000 hit that appears in no drain estimate
+        // at all, so a castle sitting at 8,000 HP with no enemy unit near it reads as
+        // perfectly safe right up until a nuke_3 deletes it. Marc's framing: the bot should
+        // survive it "even if it isn't in any danger otherwise".
+        //
+        // What makes it answerable is the 48-tick (~1.6s) delay between cast and detonation,
+        // which is ~10 decisions at this bot's cadence. Repair is the only thing that heals
+        // a castle (heal/goo are units-only), and one step is enormous -- CastleMaxHealth is
+        // 1000 + 11000*RepairCount and the refill is +20% of the NEW max -- so a single
+        // affordable repair clears most blasts outright.
+        //
+        // Reads the queued blast rather than assuming a level: GameEngine.IncomingCastleDamage
+        // sums the actual pending detonations, so it gets the level right by construction,
+        // covers several nukes in the air at once (ARMAGEDDON fires nuke_3 on a repeating
+        // schedule), and covers our own in-flight nuke as well as theirs.
+        //
+        // CONFIRMED MECHANICALLY FIRST, before any ladder run: `--nuke-defence-check` puts
+        // the bot on an EMPTY board (no units, so every rate-based danger signal reads safe)
+        // below the blast already in flight. Without this flag it dies to nuke_2 and nuke_3
+        // outright, having spent the window investing; with it, it buys 1 and 2 repairs and
+        // survives on 9,299 and 23,060 HP. Level 1 is a genuine no-op -- a 100 blast is only
+        // lethal under 100 HP, which RepairHpThreshold already covers.
+        //
+        // MEASURED ON THE LADDER, seed 12345, 250 setups x 2 sides, vs IncomingNukeRepairOff
+        // paired inside one run. THE ONLY RUNG THAT MOVES IS THE MIRROR, which is the only
+        // rung whose opponent casts nukes at all -- DoNothing, Tier1Spam, Tier4Spam,
+        // Investor, BalancedHuman and HumanClone come back BYTE-IDENTICAL (same wins, same
+        // avg_ticks to the tick) in both modes, pinned and unpinned:
+        //
+        //                        mirror ns      mirror hs
+        //   --offense nuke     49.0 vs 35.2   48.8 vs 39.8      (full exposure)
+        //   unpinned           51.8 vs 44.8   51.2 vs 47.6      (nuke = 1 of 4 draws)
+        //
+        // +13.8 / +9.0 points head-to-head at full exposure, i.e. ~+104 / +68 Elo, diluting
+        // to +7.0 / +3.6 when the gadget is only drawn a quarter of the time. Sharp and
+        // one-sided in exactly the place the mechanism predicts, which is the strongest form
+        // this evidence can take -- and note that the DEPLOYED singleplayer configuration
+        // pins the bot to White/nuke/*, so it sits at the pinned end of that range.
+        public bool IncomingNukeRepair { get; init; } = true;
+
+        // Headroom over the incoming blast, same reasoning as NukeSelfDamageMargin: the
+        // detonation lands ~1.6s later and ordinary unit damage keeps landing in between,
+        // so "survives it exactly, right now" is not the question being asked.
+        public float IncomingNukeSurvivalMargin { get; init; } = 1.25f;
 
         // (15) BOUNDED ATTACK WAVE -- TESTED AND REJECTED, kept at 0 (disabled). The
         // DIAGNOSIS below is correct and was confirmed by trace; it is this particular
@@ -270,7 +323,12 @@ namespace CastleDefense.Engine.Bot
         // Share of income defence may consume. The complement is guaranteed savings growth,
         // which is the whole point -- at 0.6 the bot banks 40% of income even while under
         // sustained attack.
-        public double ReactiveSpendFractionOfIncome { get; init; } = 0.6;
+        // LOWERED 0.6 -> 0.3, 2026-08-21, Marc's call after the 3225A7 breakdown: the bot
+        // allocated 74% of its money to military against his 30%, and the complement of this
+        // fraction is exactly the guaranteed savings growth. At 0.3 it banks 70% of income
+        // even under sustained attack, which is the split his winning line actually uses.
+        // Repair75/DrainProximity-style regression profiles for the old value are below.
+        public double ReactiveSpendFractionOfIncome { get; init; } = 0.3;
         // How many seconds of that rate may bank while quiet, so a real wave can still be
         // answered with a burst rather than a trickle.
         public double ReactiveAllowanceCapSeconds { get; init; } = 12.0;
@@ -278,7 +336,195 @@ namespace CastleDefense.Engine.Bot
         public float SafetyMarginMultiplier { get; init; } = 1.4f;
         public float SafetyBufferSeconds { get; init; } = 2f;
         public float EnemyIsCloseDistance { get; init; } = 700f;
-        public float RepairHpThreshold { get; init; } = 0.75f;
+        // ── CHANGED 0.75 -> 0.60, 2026-08-20, Marc's call. ──────────────────────────
+        //
+        // MEASURED NEUTRAL, ADOPTED FOR A REASON THE LADDER CANNOT SEE. ladder 200
+        // (400 games/rung, seed 4242, paired in one run) put 0.60 at 88.39% nostart
+        // (p=0.740 vs the 0.75 control's 88.11%) and 84.11% headstart (p=0.942 vs 84.18%),
+        // with Tier4Spam byte-identical at 83.0% and earned invests unmoved. It is as close
+        // to a pure null as this harness produces.
+        //
+        // The reason to take it anyway is the ROLLOUT, not the ladder. HeuristicBot is
+        // RolloutSearchBot's opponent model, and --defender-trace on 7A385A tick 781 showed
+        // the simulated defender answering a single incoming unit by repairing the moment
+        // its castle dipped under 0.75 while nothing threatened it -- then spending ~$400 on
+        // gadgets across the window. Marc plays through that chip damage and keeps saving.
+        // A defender that reaches for the repair less readily is a closer model of the human
+        // search actually has to beat, and this change buys that at no measured cost.
+        //
+        // DO NOT LOWER IT FURTHER WITHOUT RE-MEASURING. 0.50 was tested in the same run and
+        // is clearly NEGATIVE: Tier4Spam collapses 83.0% -> 69.0% with earned invests
+        // 4.57 -> 4.13. Sustained chip damage is exactly where the threshold is load-bearing,
+        // and 0.50 leaves the bot sitting in the 50-75% band without repairing. The window
+        // between 0.60 and 0.75 is free; below 0.60 it is not.
+        //
+        // BLAST RADIUS, stated because this is a DEFAULT and not a profile: it moves
+        // singleplayer's bot (search's prior), every ladder rung's HeuristicBot opponent,
+        // search's rollout policy for BOTH sides, and the reference the counter table was
+        // fitted against. Any HeuristicBot number recorded before 2026-08-20 is now measured
+        // against a slightly different agent. The 0.75 behaviour is preserved as the
+        // Repair75 profile so the old configuration stays reproducible.
+        public float RepairHpThreshold { get; init; } = 0.60f;
+
+        /// <summary>
+        /// Repair when time-to-death drops below this many seconds, and never otherwise.
+        /// 0 restores the pre-2026-08-21 rule (RepairHpThreshold || inDanger). See the block
+        /// in Decide() for why the old gate leaked.
+        /// </summary>
+        // ── MEASURED 2026-08-21: THE TIMING CHANGE IS NOT THE WIN. ─────────────────
+        // ladder 200 (400 games/rung), seed 4242, both modes, paired:
+        //
+        //   threshold      nostart   headstart   Tier4Spam ns/hs   p vs legacy (ns/hs)
+        //   legacy          91.82%     89.57%      89.2% / 94.0%          -
+        //   ttd 8s          92.32%     89.25%      92.0% / 94.0%     0.49 / 0.70
+        //   ttd 5.5s        90.68%     88.50%      83.8% / 88.5%     0.13 / 0.20
+        //   ttd 3s          87.43%     87.29%      72.2% / 85.8%     7e-08 / 0.0075
+        //
+        // Monotone in the threshold, and the damage is concentrated almost entirely in
+        // Tier4Spam -- sustained chip damage, the one matchup where the HP buffer is
+        // load-bearing. This replicates the RepairHpThreshold 0.50 result exactly: tighten
+        // the repair trigger and Tier4Spam collapses while everything else barely moves.
+        // The bot has to repair BEFORE it is seconds from death, because the buffer is what
+        // lets it survive the next minute, not the next second.
+        //
+        // THE DEEPER POINT, and the reason none of these thresholds is the answer: a TTD gate
+        // changes WHEN the bot repairs, not WHAT PRICE it will pay. The 7th repair on 3225A7
+        // cost $8,837 and was taken under real pressure -- a TTD gate would have permitted it
+        // too. The problem measured there is PRICE-BLINDNESS: repair is still the only
+        // inDanger-authorised purchase in this file with no cost test at all, while every
+        // gadget path checks def.Cost against reactiveSpendBudget or BigSpendJustified.
+        //
+        // ── RE-MEASURED 2026-08-21 AFTER UnifiedTimeToDeath SHIPPED. 5.5s CONFIRMED. ──
+        //
+        // THE FIRST SWEEP WAS MEASURING THE ESTIMATOR, NOT THE THRESHOLD. It ran against the
+        // contact-only TTD, which --repair-audit showed reading INFINITY at six of seven
+        // repairs in 3225A7 -- so 3s/5.5s/8s all refused essentially every repair and the
+        // "tighter is worse" trend was really "the input is blind". With the unified
+        // estimator the same repairs read 8.9s to 422s.
+        //
+        // Re-swept, ladder 200, seed 4242, paired:
+        //
+        //   arm        nostart  headstart  Tier4Spam ns/hs  mirror ns  p vs legacy (ns/hs)
+        //   ttd 5.5     90.96%    89.04%    86.2% / 88.8%     53.5%      0.24 / 0.38
+        //   legacy      90.04%    88.29%    90.2% / 94.2%     40.5%          -
+        //   ttd 15      90.21%    88.82%    92.5% / 94.8%     40.2%      0.82 / 0.53
+        //   ttd 25      89.14%    87.68%    92.5% / 94.8%     32.5%      0.27 / 0.49
+        //   ttd 45      88.50%    87.00%    92.8% / 94.5%     29.2%      0.06 / 0.14
+        //
+        // 5.5s is the best aggregate arm and now BEATS legacy, where against the old
+        // estimator it lost to it. Same threshold, opposite verdict, because the input
+        // changed. The mirror rung is a direct head-to-head (its opponent is the default
+        // bot), and repairing less wins it monotonically: 53.5 / 40.5 / 40.2 / 32.5 / 29.2.
+        //
+        // A PREDICTION OF ~25s, EXTRAPOLATED FROM 3225A7's PER-REPAIR geoTtd, WAS WRONG --
+        // 25s is among the worst arms. One game's repair timings do not determine which
+        // threshold wins across seven rungs and two headstart modes.
+        //
+        // OPEN WEAKNESS, deliberately accepted: against Tier4Spam the bot now UNDER-repairs
+        // by 4-6 points (86.2% at 5.5s against 92.8% at 45s, same shape in headstart). A
+        // single scalar threshold cannot serve both sustained chip damage and the mirror;
+        // separating them would need the gate to consider what KIND of pressure it is under,
+        // not just how many seconds remain. Not attempted.
+        //
+        // The VALUE-gate idea this comment used to propose is dropped. --repair-audit showed
+        // repair #n costs almost exactly investment rung #n (ratio 0.85-1.09 for n=1..7), so
+        // a price-relative-to-rung test is ~constant across the whole game and cannot
+        // discriminate early from late repairs at all.
+        public double RepairTtdSeconds { get; init; } = 5.5;
+
+        // ── REPAIR FIXES, 2026-08-23. ALL THREE DEFAULT TO FLAGSHIP BEHAVIOUR. ──
+        //
+        // The flagship's repair rule is `timeToDeath < 5.5 && money >= price`. It has no
+        // notion of price and no notion of absolute health, and each omission produced one of
+        // the two failures Marc reported and the replays confirmed. Every knob below is off
+        // by default so `bot-checksum --games 24` keeps printing
+        // 643A6CA19C1851CF04A2A0C9F873195C -- see FLAGSHIP_2026-08-23.md.
+
+        /// <summary>
+        /// Apply the price check (`RepairBuysItsPrice`) to the SHIPPED bot, not only the
+        /// defence-only one. Today `worthRepairing = !DefenceOnly || ...` short-circuits to
+        /// true for the shipped bot, so the check is dead code there.
+        ///
+        /// FIXES THE PANIC. In game 1269AD repairs #5/#6/#7 fired at 323.7s, 323.9s and
+        /// 324.0s for $73,828 -- the price ladder is $8/$26/$66/$169/$493/$1,796/$8,837/
+        /// $63,195 and nothing told it #7 costs seven times #6.
+        /// </summary>
+        public bool RepairPriceCheck { get; init; } = false;
+
+        /// <summary>
+        /// Repair whenever castle health is below this fraction of maximum, regardless of what
+        /// the time-to-death estimate says -- still subject to affordability and, if enabled,
+        /// the price check.
+        ///
+        /// FIXES THE OPPOSITE FAILURE. A rate-based time-to-death cannot see an absolute
+        /// floor. In 061479 the bot sat at 822/2,000 HP for eleven seconds with 138 units on
+        /// the field against Marc's 4 and $67,745 in the bank, and never repaired: its army
+        /// was winning so overwhelmingly that incoming damage arrived as rare single hits, the
+        /// observed drain rate was tiny, and TTD read long -- correctly on average, fatally at
+        /// 297 HP. Repair #0 costs $8. 0 disables.
+        /// </summary>
+        public float RepairHpFloorPct { get; init; } = 0f;
+
+        /// <summary>
+        /// Minimum seconds between repairs. The decision loop runs 6x/second, so without this
+        /// the bot can re-fire before the previous repair has changed anything about the
+        /// threat -- five repairs inside 0.7s in game A8C7AC. 0 disables.
+        /// </summary>
+        public double RepairMinIntervalSeconds { get; init; } = 0.0;
+
+        /// <summary>
+        /// Stop buying ATTACKING units while a hazard is live that the purchase cannot survive,
+        /// and put the money on the investment ladder instead. Defaults false so the flagship
+        /// fingerprint is unchanged. See AttackBlockingHazardActive for why an enemy wave
+        /// counts but an allied one does not, while a blackhole counts from EITHER side.
+        ///
+        /// MARC, 2026-08-23: "the Blue team's Wave gadget makes it effectively immune to unit
+        /// damage while it's active. If there is an opposing WaveHazard on the field, you are
+        /// not getting the kill with units... the bot keeps up its attack in this scenario,
+        /// effectively wasting money trying to apply pressure when there is physically no way
+        /// to do so."
+        ///
+        /// The engine agrees. `WaveHazard.ProcessEffect` knocks every non-wall enemy unit
+        /// inside its span backwards by up to 3,000px (level 3) as it sweeps the map, so an
+        /// attacker bought into an active wave is pushed off before it can land a swing.
+        /// `BlackholeHazard` drags units toward its centre for its whole duration. In both
+        /// cases the purchase cannot convert into damage, and the money is simply gone.
+        ///
+        /// DELIBERATELY ATTACK-ONLY. Reactive defence keeps buying: a blocker that gets pushed
+        /// around is still a body the enemy has to chew through afterwards, and gating defence
+        /// on an enemy gadget would hand the opponent a way to switch the bot's defence off.
+        /// </summary>
+        public bool HazardAttackBlackout { get; init; } = false;
+
+        /// <summary>
+        /// Suppress `killerInstinct` while the next investment rung is within this many seconds
+        /// of income. 0 disables. Defaults off so the flagship is unchanged.
+        ///
+        /// WHY. killerInstinct is a deliberate bypass around the attack flow allowance, the
+        /// gadget reserve and the disengage system all at once -- everything that keeps the bot
+        /// investing while it attacks. That is defensible when it really is about to win. It is
+        /// indefensible three seconds from a rung.
+        ///
+        /// Game 0A7658, 146.0s: the bot held $7,362 against a rung price of $8,080 -- $718
+        /// short, 2.8 seconds of income -- and spent $8,264 on four tier-7 units across two
+        /// killerInstinct bursts. It did not buy that rung for another 80 seconds and never
+        /// bought the one after it. Marc: "We definitely do not want to be spending the whole
+        /// bank on attacking, especially when we are close to our next investment rung."
+        /// </summary>
+        public double KillerInstinctInvestLockoutSeconds { get; init; } = 0.0;
+
+        /// <summary>
+        /// Once a killerInstinct push COLLAPSES, refuse to fire it again until the bot holds an
+        /// income advantage. 0/false disables. Defaults off so the flagship is unchanged.
+        ///
+        /// WHY. The trigger asks "how many seconds to kill their castle at the DPS my units are
+        /// applying right now", and has no term for the defender clearing the push. In 0A7658
+        /// the bot's army went 64 -> 11 units in seven seconds; it then fired AGAIN on the
+        /// remnant and spent down to $489. Marc: "If one of our attacks fails, that's typically
+        /// a huge economic swing in favour of our opponent, so we need to re-establish our
+        /// economic advantage before pressing again."
+        /// </summary>
+        public bool KillerInstinctPushLatch { get; init; } = false;
 
         // Attack-vs-savings balance knobs (see HeuristicBot's own field comments for the
         // full design). Marc's own explicit framing when he gave these: "those numbers I
@@ -505,6 +751,56 @@ namespace CastleDefense.Engine.Bot
         // cap entirely. Matches EnemyIsCloseDistance's scale.
         public float GadgetDrainCapCastleThreat { get; init; } = 500f;
 
+        // ── DRAIN-CAP "UNDER ATTACK" TEST (2026-08-20) ──────────────────────────────
+        //
+        // 0 = the original PROXIMITY rule: any enemy unit within GadgetDrainCapCastleThreat
+        // (500px) of our castle disables the drain cap entirely. Above 0, the test becomes
+        // time-to-death instead: underAttack = LastTimeToDeathSeconds < this many seconds.
+        //
+        // WHY IT NEEDED CHANGING, measured on E32DEB. The proximity rule is a latch in
+        // practice -- once a human applies sustained pressure there is always SOMETHING
+        // within 500px, so the cap is off for the rest of the game. With it off, the bot
+        // cast reinforcements_2 on cooldown: $180 every 8.0s against $158 of income per
+        // cycle, i.e. NET NEGATIVE income while casting. It spent $1512 on that gadget
+        // against $290 on investing, and never again afforded the $474 rung -- the drain is
+        // worth almost exactly the two investment rungs separating it from Marc.
+        //
+        // Time-to-death is the right question because the override exists for "I am about to
+        // die, stop saving". Proximity cannot distinguish a lethal wave from one scout
+        // loitering; the TTD estimator already fuses observed HP drain with projected DPS of
+        // whatever is actually in contact, and it is the same number inDanger is built on.
+        //
+        // NOTE this READS LastTimeToDeathSeconds, which Decide() sets before any gadget call
+        // in the same pass, so it is current rather than a tick stale.
+        // ── MEASURED 2026-08-20: THE LARGEST SINGLE WIN OF THE ARC. SHIPPED AT 5s. ──
+        //
+        // ladder 200 (400 games/rung), seed 4242, both modes, all five arms paired:
+        //
+        //   arm          nostart   headstart   invests(ns/hs)
+        //   proximity     88.18%     83.96%     5.46 / 3.72
+        //   ttd 3s        92.00%     90.18%     5.61 / 3.87
+        //   ttd 5s        91.89%     90.21%     5.61 / 3.87
+        //   ttd 8s        91.93%     90.04%     5.61 / 3.86
+        //   ttd 15s       91.89%     89.71%     5.61 / 3.86
+        //
+        // +3.8 points nostart (p = 3.5e-06) and +6.3 headstart (p = 3.1e-12), with earned
+        // invests up on both. 3s / 5s / 8s are statistically indistinguishable; only 15s is
+        // measurably worse, and only in headstart. 5s is shipped because it sits in the flat
+        // middle of the plateau.
+        //
+        // THE FLATNESS IS THE FINDING. If the threshold barely matters, the old rule was not
+        // mis-tuned -- it was firing in states with no danger at all. Proximity cannot tell a
+        // lethal wave from a scout loitering near the wall; any sane time-to-death cut does.
+        //
+        // WHERE THE GAIN LANDS confirms the mechanism rather than just the number:
+        //   Investor    87.5% -> 100.0% (ns), 73.0% -> 89.2% (hs)  -- the pure-economy rung,
+        //               exactly where leaking income into gadgets is fatal
+        //   HumanClone  93.0% -> 100.0%, 92.2% -> 100.0%           -- the Marc-shaped rung
+        //   mirror      53.8% ->  61.0%, 44.2% ->  52.8%
+        //   Tier4Spam   unchanged at 83.0% nostart                 -- sustained real pressure,
+        //               where TTD genuinely IS short and the cap correctly stays off
+        public double DrainCapTtdSeconds { get; init; } = 5;
+
         // (19) EAGER DIVINE -- see the divine case in TryUseSignatureGadget. Divine needs
         // FIFTEEN casts to reach divine_3 (400 XP then 1100, at 100 XP per cast), and
         // divine_3 is what makes the yellow team strong -- total invulnerability for castle
@@ -558,12 +854,23 @@ namespace CastleDefense.Engine.Bot
         // check at castleHpPct < 0.75. So the bot's choice is never "wiper vs repair" -- the
         // wiper was never on the menu.
         //
-        // THE RULE: right before repairing, ask whether a unit exists that would one-shot the
-        // committed stack outright -- which full-damage AoE makes a real question, since one
-        // swing hits every enemy in contact -- and costs materially less than the repair. If
-        // so, buy it instead. Bounded by construction: it only fires where a repair was about
-        // to happen, and buys exactly one unit, so it cannot become the unbounded re-buying
-        // that sank wave-wipe attempt 1.
+        // THE RULE, as shipped: on any decision where enemies are committed against our
+        // castle, find the cheapest unit that one-shots the TOUGHEST of them (health plus
+        // shield, since ApplyDamage spends the shield first) -- which full-damage AoE makes
+        // a real question, since one swing hits every enemy in contact -- and buy it if it
+        // costs at most WiperMaxCostVsStackValue (0.35) of the stack's total value.
+        //
+        // Note what it is NOT priced against: the repair. An earlier version of this
+        // paragraph described the purchase as happening "right before repairing" and being
+        // bounded by only firing where a repair was about to happen. That is the ABANDONED
+        // design described in the correction above -- gating on repairWouldHelp is exactly
+        // what produced Investor -10.0/-9.6 and forced the decoupling. The shipped purchase
+        // is standalone and runs whether or not a repair happened.
+        //
+        // What actually bounds it is WiperMinIntervalSeconds (4.0): a wiper has to walk in
+        // and swing before we can judge whether another is needed, and without that gap the
+        // check re-fires every decision -- which is precisely how wave-wipe attempt 1
+        // collapsed (re-buying 6x/second, Investor 98.5 -> 60.5).
         //
         // This is Marc's "be satisfied with smaller economic swings earlier in the game"
         // expressed as a direct price comparison rather than a tunable swing threshold.
@@ -577,6 +884,12 @@ namespace CastleDefense.Engine.Bot
         // judge whether another is needed; without this the check re-fires every decision,
         // which is exactly how wave-wipe attempt 1 collapsed.
         public double WiperMinIntervalSeconds { get; init; } = 4.0;
+
+        // Whether a wipe is priced on the MARGIN -- what a purchase adds over the units already
+        // deployed -- or on the whole pile as if the field were empty. Exists so the coverage
+        // rule can be measured against its own absence on identical seeds; a bare rate
+        // difference at n=160 has SE ~3.9pp and cannot resolve what this is worth.
+        public bool WiperCountsFieldCoverage { get; init; } = true;
         // Floor on the attack flow as a fraction of income, so a very expensive upcoming
         // investment (the InvestmentCount 7/8 overrides price at 40,000/121,221) can't
         // reduce offensive spending to literally zero for a minute at a time.
@@ -648,6 +961,154 @@ namespace CastleDefense.Engine.Bot
         // the only rung that saves money and can build a real threat, and Investor is
         // the one rung that improved -- which is weak evidence FOR the mechanism even
         // though the aggregate says no. Judge a retest on Investor and the mirror.
+        // ── GEOMETRIC t_death (arm 1, 2026-08-19) ────────────────────────────────────
+        //
+        // Adds GameState.TimeToCastleDeathSeconds as a THIRD input to the existing
+        // Math.Max that produces timeToDeathSeconds. Built for the board evaluator, where
+        // it measured -20 points -- but that arm both DROPPED the army term and ADDED
+        // t_death, so it licenses "not an adequate substitute for army", not "harmful".
+        // See GameState.cs's own note, which says exactly that.
+        //
+        // WHY IT MIGHT WORK HERE WHEN IT DID NOT THERE. The evaluator used it as a linear
+        // positional feature competing for weight share at rollout leaves, and that whole
+        // feature class is unmeasurable on calibration data (dropping army costs +0.0011
+        // logloss and 20 points of play). HeuristicBot uses it as a THRESHOLD input: one
+        // comparison against timeToInvest, one subtraction for reactiveSpendBudget. A
+        // quantity can be a poor linear score and a good trigger.
+        //
+        // WHAT IT ADDS over the two existing estimators, which between them see only
+        // (a) damage that already landed in a ~3s HP window and (b) units LITERALLY
+        // touching the wall -- Range is 0 for every roster unit, so the projected
+        // estimator's contact test is `distance <= 0`:
+        //   travel time for units not yet arrived, a piecewise-linear DPS staircase
+        //   rather than a constant rate, Siege doubling, Rage, Slow/Speed/freeze,
+        //   friendly blockers as an interception delay, and castle invulnerability.
+        //
+        // IT REPLACES THE EXISTING Max, IT IS NOT ADDED TO IT. The first version of this
+        // arm Max'd it in as a third estimator and came back BYTE-IDENTICAL on 6 of 7
+        // ladder rungs -- a bug signal, not a null. Math.Max can only RAISE timeToDeath,
+        // and both existing estimators return EffectivelyInfiniteSeconds (999999) whenever
+        // the HP window is not full or HP is flat, which is exactly the "a wave is inbound
+        // but has not landed yet" state the geometric model was built to see. Max(999999,
+        // geo) = 999999, so the flag was inert precisely where it mattered. A Max over
+        // estimators is a noise guard between two WEAK ones; a better estimator must not be
+        // defended by it.
+        //
+        // TWO COMBINATION MODES, because "replace" hides a second variable. The observed
+        // estimator is the only one of the three that sees gadget, hazard and DoT damage --
+        // the geometric model counts units and nothing else -- so dropping it outright
+        // changes coverage as well as accuracy:
+        //   GeometricTDeathKeepObserved = false -> timeToDeath = geo alone. The literal
+        //       "does t_death help on its own" reading. Loses gadget/DoT visibility.
+        //   GeometricTDeathKeepObserved = true  -> timeToDeath = MIN(observed, geo).
+        //       Min, not Max: it keeps observed's unique coverage (gadget damage makes
+        //       observed read short, and Min takes it) while letting geo speak whenever
+        //       observed is infinite. This is the principled combination, and also the one
+        //       most exposed to the risk below, since it removes the optimism guard.
+        //
+        // THE RISK, stated up front so a negative result is interpretable. t_death's
+        // documented bias is PESSIMISTIC (friendly units contribute HP but not damage, so
+        // a winning blocker's hold time is understated). GameStateTimeFeatures calls that
+        // "tolerable in a differential (both sides computed identically)" -- true in
+        // TDeathComponent, where it largely cancels. It does NOT cancel here: t_death is
+        // compared against timeToInvest, an absolute clock with no matching bias. A
+        // pessimistic reading makes investmentRunwayIsSafe false, which makes inDanger
+        // true, and this file documents FOUR previous inDanger triggers that collapsed to
+        // "true almost always" and cost the economy the game. Watch EARNED INVESTS, not
+        // just win rate: the economy collapses first and invests/game is the leading
+        // indicator.
+        //
+        // NOTE the enemyIsClose AND-gate limits how much of this can express: inDanger is
+        // `enemyIsClose && !investmentRunwayIsSafe` at 700px, so the headline capability
+        // (pricing units that have not arrived yet) is largely gated away. That gate is
+        // arm 3's subject and is deliberately untouched here.
+        // ── MEASURED 2026-08-19: NEGATIVE ON BOTH SUB-ARMS. SHIPPED OFF. ────────────
+        //
+        // ladder 400 (800 games/rung), seed 4242, both modes, all three contenders paired
+        // inside ONE run on identical specs. Overall and the mirror rung, which is the rung
+        // that moves:
+        //
+        //   mode       contender        overall    mirror     mirror earned invests
+        //   nostart    control           88.30%    54.1%              6.94
+        //   nostart    GeoTDeathPure     86.38%    45.4%  (-8.8)      6.80
+        //   nostart    GeoTDeathMin      86.34%    43.9% (-10.3)      6.74
+        //   headstart  control           84.70%    50.0%              4.85
+        //   headstart  GeoTDeathPure     84.36%    42.8%  (-7.3)      4.72
+        //   headstart  GeoTDeathMin      84.16%    41.8%  (-8.3)      4.67
+        //
+        // Two-proportion z on the mirror rung: p = 4.7e-4, 4.1e-5, 3.6e-3, 9.3e-4. Four
+        // independent negatives (2 modes x 2 sub-arms), same sign, same magnitude. This is
+        // not noise.
+        //
+        // (The mirror rung's control reads 54.1% rather than 50% because the contender
+        // always draws loadout A and the opponent loadout B -- a documented ladder property,
+        // see CLEANUP_BACKLOG.md. It is shared by all three contenders, so the DELTAS stand.)
+        //
+        // THE PREDICTED PATHOLOGY IS EXACTLY WHAT HAPPENED, confirmed directly rather than
+        // inferred. `trace <opp> --variant <profile>`, fraction of decisions with inDanger
+        // true, and fraction with a finite TTD reading:
+        //
+        //   opponent   contender        danger    finite TTD
+        //   investor   control            0.0%          7.5%
+        //   investor   GeoTDeathPure      0.4%        100.0%
+        //   investor   GeoTDeathMin       1.2%        100.0%
+        //   spam4      control           10.2%         43.5%
+        //   spam4      GeoTDeathPure     49.4%        100.0%
+        //   spam4      GeoTDeathMin      17.0%        100.0%
+        //
+        // TTD stops ever being infinite (geo caps at remaining game time, 600s, where the
+        // old estimators returned 999999), and the danger rate against spam4 goes 10.2% ->
+        // 49.4%. Earned invests fall on the mirror rung in every arm. That is the FIFTH
+        // instance of this file's dominant failure mode -- an inDanger trigger that is true
+        // too often, draining money into reactive defence and losing the investment race.
+        //
+        // WHAT THIS DOES AND DOES NOT LICENCE. It says the geometric estimator is not a
+        // drop-in replacement for the existing pair AT THE CURRENT THRESHOLD. It does NOT
+        // say t_death is the wrong quantity: the estimator passes 41/41 oracle checks, and
+        // the failure is entirely consistent with its DOCUMENTED pessimistic bias (friendly
+        // units contribute HP but not damage) meeting a threshold that was tuned against
+        // two optimistic estimators. investmentRunwayIsSafe's 1.4x margin and 2s buffer were
+        // fitted to the old readings and were not re-tuned here; doing so is a separate arm
+        // and is the obvious next thing to try before abandoning the direction.
+        //
+        // THROUGHPUT: 4-8% slower (nostart 359,876 -> 330,597 / 345,690 ticks/s; headstart
+        // 218,384 -> 205,634 / 209,547). Part of that is consequence rather than cost -- the
+        // arms play longer, unit-denser games (mirror avg_ticks +6%), and denser boards make
+        // every tick more expensive regardless of the flag. The identical-game DoNothing rung
+        // is too noisy at this n to isolate it (-9.7% nostart vs -0.8% headstart). No step
+        // change: nothing here threatens search throughput.
+        /// <summary>
+        /// Single unified time-to-death: discard estimators sitting at their no-information
+        /// sentinel, then MAX the rest. Replaces the observed/projected Math.Max and the
+        /// GeometricTimeToDeath arms. See the block in Decide() for the full reasoning.
+        /// </summary>
+        // ── MEASURED 2026-08-21: NEUTRAL, AND SHIPPED FOR STRUCTURE. ───────────────
+        // ladder 200 (400 games/rung), seed 4242, paired:
+        //
+        //   arm                nostart   headstart   invests(ns/hs)
+        //   dual (old)          90.68%     88.50%     5.60 / 3.84
+        //   unified m1.4        90.82%     88.50%     5.57 / 3.82   p 0.85 / 1.00
+        //   unified m1.0        90.71%     88.25%     5.58 / 3.84
+        //   unified m0.7        90.07%     88.75%     5.59 / 3.83
+        //
+        // A clean null on strength, taken for correctness: it removes the second estimator
+        // and the standing risk of forgetting which one a given call site reads.
+        //
+        // THE SENTINEL RULE IS WHY THIS IS NEUTRAL WHERE THE GEOMETRY-ONLY ARM WAS NOT. That
+        // arm (GeoTDeathPure/Min, 2026-08-19) lost 8-10 points on the mirror rung because geo
+        // is systematically pessimistic -- friendly units contribute HP but never damage --
+        // and feeding that into an absolute threshold made inDanger fire constantly. Here geo
+        // is consulted ONLY when the observed estimator has nothing to say, so the pessimism
+        // never overrides a real measurement.
+        //
+        // SafetyMarginMultiplier does NOT need to move with it: the margin sweep above is
+        // flat, unlike the geometry-only arm which recovered monotonically as the margin
+        // loosened.
+        public bool UnifiedTimeToDeath { get; init; } = true;
+
+        public bool GeometricTimeToDeath { get; init; } = false;
+        /// <summary>See GeometricTimeToDeath: false = geo alone, true = Min(observed, geo).</summary>
+        public bool GeometricTDeathKeepObserved { get; init; } = false;
         public bool SurvivalInstinct { get; init; } = false;
         public float SurvivalEmergencySeconds { get; init; } = 12f;
 
@@ -1231,7 +1692,138 @@ namespace CastleDefense.Engine.Bot
         // The hold may consume at most 1/this of the remaining game.
         public float TechTimeSafetyFactor { get; init; } = 3f;
 
+        // ── DEFENCE-ONLY MODE (2026-08-22) ──────────────────────────────────────
+        //
+        // Removes offensive unit spawning entirely and buys bodies purely in response to
+        // what the enemy has on the field, sized by the measured survival law (see
+        // ThreatModel and CastleDefense.BotArena/stall/FINDINGS.md).
+        //
+        // DEFAULT FALSE ON PURPOSE. The attacking bot stays the shipped one, byte for byte:
+        // it is the ladder rung, the counter-table was fitted from it, and RolloutSearchBot
+        // uses it as BOTH its policy prior and its rollout policy for both sides -- flipping
+        // this by default would silently change every one of those at once.
+        //
+        // The win condition is unchanged and does NOT depend on attacking: buying the invest
+        // at InvestmentCount 8 triggers ARMAGEDDON (GameEngine.Invest -> ArmageddonEffect),
+        // which shields us with divine_3 and rains meteors, firebombs, waves and nukes on the
+        // enemy castle. So the whole job is: survive long enough to invest eight times.
+        public bool DefenceOnly { get; init; } = false;
+
+        // Incoming castle DPS at which the attack is worth answering at all.
+        //
+        // THIS REPLACED "WAIT UNTIL THE FORCE STOPS GROWING", WHICH WAS ANTI-ADAPTIVE. Against
+        // an opponent who reinforces continuously the force NEVER stops growing, so the settle
+        // rule never released and the only thing that ever triggered a response was the panic
+        // override at a few seconds from death. Traced: a 45-unit wave walked in over four
+        // seconds while the bot sat on full credit and full pockets and spawned nothing,
+        // starting its defence with 4.7s to live instead of 10.6s.
+        //
+        // A DPS threshold is the right shape because it is what actually distinguishes a
+        // threat from traffic: a stream of low-tier units may never stop arriving and never
+        // matter, while one high-tier unit matters immediately. 850 is Marc's own read of
+        // where that line sits -- roughly "ignore a tier 6, always answer a tier 7".
+        public float ThreatEngageDps { get; init; } = 850f;
+
+        // Read the force anyway, settled or not, once predicted survival with NO defence
+        // falls under this. Waiting for a read we cannot afford is how a defensive bot dies
+        // tidily.
+        public float DefenceReadPanicSeconds { get; init; } = 6f;
+
+        // Safety margin on the survival target. The law predicts survival TIME well but the
+        // critical rate less well (measured r_crit/S ran 0.11-0.14 against tier 5 and 1.9-2.6
+        // against tier 7 in numbers), so aim past the target rather than exactly at it.
+        public float DefenceTargetMultiplier { get; init; } = 1.35f;
+
+        // How far ahead the defence plans, in seconds, capped by the real remaining runway
+        // to ARMAGEDDON.
+        //
+        // THIS REPLACED "SURVIVE UNTIL THE NEXT INVESTMENT", WHICH WAS BACKWARDS. Time-to-next
+        // -investment goes to ZERO exactly when the bot is rich enough to already afford it --
+        // so the target collapsed to the safety buffer alone (~2s) and the defence went thin at
+        // the precise moment it could most afford not to. Measured: the bot was dying at
+        // investment 7-8, one purchase short of the win condition, while out-trading the
+        // attacker 6-39x on dollars. It was not overspending, it was barely spending.
+        //
+        // Capped rather than set to the whole runway because a wave is transient: the force on
+        // the board now will not still be there in three minutes, and sizing against the full
+        // runway would buy defence against an attack that has already died.
+        public float DefenceHorizonSeconds { get; init; } = 45f;
+
+        // Seconds a wipe needs between the decision and the swing landing: the unit has to
+        // be bought, walk to the pile and get one attack off. The deadline guard refuses to
+        // keep waiting inside this window, because a wipe ordered too late is just a wasted
+        // purchase on top of the damage.
+        // The only lead constant. A `WipeLeadMarginSeconds` (3f) sat here alongside it,
+        // documented as "extra headroom, because the survival law predicts TIME well but the
+        // exact cliff less well" -- and was never read by anything. Deleted 2026-08-29. If
+        // that headroom is wanted, widen WipeLeadSeconds or add the margin AT the subtraction
+        // in the deadline guard; do not reintroduce a settings field that nothing consumes,
+        // because a knob a sweep can randomise but no code reads reports "this parameter does
+        // not matter" when the truth is "this parameter is not connected" (the same trap
+        // KillerInstinctHpThreshold is already documented for, above).
+        public float WipeLeadSeconds { get; init; } = 4f;
+
+        // Smallest share of the law's required block rate that is worth paying for at all.
+        //
+        // FOLLOWS DIRECTLY FROM THE MEASURED CONVEXITY, which the first implementation ignored:
+        // dt/dr = K/(S-r)^2 GROWS as r approaches S, so a fraction of the needed rate buys
+        // almost nothing. Feeding two bodies a second into a wave that needs two hundred is not
+        // a partial defence, it is a donation -- the blockers walk out, get picked off
+        // piecemeal mid-field, and the wave arrives anyway.
+        //
+        // Below this share the bot deliberately saves the money instead, for a wiper or for the
+        // gadget layer, which are the tools that actually scale to a swarm.
+        public float MinBlockEffectiveness { get; init; } = 0.5f;
+
+        // Bodies-owed the response may bank while it waits for money or the decision clock.
+        // Without a cap a long quiet stretch would accrue a debt the bot then dumps all at
+        // once, which is neither useful nor affordable.
+        public float MaxBlockCredit { get; init; } = 3f;
+
         public static readonly HeuristicBotSettings Default = new HeuristicBotSettings();
+
+        /// <summary>The 100% defensive bot. Everything else is the shipped attacking config.</summary>
+        public static readonly HeuristicBotSettings DefenceOnlyProfile =
+            new HeuristicBotSettings { DefenceOnly = true, WiperMinIntervalSeconds = 1.0 };
+
+        /// <summary>
+        /// The flagship plus the three repair fixes. Everything else is untouched, so a
+        /// difference in outcome against the flagship is attributable to repair alone.
+        ///
+        /// Floor at 45%: the two under-repair games sat at 41% and 19% of maximum for ten
+        /// seconds or more. 1.0s interval: long enough that a repair has landed and the threat
+        /// has been re-read before another can fire, short enough to still stack under real
+        /// pressure.
+        /// </summary>
+        public static readonly HeuristicBotSettings RepairFixProfile = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+        };
+
+        /// <summary>The repair fixes plus the enemy-CC attack blackout. What singleplayer plays
+        /// while these are being evaluated against Marc.</summary>
+        public static readonly HeuristicBotSettings RepairFixPlusHazardProfile = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+        };
+
+        /// <summary>Everything above plus the two killerInstinct brakes. The lockout is 5s on
+        /// Marc's call: the 0A7658 stall happened at 2.8 seconds from the rung, so 5 covers it
+        /// with margin without blocking a genuine finish from further out.</summary>
+        public static readonly HeuristicBotSettings EconomyBrakeProfile = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+            KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+        };
 
         // ── Named presets for temporary ladder contenders ──
         // Each layers ONE tabled change on top of current default behaviour, so a retest
@@ -1259,6 +1851,181 @@ namespace CastleDefense.Engine.Bot
             new HeuristicBotSettings { FirebombSweptFriendlyFireCheck = true };
         public static readonly HeuristicBotSettings IncomeEdge =
             new HeuristicBotSettings { IncomeAdvantageAttack = true };
+        // Arm 1 of the t_death port, in two sub-arms. enemyIsClose is untouched in both.
+        public static readonly HeuristicBotSettings GeoTDeathPure =
+            new HeuristicBotSettings { GeometricTimeToDeath = true };
+        public static readonly HeuristicBotSettings GeoTDeathMin =
+            new HeuristicBotSettings { GeometricTimeToDeath = true, GeometricTDeathKeepObserved = true };
+
+        // ── THRESHOLD SWEEP on top of GeoTDeathMin (2026-08-19) ──────────────────────
+        //
+        // Arm 1 measured -8 to -10 points on the mirror rung and the trace showed why: the
+        // danger rate against spam4 went 10.2% -> 17.0%, i.e. inDanger fires far more often.
+        // investmentRunwayIsSafe is `timeToDeath >= timeToInvest * 1.4 + 2`, and BOTH of
+        // those constants were fitted against the OLD pair of estimators, which are
+        // optimistic by construction (Max, and 999999 whenever the HP window is flat).
+        // Feeding a PESSIMISTIC estimator into a margin sized for optimistic ones
+        // double-counts the caution. A more accurate estimator should need LESS margin, so
+        // the sweep goes down.
+        //
+        // PlainM070 IS THE LOAD-BEARING CONTROL, not a filler arm. If lowering the margin
+        // helps the plain bot just as much, then any gain on the geo arms is a threshold
+        // improvement that has nothing to do with t_death, and attributing it to the port
+        // would be exactly the confound that made the evaluator's -20 uninterpretable.
+        // Read the geo arms as deltas against this row, not only against the 1.4 control.
+        // Repair threshold sweep (2026-08-20). The trace in DefenderTrace showed the
+        // simulated defender repairing the moment its castle dipped under 0.75 while nothing
+        // was actually threatening it -- Marc plays through that chip damage and keeps
+        // saving. NOTE the gate is "castleHpPct < RepairHpThreshold || inDanger", so lowering
+        // the threshold only changes decisions where inDanger is FALSE; it cannot suppress a
+        // repair that danger already justifies. In the traced case danger was already true at
+        // the repair, so this flag would NOT have changed that particular decision -- it acts
+        // on the quieter ones, where HP is between the new and old thresholds and nothing is
+        // actually attacking.
+        // ── MEASURED 2026-08-20: NO IMPROVEMENT. BOTH SHIPPED OFF. ──────────────────
+        // ladder 200 (400 games/rung), seed 4242, both modes, paired in one run:
+        //
+        //   contender      nostart overall   headstart overall   Tier4Spam (nostart)
+        //   control 0.75       88.11%             84.18%            83.0%  inv 4.57
+        //   Repair50           86.54% (p=0.077)   83.57% (p=0.537)  69.0%  inv 4.13
+        //   Repair60           88.39% (p=0.740)   84.11% (p=0.942)  83.0%  inv 4.55
+        //
+        // Repair60 is a clean NULL -- identical on most rungs, byte-for-byte on DoNothing
+        // and Tier4Spam. Repair50 is NEGATIVE, and the damage is concentrated in one place:
+        // Tier4Spam collapses 83.0% -> 69.0% with earned invests 4.57 -> 4.13.
+        //
+        // THAT COLLAPSE IS THE INFORMATIVE PART. Tier4Spam is precisely the sustained
+        // chip-damage matchup, and it is where the 0.75 threshold turns out to be
+        // load-bearing: sitting between 50% and 75% without repairing against a steady
+        // stream is how the bot dies. Marc can tank that damage because he judges when it is
+        // survivable; HeuristicBot has no such judgement, so the blunt threshold is doing
+        // real work for it.
+        //
+        // SCOPE NOTE: this measures HeuristicBot's OWN ladder strength. It does not test the
+        // original motivation, which was whether a less repair-happy ROLLOUT OPPONENT makes
+        // search's simulated futures more realistic. Those are different questions and a
+        // profile could lose here while still helping there.
+        // Drain-cap under-attack test as time-to-death rather than proximity. Marc's
+        // suggestion, 5s his starting guess; swept because the right threshold is not
+        // obvious and the cost of being wrong in either direction is large.
+        /// <summary>Restores the pre-2026-08-20 proximity rule, for regression checks.</summary>
+        /// <summary>Pre-2026-08-21 repair rule, for regression checks.</summary>
+        /// <summary>Pre-2026-08-21 dual-estimator Math.Max, for regression checks.</summary>
+        public static readonly HeuristicBotSettings DualTtd =
+            new HeuristicBotSettings { UnifiedTimeToDeath = false };
+        public static readonly HeuristicBotSettings Unified =
+            new HeuristicBotSettings { UnifiedTimeToDeath = true };
+        // The unified estimator reads SHORTER, so inDanger fires more; these pair it with a
+        // looser safety margin, which is the knob the earlier geometry sweep showed has to
+        // move with the estimator.
+        public static readonly HeuristicBotSettings UnifiedM100 =
+            new HeuristicBotSettings { UnifiedTimeToDeath = true, SafetyMarginMultiplier = 1.0f };
+        public static readonly HeuristicBotSettings UnifiedM070 =
+            new HeuristicBotSettings { UnifiedTimeToDeath = true, SafetyMarginMultiplier = 0.7f };
+        public static readonly HeuristicBotSettings RepairLegacy =
+            new HeuristicBotSettings { RepairTtdSeconds = 0 };
+        // Re-sweep after UnifiedTimeToDeath shipped. The old sweep (3/5.5/8s) was run
+        // against the CONTACT-ONLY estimator, which read infinity at six of seven repairs
+        // in 3225A7 -- so every one of those thresholds refused essentially all repairs and
+        // the trend just measured how fast Tier4Spam collapses. With the unified estimator
+        // the same repairs read 8.9s to 422s, so the useful range is far higher.
+        public static readonly HeuristicBotSettings RepairTtd15 =
+            new HeuristicBotSettings { RepairTtdSeconds = 15 };
+        public static readonly HeuristicBotSettings RepairTtd25 =
+            new HeuristicBotSettings { RepairTtdSeconds = 25 };
+        public static readonly HeuristicBotSettings RepairTtd45 =
+            new HeuristicBotSettings { RepairTtdSeconds = 45 };
+        public static readonly HeuristicBotSettings RepairTtd3 =
+            new HeuristicBotSettings { RepairTtdSeconds = 3 };
+        public static readonly HeuristicBotSettings RepairTtd8 =
+            new HeuristicBotSettings { RepairTtdSeconds = 8 };
+        public static readonly HeuristicBotSettings Reactive60 =
+            new HeuristicBotSettings { ReactiveSpendFractionOfIncome = 0.6 };
+        public static readonly HeuristicBotSettings Reactive45 =
+            new HeuristicBotSettings { ReactiveSpendFractionOfIncome = 0.45 };
+        public static readonly HeuristicBotSettings Reactive20 =
+            new HeuristicBotSettings { ReactiveSpendFractionOfIncome = 0.20 };
+        public static readonly HeuristicBotSettings DrainProximity =
+            new HeuristicBotSettings { DrainCapTtdSeconds = 0 };
+        public static readonly HeuristicBotSettings DrainTtd3 =
+            new HeuristicBotSettings { DrainCapTtdSeconds = 3 };
+        public static readonly HeuristicBotSettings DrainTtd5 =
+            new HeuristicBotSettings { DrainCapTtdSeconds = 5 };
+        public static readonly HeuristicBotSettings DrainTtd8 =
+            new HeuristicBotSettings { DrainCapTtdSeconds = 8 };
+        public static readonly HeuristicBotSettings DrainTtd15 =
+            new HeuristicBotSettings { DrainCapTtdSeconds = 15 };
+        public static readonly HeuristicBotSettings Repair50 =
+            new HeuristicBotSettings { RepairHpThreshold = 0.50f };
+        // 0.60 IS NOW THE DEFAULT (2026-08-20) -- kept as a named profile only so the sweep
+        // stays runnable. Repair75 restores the pre-2026-08-20 shipped behaviour, which every
+        // HeuristicBot number recorded before that date was measured against.
+        public static readonly HeuristicBotSettings Repair60 =
+            new HeuristicBotSettings { RepairHpThreshold = 0.60f };
+        public static readonly HeuristicBotSettings Repair75 =
+            new HeuristicBotSettings { RepairHpThreshold = 0.75f };
+        public static readonly HeuristicBotSettings GeoTDeathMin_M100 =
+            new HeuristicBotSettings { GeometricTimeToDeath = true, GeometricTDeathKeepObserved = true,
+                                       SafetyMarginMultiplier = 1.0f };
+        public static readonly HeuristicBotSettings GeoTDeathMin_M070 =
+            new HeuristicBotSettings { GeometricTimeToDeath = true, GeometricTDeathKeepObserved = true,
+                                       SafetyMarginMultiplier = 0.7f };
+        public static readonly HeuristicBotSettings GeoTDeathMin_M050 =
+            new HeuristicBotSettings { GeometricTimeToDeath = true, GeometricTDeathKeepObserved = true,
+                                       SafetyMarginMultiplier = 0.5f };
+        // Buffer as well as margin: the +2s is an absolute floor that does not scale with
+        // timeToInvest, so it dominates exactly when the investment is nearly affordable.
+        public static readonly HeuristicBotSettings GeoTDeathMin_M070B0 =
+            new HeuristicBotSettings { GeometricTimeToDeath = true, GeometricTDeathKeepObserved = true,
+                                       SafetyMarginMultiplier = 0.7f, SafetyBufferSeconds = 0f };
+        // ── SWEEP RESULT 2026-08-19: THE DIRECTION IS EXHAUSTED. ALL ARMS SHIPPED OFF. ──
+        //
+        // ladder 400, seed 4242, all seven contenders paired in ONE run. Mirror rung
+        // (the only rung that moves), delta vs the m1.4 control, and earned invests:
+        //
+        //   contender        nostart mirror   inv      headstart mirror   inv
+        //   control  m1.4      54.1%  +0.0   6.94        50.0%  +0.0   4.85
+        //   geo      m1.4      43.9% -10.3   6.74        41.8%  -8.3   4.67
+        //   geo      m1.0      46.4%  -7.8   6.82        43.9%  -6.1   4.72
+        //   geo      m0.7      47.0%  -7.1   6.85        45.1%  -4.9   4.77
+        //   geo      m0.5      49.6%  -4.5   6.86        48.0%  -2.0   4.80
+        //   geo   m0.7 b0      50.6%  -3.5   6.86        47.5%  -2.5   4.81
+        //   PLAIN    m0.7      55.2%  +1.1   6.94        49.5%  -0.5   4.85
+        //
+        // THE HYPOTHESIS WAS RIGHT ABOUT DIRECTION AND WRONG ABOUT UPSIDE. Lowering the
+        // margin recovers the loss MONOTONICALLY in both modes, and earned invests recover
+        // with it -- a genuine dose-response, not noise. But it converges to the control
+        // from BELOW and never crosses it. Best geo arm: -3.5 (p=0.2) nostart, -2.0 (p=0.4)
+        // headstart. Overall win rate best-geo vs control: 87.34% vs 88.30% nostart,
+        // 84.75% vs 84.70% headstart. Parity at best, for a 4-7% throughput cost.
+        //
+        // PlainM070 IS WHY THIS IS A VERDICT RATHER THAN A MISTUNE. Lowering the margin on
+        // the plain bot does essentially nothing (+1.1 / -0.5, both p>0.7), so the margin is
+        // not a binding constraint on its own -- which means the geo arms' recovery is not a
+        // generic threshold improvement, it is geo-specific damage being undone. Attribution
+        // is clean in both directions: the loss was geo's, and so is the repair.
+        //
+        // AND THE REPAIR WORKS BY NEUTRALISING THE SIGNAL, which is the decisive point.
+        // `trace spam4` danger rate: control 10.2%, geo m1.4 17.0%, geo m0.5 14.6%,
+        // PlainM070 4.1%. On `investor`: control 0.0%, geo m1.4 1.2%, geo m0.5 0.0%. Every
+        // step that recovers win rate pulls the danger rate back toward the value the OLD
+        // estimators produced. The tuned arm is not using t_death better; it is using it
+        // less. A more accurate estimator that only helps by being ignored is not a
+        // stronger input, and no further margin reduction changes that -- extrapolating the
+        // trend reaches parity, not advantage.
+        //
+        // CONSEQUENCE: arm 3 (relaxing enemyIsClose) was conditional on arm 1 or 2 being
+        // positive. Neither was. Do not run it. The geometric estimator remains correct
+        // (41/41 oracle) and is still deployed as an evaluator feature at zero weight; what
+        // is now measured is that HeuristicBot's danger threshold has no headroom to give it.
+        // NINTH failed direction if the evaluator's eight are counted alongside.
+        //
+        // (Single-game traces are noisy: the m0.7-b0 spam4 trace ended after 83 decisions at
+        // 49.4% danger, an outlier game, not a rate comparable to the 300+ decision rows.)
+        //
+        // No geo. Isolates "is a lower margin just better anyway?" from "does geo need one?"
+        public static readonly HeuristicBotSettings PlainM070 =
+            new HeuristicBotSettings { SafetyMarginMultiplier = 0.7f };
         public static readonly HeuristicBotSettings SurvivalFirst =
             new HeuristicBotSettings { SurvivalInstinct = true };
         // Retest at the two triggers flag (4)'s own note recommends ("6s and 8s are the
@@ -1348,6 +2115,10 @@ namespace CastleDefense.Engine.Bot
         // marginal casts a 2.0 margin declines.
         public static readonly HeuristicBotSettings NukeGuardOff =
             new HeuristicBotSettings { NukeSelfDamageMargin = 0f };
+        // Isolates the COST of the incoming-nuke repair, i.e. reproduces the pre-2026-08-20
+        // bot, which had no reaction to an enemy nuke at all.
+        public static readonly HeuristicBotSettings IncomingNukeRepairOff =
+            new HeuristicBotSettings { IncomingNukeRepair = false };
         public static readonly HeuristicBotSettings NukeGuard12 =
             new HeuristicBotSettings { NukeSelfDamageMargin = 1.2f };
         // REGRESSION GUARD for the reactive flow cap -- defensive spending unbounded by
@@ -1518,6 +2289,13 @@ namespace CastleDefense.Engine.Bot
         public bool LastDecisionWasDanger { get; private set; }
         public int LastUnitsPurchased { get; private set; }
         public string LastSpendDebug { get; private set; } = "";
+
+        /// <summary>
+        /// DIAGNOSTIC ONLY. Which branch of Decide() bought the most recent unit, so a
+        /// trace can attribute a spawn to a rule instead of guessing from the outside.
+        /// Set at every SpawnUnit call site; never read by the bot itself.
+        /// </summary>
+        public string LastSpawnReason { get; private set; } = "";
         public float LastThreatScore { get; private set; }
         public float LastDefenseScore { get; private set; }
         public float LastTimeToDeathSeconds { get; private set; }
@@ -1526,9 +2304,16 @@ namespace CastleDefense.Engine.Bot
         public bool LastKillerInstinct { get; private set; }
         public bool LastIncomeAdvantage { get; private set; }
         public bool LastSurvivalEmergency { get; private set; }
+        // Castle damage queued against us by pending nuke detonations, and whether that is
+        // currently lethal. Exposed for tracing/telemetry the same way the danger flags are.
+        public int LastIncomingCastleDamage { get; private set; }
+        public bool LastNukeEmergency { get; private set; }
         // Enemy $ currently committed within WaveWipeRadius of our castle -- the AoE
         // wipe opportunity. 0 when flag (12) is off.
         public double LastWaveWipeValue { get; private set; }
+
+        // Last geometric t_death reading, for diagnostics. Untouched when the flag is off.
+        public float LastGeoTimeToDeathSeconds { get; private set; } = EffectivelyInfiniteSeconds;
 
         // Running per-game tally of every successful action actually taken, indexed by
         // the same 14-action ID space as GetActionMask/ApplyAction (0=wait unused here,
@@ -1538,6 +2323,29 @@ namespace CastleDefense.Engine.Bot
         // Decide() can call SpawnUnit many times in a row -- sampling LastAction once per
         // tick would only ever see the last of those and badly undercount.
         public readonly long[] ActionCounts = new long[14];
+
+        /// <summary>Tick of the last repair, for RepairMinIntervalSeconds.</summary>
+        private long _lastRepairTick = long.MinValue / 2;
+
+        // killerInstinct push-latch state. See KillerInstinctPushLatch.
+        private bool _killerPushLive;
+        private int _killerPushPeak;
+        private bool _killerLockedOut;
+
+        /// <summary>Summed DPS of our units in contact with the enemy castle and unengaged.</summary>
+        public float LastOwnPushDps { get; private set; }
+
+        /// <summary>killerInstinct's own estimate: seconds to kill the enemy castle.</summary>
+        public float LastKillerSeconds { get; private set; }
+
+        /// <summary>The killerInstinct trigger BEFORE the brakes, for attribution.</summary>
+        public bool LastKillerInstinctRaw { get; private set; }
+
+        /// <summary>Which brake suppressed killerInstinct this decision, or null.</summary>
+        public string LastKillerLockReason { get; private set; }
+
+        /// <summary>Decisions on which a brake suppressed killerInstinct.</summary>
+        public long KillerLockedDecisions { get; private set; }
 
         // ~6 decisions/sec at 30 TPS. Fast enough to never leave money idle,
         // slow enough that it doesn't look like it's cheating with instant reactions.
@@ -1734,13 +2542,84 @@ namespace CastleDefense.Engine.Bot
             return result;
         }
 
+        // ── ONE ACTION PER TICK (2026-08-20) ────────────────────────────────────────
+        //
+        // Decide() can take several actions in one pass -- it calls TryUseOffenseGadget,
+        // TryUseDefenseGadget and TryUseSignatureGadget in sequence, and repair, wave-wipe,
+        // reactive spending and the fallback investment all sit in the same pass without
+        // returning. Measured over 20 self-play games: 3.3% of acting ticks took more than
+        // one action (341 ticks with 2, 5 with 3).
+        //
+        // TWO REASONS THAT IS WRONG, and the fairness one is the reason it changed:
+        //  1. A HUMAN CANNOT DO IT. A tick is 33ms; Marc gets one action per tick at best.
+        //     A bot firing three gadgets inside one tick is using input bandwidth no player
+        //     has, which is not the kind of difficulty this project is trying to build.
+        //  2. The replay format stores exactly ONE action id per side per tick, so every
+        //     extra action was silently dropped from the recording -- which is why rebuilt
+        //     games diverged and the bot died early in every reconstruction.
+        //
+        // So extra actions are QUEUED and played out on subsequent ticks, one per tick, in
+        // the order Decide() chose them. There is room: decisions are DecisionIntervalTicks
+        // (5) apart and the observed maximum is 3 actions, so the queue always drains before
+        // the next decision.
+        //
+        // RE-VALIDATED ON EXECUTION, not fired blind. A queued action runs 1-2 ticks later
+        // and the world has moved; engine.Invest/Repair/SpawnUnit/UseGadget all re-check
+        // money and cooldowns and return false without side effects, so a no-longer-legal
+        // action is skipped cleanly rather than half-applied.
+        //
+        // KNOWN WRINKLE, deliberately accepted: Act() returns true for a QUEUED action, so
+        // the rest of that Decide() proceeds as though the money were already spent. It has
+        // not been, so a later check in the same pass can see stale money and queue a
+        // purchase it cannot actually afford -- which then fails cleanly above. The
+        // alternative, returning false, would make Decide() retry the same action down a
+        // different branch and is worse.
+        //
+        // The queue lives on the BOT, never on the engine. GameEngine.Clone is shallow and
+        // any mutable reference field added there is silently shared with every one of
+        // search's ~231x rollouts per decision (see [[project_engine_clone_hazard]]). Bots
+        // are constructed fresh per rollout, so this is inert there.
+        private readonly Queue<Func<bool>> _pendingActions = new Queue<Func<bool>>();
+        private bool _actedThisDecision;
+
+        /// <summary>Number of actions still queued from an earlier decision. Diagnostic.</summary>
+        public int PendingActionCount => _pendingActions.Count;
+
+        /// <summary>
+        /// Performs an action now if this decision has not acted yet, otherwise queues it for
+        /// a later tick. Returns true when the action happened OR was queued, so callers keep
+        /// their existing control flow.
+        /// </summary>
+        private bool Act(Func<bool> act)
+        {
+            if (!_actedThisDecision)
+            {
+                bool ok = act();
+                if (ok) _actedThisDecision = true;
+                return ok;
+            }
+            _pendingActions.Enqueue(act);
+            return true;
+        }
+
         public void Update(GameEngine engine)
         {
             var state = engine._state;
             if (state.IsGameOver) return;
+
+            // Drain first: one queued action per tick, ahead of any new decision. The queue
+            // is shorter than the decision interval, so this never starves Decide().
+            if (_pendingActions.Count > 0)
+            {
+                _pendingActions.Dequeue()();
+                return;
+            }
+
             if (state.CurrentTick < _nextDecisionTick) return;
             _nextDecisionTick = state.CurrentTick + DecisionIntervalTicks;
 
+            _actedThisDecision = false;
+            _castsThisDecision.Clear();
             Decide(engine);
         }
 
@@ -1761,17 +2640,26 @@ namespace CastleDefense.Engine.Bot
             var enemyUnits = state.Units.Where(u => u.Side != _side).ToList();
 
             // Refresh the wall cache for ProjectedPosition's blocker clamp. One per side max.
-            _side1Wall = null; _side2Wall = null;
-            foreach (var u in state.Units)
-            {
-                if (!IsWall(u)) continue;
-                if (u.Side == 1) _side1Wall = u; else _side2Wall = u;
-            }
+            (_side1Wall, _side2Wall) = Gadgets.GadgetTargeting.FindWalls(state);
 
             foreach (var u in enemyUnits)
             {
                 if (_observedEnemyUnitIds.Add(u.InstanceId))
+                {
                     _observedEnemyTiers.Add(u.Tier);
+                    _enemyValueSeen += EstimateUnitCost(engine, u);
+                }
+            }
+
+            // Sample the commitment rate on a ~1s cadence. Shorter and it is dominated by the
+            // burstiness of individual spawns; longer and it lags a wave that is still forming.
+            if (_enemyValueSampleTick < 0) { _enemyValueSampleTick = state.CurrentTick; _enemyValueSample = _enemyValueSeen; }
+            else if (state.CurrentTick - _enemyValueSampleTick >= 30)
+            {
+                double dt = (state.CurrentTick - _enemyValueSampleTick) / 30.0;
+                _enemyValueRate = (_enemyValueSeen - _enemyValueSample) / dt;
+                _enemyValueSampleTick = state.CurrentTick;
+                _enemyValueSample = _enemyValueSeen;
             }
             bool confidentStaticSpammer = _observedEnemyUnitIds.Count >= MinEnemyUnitsForSpammerRead && _observedEnemyTiers.Count == 1;
             int observedEnemySpamTier = confidentStaticSpammer ? _observedEnemyTiers.First() : 0;
@@ -1790,6 +2678,24 @@ namespace CastleDefense.Engine.Bot
 
             bool enemyIsClose = enemyUnits.Count > 0 && enemyUnits.Min(u => Math.Abs(u.Position - myCastlePos)) < _settings.EnemyIsCloseDistance;
             float castleHpPct = me.CastleMaxHealth > 0 ? (float)me.CastleHealth / me.CastleMaxHealth : 1f;
+
+            // Built here rather than after the gadget layer: repair takes its turn before the
+            // gadgets, and its price check needs the true incoming damage rate. The older
+            // EstimateProjectedThreatDps counts only units already in contact, which during a
+            // collapse reads far lower than the army actually swinging -- so the check silently
+            // approved every repair it was meant to refuse.
+            //
+            // ALSO BUILT WHEN RepairPriceCheck IS ON, and that is not optional. Measured on
+            // game F66E23 (2026-08-24): with `threat` null the price check falls back to
+            // EstimateProjectedThreatDps, which counts only units already touching the castle.
+            // While an army is walking in that reads ZERO, and RepairBuysItsPrice opens with
+            // `if (incomingDps <= 0.01f) return true` -- so it rubber-stamped every repair in
+            // exactly the situation it exists to refuse. Meanwhile the geometric time-to-death
+            // DOES see the approaching army and opens the gate, so the bot repaired a castle at
+            // 100% health four times, the last for $8,837.
+            ThreatModel threat = (_settings.DefenceOnly || _settings.RepairPriceCheck)
+                ? ThreatModel.Build(engine, _side, enemyUnits, me.CastleHealth)
+                : null;
 
             // Under the boom strategy our standing army is intentionally near-zero most of
             // the game, so a naive "is any enemy near our castle" trigger fires almost
@@ -1827,7 +2733,8 @@ namespace CastleDefense.Engine.Bot
             // investment reserve at all, by design, since reactive defense shouldn't hold
             // back when actually threatened -- kept consuming money on cheap fodder before
             // the invest check downstream ever got a real shot at it. Money never
-            // re-accumulated to InvestmentPrice (169.4 at that point) for the rest of the
+            // re-accumulated to InvestmentPrice (169.4 at that point; that same rung is $170
+            // since prices became whole dollars on 2026-08-29) for the rest of the
             // game while the model's kept compounding unimpeded (investment 3 -> 9). Require
             // enemyIsClose here too: a stale HP deficit with nothing actually near our
             // castle isn't an active threat, just a scoreboard number repair will fix on its
@@ -1886,7 +2793,80 @@ namespace CastleDefense.Engine.Bot
                 ? me.CastleHealth / projectedDps
                 : EffectivelyInfiniteSeconds;
 
-            float timeToDeathSeconds = Math.Max(EstimateTimeToDeathSeconds(me.CastleHealth), projectedTimeToDeathSeconds);
+            float observedTimeToDeathSeconds = EstimateTimeToDeathSeconds(me.CastleHealth);
+            float timeToDeathSeconds;
+            if (_settings.UnifiedTimeToDeath)
+            {
+                // ── ONE TIME-TO-DEATH, 2026-08-21 (Marc's design) ───────────────────
+                //
+                // Two estimators with different blind spots were being combined with a plain
+                // Math.Max, which let a BLIND estimator win. Each has a "no information"
+                // sentinel and the old Max treated that sentinel as a genuine reading of
+                // "essentially forever":
+                //
+                //   observed  -> EffectivelyInfiniteSeconds when the 18-sample HP window is
+                //                not full, or when both drain rates are under 0.5 HP/s. It
+                //                only ever sees damage that has ALREADY LANDED.
+                //   geometric -> its cap (remaining game time) when nothing on the board can
+                //                reach the castle. It counts UNITS ONLY, so gadget, hazard
+                //                and DoT damage are invisible to it.
+                //
+                // Measured consequence of letting the sentinel win: --repair-audit on 3225A7
+                // found the contact-only estimator reading INFINITY at six of seven repairs,
+                // because a wave walking in is invisible until it makes contact. That is why
+                // the RepairTtdSeconds gate refused nearly every repair and Tier4Spam
+                // collapsed 89.2% -> 72.2% as the threshold tightened.
+                //
+                // THE RULE: discard any estimator sitting at its sentinel, then take the MAX
+                // of whatever is left. Max is kept deliberately -- it is the established
+                // optimistic choice, and a real escalating threat reads short on BOTH once it
+                // is genuinely in range, so this does not blind the bot. If NOTHING is
+                // informative, the answer is genuinely "no measurable threat" and we return
+                // the infinite sentinel rather than the geometric cap. Returning the cap
+                // would make investmentRunwayIsSafe permanently false in the last ~76 seconds
+                // of every game at investment 7, which is a new endgame pathology.
+                //
+                // The contact-only PROJECTED estimator is dropped entirely here: the
+                // geometric one already counts contact units (their travel time is zero) and
+                // additionally handles Siege doubling, Rage, Slow/freeze and blockers, so it
+                // strictly supersedes it.
+                //
+                // EXPECT THIS TO READ SHORTER THAN THE OLD Math.Max, by construction -- that
+                // is the fix, but it means inDanger fires more readily and
+                // reactiveSpendBudget grows. Both effects push against the economy, which is
+                // exactly how the earlier geometry-only arm lost 10 points on the mirror
+                // rung. Measure before trusting.
+                float geo = (float)state.TimeToCastleDeathSeconds(_side);
+                LastGeoTimeToDeathSeconds = geo;
+                float geoCap = (GameEngine.MAX_TICKS - state.CurrentTick) / (float)GameEngine.TICKS_PER_SECOND;
+                bool observedInformative = observedTimeToDeathSeconds < EffectivelyInfiniteSeconds;
+                // Geo returns exactly its cap when it has nothing to report; the epsilon
+                // guards float noise rather than admitting near-cap readings.
+                bool geoInformative = geo < geoCap - 0.01f;
+
+                timeToDeathSeconds =
+                      observedInformative && geoInformative ? Math.Max(observedTimeToDeathSeconds, geo)
+                    : observedInformative ? observedTimeToDeathSeconds
+                    : geoInformative      ? geo
+                                          : EffectivelyInfiniteSeconds;
+            }
+            else if (_settings.GeometricTimeToDeath)
+            {
+                // The geometric estimator REPLACES the optimistic Max above -- see the flag's
+                // own comment for why Max'ing it in measured as a no-op. Guarded on the flag
+                // rather than computed and discarded: HeuristicBot is RolloutSearchBot's
+                // rollout policy for BOTH sides, so per-decision work here is multiplied by
+                // ~64M evaluations per n=20 search benchmark.
+                float geo = (float)state.TimeToCastleDeathSeconds(_side);
+                LastGeoTimeToDeathSeconds = geo;
+                timeToDeathSeconds = _settings.GeometricTDeathKeepObserved
+                    ? Math.Min(observedTimeToDeathSeconds, geo)
+                    : geo;
+            }
+            else
+            {
+                timeToDeathSeconds = Math.Max(observedTimeToDeathSeconds, projectedTimeToDeathSeconds);
+            }
 
             double moneyStillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
             float timeToInvestSeconds = me.Income > 0.01 ? (float)(moneyStillNeeded / me.Income) : EffectivelyInfiniteSeconds;
@@ -2018,15 +2998,69 @@ namespace CastleDefense.Engine.Bot
             LastTimeToDeathSeconds = timeToDeathSeconds;
             LastTimeToInvestSeconds = timeToInvestSeconds;
 
+            // --- INCOMING NUKE ---
+            // A queued nuke detonation is the one threat none of the machinery above can
+            // see. Every danger signal in this method is a rate (HP over observed or
+            // projected drain from units in contact); a nuke is a single instantaneous hit
+            // that is already committed and cannot be blocked, killed or outrun. So this is
+            // checked separately, and BEFORE the investment early-exit below -- otherwise
+            // the bot's highest-priority action, on the last decision it will ever make, is
+            // to hand its entire pile to an economy upgrade it is about to be deleted with.
+            // See IncomingNukeRepair for the full reasoning.
+            //
+            // The blast is read from the engine rather than assumed, so it is correct for
+            // whichever nuke level is actually in flight (100 / 1500 / 12000), sums several
+            // in the air at once, and counts our own as readily as the enemy's.
+            //
+            // Fires at FULL health too, where DamageCastle's 1-shot prevention floors us at
+            // 1 HP instead of killing us. That is deliberate: surviving on 1 HP against an
+            // opponent free to finish the job is not surviving, and the repair both clears
+            // the blast outright and raises CastleMaxHealth permanently.
+            int incomingBlast = _settings.IncomingNukeRepair ? engine.IncomingCastleDamage(_side) : 0;
+            bool nukeEmergency = incomingBlast > 0
+                && me.CastleHealth <= incomingBlast * _settings.IncomingNukeSurvivalMargin;
+            LastIncomingCastleDamage = incomingBlast;
+            LastNukeEmergency = nukeEmergency;
+
+            if (nukeEmergency)
+            {
+                // No 1.25x money reserve here (unlike the ordinary repair below): the
+                // alternative to this purchase is losing the castle, so there is nothing
+                // left for the reserve to protect. Same principle as survivalEmergency
+                // uncapping the reactive-spend budget.
+                //
+                // One repair may not be enough against a nuke_3 at low HP, and that is
+                // fine: this re-runs every decision, and 48 ticks of delay is ~10 of them,
+                // so the bot keeps buying HP for as long as the blast is still lethal and
+                // it can still afford to. Returning yields the rest of the decision so no
+                // gadget or unit purchase can spend the money the next repair needs.
+                if (me.Money >= me.RepairPrice && Act(() => engine.Repair(_side)))
+                {
+                    ActionCounts[10]++;
+                    return;
+                }
+                // Can't afford it. Fall through and play normally -- but the investment
+                // early-exit below is now gated on !nukeEmergency, so the money stays
+                // available for a repair on a later decision inside the same window.
+            }
+
             // Claim a safely-affordable investment before ANYTHING else this decision gets
             // a chance to spend the money, rather than checking it last (as below) and
             // hoping nothing else got to it first. Found via trace (hunt v4 headstart) that
             // this race is real and not just theoretical: money visibly reached $32.32
             // against a $31.20 InvestmentPrice while inDanger was false, yet InvestmentCount
             // never moved -- because unlike the first investment ($18, landed on exactly by
-            // clean $2 increments from zero), later thresholds aren't round numbers the
-            // income accrual lands on exactly, so money can jump straight PAST the price in
-            // a single decision. DeferForInvestment's <= boundary guard (see its own
+            // clean $2 increments from zero), later thresholds are not values the income
+            // accrual lands on exactly, so money can jump straight PAST the price in
+            // a single decision.
+            //
+            // THE MECHANISM MOVED, THE HAZARD DID NOT (2026-08-29). Prices are whole dollars
+            // now, so it is no longer true that "the thresholds aren't round numbers" -- the
+            // fractional side is the INCOME. At InvestmentCount 1 income is 2.6484/s, so
+            // money steps 31.78 -> 34.43 and still skips straight over the $32 price without
+            // ever equalling it. The overshoot this paragraph exists to defend against is
+            // unchanged; only the reason it happens is. The quoted trace numbers are the
+            // pre-rounding ones and are left as recorded. DeferForInvestment's <= boundary guard (see its own
             // comment) only protects gadgets up to the exact crossover value -- once money
             // overshoots it in one step, that guard is already inactive the very same
             // decision a gadget or reactive spend could also fire and steal the dollar
@@ -2045,7 +3079,90 @@ namespace CastleDefense.Engine.Bot
             // "timeToDeath >= 2 seconds" once money has already reached InvestmentPrice,
             // so without this guard the highest-priority action in the entire bot is to
             // spend the whole pile on economy while the castle is seconds from falling.
-            if (investmentRunwayIsSafe && !survivalEmergency && me.Money >= me.InvestmentPrice && engine.Invest(_side))
+            // ── REPAIR: TIME-TO-DEATH ONLY, AND FIRST IN LINE (2026-08-21) ──────────
+            //
+            // WAS: `castleHpPct < RepairHpThreshold || inDanger`, then `money >= price*1.25`,
+            // evaluated AFTER the three gadget casts. Two things were wrong with that.
+            //
+            //  1. NO OPPORTUNITY COST. Every other inDanger-authorised purchase in this file
+            //     is additionally gated on `def.Cost <= reactiveSpendBudget` or on
+            //     BigSpendJustified. Repair was the ONLY one that asked merely "can I afford
+            //     it". Measured on 3225A7: the bot bought its 7th repair for $8,837 while
+            //     $40,000 from the investment rung that leads to ARMAGEDDON, and finished the
+            //     game $16,419 short of it.
+            //
+            //  2. THE PRICE IS SUPER-EXPONENTIAL AND THE BENEFIT IS FLAT. RepairPrice is
+            //     e^(0.0109n^3 + ...) * (5n+5), doubling again at n>=8, while every repair
+            //     buys exactly +11,000 CastleMaxHealth. The schedule is 20 / 26 / 66 / 169 /
+            //     493 / 1,796 / 8,837 / 126,390 -- repair 7 is 443x worse value per HP than
+            //     repair 1, and repair 8 costs MORE THAN ARMAGEDDON ($121,221). The old gate
+            //     treated all of them identically.
+            //
+            //  3. inDanger IS THE WRONG QUANTITY, and gets wronger as the game goes on.
+            //     It is `enemyIsClose && !investmentRunwayIsSafe`, and the runway test is
+            //     `timeToDeath >= timeToInvest*1.4 + 2`. At investment 7 the rung costs
+            //     $40,000 against income 750, so timeToInvest is ~53s and the bar becomes 76
+            //     SECONDS. Anything on the board flips it. So the flag that authorises
+            //     unbounded repair spending gets LOOSER exactly as the rung gets dearer --
+            //     it protects the investment race by spending the investment.
+            //
+            // NOW: a single absolute survival test. Repair when death is imminent, never
+            // otherwise. This mirrors the drain-cap fix (DrainCapTtdSeconds), which replaced
+            // a proximity proxy with the same estimator and gained +3.8/+6.3 points.
+            //
+            // AND IT RUNS FIRST. Marc's requirement: repair outranks everything, so it is
+            // evaluated ahead of the investment claim and ahead of all gadget/unit spending.
+            // At a 5.5s time-to-death an investment cannot pay for itself before the castle
+            // falls, so losing the rung to a repair in that window is the correct trade -- and
+            // because the gate is this tight, it cannot preempt investing in normal play.
+            //
+            // The 1.25x affordability cushion is gone too: at this threshold the bot is about
+            // to die, so a repair it can exactly afford is one it should buy.
+            if (_settings.RepairTtdSeconds > 0)
+            {
+                // REPAIR KEEPS ITS FIRST CLAIM. Moving it into the defensive comparison was
+                // measured and cost 11 points (35.0% -> 23.8%) -- the ordering comment above is
+                // load-bearing, and the one purchase that actually prevents death should not be
+                // competing for leftovers.
+                //
+                // What defence-only adds is a PRICE CHECK in the same slot: a repair is worth
+                // buying only if the seconds it buys are worth more than it costs, where a
+                // second is worth a second of income. Traced against a real collapse the old
+                // rule bought six repairs in seven seconds for $11,398, the last at $8,837 for
+                // 0.89 seconds of life; this refuses everything past the fourth.
+                bool worthRepairing = !(_settings.DefenceOnly || _settings.RepairPriceCheck)
+                    || RepairBuysItsPrice(me, threat?.UnblockedDps ?? projectedDps);
+
+                // The absolute floor. Deliberately ORed with the time-to-death gate rather
+                // than folded into it: the whole point is that it fires in the case the rate
+                // estimate calls safe, so it must not be filtered by that estimate.
+                float hpPct = me.CastleMaxHealth > 0
+                    ? (float)me.CastleHealth / me.CastleMaxHealth : 1f;
+                bool onTheFloor = _settings.RepairHpFloorPct > 0f
+                    && hpPct < _settings.RepairHpFloorPct;
+
+                bool burstOk = _settings.RepairMinIntervalSeconds <= 0
+                    || (engine._state.CurrentTick - _lastRepairTick)
+                       / (double)GameEngine.TICKS_PER_SECOND >= _settings.RepairMinIntervalSeconds;
+
+                if ((timeToDeathSeconds < _settings.RepairTtdSeconds || onTheFloor)
+                    && me.Money >= me.RepairPrice
+                    && worthRepairing && burstOk
+                    && Act(() => engine.Repair(_side)))
+                {
+                    _lastRepairTick = engine._state.CurrentTick;
+                    ActionCounts[10]++;
+                    return;
+                }
+            }
+            else if ((castleHpPct < _settings.RepairHpThreshold || inDanger)
+                     && me.Money >= me.RepairPrice * 1.25)
+            {
+                // Legacy path, kept so RepairLegacy reproduces the pre-2026-08-21 bot.
+                if (Act(() => engine.Repair(_side))) ActionCounts[10]++;
+            }
+
+            if (investmentRunwayIsSafe && !survivalEmergency && !nukeEmergency && me.Money >= me.InvestmentPrice && Act(() => engine.Invest(_side)))
             {
                 ActionCounts[9]++;
                 return;
@@ -2055,6 +3172,25 @@ namespace CastleDefense.Engine.Bot
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
             TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
             TryUseSignatureGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, castleHpPct, reactiveSpendBudget);
+
+            // ── SHARED THREAT MODEL ────────────────────────────────────────────────
+            // Built here, AFTER the three gadget methods have chosen, so it can net off the
+            // relief they just bought before the spawn logic prices anything. That is the
+            // whole integration: the gadget code is untouched and knows nothing about units,
+            // the spawn code knows nothing about gadgets, and they meet in this one object.
+            if (threat != null)
+            {
+                // Relief is applied AFTER the gadget methods have chosen, so the spawn logic
+                // prices only the residual. The model itself is built earlier -- see above --
+                // because the repair price check needs the real incoming damage rate before
+                // repair takes its turn.
+                foreach (var (cdef, cpos) in _castsThisDecision)
+                {
+                    var (sup, killS, killD) = ThreatModel.EstimateRelief(cdef, cpos, enemyUnits);
+                    threat.ApplyRelief(sup, killS, killD);
+                }
+                LastThreatDebug = threat.ToString();
+            }
 
             // --- MILITARY / ECONOMY ---
             // Boom strategy: a spam bot (or a human who isn't optimizing) never invests,
@@ -2095,12 +3231,10 @@ namespace CastleDefense.Engine.Bot
             // move: the first repair alone takes CastleMaxHealth 2000 -> 12000, a ~6x swing
             // that can turn a losing race against the clock into a comfortable one for the
             // price of a single, cheap, permanent purchase.
-            bool repairWouldHelp = castleHpPct < _settings.RepairHpThreshold || inDanger;
-
-            if (repairWouldHelp && me.Money >= me.RepairPrice * 1.25)
-            {
-                if (engine.Repair(_side)) ActionCounts[10]++;
-            }
+            // REPAIR MOVED. It now runs FIRST, before the early-investment claim and before
+            // any gadget or unit spending -- see the RepairTtdSeconds block above. Leaving it
+            // here meant three gadget casts had already had a shot at the wallet, so the one
+            // purchase that actually prevents death competed for leftovers.
 
             // WAVE-WIPE PURCHASE (flag 20). Marc's correction to a first version that framed
             // this as "wiper INSTEAD OF repair": "It's not so much the wiper vs repair debate.
@@ -2120,7 +3254,8 @@ namespace CastleDefense.Engine.Bot
             // walk in and swing before we can tell whether another is needed, so refuse to
             // buy a second one until it has had that time.
             bool boughtWiper = false;
-            if (_settings.WiperOverRepair && committedEnemyCount > 0 && committedEnemyValue > 0
+            if (!_settings.DefenceOnly
+                && _settings.WiperOverRepair && committedEnemyCount > 0 && committedEnemyValue > 0
                 && (state.CurrentTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds)
             {
                 // Toughest thing in the stack. Shield absorbs before health (ApplyDamage), so
@@ -2145,9 +3280,10 @@ namespace CastleDefense.Engine.Bot
 
                 if (wiper != null
                     && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
-                    && engine.SpawnUnit(_side, wiper.Id))
+                    && Act(() => engine.SpawnUnit(_side, wiper.Id)))
                 {
                     boughtWiper = true;
+                    LastSpawnReason = "wiper";
                     _lastWiperTick = state.CurrentTick;
                     LastUnitsPurchased++;
                     if (wiper.Tier >= 1 && wiper.Tier <= 8) ActionCounts[wiper.Tier]++;
@@ -2159,7 +3295,15 @@ namespace CastleDefense.Engine.Bot
             // `!boughtWiper` keeps the one-purchase-per-decision pacing this file
             // deliberately maintains -- without it a wiper and a reactive unit could both
             // land on the same tick.
-            if (inDanger && !boughtWiper)
+            if (_settings.DefenceOnly)
+            {
+                // Owns unit spawning entirely in this mode. Still yields to the wiper, which
+                // is the same trade priced a different way -- one unit that clears the whole
+                // committed stack for less than the stack is worth.
+                DefensiveResponse(engine, me, teamDef.Roster, threat, enemyUnits,
+                                  myCastlePos, committedEnemyValue, state.CurrentTick);
+            }
+            else if (inDanger && !boughtWiper)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget);
             }
@@ -2195,7 +3339,7 @@ namespace CastleDefense.Engine.Bot
             // standing between a full money pile and an investment bought moments before
             // the castle falls. Repair and reactive spending have already had their turn
             // above by the time we reach here, so blocking this doesn't strand the money.
-            if (!survivalEmergency && me.Money >= me.InvestmentPrice && engine.Invest(_side))
+            if (!survivalEmergency && !nukeEmergency && me.Money >= me.InvestmentPrice && Act(() => engine.Invest(_side)))
             {
                 ActionCounts[9]++;
                 return;
@@ -2377,6 +3521,11 @@ namespace CastleDefense.Engine.Bot
             if (_settings.PaceAttackSpendForInvestment)
             {
                 float ownPushDps = EstimateOwnCastleDps(engine, myUnits, enemyUnits);
+                // Diagnostics only -- no behaviour change. The flag's own confidence is the
+                // obvious feature for auditing it and was not previously observable.
+                LastOwnPushDps = ownPushDps;
+                LastKillerSeconds = ownPushDps > 0.01f
+                    ? enemy.CastleHealth / ownPushDps : float.PositiveInfinity;
                 killerInstinct = ownPushDps > 0.01f
                     && enemy.CastleHealth / ownPushDps <= _settings.KillerInstinctSeconds;
             }
@@ -2384,6 +3533,59 @@ namespace CastleDefense.Engine.Bot
             {
                 killerInstinct = enemy.CastleHealth <= _settings.KillerInstinctHpThreshold;
             }
+            // ── TWO BRAKES ON killerInstinct, both default-off ────────────────────────
+            // Applied AFTER the trigger rather than folded into it, so the raw signal stays
+            // readable in LastKillerInstinctRaw and the brakes can be attributed separately.
+            LastKillerInstinctRaw = killerInstinct;
+            LastKillerLockReason = null;
+
+            // (a) NEAR A RUNG. Refuse to bypass the savings discipline when the thing being
+            // bypassed is about to pay out anyway.
+            if (killerInstinct && _settings.KillerInstinctInvestLockoutSeconds > 0)
+            {
+                double stillNeeded = Math.Max(0, me.InvestmentPrice - me.Money);
+                double secondsToRung = me.Income > 0.01
+                    ? stillNeeded / me.Income : EffectivelyInfiniteSeconds;
+                if (secondsToRung <= _settings.KillerInstinctInvestLockoutSeconds)
+                {
+                    killerInstinct = false;
+                    LastKillerLockReason = "near-invest";
+                }
+            }
+
+            // (b) THE PUSH FAILED. Track the high-water mark of our army while a push is live;
+            // if it more than halves, the push has been cleared and pressing again is throwing
+            // good money after bad. Clears when we hold an income advantage again.
+            //
+            // Uses LastIncomeAdvantage -- the PREVIOUS decision's value -- deliberately:
+            // hasIncomeAdvantage is computed further down this method, and a one-decision lag
+            // (about 0.17s) is not worth reordering a block this load-bearing for.
+            if (_settings.KillerInstinctPushLatch)
+            {
+                int ownNow = myUnits.Count;
+                if (killerInstinct)
+                {
+                    _killerPushLive = true;
+                    if (ownNow > _killerPushPeak) _killerPushPeak = ownNow;
+                }
+                if (_killerPushLive && _killerPushPeak > 0 && ownNow * 2 < _killerPushPeak)
+                {
+                    _killerLockedOut = true;
+                    _killerPushLive = false;
+                    _killerPushPeak = 0;
+                }
+                if (_killerLockedOut)
+                {
+                    if (LastIncomeAdvantage) _killerLockedOut = false;
+                    else if (killerInstinct)
+                    {
+                        killerInstinct = false;
+                        LastKillerLockReason = "push-failed";
+                    }
+                }
+            }
+
+            if (LastKillerLockReason != null) KillerLockedDecisions++;
             LastKillerInstinct = killerInstinct;
 
             bool attackDisengaged = state.CurrentTick < _disengageUntilTick && !killerInstinct;
@@ -2442,17 +3644,604 @@ namespace CastleDefense.Engine.Bot
             // may open. At 0 this is vacuously true and the gate is exactly Income >= 50.
             bool investmentGateOpen = me.InvestmentCount >= _settings.AttackGateMinInvestment;
 
-            if (!inDanger && investmentGateOpen && (me.Income >= 50 || hasIncomeAdvantage) && !attackDisengaged)
+            // DEFENCE-ONLY closes this branch outright -- no offensive unit ever gets bought.
+            // The win condition does not need it: invest eight times and ARMAGEDDON ends the
+            // game (GameEngine.Invest -> ArmageddonEffect).
+            // An enemy Wave or Blackhole makes an attack purchase unconvertible -- see
+            // HazardAttackBlackout. Saving through it is strictly better than spending into it.
+            bool hazardBlackout = _settings.HazardAttackBlackout && AttackBlockingHazardActive(engine);
+            LastHazardBlackout = hazardBlackout;
+            if (hazardBlackout) HazardBlackoutDecisions++;
+
+            if (!_settings.DefenceOnly
+                && !inDanger && investmentGateOpen && (me.Income >= 50 || hasIncomeAdvantage) && !attackDisengaged
+                && !hazardBlackout)
             {
+                // Diagnostic: the offensive branch was ENTERED. Distinguishes a gate leak from
+                // action-queue latency -- Update drains one queued action per tick BEFORE
+                // Decide() runs, so money can leave under an "attack" label on a tick where the
+                // blackout is already true, without the offensive branch having been entered.
+                OffensiveSpendDecisions++;
+                if (LastHazardBlackout) OffensiveWhileBlackedOut++;
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct,
                              hasIncomeAdvantage: hasIncomeAdvantage);
+            }
+        }
+
+        /// <summary>
+        /// Buys blocking bodies at the rate the survival law says is needed to outlast the wait
+        /// for the next investment -- and nothing more.
+        ///
+        /// THE OBJECTIVE IS THE INVESTMENT CLOCK, not the enemy. Every second bought is only
+        /// worth buying because it is a second of income compounding toward the next invest,
+        /// and eight investments is the whole game (ARMAGEDDON). So the target is "outlive the
+        /// time it takes to afford the next one", and once that is already true for free the
+        /// right move is to spend nothing at all.
+        ///
+        /// THREE THINGS THE MEASUREMENTS DICTATE HERE:
+        ///  - Buy the CHEAPEST body. A body absorbs one swing whatever it is, so per unit of
+        ///    blocking only price matters -- tier 4 costs 10x a tier 1 for the same job, tier 5
+        ///    30x, tier 6 166x.
+        ///  - Aim at the rate, not proportionally to the threat. dt/dr = K/(S-r)^2 accelerates,
+        ///    so a fraction of the needed rate buys almost nothing; this either commits to the
+        ///    computed rate or stays home.
+        ///  - Wait for the force to settle before reading it, unless waiting is what kills us.
+        ///
+        /// KNOWN CEILING: DecisionIntervalTicks is 5 and this buys at most one unit per
+        /// decision, so the bot physically cannot exceed 6 bodies/sec. The sweeps say that
+        /// covers most unescorted forces but NOT an escorted tier 7, which wanted 15-30/s.
+        /// Against those the credit simply saturates and the gadget layer has to carry it.
+        /// </summary>
+        /// <summary>Seconds of income needed to buy every remaining investment through ARMAGEDDON.</summary>
+        public float LastDefenceTarget { get; private set; }
+
+        /// <summary>Which branch of the trade won last decision: free / wait / wipe / block.</summary>
+        public string LastDefenceChoice { get; private set; } = "";
+
+        /// <summary>Dollar price of one castle HP, from the repair ladder. Diagnostic.</summary>
+        public double LastDollarsPerHp { get; private set; }
+
+        /// <summary>Block rate the law last asked for, bodies/sec. Diagnostic.</summary>
+        public float LastRequiredRate { get; private set; }
+
+        /// <summary>Block rate the bot can actually deliver, after the spawn ceiling.</summary>
+        public float LastAchievableRate { get; private set; }
+
+        /// <summary>Net dollar swing of each option last decision. Diagnostic.</summary>
+        public string LastDefenceDebug { get; private set; } = "";
+
+        /// <summary>Why this decision did not wipe. Diagnostic only.</summary>
+        public string LastWipeVeto { get; private set; } = "";
+
+        /// <summary>
+        /// What a wipe would ACTUALLY reach, against what it is being credited for.
+        ///
+        /// The value side of the wipe assumes one swing clears the pile, which is only true
+        /// when ClampToContact has parked the attackers at a single contact point. Neither
+        /// FindWiper nor committedEnemyValue checks that -- both simply sum everything inside
+        /// WaveWipeRadius (500px), while a swing reaches only Range beyond the attacker's own
+        /// sprite edge. These record both so the gap can be measured rather than assumed.
+        /// </summary>
+        public int LastWipeInRadius { get; private set; }
+        public int LastWipeInReach { get; private set; }
+        public double LastWipeValRadius { get; private set; }
+        public double LastWipeValReach { get; private set; }
+        public float LastWipeSpread { get; private set; }
+
+        /// <summary>
+        /// Running tally of what wipes actually bought, for calibrating the re-buy gate.
+        /// Recorded at the moment of purchase: the value a single swing can reach, the price
+        /// paid, and the count. The reach figure is the honest one -- the value sitting inside
+        /// the radius but outside the swing is credited by the scoring and never collected.
+        /// </summary>
+        public int WipeCount { get; private set; }
+        public double WipeValueReached { get; private set; }
+        public double WipeValueCredited { get; private set; }
+        public double WipeSpend { get; private set; }
+
+        /// <summary>
+        /// What the BEST available wiper would have collected, against what we actually bought.
+        ///
+        /// FindWiper insists on one-shotting the TOUGHEST unit in the band, which can force a
+        /// tier-7 purchase to clear a pile that is mostly tier-4 chaff. A cheaper unit that
+        /// one-shots the chaff and leaves the one tough survivor may be the far better trade.
+        /// These record both so the rule can be judged rather than assumed.
+        /// </summary>
+        public double WipeBestAltKill { get; private set; }
+        public double WipeBestAltCost { get; private set; }
+        public int WipeBestAltCount { get; private set; }
+
+        /// <summary>Bodies currently owed. Diagnostic.</summary>
+        public float LastBlockCredit => _blockCredit;
+
+        /// <summary>Survival the law predicts with no defence at all. Diagnostic.</summary>
+        public float LastBareSurvival { get; private set; }
+
+        /// <summary>
+        /// How long until this economy can buy ARMAGEDDON, assuming it spends on nothing else.
+        ///
+        /// Walks the real ladder on a CLONE rather than reimplementing the curve, because
+        /// PlayerState.ApplyInvestmentStep is deliberately the single source of truth for the
+        /// income/price formula (including its hardcoded overrides at counts 7 and 8) and a
+        /// second copy here would drift from it exactly the way the time-machine constructor
+        /// once did.
+        /// </summary>
+        private static float SecondsToArmageddon(PlayerState me)
+        {
+            if (me.ArmageddonUsed) return 0f;
+
+            var sim = me.Clone();
+            float seconds = 0f;
+            for (int guard = 0; guard <= PlayerState.ArmageddonInvestmentCount + 1; guard++)
+            {
+                if (sim.Money < sim.InvestmentPrice)
+                {
+                    if (sim.Income <= 0.01) return EffectivelyInfiniteSeconds;
+                    seconds += (float)((sim.InvestmentPrice - sim.Money) / sim.Income);
+                    sim.Money = sim.InvestmentPrice;
+                }
+                sim.Money -= sim.InvestmentPrice;
+
+                // At the top of the ladder the purchase IS Armageddon -- it does not step the
+                // economy, it ends the game (GameEngine.Invest).
+                if (sim.InvestmentCount >= PlayerState.ArmageddonInvestmentCount) return seconds;
+                sim.ApplyInvestmentStep();
+            }
+            return seconds;
+        }
+
+        /// <summary>
+        /// Dollar price of one point of castle HP, taken from what it actually costs to buy HP
+        /// back: a repair.
+        ///
+        /// Uses the HEALING component of the preview, not the whole delta. PreviewRepairStep
+        /// also raises CastleMaxHealth, so at full HP the raw delta is mostly a max-health
+        /// increase and would price HP at almost nothing precisely when the castle is healthy.
+        /// The heal is 20% of the new maximum, and that is the part that replaces damage taken.
+        ///
+        /// Rises naturally over a game, because RepairPrice climbs faster than max health does.
+        /// That is the right shape: HP genuinely is more precious later, when there is less
+        /// time left to earn back what replacing it costs.
+        /// </summary>
+        /// <summary>
+        /// Is one more repair worth what it costs, in the only currency that matters here?
+        ///
+        /// The health a repair restores buys `restored / incomingDps` seconds, and every second
+        /// survived is a second of income compounding toward the investment that ends the game.
+        /// So the test is simply: seconds bought x income > price.
+        ///
+        /// Deliberately does NOT credit the permanent max-health increase a repair also buys.
+        /// That is real value, so this under-values repair -- the safe direction, given the
+        /// failure it exists to stop is repairing far too often.
+        /// </summary>
+        private static bool RepairBuysItsPrice(PlayerState me, float incomingDps)
+        {
+            if (incomingDps <= 0.01f) return true;          // no attack to price against
+            var (previewHp, _) = me.PreviewRepairStep();
+            double restored = previewHp - me.CastleHealth;
+            if (restored <= 0) return false;
+            return (restored / incomingDps) * me.Income > me.RepairPrice;
+        }
+
+        private static double DollarsPerHp(PlayerState me)
+        {
+            var (nextHealth, nextMax) = me.PreviewRepairStep();
+            double healed = nextHealth - me.CastleHealth;
+            if (healed < 1.0) healed = 0.2 * nextMax;
+            return me.RepairPrice / Math.Max(1.0, healed);
+        }
+
+        /// <summary>
+        /// Cheapest unit that one-shots the toughest thing in the pile, and is worth less than
+        /// the pile is. Shield absorbs before health (ApplyDamage), so a real one-shot has to
+        /// cover both.
+        ///
+        /// Damage-based rather than "one tier above the wave": it is the property that actually
+        /// makes the swing clear the stack, and a tier is only a proxy for it. Works because
+        /// ClampToContact parks every attacker at the same contact point, so one swing reaches
+        /// all of them -- which is also why letting them pile up first is what makes this pay.
+        /// </summary>
+        /// <summary>
+        /// Compares what a wipe is credited with clearing to what one swing can actually touch.
+        /// The frontmost enemy is where the wiper will come to rest (ClampToContact), and its
+        /// swing reaches Range beyond its own sprite edge -- so anything further back than
+        /// width + range is in the radius but not in the swing.
+        /// </summary>
+        private void MeasureWipeReach(GameEngine engine, PlayerState me, UnitDefinition wiper,
+                                      List<Unit> enemyUnits, int myCastlePos, float radius)
+        {
+            LastWipeInRadius = 0; LastWipeInReach = 0;
+            LastWipeValRadius = 0; LastWipeValReach = 0; LastWipeSpread = 0;
+            LastAltKill = 0; LastAltCost = 0; LastAltId = "-";
+            if (wiper == null) return;
+
+            float front = float.MaxValue, back = float.MinValue;
+            foreach (var u in enemyUnits)
+            {
+                if (Math.Abs(u.Position - myCastlePos) > radius) continue;
+                float d = Math.Abs(u.Position - myCastlePos);
+                if (d < front) front = d;
+                if (d > back) back = d;
+            }
+            if (front == float.MaxValue) return;
+            LastWipeSpread = back - front;
+
+            float reach = wiper.Width + wiper.Range;
+            foreach (var u in enemyUnits)
+            {
+                float d = Math.Abs(u.Position - myCastlePos);
+                if (d > radius) continue;
+                LastWipeInRadius++;
+                LastWipeValRadius += EstimateUnitCost(engine, u);
+                if (d - front <= reach)
+                {
+                    LastWipeInReach++;
+                    LastWipeValReach += EstimateUnitCost(engine, u);
+                }
+            }
+
+            // What every OTHER roster unit would have collected from the same pile: the value of
+            // everything in reach that its single swing would actually kill, less its price.
+            // A cheap unit that one-shots forty tier-4s and leaves one tier-7 standing can beat
+            // the expensive one that kills all forty-one.
+            double bestNet = double.NegativeInfinity;
+            var team = GameDataManager.Teams.FirstOrDefault(t => t.Color == me.Team);
+            if (team == null) return;
+            foreach (var d in team.Roster)
+            {
+                if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                double kills = 0;
+                foreach (var u in enemyUnits)
+                {
+                    float dist = Math.Abs(u.Position - myCastlePos);
+                    if (dist > radius || dist - front > reach) continue;
+                    if (u.CurrentHealth + u.CurrentShield <= d.Damage)
+                        kills += EstimateUnitCost(engine, u);
+                }
+                if (kills - d.Cost > bestNet)
+                {
+                    bestNet = kills - d.Cost;
+                    LastAltKill = kills; LastAltCost = d.Cost; LastAltId = d.Id;
+                }
+            }
+        }
+
+        /// <summary>Best alternative wiper this decision -- what it would kill, and its price.</summary>
+        public double LastAltKill { get; private set; }
+        public double LastAltCost { get; private set; }
+        public string LastAltId { get; private set; } = "-";
+
+        private static UnitDefinition FindWiper(GameEngine engine, PlayerState me, List<UnitDefinition> roster,
+                                                List<Unit> enemyUnits, int myCastlePos, float radius,
+                                                out double killValue, bool ignoreMoney = false,
+                                                List<Unit> myUnits = null, bool countCoverage = true)
+        {
+            killValue = 0;
+
+            // Where the pile is. A wiper walks out and stops at the nearest enemy
+            // (ClampToContact), so the front of the pile is where its swing lands.
+            float front = float.MaxValue;
+            foreach (var u in enemyUnits)
+            {
+                float d0 = Math.Abs(u.Position - myCastlePos);
+                if (d0 <= radius && d0 < front) front = d0;
+            }
+            if (front == float.MaxValue) return null;
+
+            // WHAT WE ALREADY HAVE OUT THERE.
+            //
+            // A unit on the field is OBSERVED, not predicted: it stands at a known position with
+            // a known Damage, so "can it already kill this enemy" needs no model of the future.
+            // Anything it covers is not worth buying a second unit to kill, and the wipe should
+            // be priced on the MARGIN -- what a new purchase adds over what is already deployed.
+            //
+            // This is what stops the bot buying the tier 7 its own reinforcements gadget is
+            // handing it. Measured on the pinned mirror before this existed: between 160s and
+            // 210s it paid $22,726 for 11 tier-7 units while 25 identical tier-7 units arrived
+            // free from its own reinforcements_3, and tier-7 purchases were 96% of its entire
+            // unit budget for the game. ReinforcementsEffect spawns the first of its five
+            // immediately, so from the moment a wave is cast it is on the field to be counted --
+            // which is why the observed-only rule catches almost all of what a predictive one
+            // would, without having to forecast a battle.
+            //
+            // The coverage test deliberately mirrors the purchase test below, including its
+            // optimism: both credit a single unit with everything it one-shots in reach, though
+            // it can only swing at one target at a time. The absolute numbers are therefore too
+            // high on BOTH sides -- and it is the difference between them that is being used.
+            // The coverage test must score an existing unit EXACTLY as the purchase test below
+            // scores a candidate, or the comparison is rigged. The first version of this scored
+            // an existing unit only where it currently stands, while candidates are priced as if
+            // they were already at the front of the pile -- and since our reinforcements spawn at
+            // our own castle and have to walk, that version credited them with nothing and
+            // changed almost no decisions (50.0% vs 53.1%, wipes 38.7, spend unmoved).
+            //
+            // So: credit a live friendly unit with what it will kill WHEN IT ARRIVES, from the
+            // same front, using its own reach -- identical treatment. A unit counts if it has not
+            // already passed the pile.
+            var covered = new HashSet<Guid>();
+            if (myUnits != null && countCoverage)
+            {
+                foreach (var m in myUnits)
+                {
+                    if (m.CurrentHealth <= 0) continue;
+                    float mreach = m.Width + m.Range;
+                    if (Math.Abs(m.Position - myCastlePos) > front + mreach) continue;  // past it
+                    foreach (var u in enemyUnits)
+                    {
+                        float dist = Math.Abs(u.Position - myCastlePos);
+                        if (dist > radius || dist - front > mreach) continue;
+                        if (u.CurrentHealth + u.CurrentShield <= m.Damage) covered.Add(u.InstanceId);
+                    }
+                }
+            }
+
+            // Pick the unit that maximises VALUE KILLED MINUS PRICE.
+            //
+            // THIS REPLACED "cheapest unit that one-shots the toughest thing present", which was
+            // not an economic rule at all and was the reason wipes lost money. Against forty
+            // tier-4s plus one tier-7 it forced a $2,066 purchase to clear mostly $18 chaff,
+            // when an $81 tier-5 one-shots all forty and leaves the tier-7 standing. Measured
+            // over 1,600 wipes: what that rule bought killed $715 for $1,528 (net -$813), while
+            // the best available alternative killed $361 for $171 (net +$189) -- and a different
+            // unit was the better buy in 66% of them.
+            //
+            // Clearing the whole pile is not the objective and never was; the objective is the
+            // trade. A cheaper unit that kills half as much for a ninth of the price wins.
+            UnitDefinition best = null;
+            double bestNet = double.NegativeInfinity;
+            foreach (var d in roster)
+            {
+                if (d.Cost <= 0) continue;
+                if (!ignoreMoney && d.Cost > me.Money) continue;
+
+                // One swing reaches Range beyond this unit's own sprite edge, so a wide unit
+                // sweeps a deeper slice of the pile than a narrow one.
+                float reach = d.Width + d.Range;
+                double kills = 0;
+                foreach (var u in enemyUnits)
+                {
+                    float dist = Math.Abs(u.Position - myCastlePos);
+                    if (dist > radius || dist - front > reach) continue;
+                    if (covered.Contains(u.InstanceId)) continue;   // already handled, not marginal
+                    if (u.CurrentHealth + u.CurrentShield <= d.Damage)
+                        kills += EstimateUnitCost(engine, u);
+                }
+
+                double net = kills - d.Cost;
+                if (net > bestNet)
+                {
+                    bestNet = net;
+                    best = d;
+                    killValue = kills;
+                }
+            }
+            if (best == null) killValue = 0;
+            return best;
+        }
+
+        private void DefensiveResponse(GameEngine engine, PlayerState me, List<UnitDefinition> roster,
+                                       ThreatModel threat, List<Unit> enemyUnits, int myCastlePos,
+                                       double committedEnemyValue, long nowTick)
+        {
+            if (threat == null || threat.Idle) { _blockCredit = 0f; return; }
+
+            float bareSurvival = threat.SurvivalSeconds(0f);
+            LastBareSurvival = bareSurvival;
+
+            // ENGAGE ON DANGER, NOT ON THE FORCE HOLDING STILL. Either the attack is big enough
+            // to be worth answering, or it is close enough to killing us that the size no
+            // longer matters.
+            bool worthAnswering = threat.UnblockedDps >= _settings.ThreatEngageDps
+                               || bareSurvival < _settings.DefenceReadPanicSeconds;
+            if (!worthAnswering) { _blockCredit = 0f; LastDefenceChoice = "watch"; return; }
+
+            // ── THE DEATH CONSTRAINT ───────────────────────────────────────────────
+            // Above this line HP is cheap and SHOULD be traded: the early repairs cost almost
+            // nothing against a running income, and giving up health to keep investing is
+            // straightforwardly good play. Below it, survival stops being a trade at all and
+            // the dollar economics are simply switched off.
+            //
+            // Keyed to RepairTtdSeconds deliberately, so the defence and the repair agree about
+            // where the line is instead of each carrying its own threshold. KNOWN GAP: repair
+            // still reads the older EstimateProjectedThreatDps clock while this reads the
+            // measured survival law, so the two numbers can still differ even though the
+            // threshold is now shared. Unifying them changes the SHIPPED bot's repair timing,
+            // so it needs its own measurement rather than a quiet ride-along here.
+            bool survivalCritical = bareSurvival <= _settings.RepairTtdSeconds;
+
+            // Plan against the remaining runway to ARMAGEDDON, capped to a horizon a single
+            // wave can plausibly span. Deliberately NOT time-to-next-investment: that goes to
+            // zero the moment the bot can afford the next one, which made the defence thinnest
+            // exactly when the wallet was fullest.
+            float runway = SecondsToArmageddon(me);
+            float target = Math.Min(runway, _settings.DefenceHorizonSeconds)
+                         * _settings.DefenceTargetMultiplier
+                         + _settings.SafetyBufferSeconds;
+            LastDefenceTarget = target;
+
+            if (bareSurvival >= target) { _blockCredit = 0f; LastDefenceChoice = "free"; return; }
+
+            // ── THE TRADE ──────────────────────────────────────────────────────────
+            // Three options, all priced in dollars over the same window: do nothing, block at
+            // the rate we can actually achieve, or wipe the pile. Whichever swing is biggest
+            // wins.
+            //
+            // THE SPAWN CEILING IS AN INPUT, NOT AN AFTERTHOUGHT. One purchase per decision at
+            // DecisionIntervalTicks is a hard six units per second -- and deliberately so, since
+            // no human clicks faster. Pricing the block option at the rate the law ASKS for
+            // rather than the rate we can DELIVER made blocking look like it solved problems it
+            // cannot touch: traced against a 45-unit wave the law wanted 100-280 bodies/sec
+            // against a ceiling of 6. Valuing it honestly is what lets the other options win
+            // when they deserve to.
+            float ceiling = GameEngine.TICKS_PER_SECOND / (float)DecisionIntervalTicks;
+
+            float required = survivalCritical ? threat.SwingRate : threat.RequiredBlockRate(target);
+            float achievable = Math.Min(required, ceiling);
+            LastRequiredRate = required;
+            LastAchievableRate = achievable;
+
+            double perHp = DollarsPerHp(me);
+            LastDollarsPerHp = perHp;
+
+            UnitDefinition cheapest = null;
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var d = roster[i];
+                if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
+            }
+
+            // Price everything over the same window: how long this decision is meant to cover.
+            float window = Math.Min(target, _settings.DefenceHorizonSeconds);
+            if (window < 1f) window = 1f;
+
+            // VALUE THE TIME, NOT THE HEALTH.
+            //
+            // Pricing each option by the health it saves looks equivalent and is not. During any
+            // serious attack `D x window` exceeds the whole castle, so every option's health term
+            // clamps to the same number and CANCELS -- the comparison collapses to cost alone and
+            // "do nothing", at $0, beats blocking exactly when blocking is needed. Measured: that
+            // formulation took the bot from 36.9% to 15.6%.
+            //
+            // Seconds do not have that failure. Every second survived is a second of income
+            // compounding toward the investment that ends the game, so a second is worth a
+            // second of income, and each option is worth the seconds it ADDS over standing
+            // still. Capped at the planning window so an option that holds forever does not
+            // return an infinite score.
+            double baseSurvival = Math.Min(bareSurvival, window);
+            double netNothing = 0.0;   // the baseline every other option is measured against
+
+            double survBlock = Math.Min(threat.SurvivalSeconds(achievable), window);
+            double blockSpend = achievable * (cheapest?.Cost ?? 0) * window;
+            double netBlock = cheapest == null ? double.NegativeInfinity
+                : (survBlock - baseSurvival) * me.Income - blockSpend;
+
+            // WIPE -- one unit clears the whole pile, so it destroys everything committed and
+            // pays for exactly one unit, against the damage that still lands while it walks in.
+            var myUnitsNow = engine._state.Units.Where(u => u.Side == _side).ToList();
+            var wiper = FindWiper(engine, me, roster, enemyUnits, myCastlePos,
+                                  _settings.WaveWipeRadius, out double wiperKillValue,
+                                  myUnits: myUnitsNow,
+                                  countCoverage: _settings.WiperCountsFieldCoverage);
+            MeasureWipeReach(engine, me, wiper, enemyUnits, myCastlePos, _settings.WaveWipeRadius);
+            bool wipeReady = wiper != null
+                && (nowTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds;
+            // WHAT THE WIPE IS WORTH, priced off two things it used to get wrong.
+            //
+            // FIRST, the material: use the value one swing can actually REACH, not everything
+            // that happens to be inside WaveWipeRadius. Measured over 1,631 wipes, 86% of the
+            // credited value was reachable and the rest was never collected.
+            //
+            // SECOND, and much larger: the old version credited a wipe with clearing the threat
+            // for the whole planning window -- about 41 seconds of income, which swamped every
+            // other term and approved anything. Against a swarm the pile regrows in seconds. So
+            // the seconds a wipe really buys is the time the opponent needs to rebuild what it
+            // destroyed, which we already track as the rate they commit money at. That collapses
+            // toward zero exactly when the attack is dense enough for it to matter, which is the
+            // behaviour a fixed cooldown was crudely approximating.
+            //
+            // Measured before this change: the average wipe collected $736 against a $1,383
+            // price -- half its cost -- and the scoring approved it every time.
+            // What the chosen unit actually kills, not everything standing in reach of it --
+            // the selection above deliberately leaves survivors when they are not worth the
+            // price of killing them.
+            double reachValue = wiperKillValue;
+            double regrowSeconds = _enemyValueRate > 1.0
+                ? reachValue / _enemyValueRate
+                : window;                     // not reinforcing, so the kill stands
+            double maxWipeGain = Math.Max(0, window - _settings.WipeLeadSeconds - baseSurvival);
+            double gainWipe = Math.Min(maxWipeGain, regrowSeconds);
+            double netWipe = wipeReady
+                ? gainWipe * me.Income + reachValue - wiper.Cost
+                : double.NegativeInfinity;
+
+            // Never wait when survival is already critical, however good the trade looks -- and
+            // waiting only pays while the opponent commits value faster than we bleed it.
+            bool waitingPays = !survivalCritical
+                && _enemyValueRate > threat.UnblockedDps * perHp;
+            if (!waitingPays) netNothing -= 1e-6;   // break exact ties away from standing still
+
+            LastDefenceDebug = $"need={required:F1} can={achievable:F1} base={baseSurvival:F1}s " +
+                               $"block={netBlock:F0} wipe={netWipe:F0}";
+
+            // WHY NO WIPE, when there was none. Wipers are NOT gated by the critical state --
+            // this check runs before it -- so every decision that ends up labelled "critical" is
+            // one where a wipe was considered and rejected. Knowing which of the three reasons
+            // it was is the difference between tuning the cooldown, the budget, or the scoring.
+            if (wiper == null)
+            {
+                var anyPrice = FindWiper(engine, me, roster, enemyUnits, myCastlePos,
+                                         _settings.WaveWipeRadius, out _, ignoreMoney: true,
+                                         myUnits: myUnitsNow,
+                                         countCoverage: _settings.WiperCountsFieldCoverage);
+                // Distinguish "nothing in the roster one-shots it" from "nothing is close
+                // enough to wipe yet" -- FindWiper only looks inside WaveWipeRadius, so a fight
+                // our blockers are holding out at midfield produces no wipe target at all.
+                int inRadius = 0;
+                foreach (var u in enemyUnits)
+                    if (Math.Abs(u.Position - myCastlePos) <= _settings.WaveWipeRadius) inRadius++;
+                LastWipeVeto = anyPrice != null ? "too-poor"
+                             : inRadius == 0 ? "out-of-radius"
+                             : "nothing-one-shots";
+            }
+            else if (!wipeReady) LastWipeVeto = "cooldown";
+            else if (wiperKillValue <= 0) LastWipeVeto = "already-covered";
+            else if (netWipe < netBlock || netWipe < netNothing) LastWipeVeto = "lost-scoring";
+            else LastWipeVeto = "-";
+
+            if (wipeReady && netWipe >= netBlock && netWipe >= netNothing)
+            {
+                if (engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
+                    && Act(() => engine.SpawnUnit(_side, wiper.Id)))
+                {
+                    _lastWiperTick = nowTick;
+                    _blockCredit = 0f;
+                    WipeCount++;
+                    WipeValueReached += wiperKillValue;
+                    WipeValueCredited += committedEnemyValue;
+                    WipeSpend += wiper.Cost;
+                    WipeBestAltKill += LastAltKill;
+                    WipeBestAltCost += LastAltCost;
+                    if (LastAltId != wiper.Id) WipeBestAltCount++;
+                    LastSpawnReason = "wiper";
+                    LastDefenceChoice = "wipe";
+                    LastUnitsPurchased++;
+                    if (wiper.Tier >= 1 && wiper.Tier <= 8) ActionCounts[wiper.Tier]++;
+                    return;
+                }
+            }
+
+            if (!survivalCritical && netNothing > netBlock)
+            {
+                _blockCredit = 0f;
+                LastDefenceChoice = waitingPays ? "wait" : "outmatched";
+                return;
+            }
+
+            float rate = achievable;
+            if (rate <= 0f) { _blockCredit = 0f; LastDefenceChoice = "free"; return; }
+            LastDefenceChoice = survivalCritical ? "critical" : "block";
+
+            _blockCredit = Math.Min(_blockCredit + rate * (DecisionIntervalTicks / 30f),
+                                    _settings.MaxBlockCredit);
+            if (_blockCredit < 1f) return;
+
+            if (cheapest == null) return;
+            if (engine._state.Units.Count(u => u.Side == _side) >= MaxOwnUnitsOnField) return;
+
+            if (Act(() => engine.SpawnUnit(_side, cheapest.Id)))
+            {
+                _blockCredit -= 1f;
+                LastSpawnReason = "block";
+                LastUnitsPurchased++;
+                if (cheapest.Tier >= 1 && cheapest.Tier <= 8) ActionCounts[cheapest.Tier]++;
             }
         }
 
         // Sums the DPS our own units are currently applying to the ENEMY castle -- the
         // mirror image of EstimateProjectedThreatDps, and gated by the same contact test
         // (GameEngine.GetDistanceToEnemyCastle vs the unit's Range) that MoveAndFight
-        // uses before it will call AttackCastle, so only units actually landing hits on
+        // uses before it damages a castle, so only units actually landing hits on
         // the castle count. Reads the live Unit's own stats rather than the roster
         // definition because those already reflect any active buffs (rage, speed) the
         // roster row does not know about.
@@ -2501,18 +4290,15 @@ namespace CastleDefense.Engine.Bot
             var waveBreaker = roster.FirstOrDefault(u => u.Tier == targetTier);
             if (waveBreaker == null || me.Money < waveBreaker.Cost) return;
 
-            if (engine.SpawnUnit(_side, waveBreaker.Id))
+            if (Act(() => engine.SpawnUnit(_side, waveBreaker.Id)))
             {
+                LastSpawnReason = "wavebreaker";
                 LastUnitsPurchased++;
                 if (targetTier >= 1 && targetTier <= 8) ActionCounts[targetTier]++;
             }
         }
 
-        private static float Power(Unit u)
-        {
-            float aps = u.AttackSpeed > 0 ? u.AttackSpeed : 0.3f;
-            return u.Damage * aps + u.CurrentHealth * 0.04f + u.CurrentShield * 0.04f;
-        }
+        private static float Power(Unit u) => Gadgets.GadgetTargeting.Power(u);
 
         // Buys at most ONE unit per decision -- matching the pacing every other agent
         // (a human clicking buy, or a trained ONNX model getting one action per inference
@@ -2940,8 +4726,9 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
-            if (engine.SpawnUnit(_side, pick.def.Id))
+            if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
+                LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
                 LastUnitsPurchased++;
                 if (!preferDefense && !killerInstinct)
                 {
@@ -3039,7 +4826,7 @@ namespace CastleDefense.Engine.Bot
         // WaveHazard refuses to knock them back, and CC has nothing to disable. Several
         // gadget checks need to exclude them so a lone wall doesn't read as a live threat
         // or a legitimate AoE target. Matches WallEffect's ids ("wall", "wall_2", "wall_3").
-        private static bool IsWall(Unit u) => u.DefinitionId.StartsWith("wall");
+        private static bool IsWall(Unit u) => Gadgets.GadgetTargeting.IsWall(u);
 
         /// <summary>
         /// How many of our units are actually attacking the enemy castle, using the
@@ -3071,12 +4858,8 @@ namespace CastleDefense.Engine.Bot
         /// </summary>
         private bool AoeTradeOk(GameEngine engine, List<Unit> myUnits, List<Unit> enemyUnits,
                                 float target, int radius)
-        {
-            double allyValue = EstimateEnemyValueNear(engine, myUnits, target, radius);
-            if (allyValue <= 0) return true;                       // nothing of ours caught
-            double enemyValue = EstimateEnemyValueNear(engine, enemyUnits, target, radius);
-            return enemyValue >= allyValue * _settings.AoeTradeMargin;
-        }
+            => Gadgets.GadgetTargeting.AoeTradeOk(engine, myUnits, enemyUnits, target, radius,
+                                                  _settings.AoeTradeMargin);
 
         // Tick of our last cast of ANY gadget, for the upgrade-spam stagger. Distinct from
         // _lastGadgetCastTick, which is per-family and only rate-limits a gadget against
@@ -3147,6 +4930,28 @@ namespace CastleDefense.Engine.Bot
         // Tick of our last cast per gadget FAMILY ("meteor", "nuke", ...), for the
         // self-imposed cooldown in GadgetIncomeDrainCap. Keyed by family rather than by id
         // so an upgrade mid-game (meteor -> meteor_2 -> meteor_3) does not reset the clock.
+        // Gadget casts made THIS decision, so the defensive spawn logic can price only the
+        // residual threat. Recorded here rather than returned from the three TryUse* methods
+        // because every cast in this file already funnels through TryCast -- one choke point,
+        // nothing to miss, and the gadget DECISION logic is left completely untouched.
+        private readonly List<(GadgetDefinition def, int position)> _castsThisDecision
+            = new List<(GadgetDefinition, int)>();
+
+        // Running total of the roster price of every DISTINCT enemy unit ever seen, and a
+        // sample of it a moment ago. The difference is the rate the opponent is committing
+        // money at, which is the whole basis for deciding whether waiting pays: waiting is
+        // profitable exactly while they commit value faster than we bleed it.
+        private double _enemyValueSeen;
+        private double _enemyValueSample;
+        private long _enemyValueSampleTick = -1;
+        private double _enemyValueRate;
+
+        /// <summary>Bodies the defensive response owes but has not yet been able to spawn.</summary>
+        private float _blockCredit;
+
+        /// <summary>Last threat read, for tracing. Never used to decide anything.</summary>
+        public string LastThreatDebug { get; private set; } = "";
+
         private readonly Dictionary<string, long> _lastGadgetCastTick = new Dictionary<string, long>();
 
         /// <summary>
@@ -3164,8 +4969,10 @@ namespace CastleDefense.Engine.Bot
             {
                 // Override 1 -- the castle is actually under attack. Survival outranks
                 // savings; spend whatever it takes.
-                bool underAttack = enemyUnits.Any(u =>
-                    Math.Abs(u.Position - myCastlePos) <= _settings.GadgetDrainCapCastleThreat);
+                bool underAttack = _settings.DrainCapTtdSeconds > 0
+                    ? LastTimeToDeathSeconds < _settings.DrainCapTtdSeconds
+                    : enemyUnits.Any(u =>
+                        Math.Abs(u.Position - myCastlePos) <= _settings.GadgetDrainCapCastleThreat);
 
                 // Override 2 -- the cast pays for itself. If it destroys more enemy value
                 // than it costs, it is a positive economic swing and the drain argument does
@@ -3185,7 +4992,8 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
-            if (!engine.UseGadget(_side, def.Id, position)) return false;
+            if (!Act(() => engine.UseGadget(_side, def.Id, position))) return false;
+            _castsThisDecision.Add((def, position));
             _lastGadgetCastTick[def.Id.Split('_')[0].ToLowerInvariant()] = engine._state.CurrentTick;
             // Stagger clock covers TACTICAL casts too -- the point is that the three slots
             // are never all on cooldown at once, whatever put them there.
@@ -3229,13 +5037,14 @@ namespace CastleDefense.Engine.Bot
 
         // Sums the real, current incoming damage-per-second against OUR castle: only
         // enemy units already within their own attack Range of it count (the same
-        // castleInRange check GameEngine.MoveAndFight uses before ever calling
-        // AttackCastle), so a large force still marching in from across the map isn't
+        // castleInRange check GameEngine.MoveAndFight uses before it damages a castle),
+        // so a large force still marching in from across the map isn't
         // counted as an active threat before it actually is one -- matching the same
         // "react to what's real, not what might happen" philosophy the rest of this
         // file already uses (see inDanger's own history of over-eager triggers). DPS is
-        // Damage * AttackSpeed directly (GameEngine.AttackCastle sets AttackCooldown to
-        // 1000f/AttackSpeed ms per hit, so AttackSpeed is already attacks/second).
+        // Damage * AttackSpeed directly (MoveAndFight's castle-attack branch sets
+        // AttackCooldown to 1000f/AttackSpeed ms per hit, so AttackSpeed is already
+        // attacks/second).
         private static float EstimateProjectedThreatDps(GameEngine engine, List<Unit> enemyUnits, List<UnitDefinition> enemyRoster)
         {
             if (enemyRoster == null || enemyRoster.Count == 0) return 0f;
@@ -3250,15 +5059,15 @@ namespace CastleDefense.Engine.Bot
                 // would in practice never fire at all. Reuse GameEngine's own
                 // GetDistanceToEnemyCastle (already accounts for the unit's Width and
                 // which side it's attacking) so this matches the SAME contact-distance
-                // test the real castleInRange check uses before ever calling
-                // AttackCastle -- found via an n=50 sanity run where this bug silently
+                // test the real castleInRange check uses before damaging a castle
+                // -- found via an n=50 sanity run where this bug silently
                 // zeroed out the projected estimate for every matchup (Math.Max against
                 // an always-infinite projected TTD unconditionally discarded the real,
                 // working observed-drain estimate), most visibly on Tier1 spam (58% vs
                 // the ~90% baseline) since that matchup leans hardest on real reactive
                 // defense.
                 if (engine.GetDistanceToEnemyCastle(u) <= def.Range)
-                    dps += def.Damage * def.AttackSpeed;
+                    dps += u.Damage * def.AttackSpeed;   // instance, not definition (random-stat unit)
             }
             return dps;
         }
@@ -3266,19 +5075,53 @@ namespace CastleDefense.Engine.Bot
         // Looks up an enemy unit's actual spawn cost from its own team's roster --
         // Unit (the runtime instance) only carries Tier/DefinitionId, not Cost, so this
         // needs the owning player's Team to find the right roster.
-        private static double EstimateUnitCost(GameEngine engine, Unit u)
+        /// <summary>
+        /// True while a hazard is live that makes an attacking purchase unconvertible.
+        ///
+        /// THE TWO HAZARDS ARE NOT SYMMETRIC AND THE CHECK MUST NOT BE EITHER — this is the
+        /// whole subtlety, and the first version got it wrong by treating both as enemy-only.
+        ///
+        ///   WAVE       `WaveHazard.ProcessEffect` filters to `u.Side != this.Side`, so it only
+        ///              knocks back the CASTER'S ENEMIES. Our own wave is free to us; only an
+        ///              enemy-cast one blocks our attack.
+        ///
+        ///   BLACKHOLE  `BlackholeHazard.ProcessEffect` iterates `state.Units` with no side
+        ///              filter at all. It drags EVERY unit toward its centre — and at level 3
+        ///              the event horizon sets `CurrentHealth = 0` on any unit that is not tier
+        ///              8, ours included. So OUR OWN blackhole eats our own attackers, and it
+        ///              counts whoever cast it. (Marc, 2026-08-24.)
+        /// </summary>
+        private bool AttackBlockingHazardActive(GameEngine engine)
         {
-            var owner = u.Side == 1 ? engine._state.Player1 : engine._state.Player2;
-            var roster = GameDataManager.Teams.FirstOrDefault(t => t.Color == owner.Team)?.Roster;
-            return roster?.FirstOrDefault(d => d.Id == u.DefinitionId)?.Cost ?? 0;
+            var hazards = engine._state.Hazards;
+            for (int i = 0; i < hazards.Count; i++)
+            {
+                var h = hazards[i];
+                if (h is BlackholeHazard) return true;              // either side's
+                if (h is WaveHazard && h.Side != _side) return true; // enemy-cast only
+            }
+            return false;
         }
+
+        /// <summary>Diagnostic: was the attack suppressed by an enemy CC hazard this decision.</summary>
+        public bool LastHazardBlackout { get; private set; }
+
+        /// <summary>Decisions on which the attack was suppressed by an enemy CC hazard.</summary>
+        public long HazardBlackoutDecisions { get; private set; }
+
+        /// <summary>Times the offensive spend branch was entered.</summary>
+        public long OffensiveSpendDecisions { get; private set; }
+
+        /// <summary>Times it was entered while the blackout was up. Must stay 0.</summary>
+        public long OffensiveWhileBlackedOut { get; private set; }
+
+        private static double EstimateUnitCost(GameEngine engine, Unit u)
+            => Gadgets.GadgetTargeting.UnitCost(engine, u);
 
         // Total $ value of enemy units within radius of position -- used to estimate
         // whether an AOE gadget cast is actually worth its cost (see BigSpendJustified).
         private static double EstimateEnemyValueNear(GameEngine engine, List<Unit> enemyUnits, float position, int radius)
-        {
-            return enemyUnits.Where(u => Math.Abs(u.Position - position) <= radius).Sum(u => EstimateUnitCost(engine, u));
-        }
+            => Gadgets.GadgetTargeting.ValueNear(engine, enemyUnits, position, radius);
 
         // Marc's direct playtest feedback: watched the bot spend $200+ (a huge fraction
         // of its money, with income nowhere near able to support it) on goo healing a
@@ -3482,7 +5325,7 @@ namespace CastleDefense.Engine.Bot
                     // Margin, not a bare comparison, because the blast lands 1.6s later and
                     // the enemy keeps hitting us in the meantime -- surviving it "exactly"
                     // at cast time is not surviving it on arrival.
-                    int selfBlast = (int)def.BaseValue / 2;
+                    int selfBlast = Gadgets.NukeEffect.CastleBlastFor(def);
                     bool survivesOwnBlast = me.CastleHealth > selfBlast * _settings.NukeSelfDamageMargin;
 
                     // Walls are near-immune value sinks here (Marc: "a freeze ray or a Nuke
@@ -3910,55 +5753,7 @@ namespace CastleDefense.Engine.Bot
         // stationary/fighting unit is correctly not led at all -- only units still
         // actively marching get projected forward.
         private float ProjectedPosition(Unit u, int leadTicks, bool clampToCastle = true)
-        {
-            if (leadTicks <= 0 || u.CurrentSpeed <= 0) return u.Position;
-            float direction = u.Side == 1 ? 1f : -1f;
-            float projected = u.Position + u.CurrentSpeed * leadTicks * direction;
-
-            // A UNIT CANNOT WALK PAST THE CASTLE IT IS ATTACKING -- it stops on contact and
-            // starts hitting it. Extrapolating raw speed over the gadget's deployment delay
-            // ignores that, and Marc caught the consequence in live play: against a fast
-            // incoming wave already near our castle, the lead put the aim point BEHIND our
-            // own castle, so the units crashed into it and dealt their damage while the
-            // gadget landed on empty ground. His words: "there's never any enemy units back
-            // there, so it's never a good idea to do that."
-            //
-            // Clamped here rather than on the final target so the fix also reaches
-            // FindBestAoeTarget's CLUSTER SCORING, which compares projected positions to each
-            // other -- several units projected past the castle would otherwise score as a
-            // phantom cluster at a position nothing can occupy.
-            //
-            // Stop lines are exactly GetDistanceToEnemyCastle's: a side-1 unit halts when
-            // Position + Width reaches MAP_WIDTH - 200, a side-2 unit when Position reaches
-            // 200. Applies to our own units too -- they stop at the enemy castle by the same
-            // rule, which keeps AllyWouldEnterHazard's swept path honest.
-            if (!clampToCastle) return projected;
-
-            // A WALL STOPS UNITS TOO (Marc, 2026-07-31: "we should make the same change for
-            // an allied wall, that will stop units as well"). Any unit in contact sets
-            // CurrentSpeed = 0 in MoveAndFight, and a wall is a stationary, persistent
-            // blocker sitting in front of the castle -- so leading a unit straight through
-            // one is the same error as leading it through the castle behind it, just
-            // further out. WallEffect allows only one wall per side, so this is a single
-            // lookup refreshed once per decision rather than a scan.
-            if (u.Side == 1)
-            {
-                // Travelling +X: blocked by the ENEMY's (side 2's) wall, but only if that
-                // wall is actually ahead of it. A wall already behind blocks nothing.
-                float limit = GameEngine.MAP_WIDTH - 200 - u.Width;
-                if (_side2Wall != null && _side2Wall.Position > u.Position)
-                    limit = Math.Min(limit, _side2Wall.Position - u.Width);
-                return Math.Min(projected, limit);
-            }
-            else
-            {
-                // Travelling -X: blocked by side 1's wall, stopping at its right edge.
-                float limit = 200f;
-                if (_side1Wall != null && _side1Wall.Position < u.Position)
-                    limit = Math.Max(limit, _side1Wall.Position + _side1Wall.Width);
-                return Math.Max(projected, limit);
-            }
-        }
+            => Gadgets.GadgetTargeting.ProjectedPosition(u, leadTicks, clampToCastle, _side1Wall, _side2Wall);
 
         // Would any of our own units be standing in a ground hazard centred on `centre`
         // at ANY point during that hazard's life?
@@ -4022,32 +5817,8 @@ namespace CastleDefense.Engine.Bot
         // Damage gadgets keep the default, which prefers the threatening front.
         private int? FindBestAoeTarget(List<Unit> targets, int radius, int myCastlePos, int leadTicks = 0,
                                        bool preferFarFromMyCastle = false, bool clampToCastle = true)
-        {
-            if (targets.Count == 0) return null;
-
-            int bestPos = 0;
-            float bestScore = -1f;
-            foreach (var candidate in targets)
-            {
-                float candidatePos = ProjectedPosition(candidate, leadTicks, clampToCastle);
-                float score = 0f;
-                foreach (var other in targets)
-                {
-                    if (Math.Abs(ProjectedPosition(other, leadTicks, clampToCastle) - candidatePos) <= radius)
-                        score += Power(other);
-                }
-                float distToMyCastle = Math.Abs(candidatePos - myCastlePos);
-                float threatWeight = preferFarFromMyCastle
-                    ? Math.Max(0.15f, distToMyCastle / 1200f)
-                    : Math.Max(0.15f, 1200f / (distToMyCastle + 250f));
-                score *= threatWeight;
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestPos = (int)candidatePos;
-                }
-            }
-            return bestPos;
-        }
+            => Gadgets.GadgetTargeting.FindBestAoeTarget(targets, radius, myCastlePos, leadTicks,
+                                                         preferFarFromMyCastle, clampToCastle,
+                                                         _side1Wall, _side2Wall);
     }
 }

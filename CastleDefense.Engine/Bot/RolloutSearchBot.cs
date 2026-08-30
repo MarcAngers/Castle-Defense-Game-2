@@ -159,6 +159,54 @@ namespace CastleDefense.Engine.Bot
         private readonly double _macroMargin;
 
         /// <summary>
+        /// Below this investment count, search cannot propose a unit purchase; the prior
+        /// owns that decision. 0 disables the guard (pre-2026-08-18 behaviour).
+        /// </summary>
+        private readonly int _earlySpendGuardMinInvest;
+
+        /// <summary>
+        /// Below this investment count, search may not propose a GADGET cast (11/12/13).
+        /// 0 = off. Shipped at 1 for singleplayer: no gadget before the first investment.
+        /// See the note at the candidate filter for the measurement behind it.
+        /// </summary>
+        private readonly int _earlyGadgetGuardMinInvest;
+
+        // ── REACTIVE OPENING GATE (2026-08-20, Marc's design) ───────────────────────
+        //
+        // Until the opponent has put a unit on the board, search may not propose ANY
+        // spending except investment, repair and the signature gadget. It is not allowed to
+        // open the game by buying something.
+        //
+        // WHY THIS SHAPE RATHER THAN AN INVESTMENT COUNT. Two investment-count guards were
+        // tried first and each just moved the leak: blocking gadgets before investment 1
+        // made the bot open with a $12 Reinforcements -> $9 tier-3 unit instead, and
+        // blocking units too made it buy the tier-3 the moment the first investment landed.
+        // The count was never the thing that made those buys wrong. What made them wrong is
+        // that there was nothing to buy them FOR -- an empty board cannot threaten anything,
+        // so any purchase is pure economic loss with no defensive value. Gating on the
+        // OPPONENT having committed encodes that directly, and it stops being restrictive
+        // the moment a purchase could actually be justified.
+        //
+        // LATCHING, not momentary. Once the opponent has committed, the gate is open for the
+        // rest of the game: this exists to shape the OPENING, not to make the bot permanently
+        // reactive. A bot that could only ever spend while enemy units were on screen would
+        // be unable to build a wave, which is a different and much worse failure.
+        //
+        // SIGNATURE GADGET IS EXEMPT because the signature slot is where the economy gadgets
+        // live -- White's is `cash`, which converts money at a profit and is the opposite of
+        // waste. NOTE this exemption is by SLOT, not by effect: a team whose signature is a
+        // damage gadget gets a free early cast out of it. That is a known looseness, kept
+        // because the alternative is hard-coding gadget ids here.
+        //
+        // Repair is exempt for the same reason it is exempt everywhere else: it is a
+        // permanent castle upgrade, not a consumable.
+        private readonly bool _reactiveOpeningGate;
+        private bool _opponentCommitted;
+
+        /// <summary>Whether the reactive opening gate has been released. Diagnostic.</summary>
+        public bool OpponentCommitted => _opponentCommitted;
+
+        /// <summary>
         /// Per-candidate override margin. Macros clear a different (normally lower) bar
         /// than primitive actions — see <see cref="_macroMargin"/>.
         /// </summary>
@@ -335,6 +383,18 @@ namespace CastleDefense.Engine.Bot
         private readonly Random _macroRng;
 
         public long Overrides { get; private set; }
+
+        /// <summary>
+        /// DIAGNOSTIC ONLY. Snapshot of the last decision's candidate scores, the prior's
+        /// score, and what was chosen -- so a trace can show WHY search overrode its prior
+        /// rather than only that it did. Never read by the bot itself.
+        /// </summary>
+        /// <summary>Enables the snapshot below. Diagnostic only; leave false in the game.</summary>
+        public static bool CaptureDecisionTrace { get; set; }
+
+        public Dictionary<int, double> LastScores { get; private set; }
+        public double LastPriorScore { get; private set; }
+        public int LastChosenAction { get; private set; } = -1;
         public long MacroChosen { get; private set; }
         public long PressChosen { get; private set; }
 
@@ -376,10 +436,29 @@ namespace CastleDefense.Engine.Bot
                                      bool suppressDefenceGadget = false,
                                      GadgetSuppression gadgetSuppression = GadgetSuppression.None,
                                      bool useUpgradeMacro = false,
-                                     double upgradeMargin = double.NaN)
+                                     double upgradeMargin = double.NaN,
+                                     // 0 = off (committed behaviour). See the guard in Decide().
+                                     int earlySpendGuardMinInvest = 0,
+                                     // 0 = off. Ticks between searches while the board is
+                                     // quiet. See DeferForQuietBoard.
+                                     int idleDecisionInterval = 0,
+                                     // 0 = off (shipped). See EconomyBlend.
+                                     double economyBlend = 0.0,
+                                     // 0 = off. Below this investment count search may not
+                                     // propose a gadget cast. See the candidate filter.
+                                     int earlyGadgetGuardMinInvest = 0,
+                                     // See the ReactiveOpeningGate note by the field.
+                                     bool reactiveOpeningGate = false)
         {
             // 0 = decide and act on the same tick, which is what every recorded
             // benchmark number describes. See UpdateStale.
+            _earlySpendGuardMinInvest = Math.Max(0, earlySpendGuardMinInvest);
+            _economyBlend = Math.Max(0.0, Math.Min(1.0, economyBlend));
+            _earlyGadgetGuardMinInvest = Math.Max(0, earlyGadgetGuardMinInvest);
+            _reactiveOpeningGate = reactiveOpeningGate;
+            // Below the base interval it could never fire, so clamp it away rather than
+            // silently accepting a setting that does nothing.
+            _idleInterval = idleDecisionInterval > decisionInterval ? idleDecisionInterval : 0;
             _staleTicks = Math.Max(0, staleTicks);
             // suppressDefenceGadget is the original all-in-one switch, kept so existing
             // callers are unchanged; it means "candidate + casting", both for defence.
@@ -641,7 +720,162 @@ namespace CastleDefense.Engine.Bot
         private System.Threading.Tasks.Task<int> _pending;
 
         /// <summary>Sentinel meaning "the search found nothing better than the prior".</summary>
+        // -- ECONOMY BLEND (2026-08-20) ---------------------------------------------
+        //
+        // WHY THIS IS NOT AN EVALUATOR TERM, which was the obvious first idea and is
+        // structurally impossible. EvaluateBoard returns ONE P1-perspective scalar and side 2
+        // scores 1-eval, so every term is antisymmetric by construction: add a component that
+        // is high when BOTH players are rich and it raises P1's score while lowering P2's by
+        // the same amount. "Both rich" is a SYMMETRIC property of a position and cannot be
+        // expressed in an antisymmetric scalar at all.
+        //
+        // WHAT IT FIXES. --score-decomp on 7A385A tick 781 (zero enemy units on the board)
+        // found spawnT4 scoring 0.6315 against wait 0.5223, and the leaf states explain it:
+        // the wait line takes BOTH players to income 59.9 and investment 5, the spawn line
+        // leaves BOTH on 19.7 and investment 4. Every evaluator component is a differential,
+        // so 59.9-vs-59.9 and 19.7-vs-19.7 both score exactly 0.5, and dIncome between those
+        // two lines is 0.0000. Mutually destructive play is free.
+        //
+        // The evaluator is not WRONG about that -- as a win probability both positions really
+        // are near 50/50. It is being asked the wrong question. So this does not touch the
+        // probability estimate; it blends an explicit PREFERENCE on top of it, on the search
+        // side, where action ranking actually happens:
+        //
+        //     score = (1 - w) * winProb + w * ownProsperity
+        //
+        // ownProsperity is our OWN ABSOLUTE distance to the economic terminal state, which is
+        // directional per side (so no symmetry problem) and bounded in [0,1] (so the score
+        // stays a [0,1] quantity and the 0.10 override margin keeps its meaning).
+        //
+        // IT REUSES t_arma, AND THE IRONY IS THE POINT. TimeToArmageddonSeconds measured NULL
+        // as an evaluator feature on 2026-08-19 -- but it was used there as
+        // Sig(k*(log t2 - log t1)), a DIFFERENTIAL, which inherits exactly the blindness this
+        // is trying to remove. The feature was right; the form was wrong. Used as an absolute
+        // own-side quantity it is precisely the "am I actually getting rich" signal, and it is
+        // continuous rather than the coarse integer InvestmentCount.
+        //
+        // TERMINAL ROLLOUTS ARE NOT BLENDED. A win is a win; diluting 1.0 toward a prosperity
+        // score would let search prefer a rich loss to a poor win.
+        //
+        // ── MEASURED 2026-08-20: IT DOES NOT DO WHAT IT WAS BUILT TO DO. SHIPPED OFF. ──
+        //
+        // Swept 0 / 0.15 / 0.30 / 0.50 on 7A385A tick 781, 12 seeds, horizon 1600:
+        //
+        //   blend   spawnT3   prior     gap    gap/gap0   (1-w)
+        //   0.00    0.6367   0.5223   0.1144     1.000    1.000
+        //   0.15    0.5908   0.4948   0.0960     0.839    0.850
+        //   0.30    0.5450   0.4673   0.0777     0.679    0.700
+        //   0.50    0.4839   0.4306   0.0533     0.466    0.500
+        //
+        // It does flip the decision -- 12/12 overrides at w=0 become 0/12 at w=0.15. But the
+        // RANKING IS IDENTICAL AT EVERY WEIGHT: spawnT3 stays top, and every candidate keeps
+        // its place. All that happens is that gaps shrink, and they shrink almost exactly by
+        // (1-w). The flip is the fixed 0.10 override margin biting a compressed scale, which
+        // makes this knob a more expensive, less legible way of RAISING overrideMargin -- a
+        // knob that already exists and is already tuned.
+        //
+        // The residual beyond pure compression is the only real signal, and it is tiny:
+        // 0.839 against 0.850 at w=0.15. Implied prosperity at w=0.50 is 0.3389 for wait and
+        // 0.3311 for spawnT3 -- a difference of 0.0078.
+        //
+        // WHY SO SMALL, AND WHY THAT IS THE INTERESTING PART. The premise was that the spawn
+        // line ends "both poor" (income 19.7, investment 4) against wait's "both rich" (59.9,
+        // investment 5). That reading ignored banked money: the spawn line holds $422 with
+        // rung 4 priced at 474, i.e. one purchase from where the wait line already is. On the
+        // absolute t_arma clock the wait line leads by about FOUR SECONDS out of ~243. The
+        // two futures are economically near-identical, the evaluator's income differential of
+        // 0.5-vs-0.5 is CORRECT rather than blind, and there was no large hidden economic
+        // cost for this term to expose. See the correction in ScoreDecomp's header.
+        //
+        // Kept, default 0, because the STRUCTURAL argument above still stands -- a genuinely
+        // symmetric change cannot be expressed in the evaluator's antisymmetric scalar, and
+        // if such a case is ever demonstrated this is where the fix belongs. What is not
+        // demonstrated is that tick 781 is such a case.
+        private readonly double _economyBlend;
+
+        // t_arma from a fresh game, the natural normaliser for prosperity. DERIVED rather than
+        // transcribed so it cannot drift if the investment ladder is ever rebalanced -- the
+        // same reason GameStateTimeFeatures drives PlayerState.ApplyInvestmentStep instead of
+        // hardcoding the rungs. Oracle-checked at 242.8s.
+        private static readonly double FreshGameTArma =
+            GameState.TimeToArmageddonSeconds(new PlayerState());
+
         private const int DeferToPrior = -2;
+
+        // ── ADAPTIVE DECISION CADENCE ────────────────────────────────────────────────
+        //
+        // Marc's observation: most of a game is spent with an empty board while both
+        // players bank toward an investment, and searching every 15 ticks through that is
+        // almost pure waste. `idleDecisionInterval` lets the bot search only every N ticks
+        // while the board is QUIET, and snap back to the normal interval the moment
+        // anything is happening.
+        //
+        // WHY THIS POLLS AT THE FAST INTERVAL AND SKIPS, rather than scheduling `_next`
+        // far ahead. Scheduling ahead is the obvious implementation and it is wrong: set
+        // `_next = tick + 150` while quiet and a unit spawning at tick+10 goes unanswered
+        // for 140 ticks. Here the gate still opens every `_decisionInterval` ticks, and
+        // each time it does the CURRENT board decides whether to search or skip. Worst-case
+        // reaction latency to a spawn is therefore _decisionInterval, exactly as today --
+        // the only thing given up is decisions taken DURING quiet, which is the point.
+        // The skip test is O(1), so the polls it discards are free.
+        //
+        // WHAT COUNTS AS QUIET, and why each clause is there:
+        //   - no units on the board, either side. This is the state being targeted.
+        //   - no pending gadget effects. An empty board with a meteor inbound is not quiet.
+        //   - THE NEXT INVESTMENT IS NOT YET AFFORDABLE. Without this clause the change
+        //     would attack the bot's single strongest mechanism: the save-invest macro
+        //     fires on ~4.5% of decisions, is worth +11.2 points, and does its work exactly
+        //     during quiet stretches. Holding money needs no decision (not acting IS
+        //     holding), but BUYING does -- so sitting on an affordable investment for up to
+        //     150 ticks would directly cost earned investments, and earned-investment
+        //     differential predicts win rate almost monotonically across ~20 configs.
+        //
+        // MEASURED 2026-08-19 AND NOT WORTH IT -- LEFT OFF. n=200 paired, seed 4242,
+        // horizon 1600, margin 0.10, idle interval 150:
+        //
+        //   arm        win rate   decisions/game   sim ticks   ms/decision   wall
+        //   idle off     77.0%         542          1.851B       184.4      1596s
+        //   idle 150     73.5%         513          1.760B       197.9      1477s
+        //
+        // Paired delta -3.50 (b=12/c=19, p=0.281) to save 4.9% of simulated ticks. Not
+        // significant, but the point estimate is negative and the saving is tiny, so the
+        // trade is bad in expectation.
+        //
+        // WHY THE SAVING IS SO SMALL, AND IT GENERALISES. The board is completely empty
+        // only ~7.5% of the time -- both players trickle units out continuously while they
+        // bank, so "waiting" describes the MONEY, not the BOARD. Worse, note ms/decision
+        // went UP (184.4 -> 197.9): an empty board means a rollout with no units to
+        // simulate, i.e. the CHEAPEST decisions in the game. **Any "skip when nothing is
+        // happening" heuristic targets the cheap end by construction.** Compute is
+        // concentrated where units are dense, so a real saving has to make BUSY positions
+        // cheaper -- fewer candidates, or a cheaper tick -- not skip quiet ones.
+        //
+        // Kept because it is inert at 0 and the mechanism above is worth not rediscovering.
+        // Defaults to 0 = OFF, so every existing caller and every recorded benchmark
+        // reproduces byte-for-byte. It must be switched on explicitly.
+        private readonly int _idleInterval;
+        private long _lastSearchTick;
+
+        /// <summary>Polls skipped because the board was quiet. Diagnostic only.</summary>
+        public long IdleDeferrals { get; private set; }
+
+        /// <summary>
+        /// True when this poll should be skipped. Must be called AFTER `_next` is re-armed
+        /// and BEFORE anything draws from <see cref="_rng"/> -- a deferred poll must not
+        /// perturb the random stream, or the arm stops being comparable to its control.
+        /// </summary>
+        private bool DeferForQuietBoard(GameEngine engine, long tick)
+        {
+            if (_idleInterval <= 0) return false;
+            if (tick - _lastSearchTick >= _idleInterval) return false;
+            var st = engine._state;
+            if (st.Units.Count > 0) return false;
+            if (engine.PendingEffectCount > 0) return false;
+            var me = _side == 1 ? st.Player1 : st.Player2;
+            if (me.Money >= me.InvestmentPrice) return false;
+            IdleDeferrals++;
+            return true;
+        }
 
         public void Update(GameEngine engine)
         {
@@ -659,6 +893,8 @@ namespace CastleDefense.Engine.Bot
 
             var st = engine._state;
             if (st.IsGameOver) return;
+            // Queued wave actions play out before any new decision -- see QueueWave.
+            if (DrainOne(engine)) return;
 
             // Apply a finished decision. Deliberately applied to the LIVE engine here on the
             // game-loop thread — the background task only ever touches its own clone.
@@ -676,6 +912,8 @@ namespace CastleDefense.Engine.Bot
             if (_pending == null && st.CurrentTick >= _next)
             {
                 _next = st.CurrentTick + _decisionInterval;
+                if (DeferForQuietBoard(engine, st.CurrentTick)) return;
+                _lastSearchTick = st.CurrentTick;
                 var snapshot = engine.Clone(rngSeed: _rng.Next());
                 _pending = System.Threading.Tasks.Task.Run(() => Decide(snapshot));
             }
@@ -737,6 +975,7 @@ namespace CastleDefense.Engine.Bot
         {
             var st = engine._state;
             if (st.IsGameOver) return;
+            if (DrainOne(engine)) return;
 
             if (st.CurrentTick >= _staleApplyAt)
             {
@@ -749,6 +988,8 @@ namespace CastleDefense.Engine.Bot
             if (_staleApplyAt == long.MaxValue && st.CurrentTick >= _next)
             {
                 _next = st.CurrentTick + _decisionInterval;
+                if (DeferForQuietBoard(engine, st.CurrentTick)) return;
+                _lastSearchTick = st.CurrentTick;
                 // Clone for the same reason the async path does: the decision must be
                 // taken against a frozen copy, not against an engine that keeps moving.
                 var snapshot = engine.Clone(rngSeed: _rng.Next());
@@ -778,8 +1019,11 @@ namespace CastleDefense.Engine.Bot
             if (state.IsGameOver) return;
             if (!decideOnly)
             {
+                if (DrainOne(engine)) return;
                 if (state.CurrentTick < _next) return;
                 _next = state.CurrentTick + _decisionInterval;
+                if (DeferForQuietBoard(engine, state.CurrentTick)) return;
+                _lastSearchTick = state.CurrentTick;
             }
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -829,12 +1073,84 @@ namespace CastleDefense.Engine.Bot
             // being dropped — comparisons stay fair, just shallower. Strongest-unit-first
             // ordering is kept for partitioner locality and because it puts expensive
             // options in front of the scheduler.
+            // Release the reactive opening gate the first time the opponent has anything
+            // on the board. Latches -- see the field note.
+            if (_reactiveOpeningGate && !_opponentCommitted)
+            {
+                for (int i = 0; i < state.Units.Count; i++)
+                    if (state.Units[i].Side != _side) { _opponentCommitted = true; break; }
+            }
+            bool openingLocked = _reactiveOpeningGate && !_opponentCommitted;
+
             var candidates = new List<int> { PriorBaselineAction, 0 };
             if (_useMacro && !mePlayer.ArmageddonUsed) candidates.Add(MacroSaveInvest);
             if (_usePressMacro && mePlayer.InvestmentCount >= 2) candidates.Add(MacroPressAdvantage);
             if (_useArmageddonMacro && !mePlayer.ArmageddonUsed) candidates.Add(MacroArmageddon);
             if (_useUpgradeMacro && UpgradeEligible(mePlayer)) candidates.Add(MacroGadgetUpgrade);
-            for (int a = 8; a >= 1; a--) if (mask[a] == 1) candidates.Add(a);
+            // EARLY-SPEND GUARD (2026-08-18). Below this investment count, search may not
+            // propose buying a unit at all; the prior decides all unit purchases.
+            //
+            // WHY THIS IS A CANDIDATE FILTER AND NOT A MARGIN. Traced from Marc's live-play
+            // report that the bot buys a Tier-4 the moment it can after investment 2 and
+            // spends its whole wallet. At that decision the scores are: spawnT4 0.6642 vs
+            // prior = wait = MACRO-saveInvest = 0.5323 -- all three IDENTICAL. Saving is not
+            // narrowly losing, it is completely INVISIBLE, so no margin on any option can
+            // change the ranking.
+            //
+            // It is invisible for a structural reason, not a tuning one. Because
+            // InvestmentPrice = Income * (InvestmentCount * 4 + 8), the time to afford the
+            // next investment from an empty wallet is exactly (4 * count + 8) SECONDS
+            // whatever the income: 8s at count 0, then 12s, 16s, 20s... The horizon is 300
+            // ticks = 10s. So from investment 1 onward the payoff of saving can NEVER occur
+            // inside the horizon, while a unit bought now deals damage inside it. Search is
+            // therefore structurally guaranteed to prefer spending, and the cost it ignores
+            // -- that the $18 pushes the next investment ~4s further out -- lands beyond the
+            // horizon where it cannot be seen.
+            //
+            // RETRACTED 2026-08-19. This used to read "Raising the horizon is not the fix:
+            // 900 was measured at 47.0% against 300's 68.5%, because long rollouts converge
+            // to the same self-play continuation and the search scores noise." Both claims
+            // are false. At the SHIPPED margin 0.10, horizon 900 scores 78.0% [71.8, 83.2]
+            // and 600 beats 300 by +4.0 points (n=800 paired, p=0.0128); the best-worst
+            // score spread GROWS with horizon (0.203 -> 0.341), so branches diverge rather
+            // than converge. The 47.0% came from a coordinate-descent sweep that tuned
+            // horizon at margin ~0.03 and never revisited it after margin moved to 0.10.
+            //
+            // Raising the horizon IS a fix for the structural problem described above, and
+            // the shipped bot now runs horizon 1600 -- enough to span every investment rung
+            // including the hand-tuned 7th (1600 ticks). This guard therefore addresses a
+            // narrower case than it used to. See GameHostingService.SetupSearchOpponent and
+            // FLAGSHIP_BASELINE.md section 5.
+            //
+            // Defence is NOT removed. When search declines to override, the prior runs, and
+            // HeuristicBot's reactive branch still buys units whenever it is inDanger. What
+            // this suppresses is only search's UNPROVOKED spending, which is the behaviour
+            // HeuristicBot's own AttackGateMinInvestment=6 already forbids for itself and
+            // which search was overriding.
+            // THE GUARD DOES NOT COVER GADGETS, AND THAT IS WHERE THE OPENING LEAK IS.
+            // It filters only the 1-8 unit candidates below; 9-13 are added unguarded. Marc
+            // reported the bot opening with a Reinforcements cast, and 9A60C6 tick 181
+            // confirms it: with $12.00, income 2.0, investment 0 and a $18 first rung, search
+            // scores action 12 at 0.6197 against the prior's 0.5001 and overrides in 12/12
+            // seeds, spending the ENTIRE wallet six seconds into the game.
+            //
+            // It is not ignoring the cost. --score-decomp shows the immediate money penalty
+            // is +0.8373 against us -- the largest of any candidate -- and the rollout delays
+            // investment 3 from tick 950 to 1130, exactly the 6.0 seconds $12 at $2/s buys.
+            // What outweighs it is hp: -1.1071. Fifty-three seconds later the five free
+            // tier-1 units from that cast have chewed the enemy castle to 71.7% while the
+            // wait line leaves it untouched at 100%, and the $12 has long since been re-earned.
+            //
+            // THAT HP GAIN IS AN ARTEFACT OF THE OPPONENT MODEL. It is HeuristicBot that lets
+            // five tier-1 units convert into 28% of a castle. Against Marc the same cast buys
+            // nothing and hands him a six-second lead on the first rung, which is the lead he
+            // says he snowballs. The wait line reads 0.5000 / 0.5000 / 0.5001 across the whole
+            // horizon -- search sees "do nothing" as a dead-even position, when against a
+            // human who plays the economy it is the WINNING line.
+            bool earlySpendGuard = _earlySpendGuardMinInvest > 0
+                                && mePlayer.InvestmentCount < _earlySpendGuardMinInvest;
+            if (!earlySpendGuard && !openingLocked)
+                for (int a = 8; a >= 1; a--) if (mask[a] == 1) candidates.Add(a);
             foreach (int a in new[] { 9, 10, 11, 12, 13 })
             {
                 // Action 12 is the defence gadget. _suppressDefenceGadget is a MEASUREMENT
@@ -843,6 +1159,39 @@ namespace CastleDefense.Engine.Bot
                 // gadget the probe is trying to withhold, and the arm measures nothing.
                 if (a == 12 && SuppressDefCandidate) continue;
                 if (a == 11 && SuppressOffCandidate) continue;
+                // ── EARLY GADGET GUARD (2026-08-20) ─────────────────────────────────
+                // No gadget cast before the first investment. Measured cause, 9A60C6 tick
+                // 181: with $12.00 of a $12.00 wallet, income 2.0, investment 0 and an $18
+                // first rung, search scored action 12 at 0.6197 against the prior's 0.5001
+                // and overrode in 12/12 seeds -- spending everything six seconds into the
+                // game and slipping the first rung by 6.0s.
+                //
+                // It was not a costing error. The immediate money penalty is +0.8373, the
+                // largest of any candidate, and the rollout delays investment 3 by exactly
+                // the 180 ticks the arithmetic predicts. What overrode it was hp = -1.1071:
+                // 53 seconds later the five free tier-1 units from that cast had chewed the
+                // enemy castle to 71.7% while the wait line left it at 100%.
+                //
+                // AND THAT IS AN ARTEFACT OF THE OPPONENT MODEL. HeuristicBot lets five
+                // tier-1 units become 28% of a castle; Marc does not. Against him the cast
+                // buys nothing and hands over a six-second lead on the first rung -- the
+                // lead he reports snowballing into sustained pressure. Search cannot see
+                // this: the wait line scores 0.5000/0.5000/0.5001 flat across the horizon,
+                // so "do nothing" reads as dead even when against a human playing the
+                // economy it is the WINNING line.
+                //
+                // A CANDIDATE FILTER, not a margin, for the same reason the early-SPEND
+                // guard is one: at 0.6197 against 0.5001 no margin short of 0.12 removes it,
+                // and a margin that large would suppress every legitimate override too.
+                //
+                // EXPECT THIS TO COST LADDER WIN RATE. The rollout genuinely believes the
+                // cast is worth +0.12 against HeuristicBot, and against HeuristicBot it
+                // probably is. It is removed because the opponent that matters is a human.
+                if (a >= 11 && a <= 13 && _earlyGadgetGuardMinInvest > 0
+                    && mePlayer.InvestmentCount < _earlyGadgetGuardMinInvest) continue;
+                // Reactive opening gate: offence and defence gadgets are spending with
+                // nothing to spend it on while the board is empty. 13 (signature) is exempt.
+                if (openingLocked && (a == 11 || a == 12)) continue;
                 if (a < mask.Length && mask[a] == 1) candidates.Add(a);
             }
 
@@ -887,6 +1236,15 @@ namespace CastleDefense.Engine.Bot
             }
 
             bool override_ = bestAdjusted > priorScore;
+
+            // Off by default: this copies a dictionary on the shipped bot's hot path
+            // (~560 decisions per game) and exists only for traces.
+            if (CaptureDecisionTrace)
+            {
+                LastScores = new Dictionary<int, double>(scores);
+                LastPriorScore = priorScore;
+                LastChosenAction = override_ ? bestAction : PriorBaselineAction;
+            }
 
             if (OnMacroDecision != null && !decideOnly && scores.ContainsKey(MacroSaveInvest))
             {
@@ -1199,13 +1557,57 @@ namespace CastleDefense.Engine.Bot
                 // every interval, so repeatedly choosing press produces sustained saving
                 // and then one committed strike, exactly as repeatedly choosing the
                 // save-invest macro produces sustained saving and then one investment.
-                if (tier > 0) CommitWave(engine, _side, tier, _pressWaveUnits);
+                if (tier > 0) QueueWave(engine, tier);
                 else WaitDecisions++;
                 return;
             }
 
             if (action == 0) { WaitDecisions++; return; }
             engine.ApplyAction(_side, action);
+        }
+
+        // ── ONE ACTION PER TICK (2026-08-20) ────────────────────────────────────────
+        //
+        // CommitWave was the worst offender in the codebase: up to _pressWaveUnits (6) unit
+        // spawns plus three covering gadget casts, all inside a SINGLE tick. No human can
+        // issue nine actions in 33ms, and the replay format keeps only the last of them, so
+        // eight vanished from every recording. See HeuristicBot's Act() for the full note.
+        //
+        // The real path now QUEUES the wave and plays it out one action per tick. Search
+        // decides every _decisionInterval (15) ticks and the burst is at most 9, so it always
+        // drains first. Action IDS are queued rather than closures because re-resolving the
+        // mask at execution time IS the re-validation: a tier that is no longer affordable is
+        // skipped instead of being force-spawned against a stale price.
+        //
+        // ROLLOUTS ARE DELIBERATELY NOT PACED. Rollout() still calls CommitWave directly on
+        // its clone, so search continues to price the macro as an instantaneous wave while the
+        // real bot spreads it over nine ticks. That is a real modelling gap, recorded rather
+        // than hidden: pacing inside the rollout would mean threading a tick budget through
+        // the whole simulated continuation, and the rollout's own HeuristicBot instances
+        // already pace themselves.
+        private readonly Queue<int> _pendingActions = new Queue<int>();
+
+        /// <summary>Actions still queued from an earlier decision. Diagnostic.</summary>
+        public int PendingActionCount => _pendingActions.Count;
+
+        private void QueueWave(GameEngine engine, int tier)
+        {
+            for (int i = 0; i < _pressWaveUnits; i++) _pendingActions.Enqueue(tier);
+            foreach (int g in new[] { 11, 12, 13 }) _pendingActions.Enqueue(g);
+            DrainOne(engine);
+        }
+
+        /// <summary>
+        /// Plays at most one queued action, re-checking the mask so a stale one is skipped
+        /// cleanly. Returns true when the queue was non-empty, i.e. no new decision this tick.
+        /// </summary>
+        private bool DrainOne(GameEngine engine)
+        {
+            if (_pendingActions.Count == 0) return false;
+            int a = _pendingActions.Dequeue();
+            var mask = engine._state.GetActionMask(_side);
+            if (a < mask.Length && mask[a] == 1) engine.ApplyAction(_side, a);
+            return true;
         }
 
         /// <summary>
@@ -1344,7 +1746,17 @@ namespace CastleDefense.Engine.Bot
             float eval = UseLinearEval ? cs.EvaluateBoardLinear()
                        : UseRefitEval  ? cs.EvaluateBoardRefit()
                                        : cs.EvaluateBoard();
-            return _side == 1 ? eval : 1.0 - eval;
+            double winProb = _side == 1 ? eval : 1.0 - eval;
+            if (_economyBlend <= 0) return winProb;
+
+            // Own absolute progress toward ARMAGEDDON: 0 = as far away as a fresh game,
+            // 1 = able to fire it now. See _economyBlend for why this is a search-side
+            // preference rather than an evaluator component.
+            double tArma = GameState.TimeToArmageddonSeconds(me);
+            double prosperity = 1.0 - tArma / FreshGameTArma;
+            if (prosperity < 0) prosperity = 0;
+            else if (prosperity > 1) prosperity = 1;
+            return (1.0 - _economyBlend) * winProb + _economyBlend * prosperity;
         }
     }
 }

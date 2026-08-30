@@ -310,6 +310,18 @@ button {
     border-color: black transparent transparent transparent; 
 }
 
+/* --- THE UNIT NAME --- */
+/* Sits above the stat rows. Deliberately far smaller than the 1.2rem stats: at this size
+   even the longest name in the roster (LIGHTNINGBEAR) fits inside the width most units'
+   stat rows already need, so 52 of the 64 tooltips do not get any wider at all. */
+.unit-tooltip .tooltip-name {
+    font-size: 0.65rem;
+    text-align: center;
+    letter-spacing: 1px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.25);
+}
+
 /* --- THE STAT ROWS --- */
 .unit-tooltip .stat {
     display: flex;
@@ -325,4 +337,150 @@ button {
     -webkit-user-drag: none; /* Ghost-drag prevention */
     /* Optional: Adds a tiny shadow directly to your heart/sword PNGs to make them pop */
     filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); 
+}
+
+/* ============================================================
+   DISCONNECT PAUSE OVERLAY
+   Raised while the opponent is missing and the server has stopped stepping the game.
+   Sized for a 375px-tall landscape phone: four short lines and no buttons, so it never
+   needs to scroll and never pushes the countdown off the bottom.
+   ============================================================ */
+#pause-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50; /* over the HUD, under the global rejoin prompt (900) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.78);
+    text-align: center;
+    padding: 1rem;
+    box-sizing: border-box;
+    /* .ui-screen sets pointer-events: none on itself and re-enables it per control. This
+       overlay must swallow taps aimed at the shop underneath it. */
+    pointer-events: auto;
+}
+
+#pause-overlay.hidden {
+    display: none;
+}
+
+.pause-box {
+    border: 0.4rem solid #FFFF00;
+    background: #000;
+    padding: 1rem 1.4rem;
+    max-width: 90vw;
+}
+
+/* Title flanked by two construction signs. Sized in rem so they track the pixel font as
+   the root size scales, and capped in height because a landscape phone is only 375px tall
+   and this row sits above four more lines and a button. */
+.pause-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    margin: 0 0 0.7rem;
+}
+
+.pause-icon {
+    width: 2.2rem;
+    height: 2.2rem;
+    flex-shrink: 0;      /* the title wraps before the signs shrink */
+    image-rendering: pixelated;
+}
+
+/* The right-hand sign faces back towards the text. */
+.pause-icon.flipped {
+    transform: scaleX(-1);
+}
+
+#pause-overlay h2 {
+    font-size: 1.2rem;
+    color: #FFFF00;
+    margin: 0;           /* the row owns the spacing now */
+}
+
+#pause-overlay p {
+    font-size: 0.7rem;
+    line-height: 1.5;
+    color: #FFFFFF;
+    margin: 0 0 0.4rem;
+}
+
+/* The number is what the waiting player is actually watching. */
+.pause-countdown {
+    font-size: 1.6rem !important;
+    color: #FFFF00 !important;
+    margin: 0.4rem 0 !important;
+}
+
+.pause-note {
+    color: #AAAAAA !important;
+}
+
+/* Only appears once the wait is claimable. Overrides the global button margin/padding for
+   the same reason the rejoin prompt does: at 20px a side it pushes the box past the bottom
+   edge of a 375px-tall landscape phone. */
+#btnClaimVictory {
+    margin: 0.5rem 0 0;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+}
+
+#btnClaimVictory.hidden {
+    display: none;
+}
+
+
+/* ============================================================
+   PRE-GAME COUNTDOWN
+   "3" ... "2" ... "1" ... "BATTLE!!" dropping in and fading out before the battle opens.
+   Same face and yellow-on-black-stroke treatment as the main-menu title (global-styles.css),
+   because this is the same "title card" voice.
+
+   SIZED AGAINST THE VIEWPORT, NOT IN rem ALONE. The pixel font advances a full 1em per
+   character, so "BATTLE!!" is 8em wide -- at a flat 7rem that is 770px of an 812px landscape
+   phone with no margin at all, and it would clip the moment the font fell back. The min()
+   against vw is what keeps the word on screen; a single digit has room to be far bigger.
+   ============================================================ */
+#countdown-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 60;          /* over the HUD, under the disconnect pause overlay (50 is HUD-level) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none; /* never intercepts a tap meant for the shop */
+}
+
+#countdown-text {
+    font-family: 'Press Start 2P', cursive;
+    color: #FFFF00;
+    -webkit-text-stroke: 0.5rem #000;
+    paint-order: stroke fill;
+    opacity: 0;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+#countdown-text.digit  { font-size: min(9rem, 40vh); }
+#countdown-text.battle { font-size: min(5rem, 10vw); }
+
+/* Restarted from JS by removing the class, forcing a reflow and re-adding it. */
+#countdown-text.show { animation: countdown-drop 0.9s ease-out forwards; }
+
+/* Falls in from above, lands, holds, then fades. The overshoot on the way in is what
+   makes it read as landing rather than sliding. */
+@keyframes countdown-drop {
+    0%   { opacity: 0; transform: translateY(-70vh) scale(1.5); }
+    30%  { opacity: 1; transform: translateY(0) scale(1); }
+    45%  { transform: scale(1.12); }
+    60%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #countdown-text.show { animation: countdown-fade 0.9s ease-out forwards; }
+    @keyframes countdown-fade { 0%,60% { opacity: 1; } 100% { opacity: 0; } }
 }

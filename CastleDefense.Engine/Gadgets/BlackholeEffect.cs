@@ -13,6 +13,9 @@ namespace CastleDefense.Engine.Gadgets
             _def = def;
         }
 
+        /// <summary>BlackholeHazard pulls in and damages ALL units, both sides.</summary>
+        public bool HarmsAllies => true;
+
         public void Execute(GameEngine engine, int side, int position)
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);

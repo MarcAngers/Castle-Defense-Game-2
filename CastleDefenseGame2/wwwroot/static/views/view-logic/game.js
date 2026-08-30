@@ -1,6 +1,19 @@
 import view from '../../../src/view.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
+import preGameSquad from '../../../src/pregame-squad.js';
+
+// --- Pre-game intro choreography -------------------------------------------------------
+// Against the server's 4-second window (GameHostingService.PreGameSeconds): a second looking
+// at the OPPONENT's castle, two seconds panning home, then a second to settle before the
+// battle opens. Timings are measured from the START of the window, so they are computed from
+// elapsed = total - remaining and stay correct for a client that joins mid-intro.
+const PAN_START_MS = 1000;
+const PAN_DURATION_MS = 2000;
+
+// Smoothstep: the pan eases out of the opponent's castle and into your own rather than
+// starting and stopping dead.
+const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export default function initGameScreen() {
     let startingCameraX = 0;
@@ -26,28 +39,204 @@ export default function initGameScreen() {
         initShopUI(myTeam);
     }
 
-    view.panTo(startingCameraX);
+    // Fill in the pause overlay's construction signs once, here, rather than from the frame
+    // loop. Guarded because a missing asset must cost two decorative images, not the game.
+    const constructionSign = loader.assets.tooltips?.construction;
+    if (constructionSign) {
+        document.querySelectorAll('#pause-overlay .pause-icon')
+                .forEach(img => img.src = constructionSign.src);
+    }
 
+    // Wired once per visit to this screen, alongside the rest of the UI, rather than from
+    // the frame loop -- which would reattach it thirty times a second.
+    const claimBtn = document.getElementById('btnClaimVictory');
+    if (claimBtn) claimBtn.onclick = () => {
+        claimBtn.disabled = true;
+        connection.claimVictory();
+    };
+
+    // The camera the player ends up at. During the intro it opens on the OPPONENT's castle
+    // instead and pans here; without an intro it just starts here, as it always did.
+    const homeCameraX = startingCameraX;
+    const awayCameraX = connection.mySide === 0 ? startingCameraX
+                      : (connection.mySide === 1 ? 2000 : 0);
+
+    view.panTo(connection.inPreGame ? awayCameraX : homeCameraX);
+
+    // Rebuilt per game, not per visit: coming back to this screen mid-game (a rejoin) must
+    // not repopulate a crowd the battle has already sent onto the field.
+    preGameSquad.ensure(connection.latestState, connection.currentGameId);
+
+    let lastCountdownLabel = null;
+    let lastFrameTime = performance.now();
     let animationFrameId;
 
     const gameLoop = () => {
-        if (connection.winnerSide != 0) {
+        // NOT `winnerSide != 0` -- a DRAW ends the game with winnerSide 0, which that
+        // test reads as "still playing", so the loop ran forever behind the game-over
+        // screen (a leaked rAF chain still calling updateUI every frame).
+        if (connection.gameOver) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
+            // The game-over screen draws the same state; a squad left in the list would be
+            // drawn standing at a castle that has just fallen.
+            view.preGameSquad = [];
+            preGameSquad.reset();
             return;
         }
         
         view.clear();
+
+        const now = performance.now();
+        const deltaMs = now - lastFrameTime;
+        lastFrameTime = now;
+
+        // Must run BEFORE the draw: it sets the camera and the squad list the draw reads.
+        lastCountdownLabel = runIntro(deltaMs, homeCameraX, awayCameraX, lastCountdownLabel);
 
         if (connection.latestState) {
             view.drawGameState(connection.latestState);
             updateUI(connection.latestState);
         }
 
+        // Pulled every frame rather than pushed from the SignalR handler: this screen is
+        // torn down and rebuilt by the router, so a subscription taken out here would
+        // outlive the elements it writes to.
+        syncPauseOverlay();
+
         animationFrameId = requestAnimationFrame(gameLoop);
     };
 
     requestAnimationFrame(gameLoop);
+}
+
+// Drives everything that happens before the battle opens: which castle the camera is
+// looking at, the squad waiting outside them, and the countdown banner.
+//
+// Runs EVERY frame, not just during the intro, because two of its three jobs outlive the
+// window: the squad keeps thinning out over the first seconds of the battle as its members
+// run onto the field, and "BATTLE!!" plays out after the intro has ended.
+//
+// Returns the label currently shown, which the caller threads back in -- the banner has to
+// restart its animation only when the label CHANGES, and this function holds no state.
+function runIntro(deltaMs, homeCameraX, awayCameraX, lastLabel) {
+    const inPreGame = connection.inPreGame;
+    const remaining = connection.preGameRemaining();
+
+    // --- Camera ---
+    if (inPreGame) {
+        const total = connection.preGameTotalMs || 0;
+        const elapsed = total - remaining;
+        if (elapsed <= PAN_START_MS) {
+            view.panTo(awayCameraX);
+        } else {
+            const t = Math.min(1, (elapsed - PAN_START_MS) / PAN_DURATION_MS);
+            view.panTo(awayCameraX + (homeCameraX - awayCameraX) * smoothstep(t));
+        }
+    }
+
+    // --- The squad outside the castles ---
+    preGameSquad.ensure(connection.latestState, connection.currentGameId);
+    preGameSquad.update(deltaMs);
+    view.preGameSquad = preGameSquad.visible(connection.latestState, inPreGame);
+
+    // --- Countdown banner ---
+    // 3, 2 and 1 come off the remaining time; BATTLE!! is triggered by the window closing,
+    // and is held for its animation rather than for a slice of the countdown.
+    let label = null;
+    if (inPreGame) {
+        if (remaining <= 1000) label = '1';
+        else if (remaining <= 2000) label = '2';
+        else if (remaining <= 3000) label = '3';
+    } else if (connection.battleStartedAt
+               && performance.now() - connection.battleStartedAt < 1200) {
+        label = 'BATTLE!!';
+    }
+
+    if (label !== lastLabel) showCountdown(label);
+    return label;
+}
+
+// Restarting a CSS animation needs the class removed, a reflow forced, and the class put
+// back -- assigning the same class again does nothing on its own.
+function showCountdown(label) {
+    const el = document.getElementById('countdown-text');
+    if (!el) return;
+
+    el.classList.remove('show', 'digit', 'battle');
+    if (!label) { el.innerText = ''; return; }
+
+    el.innerText = label;
+    void el.offsetWidth;                       // force reflow
+    el.classList.add('show', label === 'BATTLE!!' ? 'battle' : 'digit');
+}
+
+// The server has frozen the game because the other player's connection went away. The
+// state keeps drawing -- it simply stops changing -- so the overlay is what tells the
+// player the game is paused rather than merely quiet.
+function syncPauseOverlay() {
+    const overlay = document.getElementById('pause-overlay');
+    if (!overlay) return;
+
+    const countdown = overlay.querySelector('.pause-countdown');
+    const note = document.getElementById('pause-note');
+    const subtitle = document.getElementById('pause-subtitle');
+    const claimBtn = document.getElementById('btnClaimVictory');
+
+    // THIS end dropped, and SignalR is retrying. No server message can arrive to explain
+    // the freeze, so the overlay has to be raised locally -- and it must NOT show the
+    // 60-second countdown, which belongs to the opponent's clock and is not what this
+    // player is waiting on.
+    if (connection.reconnecting) {
+        document.getElementById('pause-title').innerText = 'CONNECTION LOST';
+        if (subtitle) subtitle.innerText = 'RECONNECTING...';
+        if (countdown) countdown.style.display = 'none';
+        if (note) note.innerText = 'YOUR SEAT IS BEING HELD';
+        if (claimBtn) claimBtn.classList.add('hidden');
+        overlay.classList.remove('hidden');
+        return;
+    }
+
+    if (!connection.paused) {
+        overlay.classList.add('hidden');
+        return;
+    }
+
+    const title = document.getElementById('pause-title');
+    if (title) {
+        // A spectator sees which side dropped; a player only cares that it was the
+        // opponent. mySide is 0 for spectators, so this never mislabels one as the other.
+        title.innerText = connection.mySide === 0
+            ? `P${connection.pausedSide} DISCONNECTED`
+            : 'OPPONENT DISCONNECTED';
+    }
+
+    if (countdown) countdown.style.display = '';
+
+    if (connection.pauseClaimable) {
+        // The 60 seconds are up and nothing has happened on its own -- by design. What the
+        // player watches now is how long they have waited, and the decision to end it is
+        // theirs. Spectators get no button: there is no seat for them to win with.
+        if (subtitle) subtitle.innerText = 'THEY HAVE NOT COME BACK YET';
+        if (countdown) countdown.innerText = formatWait(connection.pauseWaitedSeconds);
+        if (note) note.innerText = 'KEEP WAITING, OR TAKE THE WIN';
+        if (claimBtn) claimBtn.classList.toggle('hidden', connection.mySide === 0);
+    } else {
+        if (subtitle) subtitle.innerText = 'GAME PAUSED — WAITING FOR THEM TO RECONNECT';
+        if (countdown) countdown.innerText = connection.pauseSecondsRemaining + 's';
+        if (note) note.innerText = 'IF THEY DO NOT RETURN, YOU CAN CLAIM THE WIN';
+        if (claimBtn) claimBtn.classList.add('hidden');
+    }
+
+    overlay.classList.remove('hidden');
+}
+
+// mm:ss past a minute -- a bare second count is unreadable once someone has been waiting
+// for twenty of them.
+function formatWait(seconds) {
+    const s = Math.max(0, seconds | 0);
+    if (s < 60) return s + 's';
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
 function updateUI(state) {
@@ -233,16 +422,46 @@ function initShopUI(team) {
 
             const tooltip = document.createElement('div');
             tooltip.className = 'unit-tooltip';
+            // "?" on the stats this unit rolls fresh on every spawn -- the numbers here are
+            // its base row, not what the player will actually get. See loader.isRandomStatUnit.
+            const rolled = loader.isRandomStatUnit(character.id) ? '?' : '';
             tooltip.innerHTML = `
-                <div class="stat"><img src="${loader.assets.tooltips.heart.src}" alt="HP"> ${stats.health}</div>
-                <div class="stat"><img src="${loader.assets.tooltips.sword.src}" alt="DMG"> ${stats.damage}</div>
-                <div class="stat"><img src="${loader.assets.tooltips.boot.src}" alt="SPD"> ${stats.speed}</div>
+                <div class="tooltip-name">${(stats.name || character.id).toUpperCase()}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.heart.src}" alt="HP"> ${stats.health}${rolled}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.sword.src}" alt="DMG"> ${stats.damage}${rolled}</div>
+                <div class="stat"><img src="${loader.assets.tooltips.boot.src}" alt="SPD"> ${stats.speed}${rolled}</div>
             `;
             wrapper.appendChild(tooltip);
 
             // --- 2. DESKTOP HOVER LOGIC ---
-            wrapper.addEventListener('mouseenter', () => tooltip.classList.add('visible'));
-            wrapper.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+            // GUARDED TWICE, and both guards earn their place.
+            //
+            // The bug: a tap on a touch screen leaves a PHANTOM CURSOR parked on whatever
+            // was tapped. The browser follows touchend with a synthetic mouse sequence, so
+            // the old `mouseenter` listener re-added `visible` immediately after the touch
+            // handler below removed it -- and no mouseleave ever arrived, because there is
+            // no finger to move away. The tooltip then sat open until the next tap
+            // somewhere else moved the phantom cursor. Tapping to BUY a unit therefore
+            // left that unit's tooltip on screen.
+            //
+            // `hover: hover` is the load-bearing guard: a phone answers false, so no
+            // hover path exists there at all no matter what the synthetic events claim to
+            // be. It is deliberately the SAME query that gates button:hover in
+            // global-styles.css, so the CSS and JS hover stories cannot drift apart.
+            //
+            // pointerType is the second guard, for the device the first one cannot settle:
+            // a touchscreen laptop answers `hover: hover` truthfully and still takes taps.
+            // Pointer events carry the pointerType, so there a real mouse is told from a
+            // finger PER INTERACTION rather than per device.
+            const canHover = () => window.matchMedia('(hover: hover)').matches;
+            wrapper.addEventListener('pointerenter', (e) => {
+                if (e.pointerType !== 'mouse' || !canHover()) return;
+                tooltip.classList.add('visible');
+            });
+            wrapper.addEventListener('pointerleave', (e) => {
+                if (e.pointerType !== 'mouse' || !canHover()) return;
+                tooltip.classList.remove('visible');
+            });
 
             // --- 3. MOBILE LONG-PRESS LOGIC ---
             let pressTimer;
@@ -279,9 +498,18 @@ function initShopUI(team) {
             });
 
             // --- 4. THE SPAWN LOGIC ---
-            character.addEventListener('click', (e) => {
+            // The unit id comes from `character` -- the element the listener is attached
+            // to -- and NOT from walking up from e.target. It used to read
+            // `e.target.parentElement.id`, which is only the right element when the click
+            // landed on the <img>. A tap on the button's own area (its padding, or the gap
+            // around the sprite) made e.target the .character div itself, so parentElement
+            // was the .character-icon-wrapper, whose id is empty, and spawnUnit("") no-oped
+            // silently -- no unit, no money spent, no error. On a phone the sprite covers
+            // most of the button, which is exactly what made this easy to miss and
+            // miserable to hit: "I tapped it and nothing happened", intermittently.
+            character.addEventListener('click', () => {
                 if (character.classList.contains('disabled')) return;
-                connection.spawnUnit(e.target.parentElement.id);
+                connection.spawnUnit(character.id);
             });
 
             priceElements[index].innerHTML = '$' + stats.price; // Re-used the stats object here!

@@ -1,7 +1,11 @@
 import { showScreen } from '../../../src/router.js';
 import view from '../../../src/view.js';
+import meander from '../../../src/menu-meander.js';
 
 export default function initGadgetCategories() {
+    // Same scene as Collection, so this keeps the existing wanderers rather than respawning.
+    meander.start('collection');
+
     const btnOffensive = document.getElementById('btnOffensive');
     const btnTactical = document.getElementById('btnTactical');
     const btnSignature = document.getElementById('btnSignature');

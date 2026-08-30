@@ -44,18 +44,10 @@ namespace CastleDefense.Engine
         public event Action<string, int, int, Guid> OnGadgetAnimation;
         public event Action<int, GadgetDefinition> OnGadgetUpgraded;
 
-        // LEGACY closure-based scheduling. Being replaced by _scheduledEffects below —
-        // see PendingEffect.cs for why. Kept alive while the 13 gadget-effect files are
-        // migrated one at a time, so a half-finished migration still runs correctly.
-        // When the last ScheduleAction callsite is gone, delete this and ScheduleAction.
-        private class ScheduledEvent
-        {
-            public int ExecuteAtTick { get; set; }
-            public Action Action { get; set; }
-        }
-        private List<ScheduledEvent> _scheduledEvents = new List<ScheduledEvent>();
-
-        // Data-based scheduling. Copyable, serialisable, and safe to clone.
+        // Delayed gadget phases, as DATA. Copyable, serialisable, and safe to clone.
+        // This replaced a closure-based `List<Action>` (removed 2026-08-29 once the last
+        // of the 13 gadget-effect files had been migrated); PendingEffect.cs records why
+        // closures made the engine un-cloneable and therefore blocked search entirely.
         private List<PendingEffect> _scheduledEffects = new List<PendingEffect>();
 
         /// <summary>
@@ -142,16 +134,6 @@ namespace CastleDefense.Engine
         /// </summary>
         public GameEngine Clone(int? rngSeed = null)
         {
-            if (_scheduledEvents.Count > 0)
-            {
-                // Unreachable today (ScheduleAction has no callers), but a loud failure is
-                // far better than silently dropping effects or, worse, sharing closures
-                // that mutate the original game.
-                throw new InvalidOperationException(
-                    "Cannot clone an engine with legacy closure-based scheduled events pending. " +
-                    "Convert the offending gadget to ScheduleEffect/PendingEffect — see PendingEffect.cs.");
-            }
-
             // MemberwiseClone is SHALLOW: every reference-type field below is shared with the
             // original until it is explicitly replaced. Anything mutable added to GameEngine
             // must be reset here or the rollouts will silently write into the live game.
@@ -167,10 +149,15 @@ namespace CastleDefense.Engine
             copy.UnitsPurchased = new long[3];
             copy.MoneySpentOnUnits = new double[3];
             copy._scheduledEffects = new List<PendingEffect>(_scheduledEffects);
-            copy._scheduledEvents = new List<ScheduledEvent>();
             copy._actionQueue = new ConcurrentQueue<Action>();
             copy.OnGadgetAnimation = null;
             copy.OnGadgetUpgraded = null;
+            // MUST be nulled with the others. An event is a mutable reference field, so a
+            // shallow clone inherits the subscriber list and every one of search rollouts
+            // fires it -- game 9A60C6 recorded 49,448 gadget casts for a game containing
+            // about 40, inflating the replay from ~16KB to 357KB and polluting the DB.
+            // Any NEW event added to this class has to be added here too.
+            copy.OnGadgetCast = null;
             copy.Rng = rngSeed.HasValue ? new Random(rngSeed.Value) : new Random();
             copy._idRng = rngSeed.HasValue ? new Random(rngSeed.Value ^ ID_SEED_OFFSET) : new Random();
             return copy;
@@ -249,23 +236,44 @@ namespace CastleDefense.Engine
             }
         }
 
-        public void ScheduleAction(int delayInTicks, Action action)
-        {
-            _scheduledEvents.Add(new ScheduledEvent
-            {
-                ExecuteAtTick = (int)_state.CurrentTick + delayInTicks,
-                Action = action
-            });
-        }
-
         /// <summary>
-        /// Queues a delayed gadget phase as data. Preferred over ScheduleAction — see
-        /// PendingEffect.cs. The caller supplies everything except the tick.
+        /// Queues a delayed gadget phase as data — see PendingEffect.cs. The caller
+        /// supplies everything except the tick.
         /// </summary>
         public void ScheduleEffect(int delayInTicks, PendingEffect effect)
         {
             effect.ExecuteAtTick = (int)_state.CurrentTick + delayInTicks;
             _scheduledEffects.Add(effect);
+        }
+
+        /// <summary>
+        /// Total castle damage ALREADY COMMITTED against <paramref name="side"/> by delayed
+        /// gadget phases that are queued but have not fired yet -- i.e. damage that will
+        /// land even if both players do nothing from here.
+        ///
+        /// This is what makes a nuke reactable rather than a coin flip. A nuke detonates
+        /// def.Delay (48 ticks, ~1.6s) after the cast and damages BOTH castles, so between
+        /// the cast and the blast there is a real window in which a defender can buy the HP
+        /// to survive it. Without this query the only thing a bot could see was
+        /// PendingEffectCount, which says something is in flight but not what or how big.
+        ///
+        /// Counts every queued blast regardless of how far out it is, which is the right
+        /// question for "will I be alive once everything currently in the air has landed" --
+        /// there is no action that removes one. Deliberately says nothing about ongoing unit
+        /// damage; that is what the time-to-death estimators are for.
+        /// </summary>
+        public int IncomingCastleDamage(int side)
+        {
+            if (_scheduledEffects.Count == 0) return 0;
+
+            int total = 0;
+            foreach (var e in _scheduledEffects)
+            {
+                var effect = ResolveScheduledEffect(e.GadgetId);
+                if (effect == null) continue;
+                total += effect.PendingCastleDamage(e, side);
+            }
+            return total;
         }
 
         /// <summary>
@@ -288,19 +296,10 @@ namespace CastleDefense.Engine
         {
             ProcessActions();
 
-            for (int i = _scheduledEvents.Count - 1; i >= 0; i--)
-            {
-                if (_state.CurrentTick >= _scheduledEvents[i].ExecuteAtTick)
-                {
-                    _scheduledEvents[i].Action.Invoke();
-                    _scheduledEvents.RemoveAt(i);
-                }
-            }
-
-            // Same traversal shape as the legacy loop above, deliberately: iterate
-            // downward from the current count, fire, then remove at that index. Anything
-            // a firing effect schedules is appended past the starting index and so runs
-            // on a later tick rather than in this pass — matching the old behaviour.
+            // Iterate DOWNWARD from the current count, fire, then remove at that index.
+            // The direction is load-bearing: anything a firing effect schedules is
+            // appended past the starting index, so it runs on a later tick rather than
+            // inside this same pass. FreezeEffect's level-3 slow depends on that.
             for (int i = _scheduledEffects.Count - 1; i >= 0; i--)
             {
                 if (_state.CurrentTick >= _scheduledEffects[i].ExecuteAtTick)
@@ -314,6 +313,8 @@ namespace CastleDefense.Engine
             if (_state.IsGameOver) return;
             _state.CurrentTick++;
 
+            SpawnOpeningSquad();
+
             // 1. Income & Cooldowns
             if (_state.CurrentTick % INCOME_FREQUENCY == 0)
             {
@@ -325,6 +326,7 @@ namespace CastleDefense.Engine
 
             // 2. Process Gadget Effects
             ProcessHazards();
+            ProcessMapHealPulse();
 
             // 3. Process Status Effects
             if (_state.CurrentTick % 5 == 0)
@@ -342,6 +344,74 @@ namespace CastleDefense.Engine
                 _state.IsTimeLimit = true;
                 _state.WinnerSide  = _state.Player1.CastleHealth > _state.Player2.CastleHealth ? 1 :
                                      _state.Player2.CastleHealth > _state.Player1.CastleHealth ? 2 : 0;
+            }
+        }
+
+        /// <summary>
+        /// The one unit whose stats are rolled fresh on every spawn instead of being read
+        /// straight off its roster row. Black's tier-4 unit; the roster description is the
+        /// player-facing half of this.
+        ///
+        /// Keyed on the id rather than a roster column because it is a single bespoke unit
+        /// with bespoke behaviour, exactly like the "monky" shield case further down. A CSV
+        /// flag would be the right answer for the second one of these, not the first.
+        /// </summary>
+        public const string RandomStatUnitId = "weirdo";
+
+        /// <summary>Bounds of the per-stat multiplier rolled for <see cref="RandomStatUnitId"/>.</summary>
+        public const float RandomStatMinScale = 0.5f;
+        public const float RandomStatMaxScale = 2.0f;
+
+        /// <summary>
+        /// One multiplier in [<see cref="RandomStatMinScale"/>, <see cref="RandomStatMaxScale"/>].
+        /// Uniform, and taken from the caller's Random so the draw comes from the engine's
+        /// seeded stream rather than an unseeded one.
+        /// </summary>
+        private static float RollStatScale(Random rng)
+            => RandomStatMinScale + (float)rng.NextDouble() * (RandomStatMaxScale - RandomStatMinScale);
+
+        /// <summary>
+        /// How many free tier-1 units each side is given at the start of a game, one per
+        /// second. These are the units the client shows milling around the castle during
+        /// the pre-game countdown, running onto the field as the battle opens. 0 disables.
+        ///
+        /// BOTH SIDES GET THE SAME NUMBER AT THE SAME TICKS, so this is symmetric and cannot
+        /// favour a seat -- but it is still a real balance change: it is five free units and
+        /// it moves every opening. Benchmarks taken before 2026-08-26 are not comparable.
+        /// </summary>
+        public static int OpeningSquadSize = 5;
+
+        /// <summary>
+        /// The free opening units, one per second starting on the game's very first tick
+        /// (ticks 1, 31, 61, ... so the first one runs on as the battle begins rather than
+        /// after a second of nothing).
+        ///
+        /// Spawned with ignoreCost, which is what keeps them out of the action recording,
+        /// the purchase counters and the money spent totals -- they are not a decision
+        /// anybody made, and a replay that recorded them as spawn actions would replay them
+        /// twice.
+        ///
+        /// Keyed on absolute CurrentTick, so a game started mid-way through the clock (the
+        /// league mode's timeSkip puts CurrentTick at 30*30*timeSkip) gets no squad. That is
+        /// deliberate: those are AI training and spectator modes with no pre-game to match.
+        /// </summary>
+        private void SpawnOpeningSquad()
+        {
+            if (OpeningSquadSize <= 0) return;
+            long t = _state.CurrentTick;
+            if (t < 1 || t > (OpeningSquadSize - 1) * TICKS_PER_SECOND + 1) return;
+            if ((t - 1) % TICKS_PER_SECOND != 0) return;
+
+            // Sides are written literally rather than read from PlayerState.Side: a plain
+            // `new GameState()` leaves Side at 0 (only the hub assigns it), and SpawnUnit
+            // maps any side that is not 1 to player 2 -- so trusting the field here would
+            // hand BOTH squads to player 2 in every harness that builds a state directly.
+            for (int side = 1; side <= 2; side++)
+            {
+                var player = side == 1 ? _state.Player1 : _state.Player2;
+                var roster = GameDataManager.Teams.Find(x => x.Color == player.Team)?.Roster;
+                if (roster == null || roster.Count == 0) continue;
+                SpawnUnit(side, roster[0].Id, ignoreCost: true);
             }
         }
 
@@ -382,10 +452,77 @@ namespace CastleDefense.Engine
                 {
                     if (side == 1) LastActionP1 = def.Tier;
                     else LastActionP2 = def.Tier;
+                    if (side >= 1 && side <= 2) ActionsThisTick[side]++;
                 }
             }
 
             Random random = Rng;   // was `new Random()` — see the Rng property above
+
+            // ── RANDOM-STAT UNIT (weirdo) ────────────────────────────────────────────────
+            // Rolled HERE, before anything reads a size, because the spawn position and the
+            // y-offset below are both computed from the unit's width/height -- a roll made
+            // after them would place the unit as though it were its base size.
+            //
+            // DRAWN FROM Rng, NOT `new Random()`. That stream is seeded per game and is what
+            // makes a replay reconstructable and a search rollout's clone deterministic;
+            // an unseeded roll here would silently break both. See the replay determinism
+            // note in CLAUDE.md.
+            //
+            // The three draws happen ONLY for this unit id, so the RNG stream is untouched
+            // for every other unit and any game without a weirdo in it stays byte-identical
+            // to before this feature existed.
+            // EVERY OTHER UNIT TAKES THE DEFINITION'S VALUES VERBATIM -- no multiply, no
+            // rounding, no clamping. That is deliberate rather than incidental: it makes
+            // "this feature cannot have changed any other unit" true by construction instead
+            // of true by an argument about floating-point identity.
+            //
+            // It also dodges a real trap. A blanket Math.Max(1, ...) floor on damage would
+            // have handed every WALL 1 damage, since GameDataManager.WallDefinition sets
+            // Damage = 0 -- turning a piece of defensive scenery into an attacker.
+            int   spawnHealth = def.MaxHealth;
+            int   spawnDamage = def.Damage;
+            float spawnSpeed  = def.MoveSpeed;
+            float visualScale = 1f;
+
+            if (unitId == RandomStatUnitId)
+            {
+                float hpScale     = RollStatScale(random);
+                float damageScale = RollStatScale(random);
+                float speedScale  = RollStatScale(random);
+
+                // Floored at 1 so a bad roll cannot produce a unit with no health or no
+                // bite. Only reachable here, where the base values are non-zero.
+                spawnHealth = Math.Max(1, (int)MathF.Round(def.MaxHealth * hpScale));
+                spawnDamage = Math.Max(1, (int)MathF.Round(def.Damage    * damageScale));
+                spawnSpeed  = def.MoveSpeed * speedScale;
+
+                // APPEARANCE ONLY -- see Unit.VisualScale. The mean of the three rolls, so
+                // a unit that rolled well everywhere looks big and a bad one looks small.
+                visualScale = (hpScale + damageScale + speedScale) / 3f;
+            }
+
+            // ── MAP EFFECTS ──────────────────────────────────────────────────────────────
+            // THIS IS THE ONLY PLACE spawn-time map effects are applied, and that is the
+            // whole point: every unit that reaches the field goes through SpawnUnit, so the
+            // Reinforcements squad, a Wall gadget's wall and the free opening squad all pick
+            // the effect up here without any of them knowing map effects exist.
+            //
+            // Applied AFTER the weirdo roll so the two compose: a weirdo on Calm Hills gets
+            // its rolled health and then the map's +10% on top, rather than the map buffing
+            // a base value the unit was never going to have.
+            //
+            // Health and damage are whole numbers, so they round (see MapEffects.ScaleStat,
+            // which also protects a wall's zero damage). SPEED IS DELIBERATELY NOT ROUNDED:
+            // it is a float everywhere in the engine and is already scaled fractionally on
+            // every tick by Slow/Speed statuses, so keeping it float is the existing
+            // behaviour rather than a new class of value. Rounding it would also make the
+            // effect wildly uneven -- speeds run 1 to 23, so +-10% rounds to no change at all
+            // for a speed-1 or speed-2 unit while moving a speed-5 unit by a full 20%.
+            var mapMods = MapEffects.For(_state);
+            spawnHealth = MapEffects.ScaleStat(spawnHealth, mapMods.Health);
+            spawnDamage = MapEffects.ScaleStat(spawnDamage, mapMods.Damage);
+            spawnSpeed  = spawnSpeed * mapMods.Speed;
+
             if (position == -1)
             {
                 // Both sides must start with their LEADING edge the same distance from the
@@ -425,20 +562,22 @@ namespace CastleDefense.Engine
                 Tier = def.Tier,
                 Height = def.Height,
                 Width = def.Width,
+                VisualScale = visualScale,
                 PendingKnockback = 0,
                 LastKnockbackTick = 0,
                 AttacksWithoutKnockback = 0,
 
                 // --- HEALTH & POSITION ---
-                CurrentHealth = def.MaxHealth,
-                MaxHealth = def.MaxHealth,
+                CurrentHealth = spawnHealth,
+                MaxHealth = spawnHealth,
                 CurrentShield = def.MaxShield,
                 Position = position,
                 YPosition = yposition,
 
                 // --- COMBAT STATS ---
-                CurrentSpeed = def.MoveSpeed,
-                Damage = def.Damage,
+                BaseSpeed = spawnSpeed,
+                CurrentSpeed = spawnSpeed,
+                Damage = spawnDamage,
                 Range = def.Range,
                 AttackSpeed = def.AttackSpeed,
 
@@ -470,6 +609,7 @@ namespace CastleDefense.Engine
             if (player.Money < player.InvestmentPrice) return false;
 
             if (side == 1) LastActionP1 = 9; else LastActionP2 = 9;
+            if (side >= 1 && side <= 2) ActionsThisTick[side]++;
 
             // ARMAGEDDON is a one-time purchase, so the button is dead afterwards.
             if (player.ArmageddonUsed) return false;
@@ -520,6 +660,7 @@ namespace CastleDefense.Engine
             if (player.Money < player.RepairPrice) return false;
 
             if (side == 1) LastActionP1 = 10; else LastActionP2 = 10;
+            if (side >= 1 && side <= 2) ActionsThisTick[side]++;
 
             // 2. Deduct cost
             player.Money -= player.RepairPrice;
@@ -551,35 +692,31 @@ namespace CastleDefense.Engine
             if (player.Money < def.Cost) return false;
 
             // --- Bot Auto-Targeting Logic (-1) ---
+            //
+            // REPLACED 2026-08-21. This used to aim at the frontmost enemy plus a flat 300,
+            // falling back to the enemy castle when no enemy existed, with no friendly-fire
+            // check of any kind. Both halves of that rule pointed AT the caster's own army --
+            // the +300 offset lands on the collision point where the two lines meet, and the
+            // no-enemy fallback lands on the enemy castle, which is precisely where a winning
+            // bot's siege is standing. Measured over Marc's 8 v3 replays, 12 of the 14 casts
+            // that took this path hit his bot's own units, for 78 own against 42 enemy.
+            //
+            // It now routes through the SAME targeting HeuristicBot uses. That matters beyond
+            // aim quality: every caller of ApplyAction(side, 11..13) -- search's raw action,
+            // every ONNX/RL policy, HumanCloneBot, every harness driving the discrete action
+            // space -- had no friendly-fire protection at all, because all of it lived one
+            // layer up inside HeuristicBot. See GadgetTargeting for the full account.
+            //
+            // AutoTarget may return null, meaning "there is nothing here worth a blast, or
+            // hitting it means hitting ourselves". That REFUSES the cast: no money spent, no
+            // cooldown started, ApplyAction returns false.
             if (position == -1)
             {
-                var enemies = _state.Units.Where(u => u.Side != side).ToList();
-
-                if (enemies.Count > 0)
-                {
-                    if (side == 1)
-                    {
-                        // P1 targets P2's units. They are closest to P1 when X is lowest.
-                        // They are moving left, so we lead them by subtracting 300.
-                        var closestEnemy = enemies.OrderBy(e => e.Position).First();
-                        position = (int)closestEnemy.Position - 300;
-                    }
-                    else
-                    {
-                        // P2 targets P1's units. They are closest to P2 when X is highest.
-                        // They are moving right, so we lead them by adding 300.
-                        var closestEnemy = enemies.OrderByDescending(e => e.Position).First();
-                        position = (int)closestEnemy.Position + 300;
-                    }
-                }
-                else
-                {
-                    // Fallback: If no enemies exist, drop it at the enemy castle
-                    position = side == 1 ? MAP_WIDTH : 0;
-                }
-
-                // Clamp the final target to stay at least 100 units away from the castles
-                position = Math.Max(300, Math.Min(MAP_WIDTH - 300, position));
+                int? aim = Gadgets.GadgetTargeting.AutoTarget(this, side, def);
+                if (!aim.HasValue) return false;
+                // Already clamped to the legal window by AutoTarget, deliberately BEFORE its
+                // friendly-fire test rather than after it -- see GadgetTargeting.ClampToMap.
+                position = aim.Value;
             }
 
             // 2. Deduct Cost
@@ -589,12 +726,22 @@ namespace CastleDefense.Engine
             int gadgetActionId = gadgetId == player.OffensiveGadget?.Id ? 11 :
                                  gadgetId == player.DefensiveGadget?.Id  ? 12 : 13;
             if (side == 1) LastActionP1 = gadgetActionId; else LastActionP2 = gadgetActionId;
+            if (side >= 1 && side <= 2) ActionsThisTick[side]++;
 
             // 3. Apply gadget cooldown (converting ms to game ticks)
             player.GadgetCooldowns[gadgetId] = def.CooldownMs / (1000 / TICKS_PER_SECOND);
 
             // 4. Activate Gadget Effect
             def.GadgetEffect.Execute(this, side, position);
+
+            // RECORDING HOOK. Deliberately here and NOT on OnGadgetAnimation: that event is
+            // raised by the individual effects, and five of them (Reinforcements, Heal, Rage,
+            // Speed, Wall) never raise it at all. Recording through it therefore dropped every
+            // cast of those families -- 28 of 52 casts in game 0C7A5B, all of them action 12 --
+            // from both the replay's target list AND the DB's gadget_uses table. This point is
+            // reached by every successful cast, and `position` here is already resolved, so a
+            // -1 auto-target is recorded as the coordinate the blast actually used.
+            OnGadgetCast?.Invoke(side, gadgetId, position);
 
             return true;
         }
@@ -618,8 +765,69 @@ namespace CastleDefense.Engine
             }
         }
 
+        /// <summary>
+        /// The Red map's heal pulse: every 10-30 seconds, every unit on the field is healed
+        /// for 10-50% of its maximum health, capped at full.
+        ///
+        /// ONE roll per pulse, shared by every unit -- this is a single event happening to
+        /// the whole forest, not each unit rolling its own dice. Walls are included, because
+        /// they are units standing on the field like anything else.
+        ///
+        /// Both draws come from <see cref="Rng"/>, the engine's seeded stream, NEVER from an
+        /// unseeded `new Random()`: that stream is what makes a replay reconstructable and a
+        /// search rollout deterministic, and CLAUDE.md records this exact mistake twice. The
+        /// draws happen ONLY on the Red map, so every other map's RNG sequence -- and so
+        /// every existing benchmark on it -- is untouched.
+        /// </summary>
+        private void ProcessMapHealPulse()
+        {
+            if (!MapEffects.For(_state).HealPulse) return;
+
+            // First sighting of this board: schedule and wait. Tick 0 can never be a pulse
+            // time anyway (the minimum delay is ten seconds), so 0 is safe as "unscheduled".
+            if (_state.NextHealPulseTick == 0)
+            {
+                _state.NextHealPulseTick = _state.CurrentTick + RollHealPulseDelay();
+                return;
+            }
+
+            if (_state.CurrentTick < _state.NextHealPulseTick) return;
+            _state.NextHealPulseTick = _state.CurrentTick + RollHealPulseDelay();
+
+            float fraction = MapEffects.HealPulseMinFraction +
+                (float)Rng.NextDouble() * (MapEffects.HealPulseMaxFraction - MapEffects.HealPulseMinFraction);
+
+            foreach (var unit in _state.Units)
+            {
+                // Floored at 1 so the pulse always does something: 10% of a 5 HP tier-1
+                // rounds to 1 rather than to nothing at all.
+                int amount = Math.Max(1, (int)MathF.Round(unit.MaxHealth * fraction));
+                unit.CurrentHealth = Math.Min(unit.MaxHealth, unit.CurrentHealth + amount);
+
+                // A ZERO-VALUE Heal status, purely as the visual marker. The client spawns
+                // its heal particles from a status's NAME and never reads the Value, and the
+                // healing itself has already been applied above -- a non-zero Value here
+                // would be applied AGAIN by ProcessStatuses on every pass for a whole
+                // second, healing several times over. Zero is inert on that path: ApplyDamage
+                // with amount 0 changes no health and does not touch the knockback counters.
+                unit.Statuses.Add(new ActiveStatus(
+                    "Heal",
+                    _state.CurrentTick + MapEffects.HealPulseStatusTicks,
+                    0f));
+            }
+        }
+
+        private int RollHealPulseDelay() =>
+            Rng.Next(MapEffects.HealPulseMinDelayTicks, MapEffects.HealPulseMaxDelayTicks + 1);
+
         private void ProcessStatuses()
         {
+            // Blue damps fire and Orange feeds it. Scaling the damage HERE, as the tick
+            // lands, rather than where the Burn status is created, means it covers every
+            // source of fire at once -- the firebomb's zone, the meteor's ignite, and
+            // anything added later -- without each of them having to remember.
+            float burnMod = MapEffects.For(_state).BurnDamage;
+
             foreach (var unit in _state.Units)
             {
                 // Remove expired effects
@@ -631,8 +839,15 @@ namespace CastleDefense.Engine
                 {
                     int healthBefore = unit.CurrentHealth;
 
+                    // Only Burn is fire. Poison, Heal and Blackhole take the original
+                    // truncating cast untouched, so every map other than Blue and Orange
+                    // produces byte-identical damage to before map effects existed.
+                    int amount = (burn.Name == "Burn" && burnMod != 1f)
+                        ? (int)MathF.Round(burn.Value * burnMod)
+                        : (int)burn.Value;
+
                     // Change to AttackType.Magic later?
-                    ApplyDamage(unit, (int)burn.Value, AttackType.Melee, 0);
+                    ApplyDamage(unit, amount, AttackType.Melee, 0);
                 }
             }
 
@@ -717,7 +932,11 @@ namespace CastleDefense.Engine
 
                         for (int e = 0; e < enemies.Count; e++)
                         {
-                            pendingUnitDamage.Add((enemies[e], (int)(def.Damage * dmgMod), def.AttackType, impactForce));
+                            // unit.Damage, not def.Damage: identical for every ordinary unit
+                            // (it is initialised from the definition), but the random-stat
+                            // unit's roll lives on the instance. Same substitution below for
+                            // castle damage, movement speed and width.
+                            pendingUnitDamage.Add((enemies[e], (int)(unit.Damage * dmgMod), def.AttackType, impactForce));
                         }
                     }
                 }
@@ -741,11 +960,18 @@ namespace CastleDefense.Engine
                     // non-finite value into serialisable game state.
                     if (unit.AttackCooldown <= 0 && def.AttackSpeed > 0)
                     {
-                        // Inlined from AttackCastle() so castle damage can be deferred
-                        // alongside unit damage -- same logic, same cooldown reset.
+                        // THE ONLY PLACE A UNIT DAMAGES A CASTLE. This was inlined from a
+                        // separate AttackCastle() method so castle damage could be deferred
+                        // alongside unit damage; that method lingered with zero callers until
+                        // it was deleted on 2026-08-29. It was worth deleting rather than
+                        // leaving: its copy of this line never got the `def.AttackSpeed > 0`
+                        // guard above, so calling it on a wall (AttackSpeed 0) produced
+                        // float.PositiveInfinity and crashed live games by making the state
+                        // unserialisable, and it read damage off the DEFINITION, which would
+                        // now miss the weirdo's per-instance roll.
                         unit.AttackCooldown = (1000f / def.AttackSpeed);
                         var enemyPlayer = unit.Side == 1 ? _state.Player2 : _state.Player1;
-                        float castleDamage = def.Damage;
+                        float castleDamage = unit.Damage;
                         if (def.AttackType == AttackType.Siege) castleDamage *= 2;
                         foreach (var status in unit.Statuses)
                             if (status.Name == "Rage") castleDamage *= status.Value;
@@ -755,11 +981,11 @@ namespace CastleDefense.Engine
                 else
                 {
                     // --- 4. Movement Logic (decided now, applied after the loop) ---
-                    unit.CurrentSpeed = def.MoveSpeed * speedMod;
+                    unit.CurrentSpeed = unit.BaseSpeed * speedMod;
                     if (speedMod > 0)
                     {
                         float direction = (unit.Side == 1) ? 1f : -1f;
-                        float desired = unit.Position + (def.MoveSpeed * speedMod * direction);
+                        float desired = unit.Position + (unit.BaseSpeed * speedMod * direction);
                         pendingMoves.Add((unit, ClampToContact(unit, i, def, desired)));
                     }
                 }
@@ -785,6 +1011,15 @@ namespace CastleDefense.Engine
             foreach (var dead in toRemove) _state.Units.Remove(dead);
 
             // --- 6. Apply Knockback ---
+            // Black's low gravity lands here, and this is the one place displacement is
+            // turned into movement, so it covers every source at once -- a melee impact, a
+            // wave, a black hole collapsing -- exactly as the wall rule below does.
+            //
+            // Multiplying HERE rather than in ApplyDamage is deliberate: it comes after the
+            // anti-stunlock clamps (the 25f/10f plateaus and the tier-8 cap), so low gravity
+            // makes units fly farther without reopening the stunlock those clamps close.
+            var mapMods = MapEffects.For(_state);
+
             for (int i = _state.Units.Count - 1; i >= 0; i--)
             {
                 var unit = _state.Units[i];
@@ -804,10 +1039,19 @@ namespace CastleDefense.Engine
                         continue;
                     }
 
-                    unit.Position += unit.PendingKnockback;
+                    unit.Position += unit.PendingKnockback * mapMods.Knockback;
                     unit.PendingKnockback = 0f;
-                    unit.Statuses.Add(new ActiveStatus("Knockback", _state.CurrentTick + GameEngine.TICKS_PER_SECOND, 0f));
+
+                    // The stagger IS the flight time -- the unit is moved instantly and the
+                    // client animates the arc over the same window, so a unit that hangs in
+                    // the air twice as long is one that cannot act for twice as long.
+                    unit.Statuses.Add(new ActiveStatus("Knockback", _state.CurrentTick + mapMods.KnockbackStaggerTicks, 0f));
                     unit.AttacksWithoutKnockback = 0;
+
+                    // The re-knockback immunity window is deliberately NOT doubled with the
+                    // stagger. It exists to stop a unit being juggled, and at 2s it already
+                    // covers low gravity's 2s flight -- doubling it to 4s would change the
+                    // stunlock economics of the whole map rather than its gravity.
                     unit.LastKnockbackTick = _state.CurrentTick + 2 * GameEngine.TICKS_PER_SECOND;
                 }
             }
@@ -1007,29 +1251,6 @@ namespace CastleDefense.Engine
                 float dist = attacker.Position - 200;
                 return Math.Max(0f, dist);
             }
-        }
-
-        public void AttackCastle(Unit attacker, UnitDefinition def)
-        {
-            // 1. Identify Enemy
-            var enemyPlayer = attacker.Side == 1 ? _state.Player2 : _state.Player1;
-
-            // 2. Reset Cooldown
-            attacker.AttackCooldown = (1000f / def.AttackSpeed);
-
-            // 3. Deal Damage
-            float damage = def.Damage;
-
-            // Siege units usually deal double damage to structures
-            if (def.AttackType == AttackType.Siege) damage *= 2;
-
-            var dmgStatuses = attacker.Statuses.Where(s => s.Name == "Rage");
-            foreach (var status in dmgStatuses)
-            {
-                damage *= status.Value; // Multiplicative stacking (e.g. 0.5 * 1.5 = 0.75)
-            }
-
-            DamageCastle(enemyPlayer, (int)damage);
         }
 
         public void DamageCastle(PlayerState player, int damage)
@@ -1232,6 +1453,11 @@ namespace CastleDefense.Engine
         }
 
         // ------------- RECORDING HOOKS ---------------
+        /// <summary>Every successful gadget cast, with its RESOLVED target position.
+        /// Use this for recording; OnGadgetAnimation is for client visuals and is not
+        /// raised by all effects.</summary>
+        public event Action<int, string, int> OnGadgetCast;
+
         public int LastActionP1 { get; private set; }
         public int LastActionP2 { get; private set; }
 
@@ -1244,10 +1470,24 @@ namespace CastleDefense.Engine
         /// <summary>Money spent on paid unit purchases per side, indexed 1/2.</summary>
         public double[] MoneySpentOnUnits { get; private set; } = new double[3];
 
+        /// <summary>
+        /// Successful actions applied to this engine since the last ResetLastActions, per
+        /// side (indexed 1/2). The replay format stores ONE action id per side per tick, so
+        /// anything above 1 here is an action that cannot be recorded -- and, since 2026-08-20,
+        /// an action no human could have issued either. The bots pace themselves to keep this
+        /// at most 1; --multi-action-check is the regression test.
+        ///
+        /// A plain int pair, so a shallow GameEngine.Clone copying or not copying it is
+        /// harmless -- deliberately not a mutable reference (see the clone hazard note).
+        /// </summary>
+        public int[] ActionsThisTick { get; private set; } = new int[3];
+
         public void ResetLastActions()
         {
             LastActionP1 = 0;
             LastActionP2 = 0;
+            ActionsThisTick[1] = 0;
+            ActionsThisTick[2] = 0;
         }
 
         // ------------- AI VIBE CODE ---------------

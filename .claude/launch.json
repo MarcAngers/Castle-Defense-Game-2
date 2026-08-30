@@ -4,8 +4,26 @@
     {
       "name": "castle-defense-web",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "CastleDefenseGame2", "-c", "Release"],
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "CastleDefenseGame2",
+        "-c",
+        "Release"
+      ],
       "port": 5168
+    },
+    {
+      "name": "bot-dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "CastleDefense.BotArena/dashboard"
+      ],
+      "port": 8765
     }
   ]
 }

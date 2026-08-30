@@ -23,6 +23,13 @@
     <None Update="Data\master_roster.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Loadout best-response table used by CounterPicker to choose the singleplayer
+         bot's team and gadgets. Regenerate with:
+           CastleDefense.BotArena.exe counter-matrix   (sweep)
+           python CastleDefense.BotArena/counter/analyze.py (fit, then write the table) -->
+    <None Update="Data\counter_table.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <!-- Fitted human policy table played by HumanCloneBot. Regenerate via the
          CastleDefense.Simulation "export-policy-table" mode after new games are recorded. -->
     <None Update="Data\human_policy_table.csv">

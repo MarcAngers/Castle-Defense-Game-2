@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
@@ -120,6 +120,7 @@ namespace CastleDefense.BotArena
 
                 var samples = new List<(long tick,
                     (float Hp, float Income, float Money, float Army, float Gadget, float Repair) c,
+                    float tArma, float tDeath,
                     string offA, int offAL, string defA, int defAL, string sigA, int sigAL,
                     string offB, int offBL, string defB, int defBL, string sigB, int sigBL)>();
 
@@ -128,7 +129,11 @@ namespace CastleDefense.BotArena
                     if (state.CurrentTick % sample == 0)
                     {
                         var pa = state.Player1; var pb = state.Player2;
+                        // The two time-to-terminal-state candidates, collected alongside
+                        // the deployed six so incremental value can be measured as a DELTA on
+                        // them -- the method that correctly killed the gadget-level feature.
                         samples.Add((state.CurrentTick, state.GetEvalComponents(),
+                            state.TArmaComponent(), state.TDeathComponent(),
                             Fam(pa.OffensiveGadget), Lvl(pa.OffensiveGadget),
                             Fam(pa.DefensiveGadget), Lvl(pa.DefensiveGadget),
                             Fam(pa.SignatureGadget), Lvl(pa.SignatureGadget),
@@ -153,7 +158,8 @@ namespace CastleDefense.BotArena
                 foreach (var s2 in samples)
                 {
                     var c = s2.c;
-                    list.Add($"{g},{s2.tick},{c.Hp:F4},{c.Income:F4},{c.Money:F4},{c.Army:F4},{c.Gadget:F4},{c.Repair:F4},{winner}," +
+                    list.Add($"{g},{s2.tick},{c.Hp:F4},{c.Income:F4},{c.Money:F4},{c.Army:F4},{c.Gadget:F4},{c.Repair:F4}," +
+                             $"{s2.tArma:F4},{s2.tDeath:F4},{winner}," +
                              $"{s2.offA},{s2.offAL},{s2.defA},{s2.defAL},{s2.sigA},{s2.sigAL}," +
                              $"{s2.offB},{s2.offBL},{s2.defB},{s2.defBL},{s2.sigB},{s2.sigBL}");
                 }
@@ -165,9 +171,11 @@ namespace CastleDefense.BotArena
             });
 
             using var sw = new StreamWriter(outPath, append: false, Encoding.UTF8);
-            sw.WriteLine("game_id,tick,hp_score,income_score,money_score,army_score,gadget_score,repair_score,winner," +
-                         "p1_off,p1_off_lvl,p1_def,p1_def_lvl,p1_sig,p1_sig_lvl," +
-                         "p2_off,p2_off_lvl,p2_def,p2_def_lvl,p2_sig,p2_sig_lvl");
+            const string header = "game_id,tick,hp_score,income_score,money_score,army_score,gadget_score,repair_score," +
+                                 "tarma_score,tdeath_score,winner," +
+                                 "p1_off,p1_off_lvl,p1_def,p1_def_lvl,p1_sig,p1_sig_lvl," +
+                                 "p2_off,p2_off_lvl,p2_def,p2_def_lvl,p2_sig,p2_sig_lvl";
+            sw.WriteLine(header);
             long total = 0;
             for (int g = 0; g < games; g++)
                 foreach (var line in rows[g]) { sw.WriteLine(line); total++; }
@@ -182,8 +190,14 @@ namespace CastleDefense.BotArena
                 // is exactly the kind of thing that reads plausible and is never re-derived.
                 if (rows[g].Count > 0)
                 {
+                    // Index RESOLVED FROM THE HEADER, not hardcoded. It was a literal 8,
+                    // which broke the moment tarma_score/tdeath_score were inserted ahead of
+                    // winner -- the second instance of the positional bug the comment above
+                    // describes, in the same six lines. Deriving it means the next column
+                    // insertion cannot repeat it.
                     var f = rows[g][0].Split(',');
-                    if (f.Length > 8 && f[8] == "1") p1w++;
+                    int winnerIdx = Array.IndexOf(header.Split(','), "winner");
+                    if (winnerIdx >= 0 && f.Length > winnerIdx && f[winnerIdx] == "1") p1w++;
                 }
 
             Console.WriteLine($"\n[calib-collect] {total:N0} rows from {games} games -> {outPath}");

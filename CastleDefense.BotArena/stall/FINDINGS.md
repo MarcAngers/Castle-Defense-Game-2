@@ -11,6 +11,13 @@ attacker, then attacking forces with escorts, then the defender's anchor answer.
 > **every escorted number below was re-measured** and the "the escort breaks the tactic"
 > conclusion is withdrawn. See experiment 4.
 
+> **UNIT RENAME, 2026-08-25.** Black's tier-4 and tier-6 units swapped NAMES: the raw CSVs
+> beside this file call the tier-6 unit `weirdo` and the tier-4 unit `evilnom`, and the
+> roster now says the opposite. **No measurement changed** -- only the names moved, every
+> stat stayed with its tier -- so the numbers stand exactly as recorded. These files are
+> measurement records and were deliberately NOT rewritten; read a `weirdo` row here as
+> "Black tier 6", which is what the harness was actually testing.
+
 **Kept out of `bin/` deliberately.** `CLAUDE.md` records a 2026-07-14 data loss caused by a
 `bin/` cleanup; the arena writes there by default, so anything worth keeping is copied here.
 

@@ -1383,34 +1383,14 @@ namespace CastleDefense.Simulation
             }
         }
 
-        static PlayerState ClonePlayerState(PlayerState src)
-        {
-            return new PlayerState
-            {
-                ConnectionId = src.ConnectionId,
-                Side = src.Side,
-                Team = src.Team,
-                Money = src.Money,
-                Income = src.Income,
-                InvestmentPrice = src.InvestmentPrice,
-                InvestmentCount = src.InvestmentCount,
-                CastleHealth = src.CastleHealth,
-                CastleMaxHealth = src.CastleMaxHealth,
-                RepairPrice = src.RepairPrice,
-                RepairCount = src.RepairCount,
-                IsInvulnerable = src.IsInvulnerable,
-                InvulnerableUntilTick = src.InvulnerableUntilTick,
-                ArmageddonUsed = src.ArmageddonUsed,
-                ArmageddonShieldUntilTick = src.ArmageddonShieldUntilTick,
-                OffensiveGadget = src.OffensiveGadget,
-                DefensiveGadget = src.DefensiveGadget,
-                SignatureGadget = src.SignatureGadget,
-                UnitCharges = new Dictionary<string, int>(src.UnitCharges),
-                CooldownTimers = new Dictionary<string, long>(src.CooldownTimers),
-                GadgetXp = new Dictionary<string, int>(src.GadgetXp),
-                GadgetCooldowns = new Dictionary<string, long>(src.GadgetCooldowns),
-            };
-        }
+        // Delegates to PlayerState.Clone rather than listing fields by hand, and that is
+        // the whole point. The hand-written copy this replaced silently dropped any field
+        // added to PlayerState afterwards: it was missing ArmageddonUsed until 2026-08-24
+        // (so every --trace-human re-simulation let the shadow player re-buy ARMAGEDDON),
+        // and by 2026-08-29 it had lost CastleShield the same way -- shadow castles took
+        // damage the real ones had absorbed. PlayerState.Clone is MemberwiseClone-based
+        // and cannot miss a field. ActiveStatus.Clone's own comment makes this argument.
+        static PlayerState ClonePlayerState(PlayerState src) => src.Clone();
 
         // CONFIRMED BUG (found investigating a real winner mismatch: CF03FF's true
         // recorded winner is P1 per both game_records.db and the .replay header, but
@@ -1418,11 +1398,11 @@ namespace CastleDefense.Simulation
         // Units used to be shallow-copied here on the theory that "the shadow bot only
         // ever reads existing units and appends new ones via SpawnUnit, never mutates
         // one in place" -- true for the AOE gadgets (nuke/firebomb/meteor/poison/
-        // blackhole all defer their actual effect via engine.ScheduleAction, which
+        // blackhole all defer their actual effect via engine.ScheduleEffect, which
         // never fires since the clone engine is discarded before its Tick() is ever
         // called to process the schedule) but FALSE for heal and speed: HealEffect and
-        // SpeedEffect mutate existing units IMMEDIATELY (ally.Statuses.Add(...), no
-        // ScheduleAction at all). Since the shallow copy shared the exact same Unit
+        // SpeedEffect mutate existing units IMMEDIATELY (ally.Statuses.Add(...), nothing
+        // deferred at all). Since the shallow copy shared the exact same Unit
         // object references as the real trajectory, every time the shadow bot's
         // counterfactual query considered casting heal or speed (using the human's own
         // equipped loadout), it permanently attached a real "Heal"/"Speed" ActiveStatus
@@ -1439,9 +1419,12 @@ namespace CastleDefense.Simulation
         // Fix: deep-clone every Unit (and its Statuses list) so the shadow bot can
         // mutate its own clone's units freely without ever touching the real ones.
         // Hazards are still shallow-copied -- every current gadget that creates one
-        // (firebomb/poison/blackhole) does so via ScheduleAction, same as the AOE
+        // (firebomb/poison/blackhole) does so via ScheduleEffect, same as the AOE
         // damage gadgets, so it's verified safe today, but would need the same
         // treatment if a future gadget ever created one synchronously.
+        // (Named ScheduleAction until 2026-08-29; the closure-based scheduler it referred
+        // to is gone, but the reasoning above is unchanged -- deferred effects never fire
+        // on a clone that is discarded before Tick().)
         static ActiveStatus CloneStatus(ActiveStatus s) => new ActiveStatus(s.Name, s.ExpiresAtTick, s.Value, s.Side, s.SourceGadgetId);
 
         static Unit CloneUnit(Unit src) => new Unit

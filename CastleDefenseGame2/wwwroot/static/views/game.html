@@ -1,6 +1,35 @@
 <link rel="stylesheet" href="./static/views/view-styles/game.css">
 
 <div id="game" class="ui-screen">
+    <!-- Shown while the OTHER player is missing and the server has frozen the game. It
+         covers the whole screen and takes pointer events, so the HUD underneath cannot be
+         clicked -- the hub drops actions from a paused game anyway, and a button that
+         silently does nothing is worse than one that cannot be reached. -->
+    <div id="pause-overlay" class="hidden">
+        <div class="pause-box">
+            <!-- The two construction signs flank the title. src is filled in by game.js from
+                 the asset loader rather than hardcoded here, so they are already decoded when
+                 the overlay appears -- this thing is raised at the exact moment the network
+                 is misbehaving, which is the worst moment to start fetching an image. -->
+            <div class="pause-title-row">
+                <img class="pause-icon" alt="">
+                <h2 id="pause-title">OPPONENT DISCONNECTED</h2>
+                <img class="pause-icon flipped" alt="">
+            </div>
+            <p id="pause-subtitle">GAME PAUSED &mdash; WAITING FOR THEM TO RECONNECT</p>
+            <p class="pause-countdown"><span id="pause-timer">60</span>s</p>
+            <p class="pause-note" id="pause-note">IF THEY DO NOT RETURN, YOU CAN CLAIM THE WIN</p>
+            <!-- Appears at 60s. The win is OFFERED, never taken automatically: waiting for a
+                 friend to get their connection back is a perfectly reasonable thing to want,
+                 and a game that ends itself takes that choice away. -->
+            <button id="btnClaimVictory" class="hidden">Claim Win</button>
+        </div>
+    </div>
+
+    <!-- Pre-game countdown. Sits above the field and below the pause overlay; purely
+         decorative, so it never takes pointer events. -->
+    <div id="countdown-overlay"><span id="countdown-text"></span></div>
+
     <div id="game-hud">
         <div id="hud-top">
             <div class="spectator-label" id="hud-top-label" style="display:none;">P1</div>

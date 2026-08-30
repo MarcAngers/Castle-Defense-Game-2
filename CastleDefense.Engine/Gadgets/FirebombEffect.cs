@@ -12,6 +12,9 @@ namespace CastleDefense.Engine.Gadgets
             _def = def;
         }
 
+        /// <summary>The FireHazard it drops has no side check -- it burns whoever stands in it.</summary>
+        public bool HarmsAllies => true;
+
         public void Execute(GameEngine engine, int side, int position)
         {
             engine.TriggerGadgetAnimation(_def.Id, side, position);

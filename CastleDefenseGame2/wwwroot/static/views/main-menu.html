@@ -1,10 +1,25 @@
 <div id="main-menu" class="ui-screen">   
     <div>
-        <h1>CASTLE DEFENSE</h1>
+        <!-- One span per word so the intro can drop them in one at a time. The spans are
+             inline-block (see global-styles.css) and the whitespace between them is what
+             keeps the word spacing, so do not collapse these onto one line. -->
+        <h1>
+            <span class="title-word">SUPER</span>
+            <span class="title-word">BATTLE</span>
+            <span class="title-word">PETS</span>
+            <br>
+            <span class="title-word" id="title-two">2</span>
+        </h1>
         <button id="btnSingleplayer">Singleplayer</button>
         <button id="btnMultiplayer">Multiplayer</button>
+        <!-- Hidden from the menu for now. The click handlers in view-logic/main-menu.js
+             are still wired up and guarded, so uncommenting these three lines is all it
+             takes to bring the buttons back. -->
+        <!--
         <button id="btnTrainingLeague">Acceptance Test</button>
         <button id="btnPractice">Practice</button>
+        <button id="btnDefenceWatch">Watch Bots</button>
+        -->
         <div>
             <button id="btnCollection">Collection</button>
         </div>

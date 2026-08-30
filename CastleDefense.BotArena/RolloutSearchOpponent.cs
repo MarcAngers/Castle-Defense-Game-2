@@ -42,7 +42,11 @@ namespace CastleDefense.BotArena
                                      bool suppressDefenceGadget = false,
                                      GadgetSuppression gadgetSuppression = GadgetSuppression.None,
                                      bool useUpgradeMacro = false,
-                                     double upgradeMargin = double.NaN)
+                                     double upgradeMargin = double.NaN,
+                                     int earlySpendGuardMinInvest = 0,
+                                     int earlyGadgetGuardMinInvest = 0,
+                                     bool reactiveOpeningGate = false,
+                                     int idleDecisionInterval = 0)
             : base(side, decisionInterval, horizon, rolloutsPerAction, seed,
                    usePrior, overrideMargin, useMacro, usePressMacro,
                    maxDecisionMs, maxParallelism, asyncDecisions: false,
@@ -59,7 +63,11 @@ namespace CastleDefense.BotArena
                    deepCommitTicks: deepCommitTicks, staleTicks: staleTicks,
                    suppressDefenceGadget: suppressDefenceGadget,
                    gadgetSuppression: gadgetSuppression,
-                   useUpgradeMacro: useUpgradeMacro, upgradeMargin: upgradeMargin)
+                   useUpgradeMacro: useUpgradeMacro, upgradeMargin: upgradeMargin,
+                   earlySpendGuardMinInvest: earlySpendGuardMinInvest,
+                   earlyGadgetGuardMinInvest: earlyGadgetGuardMinInvest,
+                   reactiveOpeningGate: reactiveOpeningGate,
+                   idleDecisionInterval: idleDecisionInterval)
         {
         }
     }
@@ -111,6 +119,16 @@ namespace CastleDefense.BotArena
             double macroRandomRate = 0.0;
             bool macroRandomAffordable = false;
             // STAGE 1b. Off by default -- the control arm must be the shipped bot.
+            string fixedLoadout = null;
+            int earlyGuard = 0;
+            int earlyGadgetGuard = 0;
+            bool reactiveOpening = false;
+            // 0 = off. Ticks between searches while the board is quiet -- see
+            // RolloutSearchBot.DeferForQuietBoard.
+            int idleInterval = 0;
+            // Time-to-terminal-state evaluator terms. 0 = off (deployed behaviour).
+            float tArmaWeight = 0f, tDeathWeight = 0f;
+            bool noArmy = false;
             bool deepMacro = false; int deepPlayouts = 2; int deepCommitTicks = 225;
             // ASYNC STALENESS. The live bot acts on state as old as its own thinking
             // time; this benchmark has always decided and acted on the same tick, so
@@ -170,6 +188,21 @@ namespace CastleDefense.BotArena
                             "off-cast" => GadgetSuppression.OffenceCasting,
                             var o => throw new ArgumentException($"unknown --sup part '{o}' (def-cand|def-cast|off-cand|off-cast)"),
                         };
+                else if (args[i] == "--early-guard" && i + 1 < args.Length) earlyGuard = int.Parse(args[++i]);
+                // Matches singleplayer's shipped earlyGadgetGuardMinInvest: 1.
+                else if (args[i] == "--early-gadget-guard" && i + 1 < args.Length) earlyGadgetGuard = int.Parse(args[++i]);
+                // Matches singleplayer's shipped reactiveOpeningGate: true.
+                else if (args[i] == "--reactive-opening") reactiveOpening = true;
+                else if (args[i] == "--idle-interval" && i + 1 < args.Length) idleInterval = int.Parse(args[++i]);
+                else if (args[i] == "--tarma-weight" && i + 1 < args.Length) tArmaWeight = float.Parse(args[++i]);
+                else if (args[i] == "--tdeath-weight" && i + 1 < args.Length) tDeathWeight = float.Parse(args[++i]);
+                else if (args[i] == "--no-army") noArmy = true;
+                // Pins BOTH sides to one loadout, e.g. --fixed-loadout White,nuke,reinforcements.
+                // Default behaviour rolls team+gadgets independently per side per game, so every
+                // headline number this harness has ever produced is an average over the whole
+                // 128x128 loadout space. Pinning answers a different question: how the change
+                // performs in ONE matchup, which is what a human's live-play observation is.
+                else if (args[i] == "--fixed-loadout" && i + 1 < args.Length) fixedLoadout = args[++i];
                 else if (args[i] == "--deep-macro") deepMacro = true;
                 else if (args[i] == "--deep-playouts" && i + 1 < args.Length) deepPlayouts = int.Parse(args[++i]);
                 else if (args[i] == "--deep-commit-ticks" && i + 1 < args.Length) deepCommitTicks = int.Parse(args[++i]);
@@ -223,6 +256,9 @@ namespace CastleDefense.BotArena
                               $"eval={(linearEval ? "LINEAR (pre-audit)" : refitEval ? "LOGISTIC REFIT (2026-08-05)" : "logistic (deployed)")}");
             if (useUpgradeMacro)
                 Console.WriteLine($"              GADGET-UPGRADE MACRO on, margin {(double.IsNaN(upgradeMargin) ? "= macro margin" : upgradeMargin.ToString())}");
+            if (idleInterval > 0)
+                Console.WriteLine($"              ADAPTIVE CADENCE: search every {idleInterval} ticks " +
+                                  $"({idleInterval / 30.0:F1}s) while the board is quiet, {interval} otherwise");
             if (suppression != GadgetSuppression.None)
                 Console.WriteLine($"              GADGET SUPPRESSION: {suppression}");
             if (noDefGadget)
@@ -239,6 +275,21 @@ namespace CastleDefense.BotArena
             Console.WriteLine($"              rollout policy: own={ownRollout}, opponent={oppRollout}" +
                               $"{(ownRollout == RolloutPolicyKind.Saving || oppRollout == RolloutPolicyKind.Saving ? $", saveCommit={saveCommit}" : "")}");
             Console.WriteLine($"              {threads} threads on {Environment.ProcessorCount} logical cores\n");
+
+            GameState.LogitWeightTArma = tArmaWeight;
+            GameState.LogitWeightTDeath = tDeathWeight;
+            GameState.UseArmyTerm = !noArmy;
+            if (tArmaWeight != 0f || tDeathWeight != 0f || noArmy)
+            {
+                float sum = (noArmy ? 0f : GameState.LogitWeightArmy) + GameState.LogitWeightHp
+                          + GameState.LogitWeightIncome + GameState.LogitWeightMoney
+                          + GameState.LogitWeightGadget + GameState.LogitWeightRepair
+                          + tArmaWeight + tDeathWeight;
+                Console.WriteLine($"              TIME FEATURES: t_arma weight {tArmaWeight}, t_death weight {tDeathWeight}, "
+                                + $"army term {(noArmy ? "OFF" : "on")}");
+                Console.WriteLine($"                             money share {GameState.LogitWeightMoney / sum:F3} "
+                                + $"(deployed 0.154; the inverted-U peak, and BELOW it is unsampled)");
+            }
 
             RolloutSearchOpponent.UseLinearEval = linearEval;
             RolloutSearchOpponent.UseRefitEval  = refitEval;
@@ -265,6 +316,17 @@ namespace CastleDefense.BotArena
             // setups are drawn deterministically first. Drawing from a shared Random
             // inside parallel workers would make results depend on thread scheduling, and
             // an unreproducible benchmark is worth very little (see the ladder).
+            TeamColour? pinTeam = null; string pinOff = null, pinDef = null;
+            if (!string.IsNullOrWhiteSpace(fixedLoadout))
+            {
+                var f = fixedLoadout.Split(',');
+                if (f.Length != 3) { Console.WriteLine("--fixed-loadout needs Team,offense,defense"); return; }
+                pinTeam = Enum.Parse<TeamColour>(f[0].Trim(), true);
+                pinOff = f[1].Trim(); pinDef = f[2].Trim();
+                Console.WriteLine($"[search-test] SEARCH BOT pinned to {pinTeam}/{pinOff}/{pinDef}; "
+                                + "opponent keeps its random loadout draw.");
+            }
+
             var rng = new Random(seed);
             var setups = new (int gameSeed, int timeSkip, bool searchIsP1, TeamColour map,
                               TeamColour teamA, string offA, string defA,
@@ -272,10 +334,26 @@ namespace CastleDefense.BotArena
             for (int g = 0; g < games; g++)
             {
                 int ts = headstart ? Math.Max(rng.Next(-8, 9), 0) : 0;
-                setups[g] = (rng.Next(), ts, g % 2 == 0,
-                             teams[rng.Next(teams.Length)],
-                             teams[rng.Next(teams.Length)], offense[rng.Next(offense.Length)], defense[rng.Next(defense.Length)],
-                             teams[rng.Next(teams.Length)], offense[rng.Next(offense.Length)], defense[rng.Next(defense.Length)]);
+                // Draw every roll unconditionally so the RNG stream -- and therefore the game
+                // seeds, seat assignment and maps -- is IDENTICAL whether or not the loadout is
+                // pinned. Overwriting afterwards keeps a pinned run paired with an unpinned one
+                // on everything except the loadout.
+                var mapRoll = teams[rng.Next(teams.Length)];
+                var tA = teams[rng.Next(teams.Length)]; var oA = offense[rng.Next(offense.Length)]; var dA = defense[rng.Next(defense.Length)];
+                var tB = teams[rng.Next(teams.Length)]; var oB = offense[rng.Next(offense.Length)]; var dB = defense[rng.Next(defense.Length)];
+                // Pin ONLY the search bot's own side; the opponent keeps its random draw.
+                // Pinning both sides was wrong twice over: it answers "how does this loadout do
+                // against ITSELF" rather than "against the field", and it manufactures a
+                // near-mirror, where the outcome is largely fixed by the seat and the effective
+                // sample size collapses (a pinned Green/snipe/speed run returned exactly
+                // 30W/30L with seats alternating -- seat-determined, carrying no information).
+                if (pinTeam.HasValue)
+                {
+                    bool searchIsP1 = g % 2 == 0;
+                    if (searchIsP1) { tA = pinTeam.Value; oA = pinOff; dA = pinDef; }
+                    else            { tB = pinTeam.Value; oB = pinOff; dB = pinDef; }
+                }
+                setups[g] = (rng.Next(), ts, g % 2 == 0, mapRoll, tA, oA, dA, tB, oB, dB);
             }
 
             var results = new (bool win, bool draw, bool timeLimit, long gameTicks, long wallMs,
@@ -326,7 +404,15 @@ namespace CastleDefense.BotArena
                                                          macroRandomRate, macroRandomAffordable,
                                                          deepMacro, deepPlayouts, deepCommitTicks,
                                                          staleTicks, noDefGadget, suppression,
-                                                         useUpgradeMacro, upgradeMargin);
+                                                         useUpgradeMacro, upgradeMargin,
+                                                         // NAMED from here on. These three are all
+                                                         // ints in adjacent positions, so a positional
+                                                         // call binds silently to the wrong one -- which
+                                                         // it did on the first attempt at this edit.
+                                                         earlySpendGuardMinInvest: earlyGuard,
+                                                         earlyGadgetGuardMinInvest: earlyGadgetGuard,
+                                                         reactiveOpeningGate: reactiveOpening,
+                                                         idleDecisionInterval: idleInterval);
                 var heuristic = new HeuristicBotAdapter(s.searchIsP1 ? 2 : 1);
 
                 var gameSw = Stopwatch.StartNew();

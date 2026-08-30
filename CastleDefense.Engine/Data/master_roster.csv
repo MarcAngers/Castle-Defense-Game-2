@@ -2,9 +2,9 @@ Team,Tier,ID,Name,Price,Health,Damage,AttackSpeed,DPS,Speed,Width,Height,Descrip
 black,1,evilminnow,evilminnow,2,5,4,2,8,10,50,50,"Like a normal minnow, but evil"
 black,2,evildoggo,evildoggo,3,8,4,3.2,12.8,8,50,50,"Like doggo, but corrupted by an evil force of black magic."
 black,3,eevil,eevil,13,26,8,4.2,33.6,14,50,50,"Like an eel, but evil. Hilarious."
-black,4,evilnom,evilnom,25,82,23,1.808695652,41.6,13,50,50,NOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOM
+black,4,weirdo,weirdo,25,82,23,1.808695652,41.6,13,50,50,"No one knows what it is or where it comes from... All of this unit's stats are randomly generated every time it spawns!"
 black,5,evilbirdo,evilbirdo,64,253,67,1.552238806,104,13,50,50,"Like a bird, but evil"
-black,6,weirdo,weirdo,338,1102,384,0.9,345.6,12,100,100,No one knows what it is or where it comes from... This character will cost a random amount of money based on how much money you currently have (minimum of $2) All of the units stats (including damage type) are randomly generated based on how much money is spent on it.
+black,6,evilnom,evilnom,338,1102,384,0.9,345.6,12,50,50,NOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOMNOM
 black,7,gorillo,gorillo,1183,6710,2210,0.4966515837,1097.6,4,75,75,The evil henchmen of the evil realm. They are strong and unmoving in their goal to serve their leader.
 black,8,evilguy,evilguy,14040,84240,31055,0.5,15527.5,2,200,200,The leader and creator of all the evil characters. His evilness knows no bounds.
 blue,1,fishy,fishy,3,9,3,2.4,7.2,9,50,50,It's a fish...

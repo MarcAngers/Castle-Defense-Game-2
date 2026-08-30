@@ -1,8 +1,12 @@
 import { showScreen } from '../../../src/router.js';
 import loader from '../../../src/asset-loader.js';
 import connection from '../../../src/game-connection.js';
+import meander from '../../../src/menu-meander.js';
 
 export default async function initUnitInfo() {
+    // Same scene as Collection, so this keeps the existing wanderers rather than respawning.
+    meander.start('collection');
+
     let selectedTeam = connection.selectedTeam;
     let currentUnitIndex = 0; // NEW: Track which unit we are looking at!
 
@@ -37,6 +41,13 @@ export default async function initUnitInfo() {
             imgSrc = typeof imageSource === 'string' ? imageSource : imageSource.src;
         }
 
+        // A "?" on the stats this unit rolls on every spawn, so the roster's BASE values
+        // are not read as a promise. Only health, damage and speed are rolled -- price,
+        // tier and attack speed are exact, and marking the price uncertain would re-assert
+        // the "costs a random amount" claim this unit's description used to make and no
+        // longer does.
+        const rolled = loader.isRandomStatUnit(unit.id ?? unit.name) ? '?' : '';
+
         // 3. Inject the HTML card
         characterContainer.innerHTML = `
             <div class="collection-card">
@@ -44,9 +55,9 @@ export default async function initUnitInfo() {
                 <img src="${imgSrc}" class="collection-image" draggable="false">
                 <div class="collection-stats">
                     <span><strong>Price:</strong> <span style='color: #FFFF00'>$${unit.price}</span></span>
-                    <span class='stat'><strong>HP:</strong> ${unit.health} <img src="${loader.assets.tooltips.heart.src}" alt="HP"></span>
-                    <span class='stat'><strong>DMG:</strong> ${unit.damage} <img src="${loader.assets.tooltips.sword.src}" alt="DMG"></span>
-                    <span class='stat'><strong>SPD:</strong>${unit.speed} <img src="${loader.assets.tooltips.boot.src}" alt="SPD"></span>
+                    <span class='stat'><strong>HP:</strong> ${unit.health}${rolled} <img src="${loader.assets.tooltips.heart.src}" alt="HP"></span>
+                    <span class='stat'><strong>DMG:</strong> ${unit.damage}${rolled} <img src="${loader.assets.tooltips.sword.src}" alt="DMG"></span>
+                    <span class='stat'><strong>SPD:</strong>${unit.speed}${rolled} <img src="${loader.assets.tooltips.boot.src}" alt="SPD"></span>
                     <span class='stat'><strong>Tier:</strong> ${unit.tier}</span>
                     <span class='stat'><strong>ATK SPD:</strong> ${Number(unit.attackspeed).toFixed(2)}</span>
                 </div>
