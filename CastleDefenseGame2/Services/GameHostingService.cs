@@ -710,7 +710,7 @@ namespace CastleDefense.Api.Services
                         if (msLeft > 0)
                         {
                             await _hubContext.Clients.Group(gameId).SendAsync("PreGame", (int)msLeft);
-                            await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", engine._state);
+                            await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", GameStateWire.From(engine._state));
                             continue;   // not stepped
                         }
 
@@ -928,12 +928,12 @@ namespace CastleDefense.Api.Services
                                 engine._state.GameMode, opponentDescription, endReason);
                         }
 
-                        await _hubContext.Clients.Group(gameId).SendAsync("GameOver", engine._state);
+                        await _hubContext.Clients.Group(gameId).SendAsync("GameOver", GameStateWire.From(engine._state));
                         _activeGames.TryRemove(gameId, out _);
                     }
                     else
                     {
-                        await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", engine._state);
+                        await _hubContext.Clients.Group(gameId).SendAsync("GameStateUpdate", GameStateWire.From(engine._state));
                     }
                     }
                     catch (Exception ex)
