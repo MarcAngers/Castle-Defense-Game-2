@@ -1,6 +1,48 @@
 import { showScreen } from './router.js';
 import loader from './asset-loader.js';
 
+// --- WIRE FORMAT -----------------------------------------------------------------------
+//
+// The server does not send its GameState objects any more. It sends the trimmed shape
+// defined by CastleDefenseGame2/Services/GameStateWire.cs, in which every unit is a bare
+// positional ARRAY rather than an object -- the fourteen JSON keys cost more per unit than
+// the values they labelled, and a busy tick carries up to 158 units. Full state went from
+// 613 KB/s per viewer to 146 KB/s (180 MB to 43 MB over a five-minute game), which is the
+// difference between a game that is playable on cellular data and one that is not.
+//
+// THE ORDER BELOW IS THE CONTRACT, and its other half is UnitWireConverter.Write in
+// GameStateWire.cs. The two lists must match exactly; a field added to one and not the
+// other shifts everything after it by one slot. Nothing else in the client knows about any
+// of this -- expandState puts the long property names back before latestState is assigned,
+// so view.js, visual-unit.js, end-game-show.js and game.js are untouched.
+const UNIT_FIELDS = [
+    'instanceId', 'definitionId', 'side', 'tier',
+    'position', 'yPosition', 'width', 'height', 'visualScale',
+    'currentHealth', 'maxHealth', 'currentShield', 'attackCooldown',
+    // 'statuses' is the last slot and is handled separately: it arrives as an array of
+    // bare NAMES (or null, the common case), and the client expects objects with a .name.
+];
+
+function expandUnit(packed) {
+    const unit = {};
+    for (let i = 0; i < UNIT_FIELDS.length; i++) unit[UNIT_FIELDS[i]] = packed[i];
+    const names = packed[UNIT_FIELDS.length];
+    // Always an array, never null: view.js checks .length and end-game-show.js clears it
+    // by assignment, so both need a real array to be there.
+    unit.statuses = names ? names.map(name => ({ name })) : [];
+    return unit;
+}
+
+// Tolerant of a state that has already been expanded, or has no units at all, so the
+// GameJoined / GameStateUpdate / GameOver handlers can all route through it unconditionally
+// -- including for a lobby state whose game has not started.
+function expandState(state) {
+    if (!state || !Array.isArray(state.units)) return state;
+    if (state.units.length > 0 && !Array.isArray(state.units[0])) return state;
+    state.units = state.units.map(expandUnit);
+    return state;
+}
+
 class GameConnection {
     constructor() {
         // API Configuration
@@ -82,7 +124,7 @@ class GameConnection {
 
         this.connection.on("GameJoined", (side, state) => {
             this.mySide = side;
-            this.latestState = state;
+            this.latestState = expandState(state);
             // League and Acceptance Test both skip loadout selection, so read the
             // server-assigned gadgets from state. This is not cosmetic: game.js binds
             // the three gadget buttons and their targeting to selectedLoadout, so
@@ -120,7 +162,7 @@ class GameConnection {
         });
 
         this.connection.on("GameStateUpdate", (state) => {
-            this.latestState = state;
+            this.latestState = expandState(state);
         });
 
         this.connection.on("GameStarted", (preGameMs) => {
@@ -221,7 +263,7 @@ class GameConnection {
         });
 
         this.connection.on("GameOver", (state) => {
-            this.latestState = state;
+            this.latestState = expandState(state);
             this.winnerSide = state.winnerSide;   // 0 on a draw
             this.gameOver = true;
             this.paused = false;

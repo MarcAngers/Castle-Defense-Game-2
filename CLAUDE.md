@@ -110,6 +110,56 @@ ASP.NET Core (CastleDefenseGame2)
   → GameEngine          (shared with training — same C# logic)
 ```
 
+### The browser wire format is NOT GameState
+
+Added 2026-08-30. The loop broadcasts state to every client 30 times a second, and it used
+to serialise the ENGINE's objects — every public field of every unit, most of which cannot
+change (Width, Damage, Range, AttackSpeed, Weight, AttackType…), plus a Description string
+and a serialised IGadgetEffect on each of the six GadgetDefinitions. It now sends
+`GameStateWire` (`CastleDefenseGame2/Services/GameStateWire.cs`). Measured over 1,710
+sampled ticks across three complete HeuristicBot games:
+
+| | per tick | per viewer | 5-min game |
+|---|---|---|---|
+| engine state | 17,222 B | 505 KB/s | 148 MB |
+| GameStateWire | 4,356 B | 128 KB/s | 37 MB |
+
+**3.95x average, 6.49x at peak** (185,967 B → 28,663 B) — and peak is the number that
+matters, because that is a busy field on a phone.
+
+This is a hosting-cost change and a playability change at once. **Egress is the only
+resource this game uses in quantity**: a whole game costs 0.14% of a CPU core, and even the
+search bot at horizon 1600 single-threaded is 15% of one core, so the bill is bandwidth.
+148 MB per game is also simply not playable on cellular data.
+
+**Units are packed POSITIONALLY** — a bare JSON array, no keys. They are the only part that
+scales with the battle (37 on an average tick, 158 at peak), and their fourteen key names
+cost more per unit than the values. **The ordering is a two-sided contract**:
+`UnitWireConverter.Write` in GameStateWire.cs, and `UNIT_FIELDS` in
+`wwwroot/src/game-connection.js`. Change one without the other and every field after the
+edit shifts by one slot. `expandState` puts the long names back at the single seam where
+state arrives, so view.js, visual-unit.js, end-game-show.js and game.js are untouched and
+know nothing about any of this.
+
+**The trade is a hand-maintained allowlist.** Adding a field to GameState, PlayerState or
+Unit no longer makes it visible to the client — it has to be added to GameStateWire too.
+A new client feature that reads a state field and gets `undefined` is this.
+
+Two things fell out of it: `PlayerState.ConnectionId` was being handed to the OPPONENT every
+tick (the rejoin note below explains why anything on PlayerState is — the token is kept off
+it for exactly this reason; the connection id had been missed), and `GET /api/games/{id}`
+was returning the raw state to anyone who knew a game id.
+
+**Compression is not available and was checked, not assumed.** gzip on the raw state
+measures 6.2x, but permessage-deflate is reachable only through
+`WebSocketAcceptContext.DangerousEnableCompression`, which applies to the raw WebSocket
+middleware — SignalR accepts its own socket, and the whole of
+`Http.Connections.WebSocketOptions` is `CloseTimeout` and `SubProtocolSelector`.
+
+Remaining levers, in order: the six GadgetDefinitions (~857 B/tick, constant except on
+upgrade — not cached client-side because a client that missed an upgrade would misprice a
+button with no visible symptom), then delta encoding against the previous tick.
+
 ### C# Engine Layer (`CastleDefense.Engine`)
 
 This is the core shared library used by both the web game and the training simulation. Key classes:

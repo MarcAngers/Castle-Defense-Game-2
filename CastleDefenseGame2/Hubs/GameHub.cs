@@ -89,7 +89,7 @@ namespace CastleDefense.Api.Hubs
                 }
 
                 await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-                await Clients.Caller.SendAsync("GameJoined", 0, game._state);
+                await Clients.Caller.SendAsync("GameJoined", 0, GameStateWire.From(game._state));
                 _gameService.StartGame(gameId);
                 return;
             }
@@ -129,7 +129,7 @@ namespace CastleDefense.Api.Hubs
                 }
 
                 await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-                await Clients.Caller.SendAsync("GameJoined", 0, game._state);
+                await Clients.Caller.SendAsync("GameJoined", 0, GameStateWire.From(game._state));
                 _gameService.StartGame(gameId);
                 return;
             }
@@ -192,7 +192,7 @@ namespace CastleDefense.Api.Hubs
                 }
 
                 await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-                await Clients.Caller.SendAsync("GameJoined", 1, game._state);
+                await Clients.Caller.SendAsync("GameJoined", 1, GameStateWire.From(game._state));
                 await IssueSessionAsync(gameId, 1);
                 _gameService.StartGame(gameId);
                 return;
@@ -231,7 +231,7 @@ namespace CastleDefense.Api.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
 
             // Send initial State
-            await Clients.Caller.SendAsync("GameJoined", side, game._state);
+            await Clients.Caller.SendAsync("GameJoined", side, GameStateWire.From(game._state));
 
             // Only a real seat gets a rejoin token. side == 0 here means the game was
             // already full and this caller is a spectator, who has nothing to come back to.
@@ -351,7 +351,7 @@ namespace CastleDefense.Api.Hubs
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-            await Clients.Caller.SendAsync("GameJoined", 1, game._state);
+            await Clients.Caller.SendAsync("GameJoined", 1, GameStateWire.From(game._state));
             await IssueSessionAsync(gameId, 1);
             _gameService.StartGame(gameId);
         }
@@ -462,7 +462,7 @@ namespace CastleDefense.Api.Hubs
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, gameId);
-            await Clients.Caller.SendAsync("GameJoined", side, game._state);
+            await Clients.Caller.SendAsync("GameJoined", side, GameStateWire.From(game._state));
             await Clients.Caller.SendAsync("SessionToken", gameId, side, token,
                                            ReconnectService.ClaimAfterSeconds);
             // 0: a rejoining player does not replay the intro. If the game happens to

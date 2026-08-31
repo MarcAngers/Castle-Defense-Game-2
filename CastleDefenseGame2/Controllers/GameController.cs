@@ -38,7 +38,10 @@ namespace CastleDefense.Api.Controllers
                 return NotFound("Game not found");
             }
 
-            return Ok(engine._state);
+            // Same wire shape the SignalR clients get. Nothing in wwwroot calls this
+            // endpoint -- it is a debug view -- but returning the raw engine state handed
+            // anyone who knew a game id both players' ConnectionIds. See GameStateWire.
+            return Ok(GameStateWire.From(engine._state));
         }
 
         [HttpGet("all")]
