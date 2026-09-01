@@ -638,11 +638,17 @@ namespace CastleDefense.Engine.Models
                     myTeam = team;
             }
 
+            // A unit is buyable only if the player can afford it AND has a charge left.
+            // Charges were added 2026-09-01; before that, money was the only gate and a
+            // policy could pour one unit onto the field as fast as it could decide. This
+            // line is what makes that impossible for bots too, so it is a real behaviour
+            // change for every policy -- see the note in CLAUDE.md.
             for (int i = 0; i < myTeam.Roster.Count; i++)
             {
-                if (me.Money < myTeam.Roster[i].Cost)
+                var u = myTeam.Roster[i];
+                if (me.Money < u.Cost || !me.HasUnitCharge(u.Id))
                 {
-                    mask[myTeam.Roster[i].Tier] = 0;
+                    mask[u.Tier] = 0;
                 }
             }
 

@@ -24,7 +24,14 @@ builder.Services.AddSingleton<AIBrain>(new AIBrain(modelPath));
 // source directory) survives build cleanup, so recordings now live there instead.
 // Interim fix only: this is still just loose files/SQLite next to the repo, not a real
 // datastore -- recorded game data should eventually move to a proper database.
-string dbPath = Path.Combine(builder.Environment.ContentRootPath, "recordings", "game_records.db");
+// The recordings ROOT is configurable so an agent testing a feature does not write games
+// into Marc's human play record -- see RecordingPaths for the full reasoning. The replay
+// files and this database must move together, which is why both read the same helper.
+string recordingsRoot = RecordingPaths.Root(builder.Configuration, builder.Environment.ContentRootPath);
+string dbPath = Path.Combine(recordingsRoot, "game_records.db");
+Directory.CreateDirectory(recordingsRoot);
+if (RecordingPaths.IsRedirected(builder.Configuration))
+    Console.WriteLine($"[Recordings] REDIRECTED to {recordingsRoot} -- these games stay out of the human corpus.");
 builder.Services.AddSingleton(new GameDatabase(dbPath));
 
 // Add CORS (Crucial for WebGL/Web clients)

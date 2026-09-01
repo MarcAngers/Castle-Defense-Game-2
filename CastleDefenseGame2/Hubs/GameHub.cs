@@ -603,6 +603,30 @@ namespace CastleDefense.Api.Hubs
             });
         }
 
+        public void UpgradeAutoSpawn(string gameId)
+        {
+            var game = _gameService.GetGame(gameId);
+            if (game == null) return;
+
+            // Identify which player is calling
+            int side = 0;
+            if (game._state.Player1.ConnectionId == Context.ConnectionId) side = 1;
+            else if (game._state.Player2.ConnectionId == Context.ConnectionId) side = 2;
+
+            if (side == 0) return; // Spectators can't buy upgrades
+
+            // A PAUSED GAME MUST DROP ACTIONS, not bank them -- see Repair for the full
+            // reasoning. Same for the pre-game window.
+            if (_reconnect.IsPaused(gameId)) return;
+            if (_gameService.IsPreGame(gameId)) return;
+
+            // THREAD SAFETY: We do NOT modify State here. We queue it.
+            game.EnqueueAction(() =>
+            {
+                game.UpgradeAutoSpawn(side);
+            });
+        }
+
         public void UseGadget(string gameId, string gadgetId, float position)
         {
             var game = _gameService.GetGame(gameId);

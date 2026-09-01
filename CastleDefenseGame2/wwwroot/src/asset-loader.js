@@ -36,6 +36,11 @@ class AssetLoader {
 
         // 4. Load unique assets once
         await this.loadImage('buildings', 'dead-castle', '../assets/buildings/dead-castle.png');
+        // The auto-spawner's four animation frames. Team-independent, like dead-castle, so
+        // they load once here rather than per-colour: 1/2 are the idle conveyor loop and
+        // 3/4 are the same loop with the lever pulled. See View.drawAutoSpawner.
+        for (let i = 1; i <= 4; i++)
+            await this.loadImage('buildings', `auto-spawner${i}`, `../assets/buildings/auto-spawner${i}.png`);
         await this.loadImage('wall', 'wall', '../assets/units/wall.png');
         await this.loadImage('wall_2', 'wall_2', '../assets/units/wall_2.png');
         await this.loadImage('wall_3', 'wall_3', '../assets/units/wall_3.png');

@@ -28,10 +28,18 @@ button {
     bottom: 0;
     width: 14vw;
     height: 25vh;
+    /* A flex column rather than a per-button height percentage: the buttons then divide
+       the stack evenly however many there are. This was 50% each when INVEST and +HP were
+       the only two, so adding the auto-spawner overflowed the box by half a button. */
+    display: flex;
+    flex-direction: column;
 }
 .upgrade-btn {
     width: 100%;
-    height: 50%;
+    flex: 1 1 0;
+    /* Without this a long label refuses to shrink below its content height and pushes the
+       stack past 25vh on a short landscape-phone viewport. */
+    min-height: 0;
 }
 .upgrade-btn:disabled {
     filter: grayscale(100%) brightness(60%);
@@ -147,6 +155,30 @@ button {
 .btnGadget:disabled {
     filter: grayscale(100%) brightness(60%);
     cursor: not-allowed;
+}
+
+/* The same shrinking cooldown wash on the unit icons. Units gained charges on
+   2026-09-01: five per unit, one back per second, and running out puts that unit on
+   cooldown exactly like a gadget. Deliberately the identical rule and colour as
+   .btnGadget::after -- the two are the same idea and should not look like two ideas.
+
+   The overlay hangs off .character rather than the wrapper because the wrapper also holds
+   the price label and the tooltip, and neither should be washed out. */
+.character {
+    position: relative;
+    overflow: hidden;
+}
+.character::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: var(--cooldown-pct, 0%);
+    background-color: rgba(0, 0, 0, 0.75);
+    pointer-events: none;
+    transition: height 0.1s linear;
+    z-index: 4;
 }
 
 /* --- GADGET BUTTON XP BARS --- */

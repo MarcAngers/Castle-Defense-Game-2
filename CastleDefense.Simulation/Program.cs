@@ -208,6 +208,18 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--unit-charge-check")
+            {
+                UnitChargeCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--auto-spawn-check")
+            {
+                AutoSpawnCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-format-check")
             {
                 ReplayFormatCheck.Run(args.Skip(1).ToArray());
@@ -1621,7 +1633,12 @@ namespace CastleDefense.Simulation
         public static readonly string[] ActionLabels = new[]
         {
             "wait", "spawnT1", "spawnT2", "spawnT3", "spawnT4", "spawnT5", "spawnT6", "spawnT7", "spawnT8",
-            "invest", "repair", "offenseGadget", "defenseGadget", "sigGadget"
+            "invest", "repair", "offenseGadget", "defenseGadget", "sigGadget",
+            // Index 14. Not in the action mask (no policy can pick it) but humans can, and
+            // it IS recorded -- without a bucket here an auto-spawn purchase counted toward
+            // totalNonWait while landing in no row, silently deflating every other
+            // percentage in the table.
+            "autoSpawn"
         };
 
         static void AnalyzeActionDistribution(string replayDir, bool bothPlayersHuman)
@@ -1640,7 +1657,7 @@ namespace CastleDefense.Simulation
             }
             Console.WriteLine($"[Actions] Analysing {files.Length} replay(s) in {replayDir} (human side(s): {(bothPlayersHuman ? "P1+P2" : "P1 only")})\n");
 
-            long[] counts = new long[14];
+            long[] counts = new long[ActionLabels.Length];
             long totalNonWait = 0;
             long investAvail = 0, investOther = 0;
             int gamesUsed = 0;

@@ -589,6 +589,9 @@ class GameConnection {
     repair = () => {
         this.connection.invoke("Repair", this.currentGameId);
     }
+    upgradeAutoSpawn = () => {
+        this.connection.invoke("UpgradeAutoSpawn", this.currentGameId);
+    }
 
     useGadget = (gadgetId, position) => {
         this.connection.invoke("UseGadget", this.currentGameId, gadgetId, position);

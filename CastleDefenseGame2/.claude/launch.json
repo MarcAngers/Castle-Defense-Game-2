@@ -4,7 +4,13 @@
     {
       "name": "castledefense-web",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--urls", "http://localhost:5168"],
+      "runtimeArgs": [
+        "run",
+        "--urls",
+        "http://localhost:5168",
+        "--",
+        "--RecordingsDir=recordings-agent"
+      ],
       "port": 5168
     }
   ]

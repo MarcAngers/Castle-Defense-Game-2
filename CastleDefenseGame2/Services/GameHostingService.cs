@@ -106,7 +106,12 @@ namespace CastleDefense.Api.Services
             _reconnect    = reconnect;
             // See the comment on dbPath in Program.cs -- recordings live under
             // ContentRootPath, not bin/, so a build cleanup can't destroy them.
-            _replayDir    = Path.Combine(env.ContentRootPath, "recordings");
+            //
+            // SAME HELPER AS THE DATABASE, deliberately: if only one of the two honoured
+            // the redirect, an agent's games would be half-separated -- files in their own
+            // folder but rows still in game_records.db, which is where every win-rate query
+            // looks. See RecordingPaths.
+            _replayDir    = RecordingPaths.Root(config, env.ContentRootPath);
             _gameVersion  = config["GameVersion"] ?? "v1.0";
 
             string leagueDir = Path.Combine(AppContext.BaseDirectory, "league_models");

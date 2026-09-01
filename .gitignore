@@ -428,7 +428,14 @@ FodyWeavers.xsd
 *.msp
 
 # Python Virtual Environments
+#
+# NOTE: these rules do NOT untrack anything already committed. ai_env was added to git
+# before/despite this rule and is still tracked on some branches, which is why a push can
+# be rejected for torch_cpu.dll (252 MB, over GitHub's 100 MB limit) even though the venv
+# is listed here. Untracking needs `git rm -r --cached`, and removing it from a branch that
+# was already pushed needs a history rewrite.
 venv/
+.venv/
 .env/
 env/
 ai_env/
@@ -438,8 +445,29 @@ __pycache__/
 *.pyc
 
 # Machine Learning Models
+#
+# Training output -- checkpoints, GA runs, archived models -- is regenerable and stays out.
 *.zip
 *.onnx
+
+# ...EXCEPT the models the game actually loads. All three locations are declared build
+# inputs in the csproj files, so a fresh clone that lacks them builds but ships no AI:
+# singleplayer falls back with no opponent model, and Training League / Practice find no
+# league models at all. ~22MB over 15 files, largest 1.8MB.
+#
+#   AI_Models        -- the singleplayer opponent (CastleDefenseGame2.csproj)
+#   league_models    -- Training League and Practice opponents (CastleDefenseGame2.csproj)
+#   Data/AI          -- export_onnx.py's target, copied to every output dir (Engine.csproj)
+#
+# The .onnx.data companions do not exist today but are referenced by both csproj files;
+# they are external-weight sidecars ONNX emits for very large models, so they are
+# un-ignored here too rather than being a trap for whoever first exports one.
+!CastleDefenseGame2/AI_Models/*.onnx
+!CastleDefenseGame2/AI_Models/*.onnx.data
+!CastleDefenseGame2/league_models/*.onnx
+!CastleDefenseGame2/league_models/*.onnx.data
+!CastleDefense.Engine/Data/AI/*.onnx
+!CastleDefense.Engine/Data/AI/*.onnx.data
 
 # C# Build Artifacts
 bin/
@@ -448,6 +476,9 @@ obj/
 # Recorded games (interim local storage -- see comment on dbPath in
 # CastleDefenseGame2/Program.cs; not meant to be checked into git)
 CastleDefenseGame2/recordings/
+# Games played by an agent testing a feature, routed here by --RecordingsDir so they never
+# reach the human play record. See CastleDefenseGame2/Services/RecordingPaths.cs.
+CastleDefenseGame2/recordings-agent/
 # ── Regenerable analysis output ──────────────────────────────────────────────
 # All of this is produced by BotArena/Simulation modes or the Python scorers and
 # can be rebuilt on demand. Some of it is large (human_eval.csv is 27MB,
