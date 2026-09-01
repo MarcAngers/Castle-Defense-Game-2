@@ -445,8 +445,29 @@ __pycache__/
 *.pyc
 
 # Machine Learning Models
+#
+# Training output -- checkpoints, GA runs, archived models -- is regenerable and stays out.
 *.zip
 *.onnx
+
+# ...EXCEPT the models the game actually loads. All three locations are declared build
+# inputs in the csproj files, so a fresh clone that lacks them builds but ships no AI:
+# singleplayer falls back with no opponent model, and Training League / Practice find no
+# league models at all. ~22MB over 15 files, largest 1.8MB.
+#
+#   AI_Models        -- the singleplayer opponent (CastleDefenseGame2.csproj)
+#   league_models    -- Training League and Practice opponents (CastleDefenseGame2.csproj)
+#   Data/AI          -- export_onnx.py's target, copied to every output dir (Engine.csproj)
+#
+# The .onnx.data companions do not exist today but are referenced by both csproj files;
+# they are external-weight sidecars ONNX emits for very large models, so they are
+# un-ignored here too rather than being a trap for whoever first exports one.
+!CastleDefenseGame2/AI_Models/*.onnx
+!CastleDefenseGame2/AI_Models/*.onnx.data
+!CastleDefenseGame2/league_models/*.onnx
+!CastleDefenseGame2/league_models/*.onnx.data
+!CastleDefense.Engine/Data/AI/*.onnx
+!CastleDefense.Engine/Data/AI/*.onnx.data
 
 # C# Build Artifacts
 bin/
