@@ -314,6 +314,7 @@ namespace CastleDefense.Engine
             _state.CurrentTick++;
 
             SpawnOpeningSquad();
+            TickAutoSpawn();
 
             // 1. Income & Cooldowns
             if (_state.CurrentTick % INCOME_FREQUENCY == 0)
@@ -415,6 +416,55 @@ namespace CastleDefense.Engine
             }
         }
 
+        /// <summary>
+        /// The auto-spawner's free unit stream, run once per tick for both sides.
+        ///
+        /// Spawned with ignoreCost for the same reasons as the opening squad: these are not
+        /// decisions anybody made, so they must stay out of the purchase counters, the money
+        /// spent totals and the action recording -- a replay that recorded them as spawn
+        /// actions would replay them twice on top of the ones the rebuilt state generates.
+        ///
+        /// Unlike the opening squad this is NOT keyed on absolute CurrentTick, so it runs
+        /// normally in the league mode's timeSkip games. It still produces nothing there,
+        /// because the time machine hands out free investments and repairs but deliberately
+        /// no auto-spawner levels (see PlayerState's timeSkip constructor).
+        /// </summary>
+        private void TickAutoSpawn()
+        {
+            // Sides written literally, not read from PlayerState.Side -- a plain
+            // `new GameState()` leaves Side at 0 and SpawnUnit maps anything that is not 1
+            // to player 2, which would hand both streams to the same player. Same trap the
+            // opening squad documents.
+            for (int side = 1; side <= 2; side++)
+            {
+                var player = side == 1 ? _state.Player1 : _state.Player2;
+                int perSecond = PlayerState.AutoSpawnUnitsPerSecond(player.AutoSpawnLevel);
+                if (perSecond <= 0) continue;
+
+                var roster = GameDataManager.Teams.Find(x => x.Color == player.Team)?.Roster;
+                if (roster == null || roster.Count == 0) continue;
+
+                player.AutoSpawnAccumulator += perSecond;
+
+                // A loop rather than a single check: at 6/s over 30 ticks one tick can only
+                // ever owe one unit, but that is a property of the current table, not of
+                // this code, and a future rate above the tick rate should not silently drop
+                // the remainder.
+                while (player.AutoSpawnAccumulator >= TICKS_PER_SECOND)
+                {
+                    player.AutoSpawnAccumulator -= TICKS_PER_SECOND;
+
+                    int tier = player.NextAutoSpawnTier();
+                    player.AutoSpawnCycleIndex++;
+                    // Tier N is Roster[N-1], the same mapping ApplyAction uses for the
+                    // unit-buy actions. A team whose roster is short simply skips.
+                    if (tier < 1 || tier > roster.Count) continue;
+
+                    SpawnUnit(side, roster[tier - 1].Id, ignoreCost: true);
+                }
+            }
+        }
+
         public bool SpawnUnit(int side, string unitId, bool ignoreCost = false, float position = -1, int yposition = -1)
         {
             // 1. Validation
@@ -429,8 +479,26 @@ namespace CastleDefense.Engine
             {
                 if (player.Money < def.Cost) return false;
 
+                // CHARGES GATE THE PURCHASE ALONGSIDE MONEY. Checked before anything is
+                // deducted, so a spawn refused for want of a charge costs the player nothing.
+                //
+                // INSIDE the !ignoreCost branch on purpose: the opening squad, the
+                // auto-spawner and the reinforcements gadget all spawn with ignoreCost, and
+                // none of them is a purchase the player made -- charging them would let a
+                // free unit eat the budget for a bought one.
+                if (!player.HasUnitCharge(unitId)) return false;
+
                 // 3. Deduct Cost
                 player.Money -= def.Cost;
+
+                // Spend the charge, and start the regeneration clock if it is not already
+                // running. Re-arming only when the timer is idle is what makes the wait a
+                // steady one second per charge rather than something that restarts every
+                // time the player buys again.
+                int remaining = player.GetUnitCharges(unitId) - 1;
+                player.UnitCharges[unitId] = remaining;
+                if (!player.CooldownTimers.TryGetValue(unitId, out long t) || t <= 0)
+                    player.CooldownTimers[unitId] = PlayerState.UnitChargeRegenMs / (1000 / TICKS_PER_SECOND);
 
                 // PURCHASE COUNTERS (diagnostic only, added 2026-08-07 for the Stage 0 macro
                 // decomposition). Incremented here rather than at the end of the method
@@ -650,6 +718,31 @@ namespace CastleDefense.Engine
             // Untargeted: the cascade picks its own positions. Passing the enemy castle
             // only gives the opening screen-darken animation somewhere sensible to anchor.
             def.GadgetEffect.Execute(this, side, side == 1 ? MAP_WIDTH : 0);
+        }
+
+        /// <summary>
+        /// Buys one auto-spawner level. Action 14 -- see the note in ApplyAction about why
+        /// that id exists but is not in the action mask.
+        /// </summary>
+        public bool UpgradeAutoSpawn(int side)
+        {
+            // 1. Validation
+            var player = side == 1 ? _state.Player1 : _state.Player2;
+
+            if (player.AutoSpawnLevel >= PlayerState.MaxAutoSpawnLevel) return false;
+            if (player.Money < player.AutoSpawnPrice) return false;
+
+            if (side == 1) LastActionP1 = 14; else LastActionP2 = 14;
+            if (side >= 1 && side <= 2) ActionsThisTick[side]++;
+
+            // 2. Deduct cost
+            player.Money -= player.AutoSpawnPrice;
+
+            // 3. Raise the level and the next price -- single source of truth is
+            // PlayerState.ApplyAutoSpawnStep.
+            player.ApplyAutoSpawnStep();
+
+            return true;
         }
 
         public bool Repair(int side)
@@ -1419,27 +1512,34 @@ namespace CastleDefense.Engine
 
         private void TickCooldowns(PlayerState player)
         {
-            // Tick unit cooldowns?
+            // UNIT CHARGE REGENERATION -- one charge per second per unit, up to
+            // PlayerState.UnitMaxCharges. The timer is armed by SpawnUnit when a charge is
+            // spent and re-arms itself here while the unit is still short, so a unit drained
+            // to zero refills over five seconds rather than all at once.
+            //
+            // REWRITTEN 2026-09-01. The previous version of this loop read
+            // UnitDefinition.MaxCharges/CooldownMs (the price-scaled formula) and was DEAD
+            // CODE regardless: nothing ever spent a charge or seeded the dictionaries, so
+            // CooldownTimers was permanently empty and the whole block never executed. It
+            // also did a SelectMany over every team's roster per key per tick to find the
+            // definition, which the flat rule removes the need for entirely.
             foreach (var key in player.CooldownTimers.Keys.ToList())
             {
-                if (player.CooldownTimers[key] > 0)
-                {
-                    player.CooldownTimers[key]--;
-                    if (player.CooldownTimers[key] <= 0)
-                    {
-                        var unitDef = GameDataManager.Teams.SelectMany(t => t.Roster).FirstOrDefault(u => u.Id == key);
-                        if (unitDef != null)
-                        {
-                            if (!player.UnitCharges.ContainsKey(key)) player.UnitCharges[key] = 0;
-                            if (player.UnitCharges[key] < unitDef.MaxCharges)
-                            {
-                                player.UnitCharges[key]++;
-                                if (player.UnitCharges[key] < unitDef.MaxCharges)
-                                    player.CooldownTimers[key] = unitDef.CooldownMs / (1000 / TICKS_PER_SECOND);
-                            }
-                        }
-                    }
-                }
+                if (player.CooldownTimers[key] <= 0) continue;
+
+                player.CooldownTimers[key]--;
+                if (player.CooldownTimers[key] > 0) continue;
+
+                int charges = player.GetUnitCharges(key);
+                if (charges >= PlayerState.UnitMaxCharges) continue;
+
+                charges++;
+                player.UnitCharges[key] = charges;
+
+                // Still short: go round again. Full: leave the timer at 0 so the entry stops
+                // being ticked and stops being sent to the client.
+                if (charges < PlayerState.UnitMaxCharges)
+                    player.CooldownTimers[key] = PlayerState.UnitChargeRegenMs / (1000 / TICKS_PER_SECOND);
             }
 
             // Tick gadget cooldowns
@@ -1600,6 +1700,22 @@ namespace CastleDefense.Engine
                     break;
                 case 10:
                     actionSucceeded = Repair(side);
+                    break;
+                case 14:
+                    // THE AUTO-SPAWNER IS REACHABLE HERE BUT IS NOT IN THE ACTION MASK.
+                    // GetActionMask still returns 14 slots (0..13), so no policy can select
+                    // this and every trained ONNX model, its observation vector and every
+                    // pinned bot-vs-bot benchmark are untouched by the feature existing.
+                    //
+                    // The id exists anyway because recordings store one action byte per
+                    // tick: without it, a human game in which the auto-spawner was bought
+                    // could not be replayed, and every tool that rebuilds a game by
+                    // resimulating actions would silently diverge from the real one.
+                    //
+                    // Giving bots the auto-spawner is a deliberate, separate change: it
+                    // means widening the mask and the policy head, which invalidates the
+                    // models.
+                    actionSucceeded = UpgradeAutoSpawn(side);
                     break;
                 case 11:
                     if (player.OffensiveGadget != null) actionSucceeded = UseGadget(side, player.OffensiveGadget.Id, -1);

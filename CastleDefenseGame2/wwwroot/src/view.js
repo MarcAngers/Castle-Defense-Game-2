@@ -12,6 +12,79 @@ import atmosphere from './atmosphere.js';
 // noted there.
 const SHADOW_FILTER = 'grayscale(100%) brightness(50%) contrast(140%)';
 
+// Does this device have a pointer that can hover -- i.e. a real cursor for an icon to sit
+// under? Cached as a live MediaQueryList rather than re-queried, because it is read inside
+// the draw loop; `.matches` updates itself if the pointer situation changes, so caching it
+// costs nothing in correctness. Deliberately the SAME query that gates the :hover rules in
+// global-styles.css and the unit tooltip in game.js, so all three agree on what a pointer is.
+const CAN_HOVER = window.matchMedia('(hover: hover)');
+
+// ── THE AUTO-SPAWNER ────────────────────────────────────────────────────────────────────
+//
+// A machine bolted to the side of each castle, drawn only once its upgrade has been bought.
+//
+// GEOMETRY IS SPECIFIED RELATIVE TO THE CASTLE'S BOTTOM-LEFT CORNER, in the artist's
+// cartesian convention (y UP), because that is how the art was authored and it is the only
+// frame in which "it lines up with the hole in the castle wall" is a stable statement. The
+// castle sprite is 200x200 and drawn at a fixed spot, so the conversion to canvas
+// coordinates (y DOWN) happens in exactly one place, in drawAutoSpawner.
+const AUTO_SPAWNER = {
+    SPRITE_W: 74,
+    SPRITE_H: 62,
+    CASTLE_SIZE: 200,
+    // Bottom-left of the machine, from the bottom-left of the castle. The machine is 74 wide
+    // starting at 151, so it deliberately overhangs the castle's 200px edge by 25px -- that
+    // overhang is the part that reads as "coming out of the side".
+    OFFSET_X: 151,
+    OFFSET_Y: 11,
+    // Bottom-left of the level NUMBER, from the bottom-left of the machine. Lands in the
+    // blank half of the white panel, directly under the "Lv." that is painted into the art.
+    NUM_X: 2,
+    NUM_Y: 15,
+    // 18px, matching every other number the game draws (View.drawNumber). Press Start 2P is
+    // very close to 1:1 -- measured in-browser, an 18px font renders a 17px-tall, 18px-wide
+    // digit -- so "18px high" and "18px font" are the same request here.
+    NUM_FONT_PX: 18,
+    // How much room the number actually has. The white panel runs from x=1 to x=34 at the
+    // top of the number band but narrows to x=28 at the bottom, so measuring from NUM_X the
+    // safe width is 26. One digit is 18 and fits; TWO are 36 and do not, and levels 10-19
+    // are more than half the ladder -- so a two-digit level is scaled down to fit rather
+    // than allowed to spill off the panel onto the conveyor.
+    NUM_MAX_W: 26,
+
+    // Conveyor loop: frames swap this often. Fast enough to read as running machinery,
+    // slow enough that the belt segments are legible rather than a blur.
+    BELT_MS: 110,
+    // How long the lever stays pulled (frames 3/4) after a spawn. Short on purpose: the
+    // throw should SNAP back, and at 220 it read as the lever resting in the pulled
+    // position rather than being yanked.
+    LEVER_MS: 110,
+
+    // Vibration. Grows with level so a maxed machine visibly shakes itself apart while a
+    // level 1 one only hums. Two incommensurate frequencies so the motion never settles
+    // into a readable back-and-forth -- that reads as a buzz rather than a wobble.
+    //
+    // THE RAMP IS CUBIC, NOT LINEAR. Linear made the low levels far too violent for what
+    // is meant to be a single small conveyor: half the ladder sat above half the maximum
+    // amplitude. Cubing keeps the top end exactly where it is -- which is the part worth
+    // keeping -- while collapsing the bottom, so level 1 is a hum you have to look for and
+    // the shaking only becomes obvious in the last third.
+    SHAKE_MIN: 0.12,   // px at level 1
+    SHAKE_MAX: 2.6,    // px at max level, unchanged
+    SHAKE_CURVE: 3,    // 1 = linear; higher pushes the growth later up the ladder
+    SHAKE_HZ_X: 13,
+    SHAKE_HZ_Y: 17,
+};
+
+// Units per second at each auto-spawner level -- index 0 is "not bought".
+// MIRRORS PlayerState.AutoSpawnCycles, where the rate IS the cycle length. Duplicated here
+// rather than sent over the wire because the client only needs it to pace an animation: the
+// lever pull is timed to the real spawn RATE but is not phase-locked to the server's actual
+// spawn ticks, which would cost a wire field per player per tick to do properly and would
+// still be a frame or two out from what the player sees.
+const AUTO_SPAWNER_RATE = [0, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6];
+const MAX_AUTO_SPAWN_LEVEL = 19;
+
 class View {
     constructor() {
         this.visualUnits = {};
@@ -32,6 +105,16 @@ class View {
         // Decorative units drawn at the castles during the pre-game countdown. Set by the
         // game screen each frame; empty at every other time, including on every other screen.
         this.preGameSquad = [];
+
+        // Auto-spawner animation clocks, one per side. Kept on the view rather than derived
+        // from the game tick because these pace a LOOP the player watches, not a simulation
+        // step. The view is a single long-lived instance and nothing resets these between
+        // games, which is fine: they are three free-running counters with no dependence on
+        // game identity, so a stale value only shifts the belt phase by a frame.
+        this.autoSpawnAnim = {
+            1: { beltMs: 0, spawnMs: 0, leverMs: 0 },
+            2: { beltMs: 0, spawnMs: 0, leverMs: 0 },
+        };
 
         // Input State for Panning
         this.isDragging = false;
@@ -205,6 +288,14 @@ class View {
         // --- DRAW GADGET EFFECTS ---
         this.animationManager.draw(this.ctx, state);
         
+        // The auto-spawners, BEFORE the castles so the machine is embedded in the wall it is
+        // bolted to rather than pasted over it -- the overlapping half tucks behind the
+        // stonework and only the conveyor projects into the field. Safe for the readout:
+        // the castle sprite is barely 5% opaque across the machine's panel, so the "Lv."
+        // and the level number still read through. Same camera transform as the castles.
+        this.drawAutoSpawner(state.player1, 1, deltaTime);
+        this.drawAutoSpawner(state.player2, 2, deltaTime);
+
         // Draw Castles
         this.drawCastle(state.player1, 1); 
         this.drawCastle(state.player2, 2);
@@ -278,15 +369,32 @@ class View {
                 const baseId = this.gadgetManager.activeGadgetId.split('_')[0].toLowerCase();
                 const img = loader.assets.gadgets[this.activeGadgetId] || loader.assets.gadgets[baseId];            
             if (img) {
+                // WHERE THE ICON GOES depends on whether there is a cursor to follow.
+                //
+                // With a mouse, cursorLogicalX/Y track mousemove and the icon sits under the
+                // pointer, which is the whole idea. A touch screen has no pointer -- but a tap
+                // still emits a SYNTHETIC mousemove, so cursorLogical ends up wherever the
+                // player last happened to touch, which for an untargeted cast is the gadget
+                // button itself down in the HUD. The icon appeared there, in the corner, next
+                // to the button rather than out on the field. Worse before the first tap of a
+                // session: cursorLogical is still its initial 0,0, so the icon sat in the
+                // top-left corner of the screen.
+                //
+                // Centring is the right answer rather than a workaround, because an untargeted
+                // gadget HAS no position -- onClick sends 0 and the server ignores it. The icon
+                // is pure feedback meaning "this is armed, tap anywhere to cast", so it belongs
+                // where the player is already looking, not at an accident of their last tap.
+                //
+                // Targeted gadgets are deliberately NOT changed: their tap IS the aim, so the
+                // synthetic mousemove that sets crosshairWorldX is doing real work there.
+                const hasCursor = CAN_HOVER.matches;
+                const iconX = hasCursor ? this.gadgetManager.cursorLogicalX : this.logicalScreenWidth / 2;
+                const iconY = hasCursor ? this.gadgetManager.cursorLogicalY : this.logicalScreenHeight / 2;
+
                 this.ctx.save();
                 this.ctx.globalAlpha = 0.7; 
-                // Draw exactly centered on the raw logical screen coordinates
-                this.ctx.drawImage(
-                    img, 
-                    this.gadgetManager.cursorLogicalX - 25, 
-                    this.gadgetManager.cursorLogicalY - 25, 
-                    50, 50
-                );
+                // Draw exactly centered on the chosen logical screen coordinates
+                this.ctx.drawImage(img, iconX - 25, iconY - 25, 50, 50);
                 this.ctx.restore();
             }
         }
@@ -536,6 +644,124 @@ class View {
         }
     }
 
+    /// The auto-spawner bolted to a castle's flank: four-frame conveyor animation, a
+    /// level-scaled vibration, and the level number painted into the panel.
+    ///
+    /// FRAME PAIRS. 1/2 are the idle belt loop; 3/4 are the same loop with the lever pulled.
+    /// The machine runs 1<->2 continuously and swaps to 3<->4 for a moment each time it
+    /// produces a unit, so the lever visibly throws as something comes off the belt.
+    ///
+    /// THE LEVER IS RATE-MATCHED, NOT PHASE-LOCKED. It fires on a client clock running at
+    /// the level's real units-per-second, so the pull happens as often as a spawn really
+    /// happens, but not necessarily on the same tick. Phase-locking would mean sending the
+    /// engine's spawn accumulator every tick for both players, which is a per-tick wire cost
+    /// (the wire was deliberately trimmed 3.95x) for a difference of a frame or two.
+    drawAutoSpawner(playerState, side, deltaTime) {
+        if (!playerState) return;
+        const level = playerState.autoSpawnLevel | 0;
+        if (level <= 0) return;
+        // Nothing to bolt it to: the castle sprite is the ruin at this point.
+        if (playerState.castleHealth <= 0) return;
+
+        const A = AUTO_SPAWNER;
+        const anim = this.autoSpawnAnim[side];
+        if (!anim) return;
+
+        // --- advance the clocks -------------------------------------------------------
+        // deltaTime is clamped because a backgrounded tab returns with a huge delta, which
+        // would otherwise burn through hundreds of belt frames in one step.
+        const dt = Math.min(Math.max(deltaTime || 0, 0), 100);
+
+        anim.beltMs += dt;
+        const beltFrame = Math.floor(anim.beltMs / A.BELT_MS) % 2;   // 0 or 1
+
+        const rate = AUTO_SPAWNER_RATE[Math.min(level, MAX_AUTO_SPAWN_LEVEL)] || 0;
+        if (rate > 0) {
+            const period = 1000 / rate;
+            anim.spawnMs += dt;
+            if (anim.spawnMs >= period) {
+                // Modulo rather than reset to 0, so a rate faster than the frame rate does
+                // not silently drop pulls.
+                anim.spawnMs %= period;
+                anim.leverMs = A.LEVER_MS;
+            }
+        }
+        if (anim.leverMs > 0) anim.leverMs = Math.max(0, anim.leverMs - dt);
+
+        // 1/2 while idle, 3/4 while the lever is thrown.
+        const frameIndex = (anim.leverMs > 0 ? 3 : 1) + beltFrame;
+        const img = loader.assets.buildings[`auto-spawner${frameIndex}`];
+        if (!img) return;
+
+        // --- vibration ----------------------------------------------------------------
+        // Amplitude ramps linearly from SHAKE_MIN at level 1 to SHAKE_MAX at max level.
+        const t = MAX_AUTO_SPAWN_LEVEL > 1 ? (level - 1) / (MAX_AUTO_SPAWN_LEVEL - 1) : 0;
+        const amp = A.SHAKE_MIN + Math.pow(t, A.SHAKE_CURVE) * (A.SHAKE_MAX - A.SHAKE_MIN);
+        const now = this.currentTime / 1000;
+        const dx = amp * Math.sin(now * 2 * Math.PI * A.SHAKE_HZ_X);
+        const dy = amp * Math.sin(now * 2 * Math.PI * A.SHAKE_HZ_Y + 1.3);
+
+        // --- geometry ------------------------------------------------------------------
+        // The castle occupies local (0,0)-(200,200) with y DOWN; drawCastle puts that box at
+        // (50,200) for P1 and mirrors it about (MAP_WIDTH-50) for P2. Converting the artist's
+        // y-UP offsets once, here, is what keeps the two seats from drifting apart.
+        const localX = A.OFFSET_X;
+        const localY = A.CASTLE_SIZE - A.OFFSET_Y - A.SPRITE_H;
+        const castleTopY = 200;
+
+        this.ctx.save();
+        if (side === 1) {
+            this.ctx.translate(50, castleTopY);
+        } else {
+            // Same mirror drawCastle uses, so the machine comes out of the flank that faces
+            // the battlefield on both sides.
+            this.ctx.translate(this.MAP_WIDTH - 50, castleTopY);
+            this.ctx.scale(-1, 1);
+        }
+        this.ctx.drawImage(img, localX + dx, localY + dy);
+        this.ctx.restore();
+
+        // --- the level number ----------------------------------------------------------
+        // DRAWN OUTSIDE THE MIRROR ON PURPOSE. Inside it, P2's number would render
+        // back-to-front. Only its POSITION is mirrored; the glyphs are not.
+        const numLocalX = localX + A.NUM_X;
+        const numBaselineLocalY = A.CASTLE_SIZE - A.OFFSET_Y - A.NUM_Y;
+
+        const text = `${level}`;
+
+        this.ctx.save();
+        // Fit the number to the panel: full size when it fits (every level below 10), scaled
+        // down only when it does not. Chosen over a permanently smaller font so the common
+        // case is drawn at the size the art was made for.
+        this.ctx.font = `${A.NUM_FONT_PX}px "Press Start 2P", cursive`;
+        const naturalW = this.ctx.measureText(text).width;
+        if (naturalW > A.NUM_MAX_W) {
+            const fitted = Math.max(1, Math.floor(A.NUM_FONT_PX * A.NUM_MAX_W / naturalW));
+            this.ctx.font = `${fitted}px "Press Start 2P", cursive`;
+        }
+        this.ctx.textBaseline = 'alphabetic';
+        this.ctx.fillStyle = 'black';
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 3;
+
+        let numX;
+        if (side === 1) {
+            this.ctx.textAlign = 'left';
+            numX = 50 + numLocalX + dx;
+        } else {
+            // The panel is on the machine's other side once mirrored, so the text box hangs
+            // to the LEFT of the mirrored anchor -- right-aligning puts it there without
+            // having to measure the string.
+            this.ctx.textAlign = 'right';
+            numX = (this.MAP_WIDTH - 50) - numLocalX - dx;
+        }
+        const numY = castleTopY + numBaselineLocalY + dy;
+
+        this.ctx.strokeText(text, numX, numY);
+        this.ctx.fillText(text, numX, numY);
+        this.ctx.restore();
+    }
+
     drawNumber(x, y, tier, colour) {
         if (tier) {
             this.ctx.save();
@@ -659,6 +885,10 @@ class View {
         // 1. Calculate the fractional scale
         this.scale = windowHeight / logicalHeight;
         this.logicalScreenWidth = windowWidth / this.scale;
+        // Stored alongside the width because the untargeted gadget icon needs the centre of
+        // the logical canvas, and deriving it from canvas.height/scale reads as arithmetic
+        // rather than as "the middle of the screen".
+        this.logicalScreenHeight = logicalHeight;
 
         // 2. Set the CANVAS Internal Resolution (The buffer size)
         // We match the window size exactly so the browser doesn't stretch anything via CSS

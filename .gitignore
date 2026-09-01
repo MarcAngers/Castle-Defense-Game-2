@@ -448,6 +448,9 @@ obj/
 # Recorded games (interim local storage -- see comment on dbPath in
 # CastleDefenseGame2/Program.cs; not meant to be checked into git)
 CastleDefenseGame2/recordings/
+# Games played by an agent testing a feature, routed here by --RecordingsDir so they never
+# reach the human play record. See CastleDefenseGame2/Services/RecordingPaths.cs.
+CastleDefenseGame2/recordings-agent/
 # ── Regenerable analysis output ──────────────────────────────────────────────
 # All of this is produced by BotArena/Simulation modes or the Python scorers and
 # can be rebuilt on demand. Some of it is large (human_eval.csv is 27MB,

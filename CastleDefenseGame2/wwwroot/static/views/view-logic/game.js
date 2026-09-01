@@ -264,6 +264,8 @@ function updateUI(state) {
     const btnRepair = document.getElementById('btnRepair');
     if (btnRepair) btnRepair.disabled = pState.money < pState.repairPrice;
 
+    updateAutoSpawnButton(pState);
+
     // --- Update Unit Affordability ---
     const characterElements = document.getElementsByClassName('character');
     Array.from(characterElements).forEach(charDiv => {
@@ -276,8 +278,21 @@ function updateUI(state) {
         // Note: Check how your JSON is formatted (price vs Price)
         const cost = stats.price || stats.Price; 
 
-        // Apply or remove the custom CSS class based purely on funds!
-        if (pState.money < cost) {
+        // CHARGES. Absent from the wire means "full and idle" -- the server only sends units
+        // that are actually short, so the common case is an empty object. Mirrors
+        // PlayerState.GetUnitCharges.
+        const charges = (pState.unitCharges && unitId in pState.unitCharges)
+            ? pState.unitCharges[unitId]
+            : MAX_UNIT_CHARGES;
+        const cdTicks = (pState.unitCooldowns && pState.unitCooldowns[unitId]) || 0;
+
+        // Same wash as the gadgets: the overlay is the fraction of the regen second still
+        // to run, so it drains to nothing exactly as the next charge lands.
+        const pct = cdTicks > 0 ? (cdTicks / UNIT_CHARGE_REGEN_TICKS) * 100 : 0;
+        charDiv.style.setProperty('--cooldown-pct', `${pct}%`);
+
+        // Grey out when broke OR out of charges -- the two reasons a click would be refused.
+        if (pState.money < cost || charges <= 0) {
             charDiv.classList.add('disabled');
         } else {
             charDiv.classList.remove('disabled');
@@ -371,6 +386,35 @@ function updateInvestButton(pState) {
     btn.classList.toggle('armageddon-ready', isArmageddon);
 }
 
+// Mirrors PlayerState.UnitMaxCharges and UnitChargeRegenMs. Units hold five charges and
+// regain one per second; the server sends ticks remaining, and there are 30 server ticks
+// to a second.
+const MAX_UNIT_CHARGES = 5;
+const UNIT_CHARGE_REGEN_TICKS = 30;
+
+// Mirrors PlayerState.MaxAutoSpawnLevel. At the top of the ladder the auto-spawner is
+// fully bought and the button reads "AUTO: MAX", the same shape the invest button uses
+// once ARMAGEDDON is spent.
+const MAX_AUTO_SPAWN_LEVEL = 19;
+
+function updateAutoSpawnButton(pState) {
+    const btn = document.getElementById('btnAutoSpawn');
+    const price = document.getElementById('auto-spawn-price');
+    if (!btn || !price) return;
+
+    // The label is FIXED TEXT in the markup, like +HP -- the current level is deliberately
+    // not shown. The three buttons in this stack read as one row of prices, and a caption
+    // that changed width every purchase was the odd one out.
+    if (pState.autoSpawnLevel >= MAX_AUTO_SPAWN_LEVEL) {
+        price.innerHTML = 'MAX';
+        btn.disabled = true;
+        return;
+    }
+
+    price.innerHTML = '$' + Math.ceil(pState.autoSpawnPrice);
+    btn.disabled = pState.money < pState.autoSpawnPrice;
+}
+
 function initShopUI(team) {
     if (connection.mySide == 1) {
         document.getElementById('hud-top').style.float = 'left';
@@ -387,6 +431,10 @@ function initShopUI(team) {
     });
     btnRepair.addEventListener('click', () => {
         connection.repair();
+    });
+    const btnAutoSpawn = document.getElementById('btnAutoSpawn');
+    if (btnAutoSpawn) btnAutoSpawn.addEventListener('click', () => {
+        connection.upgradeAutoSpawn();
     });
 
     document.getElementById('character-bar').style.backgroundColor = team;

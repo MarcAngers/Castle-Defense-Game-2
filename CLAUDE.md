@@ -182,7 +182,7 @@ This is the core shared library used by both the web game and the training simul
 actionable for savings decisions, and `InvestmentCount` is derivable from it plus
 income. Gadget cooldown timers are still absent from the state.
 
-**Action space (14 discrete):**
+**Action space (14 discrete, 0-13):**
 - 0: wait
 - 1–8: spawn unit of that tier
 - 9: invest (economy upgrade, increases income)
@@ -191,7 +191,18 @@ income. Gadget cooldown timers are still absent from the state.
 - 12: defensive gadget
 - 13: signature gadget
 
-Action masking blocks invalid actions (insufficient funds, gadget on cooldown, etc.).
+Action masking blocks invalid actions (insufficient funds, gadget on cooldown, UNIT OUT OF
+CHARGES since 2026-09-01, etc.).
+
+**Action 14 (auto-spawner) exists but is NOT in the action space.** `GetActionMask` still
+returns 14 slots, so no policy can select it and every trained model, its observation vector
+and every pinned bot-vs-bot benchmark are unaffected by the feature existing -- confirmed by
+`bot-checksum --games 24` returning the same hash with and without it. The id is reachable
+through `ApplyAction` anyway because recordings store one action byte per tick: without it a
+human game in which the auto-spawner was bought could not be replayed, and every tool that
+rebuilds a game by resimulating actions would silently diverge. Giving bots the auto-spawner
+is a deliberate, separate change -- it means widening the mask and the policy head, which
+invalidates the models.
 
 **Decision cadence differs between training and evaluation.** Training decides every
 **9 ticks** (`Simulation/Program.cs`, `for (int fi = 0; fi < 9; fi++)`). `AIModelOpponent`
@@ -740,6 +751,34 @@ fought, and counting it drags win rate, game length and earned investments towar
 a disconnection happens to look like. The human play record in this file
 (92.1% vs HeuristicBot, 84.3% vs SearchBot) is exactly the kind of number that would rot.
 
+### AN AGENT'S OWN GAMES MUST NOT ENTER THE HUMAN CORPUS
+
+`recordings/` is Marc's play record. `--divergence`, `--export-policy-table`,
+`--analyze-actions` and every human win-rate number read it BY PATH, and `game_records.db`
+sits in the same folder. A game played by an agent driving a browser to test a feature is
+indistinguishable from one of his: same `game_mode` (`sp`), same `opponent_type`, and it
+lands in the same folder and the same database. It then counts as one of his losses.
+
+**`--RecordingsDir` moves the whole recordings root**, replay files and database together
+(`RecordingPaths`, read by both `Program.cs` and `GameHostingService`). Half-separating them
+would be worse than not separating at all -- files in their own folder but rows still in
+`game_records.db`, which is where the win-rate queries actually look.
+
+`CastleDefenseGame2/.claude/launch.json` passes `--RecordingsDir=recordings-agent`, so any
+server started through the agent preview tooling is redirected and prints
+`[Recordings] REDIRECTED ...` at startup. Marc's own runs pass no flag and are unaffected.
+
+**Two traps, both hit while building this:**
+- **There are TWO `.claude/launch.json` files** -- one at the repo root and one in
+  `CastleDefenseGame2/`. The tooling reads the one under the working directory, which is
+  `CastleDefenseGame2/`. Editing the root copy alone does nothing.
+- **That config runs `dotnet run` without `-c`, i.e. Debug.** A `dotnet build` without
+  `-c Release` is what it picks up; building only Release (or only Debug) and testing the
+  other silently runs stale code.
+
+Check the startup line before playing anything. If it is absent, the games are going into
+the human corpus.
+
 ## The random-stat unit (Black tier 4, "weirdo")
 
 One unit does not read its stats off its roster row. Every time a `weirdo` spawns,
@@ -838,6 +877,159 @@ squad. The client's decorative crowd derives its count from the same tick rather
 local timer, so the units standing outside the castle empty onto the field exactly in step.
 
 **Starting money (BALANCE).** `PlayerState` now starts at **$10**, not $0.
+
+## Unit charges
+
+Added 2026-09-01, restoring a mechanic from the old version of the game. Every buyable unit
+holds up to **5 charges** and regains **one per second**; spending the last one puts that
+unit on cooldown until the next charge lands, exactly like a gadget, and the unit button
+gets the identical wash. The purpose is to stop mindless spamming -- money alone no longer
+gates how fast one unit can be poured onto the field.
+
+**ABSENT MEANS FULL.** `PlayerState.UnitCharges` only holds units that have been used, and
+`GetUnitCharges` treats a missing key as `UnitMaxCharges`. This is not an optimisation: a
+`PlayerState` does not know its `Team` when constructed (only the hub assigns it, and the
+timeSkip constructor never does), so there is no point at which a "seed every roster entry"
+loop would be correct for every caller. Lazy makes the live game, timeSkip, rollout clones
+and a bare `new GameState()` in a harness all correct with no initialisation step.
+
+**A FLAT RULE FOR EVERY UNIT.** `UnitDefinition.MaxCharges` / `CooldownMs` still carry the
+older price-scaled formula (`max(1, 25/price)` charges) which would give a $3 tier-1 eight
+charges and a $23,000 tier-8 exactly one. Those fields are NOT what the live rule reads.
+The regeneration loop in `TickCooldowns` used to read them and was dead code regardless --
+nothing ever spent a charge or seeded the dictionaries, so `CooldownTimers` was permanently
+empty and the block never executed.
+
+**Free spawns do not consume charges.** The check sits inside `SpawnUnit`'s `!ignoreCost`
+branch, so the opening squad, the auto-spawner and the reinforcements gadget are unaffected.
+
+**Enforced in three places that must agree:** `SpawnUnit` (refuses and spends),
+`TickCooldowns` (regenerates), `GetActionMask` (gates the policy). A mask that disagrees
+with `SpawnUnit` is the dangerous one -- the bot picks a unit it cannot buy, the purchase
+silently fails, and the decision is wasted with nothing in any log to say so. Guarded by
+`--unit-charge-check`, which also asserts free spawns and rollout-clone isolation.
+
+### This invalidates every bot-vs-bot benchmark taken before 2026-09-01
+
+Unlike the auto-spawner, this one changes the rules for POLICIES, not just for humans:
+`bot-checksum --games 24` moves from `817BC80B8A4AF4DC569F01844C73BB50` to
+`47EC146D660B0D721B4DC224D8ACB7F9`. Measured over the same 24 seeded games, HeuristicBot's
+unit purchases fall from **20,196 to 6,658** -- 101.9 to 35.4 units per 1000 ticks, a **67%
+reduction** -- while earned investments barely move (6.79 to 6.88), so the economy ladder is
+intact and the cut is specifically the spam.
+
+That the drop is so large is itself a finding: the per-unit cap allows 8 units/sec across a
+full roster, yet the bot fell to ~1.06/sec, which means it was pouring nearly everything
+into a SINGLE tier. That is the behaviour already recorded in the heuristic unit-selection
+notes, and this mechanic hits it directly.
+
+Trained ONNX models are not invalidated in shape -- the mask is still 14 wide and the
+observation vector is untouched -- but they were trained against a game where a tier could
+be bought every decision, so their effective strength is an open question until re-measured.
+
+## The auto-spawner
+
+Added 2026-08-31. A third economy upgrade in the bottom-left HUD stack, between INVEST and
++HP. Each level buys a faster and stronger **free** stream of units, spawned with
+`ignoreCost` exactly like the opening squad -- so they cost nothing beyond the upgrade and
+stay out of the action recording, the purchase counters and the money-spent totals.
+
+**19 levels.** The table lives in `PlayerState.AutoSpawnCycles`: one repeating tier pattern
+per level (level 5 is `[3,2,1]` = tier 3, then 2, then 1, then round again). **Units per
+second is the cycle LENGTH**, deliberately not a separate column -- the two are equal at
+every level, so the pattern repeats exactly once per second and deriving one from the other
+makes the invariant unbreakable.
+
+**Pricing walks the shared economy curve at a different scale.** `EconomyCurve` is now the
+single source of truth for `e^(0.0109x^3 + 0.0011x^2 + 0.4351x + 0.5268)`, used by invest,
+repair and the auto-spawner. Investing walks it one integer step per purchase; the
+auto-spawner starts at **x = 2.5 and steps 0.25**, with multiplier `(x*4 + 7)` against
+investing's `(x*4 + 8)`. That is what makes this ladder 19 rungs where investing is 8.
+Levels 17/18/19 are hardcoded (43614 / 100000 / 100000), same reasoning as investing's top
+two. Prices go through `WholeDollars` (ceiling) like every other price.
+
+**The cadence accumulator is an INTEGER counting ticks**, not a double counting fractions of
+a unit. Rates do not all divide the 30 Hz tick rate -- 4 units/s is one unit every 7.5 ticks
+-- so a modulo would deliver 4.29/s or 3.75/s. The first implementation accumulated
+`perSecond / TICKS_PER_SECOND` as a double and was measurably wrong: 1/30 added thirty times
+is 0.9999999999999999, so every level delivered one spawn fewer per cycle than the table
+promises (0.97/s where it wanted 1.00). Counting whole ticks is exact at every rate and
+sidesteps any float reproducibility question in code that feeds replay reconstruction and
+search rollouts.
+
+State lives on `PlayerState` (level, price, accumulator, cycle index) rather than
+`GameEngine`, because `GameEngine.Clone` is shallow and engine-side mutable state would be
+shared with every search rollout.
+
+**Guarded by `--auto-spawn-check`** (`CastleDefense.Simulation`), which measures cost, rate
+and tier order for all 19 levels against a copy of the design table transcribed
+independently of the implementation, by running the real tick loop.
+
+### The art
+
+Four frames in `assets/buildings/`, 74x62, team-independent and loaded once (like
+`dead-castle`). 1/2 are the idle conveyor loop; 3/4 are the same loop with the lever pulled.
+`View.drawAutoSpawner` runs 1<->2 continuously and swaps to 3<->4 for `LEVER_MS` (110ms)
+each time the machine produces a unit -- short on purpose, so the throw snaps back rather
+than reading as a lever resting in the pulled position.
+
+**Drawn BEFORE the castles**, so the overlapping half is embedded in the stonework and only
+the conveyor projects into the field. Safe for the readout: the castle sprite is under 5%
+opaque across the machine's panel.
+
+**The lever is RATE-matched, not phase-locked.** It fires on a client clock running at the
+level's real units-per-second (`AUTO_SPAWNER_RATE`, mirroring `PlayerState.AutoSpawnCycles`
+where the rate IS the cycle length), so pulls happen as often as spawns really happen but
+not necessarily on the same tick. Phase-locking would mean sending the engine's spawn
+accumulator every tick for both players -- a per-tick wire cost on a wire that was
+deliberately trimmed 3.95x -- to move the pull by a frame or two.
+
+**Geometry is authored from the castle's bottom-left corner, y UP**, because that is the
+frame in which "it lines up with the hole in the wall" is stable. The machine's bottom-left
+sits at (151, 11) and the level number's at (2, 15) from the machine's own bottom-left.
+Conversion to canvas coordinates (y DOWN) happens in exactly one place.
+
+**Vibration** ramps `SHAKE_MIN` (0.12px) at level 1 to `SHAKE_MAX` (2.6px) at 19, driven by
+two incommensurate frequencies so it reads as a buzz rather than a wobble. The curve is
+CUBIC (`SHAKE_CURVE`), not linear: linear put half the ladder above half the maximum
+amplitude, which was far too violent for one small conveyor. Cubing keeps the top end and
+collapses the bottom. The number shakes with the machine -- it is painted on it.
+
+**The number is drawn OUTSIDE the mirror transform.** Inside it, P2's digits would render
+back-to-front; only the POSITION is mirrored (right-aligned against the mirrored anchor),
+not the glyphs. It is 18px Press Start 2P, which measures ~17px tall and 18px wide per digit
+-- so a single digit fits the panel and TWO do not (the panel gives 26px from NUM_X). Levels
+10-19 are auto-scaled down to fit rather than allowed to spill onto the conveyor.
+
+**KNOWN COSMETIC ISSUE: "Lv." is painted into the sprite, so it mirrors with it** -- on P2
+the caption reads backwards while the number above which it sits reads forwards. Fixing it
+means either taking "Lv." out of the art and drawing it as text beside the number, or
+shipping a pre-reversed variant of the four frames for seat 2.
+
+### The max-level crash (fixed 2026-08-31, same day it shipped)
+
+Buying level 19 froze the buyer's client. `AutoSpawnPriceFor` returns `PositiveInfinity` for
+"no such level" and `ApplyAutoSpawnStep` asked it for level 20, storing infinity in
+`AutoSpawnPrice` -- a field serialised to both clients every tick. `System.Text.Json` cannot
+write a non-finite number, so the throw surfaced inside SignalR's per-connection write
+pipeline and aborted that one client while the server kept simulating; the player saw a
+freeze, then a rejoin that failed on malformed JSON, and the game was saved `abandoned`.
+
+**This is the second instance of the identical failure class** -- `wall_3` writing
+`float.PositiveInfinity` into `Unit.AttackCooldown` (commit 29d64bfe) was the first, and the
+rule adopted then was that nothing may write a non-finite value into serialisable state. The
+sentinel is now marked query-only at its source, the price is left untouched at the top of
+the ladder (matching ARMAGEDDON), and `--auto-spawn-check` section 6 walks the whole ladder
+and runs the real serialiser, so a third instance in this field fails the check.
+
+Confirmed from the recording rather than inferred: `E1B2E1` shows P1 with exactly 19
+auto-spawn actions and P2 with 18, `winner=0`, `end_reason=abandoned`.
+
+### This is a balance change and it is not yet in any benchmark
+
+Bots never buy it, so bot-vs-bot numbers are unchanged and still comparable. Any HUMAN game
+recorded from 2026-08-31 onward may contain it, which makes such games not comparable to the
+existing human play record.
 
 ### Every benchmark taken before 2026-08-26 is stale
 

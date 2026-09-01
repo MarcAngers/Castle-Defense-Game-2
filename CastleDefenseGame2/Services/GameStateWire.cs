@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
@@ -55,7 +55,9 @@ namespace CastleDefense.Api.Services
     ///     each player their opponent's connection id every tick. CLAUDE.md's rejoin note
     ///     already says anything on PlayerState is handed to the opponent, which is why the
     ///     rejoin TOKEN is kept off it; the connection id had simply been missed.
-    ///   - UnitCharges / CooldownTimers -- two dictionaries nothing in the client reads.
+    ///   - (UnitCharges / CooldownTimers WERE listed here as unread. They are sent again as
+///     of 2026-09-01, when unit charges became a real mechanic and the unit buttons grew
+///     the same cooldown wash the gadgets have. They are sent SPARSELY -- see PlayerWire.)
     ///   - Unit.CurrentSpeed, BaseSpeed, Damage, Range, AttackSpeed, Weight, PushForce,
     ///     EffectiveWeight, AttackType, ArmorType, PendingKnockback, LastKnockbackTick,
     ///     AttacksWithoutKnockback. The client draws from the roster CSV it already loads.
@@ -123,6 +125,22 @@ namespace CastleDefense.Api.Services
         public bool IsInvulnerable { get; init; }
         public double RepairPrice { get; init; }
         public int RepairCount { get; init; }
+        public int AutoSpawnLevel { get; init; }
+        public double AutoSpawnPrice { get; init; }
+
+        /// <summary>
+        /// Unit charges and their regeneration timers, for the cooldown wash on the unit
+        /// buttons.
+        ///
+        /// SENT SPARSELY: only units that are actually short of charges appear. A player who
+        /// has bought nothing sends two empty objects, and the common mid-game case is one or
+        /// two entries -- which matters because this file exists to keep the per-tick payload
+        /// small, and a dense version would carry sixteen roster entries per player forever.
+        /// The client treats a missing id as "full, no cooldown", mirroring
+        /// PlayerState.GetUnitCharges.
+        /// </summary>
+        public Dictionary<string, int> UnitCharges { get; init; }
+        public Dictionary<string, long> UnitCooldowns { get; init; }
         public GadgetWire OffensiveGadget { get; init; }
         public GadgetWire DefensiveGadget { get; init; }
         public GadgetWire SignatureGadget { get; init; }
@@ -149,6 +167,15 @@ namespace CastleDefense.Api.Services
                 IsInvulnerable = p.IsInvulnerable,
                 RepairPrice = p.RepairPrice,
                 RepairCount = p.RepairCount,
+                AutoSpawnLevel = p.AutoSpawnLevel,
+                AutoSpawnPrice = p.AutoSpawnPrice,
+                // Only what is not at rest -- see the note on the properties.
+                UnitCharges = p.UnitCharges
+                    .Where(kv => kv.Value < PlayerState.UnitMaxCharges)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value),
+                UnitCooldowns = p.CooldownTimers
+                    .Where(kv => kv.Value > 0)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value),
                 OffensiveGadget = GadgetWire.From(p.OffensiveGadget),
                 DefensiveGadget = GadgetWire.From(p.DefensiveGadget),
                 SignatureGadget = GadgetWire.From(p.SignatureGadget),
