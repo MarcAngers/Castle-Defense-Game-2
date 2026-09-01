@@ -428,7 +428,14 @@ FodyWeavers.xsd
 *.msp
 
 # Python Virtual Environments
+#
+# NOTE: these rules do NOT untrack anything already committed. ai_env was added to git
+# before/despite this rule and is still tracked on some branches, which is why a push can
+# be rejected for torch_cpu.dll (252 MB, over GitHub's 100 MB limit) even though the venv
+# is listed here. Untracking needs `git rm -r --cached`, and removing it from a branch that
+# was already pushed needs a history rewrite.
 venv/
+.venv/
 .env/
 env/
 ai_env/
