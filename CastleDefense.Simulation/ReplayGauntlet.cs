@@ -92,6 +92,8 @@ namespace CastleDefense.Simulation
             double spWiper = 0, spReactive = 0, spAttack = 0, spChip = 0;
             var wiperTiers = new long[9];
             var reactTiers = new long[9]; var atkTiers = new long[9];
+            var midByDom = new long[9];
+            double midCharge = 0, midAny = 0, midMatched = 0;
             double humanArmaSecs = 0, botArmaSecs = 0;
 
             for (int g = 0; g < games; g++)
@@ -193,11 +195,15 @@ namespace CastleDefense.Simulation
                 raceDeficit += bot.LastRaceDeficitSeconds;
                 spWiper += bot.SpendWiper; spReactive += bot.SpendReactive;
                 spAttack += bot.SpendAttack; spChip += bot.SpendChipBlock;
+                midCharge += bot.MidBuyViaChargeFallback;
+                midAny += bot.MidBuyViaAnyAffordable;
+                midMatched += bot.MidBuyViaMatchedOrOutclass;
                 for (int ti = 1; ti <= 8; ti++)
                 {
                     wiperTiers[ti] += bot.WiperTierCounts[ti];
                     reactTiers[ti] += bot.ReactiveTierCounts[ti];
                     atkTiers[ti] += bot.AttackTierCounts[ti];
+                    midByDom[ti] += bot.MidBuyByDominantTier[ti];
                 }
                 botOffensiveDecisions += bot.OffensiveSpendDecisions;
                 botHp += Pct(state.Player2);
@@ -236,6 +242,12 @@ namespace CastleDefense.Simulation
                     if (arr[ti] > 0) parts.Add($"T{ti} x{arr[ti] / n:F1}");
                 Console.WriteLine($"    {label,-8} picks by tier: {string.Join("  ", parts)}");
             }
+
+            var md = new List<string>();
+            for (int ti = 0; ti <= 8; ti++) if (midByDom[ti] > 0) md.Add($"dom{ti} x{midByDom[ti] / n:F1}");
+            Console.WriteLine($"    reactive T5+ buys, by DOMINANT ENEMY TIER at the time: {string.Join("  ", md)}");
+            Console.WriteLine($"    reactive T5+ buys, by ROUTE: matched/outclass {midMatched / n,5:F1}  " +
+                              $"charge-fallback {midCharge / n,5:F1}  any-affordable {midAny / n,5:F1}");
 
             Console.WriteLine($"  ECONOMY TRACKER (per game): offensive purchases HELD by the race gate " +
                               $"{raceHeld / n,7:F0}, hopeless-zone decisions {raceHopeless / n,6:F0}, " +

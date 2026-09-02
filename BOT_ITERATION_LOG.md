@@ -979,3 +979,58 @@ floor at 7 for nothing.
 stall stream should do. Chaff is 7.7% of spend and blocks anything, per the survival law. Two
 shapes: drop the floor when a stall stream is already holding, or exclude free-spawned units from
 `dominantEnemyTier`. The second is narrower; the first is closer to how he says he plays.
+
+## 25. What ACTUALLY sends the T5/T6 units: my own charge-aware fallback
+
+2026-09-02 · Marc pushed back twice, correctly. Item 24 blamed the tier floor, and he pointed out
+that cannot be it: if five tier-7 units set `dominantEnemyTier` to 7, the pools are floored at 7
+and the bot **cannot legally buy tier 6**. Something else is choosing them.
+
+Instrumented every reactive purchase of tier 5+ with the dominant tier at the time and the route
+the pick came through. Gauntlet vs 0240D8, n=30:
+
+```
+reactive T5+ buys, by DOMINANT ENEMY TIER: dom1 x2.0  dom2 x6.0  dom5 x2.0  dom7 x14.8
+reactive T5+ buys, by ROUTE: matched/outclass 3.0   charge-fallback 21.8   any-affordable 0.0
+```
+
+**21.8 of 24.8 mid/high-tier reactive buys — 88% — come from `ChargeAwareFallback`**, the change
+shipped as iteration 1. And 14.8 of them happen while the dominant tier IS 7, exactly the case
+Marc said the floor should have excluded.
+
+### The mechanism
+
+```csharp
+foreach (var def in roster)                 // <- THE WHOLE ROSTER
+{
+    if (def.Cost <= 0 || def.Cost > spendable) continue;
+    if (!me.HasUnitCharge(def.Id)) continue;
+    ...
+}
+```
+
+The fallback scans **the entire roster**. It does not carry the tier floor, the outclass rule, or
+any of the discipline the ranked pools encode — by design, since its job was only to avoid a
+silently failed purchase. So when the pools correctly pick eggo (T7) against a tier-7 threat and
+eggo is out of charges, the fallback re-picks across all eight tiers and lands on **bread ($338)**,
+because `ScoreUnit`'s `SurvivabilityMultiplier` crushes everything that gets one-shot by a 5,180
+damage attacker and bread is crushed least of the affordable options. Repeatedly: **15.5 breads a
+game, $5,239, 58% of reactive spend.**
+
+**Iteration 1 fixed a silent no-op and introduced a silent substitution.** It stopped the bot
+buying nothing; it did not stop it buying the wrong thing. The measurements that accepted it —
+units/sec up, idle money down, invests unmoved — are all still true, and none of them could have
+seen this, because a substituted purchase looks identical to an intended one in every counter.
+
+### The fix shape, for Marc's call
+
+The fallback should not be free to leave the tier band the pools chose. Two options:
+
+1. **Fall back within the same pool** — if the T7 pick is drained, take the next-best *tier 7+*
+   with a charge, and if there is none, buy nothing this decision. Minimal, keeps iteration 1's
+   benefit, removes the substitution.
+2. **Fall back to chaff** — if the intended unit is on cooldown, buy the cheapest body instead.
+   Closer to how Marc describes playing: the stall stream holds while the real answer recharges,
+   and chaff is 7.7% of spend.
+
+(2) is the more interesting hypothesis and matches the survival law; (1) is the conservative one.

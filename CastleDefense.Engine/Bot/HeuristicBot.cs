@@ -5831,7 +5831,12 @@ namespace CastleDefense.Engine.Bot
             var pick = matchedPick.def != null && outclassPick.def != null && outclassPick.score < matchedPick.score * 0.9
                 ? matchedPick
                 : (outclassPick.def != null ? outclassPick : matchedPick);
-            if (pick.def == null) pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+            bool viaAnyAffordable = false;
+            if (pick.def == null)
+            {
+                pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+                viaAnyAffordable = pick.def != null;
+            }
             if (pick.def == null) return;
 
             // --- POWER PICK (flag 9) -------------------------------------------------
@@ -5928,6 +5933,7 @@ namespace CastleDefense.Engine.Bot
             // Ranked by the SAME scorer that produced the original pick, so the fallback is
             // "the next thing this bot wanted" rather than a differently-motivated choice:
             // RawPower when the power pick or rich mode is in force, ScoreUnit otherwise.
+            bool viaChargeFallback = false;
             if (_settings.ChargeAwareFallback && !me.HasUnitCharge(pick.def.Id))
             {
                 bool byPower = useRawPower
@@ -5955,6 +5961,7 @@ namespace CastleDefense.Engine.Bot
 
                 pick = (best, bestScore);
                 ChargeFallbacks++;
+                viaChargeFallback = true;
             }
 
             // --- AUTO-SPAWNER AS A SUBSTITUTE PURCHASE (flag 2b) ---------------------
@@ -6029,7 +6036,18 @@ namespace CastleDefense.Engine.Bot
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
-                if (preferDefense) { SpendReactive += pick.def.Cost; if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ReactiveTierCounts[pick.def.Tier]++; }
+                if (preferDefense)
+                {
+                    SpendReactive += pick.def.Cost;
+                    if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ReactiveTierCounts[pick.def.Tier]++;
+                    if (pick.def.Tier >= 5)
+                    {
+                        MidBuyByDominantTier[Math.Clamp(dominantEnemyTier, 0, 9)]++;
+                        if (viaChargeFallback) MidBuyViaChargeFallback++;
+                        else if (viaAnyAffordable) MidBuyViaAnyAffordable++;
+                        else MidBuyViaMatchedOrOutclass++;
+                    }
+                }
                 else { SpendAttack += pick.def.Cost; if (pick.def.Tier >= 1 && pick.def.Tier <= 8) AttackTierCounts[pick.def.Tier]++; }
                 LastUnitsPurchased++;
                 if (!preferDefense && !killerInstinct)
@@ -6527,6 +6545,17 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Dominant enemy tier last seen by the reactive scorer. Diagnostic.</summary>
         public int LastDominantEnemyTier { get; private set; }
+
+        /// <summary>
+        /// For every reactive purchase of TIER 5 OR ABOVE: what the dominant enemy tier was at
+        /// the time, and by which route the pick was made. Marc's question -- if five tier-7
+        /// units set the floor to 7, the bot cannot legally buy tier 6, so something other than
+        /// the floor must be choosing them.
+        /// </summary>
+        public long[] MidBuyByDominantTier { get; } = new long[10];
+        public long MidBuyViaChargeFallback { get; private set; }
+        public long MidBuyViaAnyAffordable { get; private set; }
+        public long MidBuyViaMatchedOrOutclass { get; private set; }
 
         /// <summary>Decisions where the single-chipper clock authorised a match. Diagnostic.</summary>
         public long ChipperMatchDecisions { get; private set; }
