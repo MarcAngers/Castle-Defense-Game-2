@@ -24,7 +24,7 @@ Conventions:
 
 ## 1. Charge-aware purchase fallback — `ChargeAwareFallback`
 
-**Status:** queued (first)
+**Status:** DONE — iteration 1, KEPT. Flag `ChargeAwareFallback`.
 
 **Mechanism.** Every filter in `SpendOnUnits`' pick pipeline (`RankPool`, `outclassPick`,
 `matchedPick`, `anyAffordable`, `PowerPickAffordable`, `TechEscalation`) tests
@@ -58,9 +58,9 @@ contain it because the *spend* caps are unchanged — only the *choice* is. Watc
 
 ---
 
-## 2. Buy the auto-spawner — `AutoSpawnerLadder`
+## 2. Buy the auto-spawner — `BuyAutoSpawner`
 
-**Status:** queued
+**Status:** implemented, awaiting measurement
 
 **Mechanism.** No bot in the project can buy it. Action 14 is absent from `GetActionMask`,
 and `RolloutSearchBot` builds candidates from `a = 8..1` plus `{9,10,11,12,13}`. But
@@ -95,7 +95,7 @@ deliberately conservative — cap at a low level (say ≤ 5, $860 cumulative) so
 
 ## 3. Block a lone chipping unit — `BlockSingleChipper`
 
-**Status:** queued (Marc's own finding, 2026-09-01)
+**Status:** implemented, measuring (Marc's own finding, 2026-09-01)
 
 **Mechanism.** A single enemy unit parked on the castle is refused by all four defence
 paths simultaneously:
@@ -131,9 +131,9 @@ the permanent-reactive-spend pathology that this file's history documents repeat
 
 ---
 
-## 4. Farm cheap gadget upgrades — `GadgetXpFarming`
+## 4. Farm cheap gadget upgrades — `CheapGadgetUpgrades`
 
-**Status:** queued
+**Status:** implemented, awaiting measurement
 
 **Mechanism.** `AddGadgetXp` grants a flat **100 XP per cast**, for every gadget,
 regardless of effect, damage dealt or value destroyed. Upgrades trigger at
@@ -212,3 +212,19 @@ Carried forward from `CLAUDE.md` and the in-file history so no session burns a r
 - **Distilling search into the rollout policy.** Probe A: search is insensitive to rollout
   strength (non-monotone; override rate pinned at 8.2 %). The headroom is the option space.
 - **Proactive early repair.** Net loss every ordering tried.
+
+---
+
+## Workflow notes (learned while running the loop)
+
+- **A running benchmark locks `CastleDefense.Engine.dll`.** `dotnet build` fails with
+  MSB3027 while an arena process is alive. Write code during a background run, but build
+  only after it finishes — or build to a separate output directory.
+- **`ladder --only HeuristicBot`, not `--only Heuristic`.** The latter also matches the four
+  `SavingHeuristic@…` contenders and quadruples the run.
+- **Several rungs are at a 100% ceiling** (DoNothing, Tier1Spam, BalancedHuman), so the
+  OVERALL figure compresses real movement. The `HeuristicBot` rung is the informative one:
+  it is a direct head-to-head against the committed reference on identical specs.
+- **Throughput matters here beyond wall clock.** `HeuristicBot` is `RolloutSearchBot`'s
+  rollout policy for both sides, so anything that slows the prior costs search depth.
+  Re-measure `search-test` before promoting any accepted flag to a default.

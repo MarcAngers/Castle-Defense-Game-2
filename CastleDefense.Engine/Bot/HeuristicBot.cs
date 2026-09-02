@@ -1745,6 +1745,126 @@ namespace CastleDefense.Engine.Bot
         /// </summary>
         public bool ChargeAwareFallback { get; init; } = false;
 
+        /// <summary>
+        /// (3) BLOCK A LONE CHIPPING UNIT. Buy one cheap body whenever an enemy is standing
+        /// on our castle with nothing of ours in contact with it -- regardless of what the
+        /// EV budget says.
+        ///
+        /// THE HOLE. Marc's own report, 2026-09-01, after watching RolloutSearchBot exploit
+        /// it: the bot almost never clears a single unit off its castle. A lone attacker is
+        /// refused by all four defence paths at once, and each refusal is correct in
+        /// isolation:
+        ///   - time-to-death against one unit is 100+ s, so `investmentRunwayIsSafe` is true,
+        ///     `inDanger` is false, and SpendOnUnits(preferDefense) is never even called;
+        ///   - if it were, `runwayDeficitSeconds = max(0, timeToInvest - timeToDeath)` is 0,
+        ///     so `reactiveSpendBudget` is $0, `spendable` is 0, and nothing is affordable;
+        ///   - `waveWipeOpportunity` requires WaveWipeMinUnits = 3;
+        ///   - `survivalEmergency` requires time-to-death &lt;= 12 s.
+        ///
+        /// THIS IS A BAND-AID THAT OUTLIVED ITS PURPOSE. `reactiveSpendBudget` was added
+        /// after playtest D3596E, where the bot spent hundreds of dollars defending against a
+        /// single unit that DPS-vs-HP math showed was barely a threat. The cap was right; its
+        /// PRICE BASIS is not. It values the threat against TIME-TO-DEATH, when the correct
+        /// comparison is a $1-4 chump against the CUMULATIVE castle HP the unit will remove.
+        /// Only Repair heals a castle, so that damage is permanent and unbounded -- a rate
+        /// model cannot see a stock. Precisely the incoming-nuke blind spot inverted.
+        ///
+        /// WHY A BODY AND NOT DAMAGE. MoveAndFight attacks the castle only in an
+        /// `else if (castleInRange)` branch: one enemy body in contact means zero castle
+        /// damage that tick. Blocking is a hard stop, not a damage race, and a body absorbs
+        /// one swing whatever it costs -- so the cheapest unit is strictly the right buy.
+        ///
+        /// RATE-LIMITED BY THE SURVIVAL LAW, not by a flat interval. Credit accrues at the
+        /// summed attack rate of the unblocked chippers, so the bot buys exactly one body per
+        /// enemy swing and no more. Without that this becomes the permanent-reactive-spend
+        /// pathology this file documents four separate times.
+        /// </summary>
+        public bool BlockSingleChipper { get; init; } = false;
+
+        /// <summary>How close to our own wall an enemy must be to count as "on the castle".</summary>
+        public float ChipBlockDistance { get; init; } = 50f;
+
+        /// <summary>Edge gap under which one of our units counts as already blocking a chipper.</summary>
+        public float ChipBlockContactPad { get; init; } = 10f;
+
+        /// <summary>
+        /// Affordability discipline: the blocker may cost at most this many seconds of
+        /// income. At the opening income of $2/s this allows $4, which covers every team's
+        /// tier-1 unit ($1-$4), and it scales itself out of relevance as income grows. This
+        /// is what stops the rule competing with the first investment rung.
+        /// </summary>
+        public double ChipBlockIncomeSeconds { get; init; } = 2.0;
+
+        /// <summary>Cap on banked blocking credit, so a quiet spell cannot fund a burst.</summary>
+        public float ChipBlockMaxCredit { get; init; } = 2f;
+
+        /// <summary>
+        /// (2) BUY THE AUTO-SPAWNER. No bot in the project can currently do this: action 14
+        /// is absent from GetActionMask, and RolloutSearchBot builds its candidate list from
+        /// `a = 8..1` plus {9,10,11,12,13}. But HeuristicBot bypasses the action space
+        /// entirely -- it calls engine.Invest / Repair / SpawnUnit / UseGadget directly -- so
+        /// engine.UpgradeAutoSpawn is reachable with NO mask change, no observation-vector
+        /// change and no ONNX checkpoint invalidated.
+        ///
+        /// WHY IT IS WORTH A RUNG. It buys BODIES PER SECOND, which since the 2026-09-01
+        /// charge change is a resource money alone can no longer buy: auto-spawner units are
+        /// `ignoreCost`, so they consume no charge and are not subject to the
+        /// one-purchase-per-decision pacing. It is the only lever that raises the ceiling
+        /// iteration 1 merely stopped wasting.
+        ///
+        /// THE PRICES MAKE THE CASE. Level 1 is $102 for one free body per second, forever.
+        /// The survival law says one body per enemy SWING holds anything, and every tier-8
+        /// unit's AttackSpeed clamps at the BOTTOM of its range (0.20/s, one swing per five
+        /// seconds) -- so level 1 alone is five times the rate needed to neutralise a lone
+        /// tier 8, permanently, for a one-off $102. Level 5 is $860 cumulative for three
+        /// bodies per second.
+        ///
+        /// PRICED AGAINST THE INVESTMENT RUNG, NOT AGAINST MONEY. Every previous "spend
+        /// earlier" experiment in this file died by competing with investing, so the rule
+        /// only buys a level when it is cheap RELATIVE to the next rung and the runway is
+        /// already safe -- i.e. out of the same surplus the early-invest claim has declined
+        /// to take. AutoSpawnMaxLevel caps the ladder deliberately low so this measures
+        /// "cheap early bodies" rather than "convert the whole economy into the machine".
+        /// </summary>
+        public bool BuyAutoSpawner { get; init; } = false;
+
+        /// <summary>
+        /// Highest auto-spawner level this rule will buy. 5 is $860 cumulative for 3 free
+        /// bodies/sec; the ladder runs to 19 and $280,427, which is a different hypothesis.
+        /// </summary>
+        public int AutoSpawnMaxLevel { get; init; } = 5;
+
+        /// <summary>
+        /// Buy a level only when it costs at most this fraction of the next investment
+        /// price. Keeps the purchase inside the surplus rather than in front of the rung --
+        /// the failure mode of every rejected early-spend variant in this file.
+        /// </summary>
+        public double AutoSpawnMaxFractionOfRung { get; init; } = 0.5;
+
+        /// <summary>
+        /// Refuse to buy once money has climbed past this fraction of the next investment
+        /// price. Spending EARLY in an accumulation cycle costs the rung a little; spending
+        /// just before the rung lands costs it the whole cycle. Same shape as
+        /// UpgradeSpamInvestCommitFraction, and the same reason.
+        /// </summary>
+        public double AutoSpawnInvestCommitFraction { get; init; } = 0.5;
+
+        /// <summary>
+        /// (4) FARM CHEAP GADGET UPGRADES. Replaces GadgetUpgradeSpam's income test with an
+        /// absolute-cost one. See the gate itself in TryUpgradeSpam for the reasoning: XP is
+        /// a flat 100 per cast for every gadget, so an upgrade is a FINITE purchase of
+        /// `ceil((UpgradeCost - xp) / 100)` casts, and pricing it as an infinite drain is
+        /// what defers it until it no longer matters. Requires GadgetUpgradeSpam = true.
+        /// </summary>
+        public bool CheapGadgetUpgrades { get; init; } = false;
+
+        /// <summary>
+        /// Total cost of finishing the next gadget upgrade, expressed in seconds of income.
+        /// At 25 s and the opening $2/s that allows a $50 ladder; it opens up as income
+        /// climbs, which is the intended shape -- cheap ladders early, expensive ones later.
+        /// </summary>
+        public double CheapUpgradeIncomeSeconds { get; init; } = 25.0;
+
         public bool DefenceOnly { get; init; } = false;
 
         // Incoming castle DPS at which the attack is worth answering at all.
@@ -2263,6 +2383,22 @@ namespace CastleDefense.Engine.Bot
         // that change alone against the committed reference on identical specs.
         public static readonly HeuristicBotSettings ChargeAware =
             new HeuristicBotSettings { ChargeAwareFallback = true };
+
+        // Iteration 3 is A/B'd against Accepted (which already carries iteration 1), not
+        // against bare defaults -- see Accepted's comment on why the stack is the baseline.
+        public static readonly HeuristicBotSettings ChipBlock =
+            new HeuristicBotSettings { ChargeAwareFallback = true, BlockSingleChipper = true };
+
+        public static readonly HeuristicBotSettings AutoSpawn =
+            new HeuristicBotSettings { ChargeAwareFallback = true, BuyAutoSpawner = true };
+
+        public static readonly HeuristicBotSettings CheapUpgrades =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                GadgetUpgradeSpam = true,     // CheapGadgetUpgrades only replaces its gate
+                CheapGadgetUpgrades = true,
+            };
 
         /// <summary>
         /// EVERY FLAG ACCEPTED BY THE ITERATION LOOP SO FAR, stacked.
@@ -3234,6 +3370,29 @@ namespace CastleDefense.Engine.Bot
                 return;
             }
 
+            // --- AUTO-SPAWNER (flag 2) ------------------------------------------------
+            // Deliberately placed AFTER the investment claim, so a rung we can afford is
+            // always taken first and this can only ever spend money investing has declined.
+            // Reaching this line means the claim above did not fire, i.e. money is below
+            // InvestmentPrice (or invest is dead because ARMAGEDDON has been bought).
+            //
+            // Called directly on the engine like Invest and Repair, NOT through ApplyAction:
+            // that is what keeps action 14 out of the mask, the observation vector unchanged
+            // and every ONNX checkpoint valid. See BuyAutoSpawner.
+            if (_settings.BuyAutoSpawner
+                && investmentRunwayIsSafe && !survivalEmergency && !nukeEmergency
+                && me.AutoSpawnLevel < Math.Min(_settings.AutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel)
+                && me.Money >= me.AutoSpawnPrice
+                // Cheap relative to the rung it delays...
+                && me.AutoSpawnPrice <= me.InvestmentPrice * _settings.AutoSpawnMaxFractionOfRung
+                // ...and bought EARLY in the accumulation cycle rather than on its doorstep.
+                && me.Money < me.InvestmentPrice * _settings.AutoSpawnInvestCommitFraction
+                && Act(() => engine.UpgradeAutoSpawn(_side)))
+            {
+                AutoSpawnLevelsBought++;
+                return;
+            }
+
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
             TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
@@ -3372,6 +3531,81 @@ namespace CastleDefense.Engine.Bot
             else if (inDanger && !boughtWiper)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget);
+            }
+
+            // --- BLOCK A LONE CHIPPER (flag 3) ---------------------------------------
+            // Gated on !inDanger deliberately: when inDanger is true the reactive branch
+            // above already owns the response, and layering a second purchase on the same
+            // decision is what the one-purchase-per-decision pacing exists to prevent. This
+            // rule is for the case that branch never sees -- see BlockSingleChipper.
+            if (_settings.BlockSingleChipper && !_settings.DefenceOnly && !inDanger && !boughtWiper)
+            {
+                // An enemy is "chipping" if it has reached our wall AND nothing of ours is in
+                // contact with it. The second half is what keeps this from re-buying against
+                // an attacker that is already held -- a blocked unit deals no castle damage,
+                // so it needs nothing further spent on it.
+                int unblocked = 0;
+                float chipSwingRate = 0f;
+                foreach (var e in enemyUnits)
+                {
+                    // e's "enemy castle" IS ours, so the engine's own geometry answers this
+                    // rather than a second copy of the leading-edge convention that has
+                    // already been got backwards once (see GetDistanceToEnemyCastle).
+                    if (engine.GetDistanceToEnemyCastle(e) > _settings.ChipBlockDistance) continue;
+
+                    bool blocked = false;
+                    foreach (var m in myUnits)
+                    {
+                        float gap = _side == 1
+                            ? e.Position - (m.Position + m.Width)
+                            : m.Position - (e.Position + e.Width);
+                        if (gap <= _settings.ChipBlockContactPad) { blocked = true; break; }
+                    }
+                    if (!blocked) { unblocked++; chipSwingRate += e.AttackSpeed; }
+                }
+
+                LastChipperCount = unblocked;
+                if (unblocked > 0 && chipSwingRate > 0f)
+                {
+                    // One body per enemy SWING -- the survival law, applied directly. Credit
+                    // rather than a flat interval so a fast-swinging chipper is answered at
+                    // its own rate instead of an arbitrary one.
+                    _chipCredit = Math.Min(_chipCredit + chipSwingRate * (DecisionIntervalTicks / 30f),
+                                           _settings.ChipBlockMaxCredit);
+
+                    if (_chipCredit >= 1f)
+                    {
+                        // Cheapest body that is affordable AND has a charge. The charge test
+                        // is iteration 1's lesson applied at the point of use: without it this
+                        // rule would inherit exactly the silent-failure mode it was written
+                        // after.
+                        double budget = Math.Min(me.Money, me.Income * _settings.ChipBlockIncomeSeconds);
+                        UnitDefinition cheapest = null;
+                        foreach (var d in teamDef.Roster)
+                        {
+                            if (d.Cost <= 0 || d.Cost > budget) continue;
+                            if (!me.HasUnitCharge(d.Id)) continue;
+                            if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
+                        }
+
+                        if (cheapest != null
+                            && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
+                            && Act(() => engine.SpawnUnit(_side, cheapest.Id)))
+                        {
+                            _chipCredit -= 1f;
+                            ChipBlocksBought++;
+                            LastSpawnReason = "chipblock";
+                            LastUnitsPurchased++;
+                            if (cheapest.Tier >= 1 && cheapest.Tier <= 8) ActionCounts[cheapest.Tier]++;
+                        }
+                    }
+                }
+                else
+                {
+                    // Nothing to block. Drop the credit rather than banking it, so the rule
+                    // cannot save up during a quiet game and dump bodies later.
+                    _chipCredit = 0f;
+                }
             }
 
             // Fallback investment check: the primary one now happens at the very top of
@@ -4996,7 +5230,31 @@ namespace CastleDefense.Engine.Bot
             double cooldownSeconds = def.CooldownMs / 1000.0;
             if (cooldownSeconds <= 0) return false;
             double k = def.Id.Contains('_') ? _settings.UpgradeSpamK2 : _settings.UpgradeSpamK1;
-            if (k <= 0 || me.Income < def.Cost / (cooldownSeconds * k)) return false;
+
+            // ── CHEAP-UPGRADE GATE (flag 4) ────────────────────────────────────────
+            // The income test above asks "can we afford to spam this FOREVER". That is the
+            // wrong question for an upgrade, which is a FINITE purchase: XP is a flat 100
+            // per cast for every gadget regardless of effect, so the next tier costs exactly
+            // ceil((UpgradeCost - xp) / 100) casts and not one more. Pricing a finite
+            // purchase as an infinite drain is why the k gate only ever fires once the bot
+            // is rich, which is after the upgrade has stopped mattering.
+            //
+            // The cheapest ladders are enormous and land early: wall -> wall_2 is 3 casts x
+            // $50 = $150 to turn a 400 HP wall into a 6,000 HP one; reinforcements_3 ends at
+            // five FREE tier-7 units per cast on a 10 s cooldown, charge-free.
+            //
+            // Every self-harm guard below is untouched and still runs. That is not optional:
+            // the first version of this path lost 73% of games to an opponent that does
+            // NOTHING, by farming XP with the nuke -- which damages both castles.
+            if (_settings.CheapGadgetUpgrades)
+            {
+                string famCost = def.Id.Split('_')[0].ToLowerInvariant();
+                int xpNow = me.GadgetXp.TryGetValue(famCost, out var gx) ? gx : 0;
+                int castsLeft = Math.Max(1, (int)Math.Ceiling((def.UpgradeCost - xpNow) / 100.0));
+                double totalToUpgrade = castsLeft * (double)def.Cost;
+                if (totalToUpgrade > me.Income * _settings.CheapUpgradeIncomeSeconds) return false;
+            }
+            else if (k <= 0 || me.Income < def.Cost / (cooldownSeconds * k)) return false;
 
             // STAGGER against every other slot, so one gadget is always available.
             if (_lastAnyGadgetCastTick >= 0 &&
@@ -5227,6 +5485,18 @@ namespace CastleDefense.Engine.Bot
         /// spawn source (the auto-spawner, reinforcements), not a better pick.
         /// </summary>
         public long ChargeFallbackEmpty { get; private set; }
+
+        /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
+        public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Blocking bodies bought by BlockSingleChipper. Diagnostic.</summary>
+        public long ChipBlocksBought { get; private set; }
+
+        /// <summary>Unblocked enemies on our castle last decision. Diagnostic.</summary>
+        public int LastChipperCount { get; private set; }
+
+        /// <summary>Blocking credit owed, in bodies. See BlockSingleChipper.</summary>
+        private float _chipCredit;
 
         public long OffensiveSpendDecisions { get; private set; }
 
