@@ -1,4 +1,4 @@
-using CastleDefense.Engine.Data;
+﻿using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
 using CastleDefense.Engine.Models;
 
@@ -74,7 +74,22 @@ namespace CastleDefense.Engine.Bot
         /// <summary>Gadget income we have credited them (cash). Diagnostic.</summary>
         public double IncomeSeen { get; private set; }
 
-        private long _lastTick = -1;
+        // STARTS AT 0, NOT -1, and there is no "skip the first update" guard.
+        //
+        // The first draft set this to -1 and had Update return early the first time it was
+        // called, to establish a baseline. That silently skipped the free-unit schedule for
+        // every tick up to that point -- including TICK 1, where the opening squad's first
+        // free unit spawns. That unit then appeared in state.Units with no matching free
+        // credit and was CHARGED as a purchase.
+        //
+        // The cost of that single $3 unit was not $3. Being $3 short delayed the opponent's
+        // first $18 investment in the model, which left the tracker a rung behind, which made
+        // its simulated income lower, which kept it behind -- the whole under-credit lag the
+        // first --economy-tracker-check run reported came from one missed unit on tick 1.
+        //
+        // Starting at 0 also makes a tracker created mid-game correct: the loop simply walks
+        // every tick since the start and owes the free units it should have owed.
+        private long _lastTick;
         private int _repairCount;
         private int _autoSpawnLevel;
         private readonly HashSet<Guid> _seen = new HashSet<Guid>();
@@ -143,7 +158,7 @@ namespace CastleDefense.Engine.Bot
             var state = engine._state;
             var them = _enemySide == 1 ? state.Player1 : state.Player2;
             long now = state.CurrentTick;
-            if (_lastTick < 0) { _lastTick = now; return; }
+            if (now <= _lastTick) return;
 
             for (long t = _lastTick + 1; t <= now; t++)
             {

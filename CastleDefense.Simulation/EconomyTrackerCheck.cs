@@ -42,10 +42,12 @@ namespace CastleDefense.Simulation
         {
             int games = 40;
             int seed = 12345;
+            bool trace = false;
             for (int i = 1; i < args.Length; i++)
             {
                 if (args[i] == "--games" && i + 1 < args.Length) games = int.Parse(args[++i]);
                 else if (args[i] == "--seed" && i + 1 < args.Length) seed = int.Parse(args[++i]);
+                else if (args[i] == "--trace") trace = true;
             }
 
             Console.WriteLine("=== ECONOMY TRACKER CHECK ===");
@@ -85,6 +87,7 @@ namespace CastleDefense.Simulation
             foreach (var (name, economic, act) in archetypes)
             {
                 var acc = new Acc();
+                bool traceFirst = trace;
                 for (int g = 0; g < games; g++)
                 {
                     var map = teams[rng.Next(teams.Length)];
@@ -130,6 +133,20 @@ namespace CastleDefense.Simulation
                         tracker.Update(engine);
 
                         // Sample once a second, after the opening squad has finished landing.
+                        // FIRST-DIVERGENCE TRACE. The aggregate says the tracker briefly
+                        // believes the opponent is on a lower rung than it is; this says
+                        // exactly when and with what balances, which is the only way to tell
+                        // a timing artefact from a real accounting bug.
+                        if (traceFirst && g == 0 && tracker.InvestmentCount != state.Player1.InvestmentCount)
+                        {
+                            Console.WriteLine($"    [{name}] FIRST DIVERGENCE at tick {state.CurrentTick}: " +
+                                              $"tracker count={tracker.InvestmentCount} money={tracker.Money:F2} " +
+                                              $"inc={tracker.Income:F2}  |  truth count={state.Player1.InvestmentCount} " +
+                                              $"money={state.Player1.Money:F2} inc={state.Player1.Income:F2}  " +
+                                              $"| spendSeen={tracker.SpendSeen:F0} gadgetIncome={tracker.IncomeSeen:F0}");
+                            traceFirst = false;
+                        }
+
                         if (state.CurrentTick % 30 == 0 && state.CurrentTick > 180)
                         {
                             var truth = state.Player1;
