@@ -255,3 +255,58 @@ Carried forward from `CLAUDE.md` and the in-file history so no session burns a r
 4. **Tier4Spam is the standing weakness.** The bot ends those games at ~14% castle HP and
    iteration 1 did not help. Nothing in the current backlog targets it, and it is the only
    ladder rung that is neither at a ceiling nor a mirror — i.e. the one with room to measure.
+
+---
+
+## 7. The ARMAGEDDON race — from Marc's 3 recorded games, 2026-09-02
+
+Games `0CBCDF` (Marc W), `399D11` (Marc W), `108F13` (bot W), all `sp` vs `heuristic_brake`,
+all ~275s. Marc's report: both wins came from reaching ARMAGEDDON first, both after barely
+surviving the bot's aggression.
+
+**The shape of it.** In both losses the bot reached InvestmentCount 8 (income 2500, i.e. the
+ARMAGEDDON rung is the only thing left to buy) and then finished the game holding **$65,253
+and $77,332** against a $121,221 rung. It did not lose the economy — it reached max income —
+it lost the *savings race at max income*.
+
+**Two structural findings, both confirmed in code:**
+
+1. **`DeferForInvestment(me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice`.**
+   The gadget layer's investment deferral is bounded to the first three rungs. During the
+   ARMAGEDDON race the gadget code has **no awareness of the rung it is saving for** and fires
+   purely on cooldown. The evidence is in the casts: the bot's gadget pattern is nearly
+   identical across all three games — reinforcements_3 x11-12, reinforcements_2 x9, cash_2 x9,
+   reinforcements x6, nuke x5, cash x5, cash_3 x2 — whether it won or lost.
+
+2. **The attack flow never closes.** With `DynamicInvestPace = true` (default),
+   `investPaceRate = Income / (1 + InvestPaceExtraTimeFraction)` = `Income / 1.2`, so the
+   residual funding attacks is **always exactly `Income / 6`**, at every rung, however far
+   away it is. At income 2500 that is **416.7/s spent on units, permanently**.
+
+**`RushArmageddon` would NOT fix this, and its doc comment is stale.** That comment says the
+`MinAttackFlowFraction` floor "is the ONLY term keeping the attack funded (the residual is
+negative there)". Under `DynamicInvestPace` the residual is `Income/6`, always positive, so
+the floor (`Income * 0.15` = 375/s) is never binding at invest 8 and zeroing it changes
+nothing. The comment describes the older `InvestPaceTargetSeconds` path.
+
+**A correction worth keeping, because the gross number is misleading.** The bot's gross gadget
+spend is ~$44,000/game, which looks like the whole gap — but **cash is profitable** and it is
+White's signature. cash_3 pays 8 x $1,500 = $12,000 for $7,800; cash_2 pays $1,500 for $975.
+Netted out, the bot's real gadget cost in `399D11` is **$6,972**, not $44,972. Do not quote the
+gross figure. The bot is playing its cash gadget correctly.
+
+**So the $43,889 gap is NOT yet attributed.** Clean saving at 2083/s reaches ARMAGEDDON in
+58.2s. Gadgets account for ~$7k and the attack flow for ~$417/s. The remainder is reactive
+spending and repairs, neither of which is bounded by the attack allowance. **Next step is
+replay reconstruction** to get the per-rung timeline: when the bot hit invest 7 and 8, and
+where the money went after that.
+
+**On Marc's hypothesis (track the opponent).** The bot already reads `enemy.Income` for
+`hasIncomeAdvantage` — but in these games **both players finish at income 2500, so that signal
+is flat at exactly the moment it matters**. The discriminating quantity in the ARMAGEDDON race
+is the opponent's MONEY, which HeuristicBot *could* read (it has `GameState`) but which
+`GetStateVector` deliberately hides from trained policies. Whether the heuristic may use it is
+a fairness call for Marc, and the same one `CLAUDE.md` already flags for `enemy.Income`.
+
+Note also the asymmetry his instinct is pointing at: `IncomeAdvantageAttack` exists to attack
+MORE when ahead, and there is no counterpart to save MORE when behind.
