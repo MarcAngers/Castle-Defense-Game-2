@@ -721,3 +721,44 @@ bot from spending while it was being chipped.
 The race gate's case rests entirely on the gauntlet ARMAGEDDON column (27% -> 57%). Its cost is
 now measured on three columns instead of one. That trade is worse than item 16 reported and the
 decision to ship it should be revisited.
+
+## 20. Wiper prices castle HP (Marc's fold-it-into-the-wiper suggestion) — big Tier4Spam win, but it does NOT fix the chipper
+
+2026-09-02 · Marc: fold the lone-chipper case into the wiper rather than writing parallel logic.
+He was right that the unit count was never the blocker -- **the budget was**. For a lone $3
+chipper `committedEnemyValue * WiperMaxCostVsStackValue` is **$1.05**, so no unit in any roster
+qualifies and the wiper silently declines. That is why `bot-checksum` reports `WIPE n=0` in every
+game. Pricing the enemy army answers "is this stack worth killing"; a chipper poses a different
+question, "what is it about to cost me".
+
+The wiper budget now also counts `UnblockedDps * horizon * DollarsPerHp(me)`, raising the budget
+and never lowering it.
+
+**Ladder, referenced against `ShipControl`, n=400 both modes:**
+
+| | Tier4Spam | Chipper | Chipper end HP | mirror h2h | OVERALL |
+|---|---|---|---|---|---|
+| ShipControl | 87.0 / 90.6 | 97.8 / 96.8 | 49.6 / 57.7 | 51.7 / 55.7 | 91.7 / 91.8 |
+| + wiper HP @30s | **91.9 / 93.8** | 98.5 / 95.0 | 52.1 / 57.4 | 48.1 / 54.1 | **92.0** / 91.4 |
+| + wiper HP @60s | 91.9 / 93.4 | 99.0 / 95.0 | 55.0 / 58.9 | 46.0 / 52.6 | 91.8 / 91.1 |
+
+**Tier4Spam gains +4.9 / +3.2**, which is the standing weakness recorded in the backlog and
+which nothing else this session has moved. But the mirror falls 3.6, headstart OVERALL falls 0.4,
+and **the chipper case barely moves** — end HP 49.6 → 52.1, unspent still $25,642.
+
+### Why it does not fix the chipper: `DollarsPerHp` is circular
+
+HP is priced off the repair ladder, and the ladder position depends on how much the bot has
+already repaired. Against a Chipper the bot is never `inDanger`, so it never repairs, so
+`RepairCount` stays 0, so a repair still buys 10,000 HP for $20 — **$0.002/HP** — and the bleed
+never looks expensive, right up until the castle is gone. The metric says HP is cheap *because*
+the bot has been tanking, which is the thing it is supposed to price.
+
+**And the helper's comment does not match its code.** `DollarsPerHp`'s doc says it "uses the
+HEALING component of the preview, not the whole delta" precisely to avoid pricing HP at almost
+nothing when the castle is healthy — but `healed = nextHealth - me.CastleHealth` at full HP is
+almost entirely the max-health bump, which is exactly the case the comment claims to exclude.
+The `0.2 * nextMax` fallback only fires when that delta is under 1.
+
+So the wiper change is a real win on a different axis (Tier4Spam) and the chipper needs the HP
+valuation fixed first. Kept behind `WiperPricesCastleHp`, not shipped, pending that.

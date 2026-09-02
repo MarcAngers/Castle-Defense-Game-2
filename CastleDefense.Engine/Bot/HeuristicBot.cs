@@ -2004,6 +2004,22 @@ namespace CastleDefense.Engine.Bot
         public bool ChipEconomics { get; init; } = false;
 
         /// <summary>
+        /// (14) Let the wiper's budget also count the CASTLE HP the unblocked attackers are
+        /// about to take, not only the value of the enemy stack. See the block in Decide().
+        /// This is what makes the wiper answer a lone chipper, which is the exploit
+        /// RolloutSearchBot found and which Marc asked to fold into the wiper rather than
+        /// solve with separate logic.
+        /// </summary>
+        public bool WiperPricesCastleHp { get; init; } = false;
+
+        /// <summary>
+        /// How far ahead to price the bleed. Bounded rather than "rest of the game" so the
+        /// budget cannot balloon in a long game; 30s is about the horizon over which a chipper
+        /// that is not answered actually matters.
+        /// </summary>
+        public double WiperHpHorizonSeconds { get; init; } = 30.0;
+
+        /// <summary>
         /// How much better than break-even the trade must be. 1.0 is break-even; above 1 is
         /// stricter. Kept as a knob because the HP price comes from the repair ladder, which
         /// moves by a factor of 250 across a game.
@@ -2264,6 +2280,23 @@ namespace CastleDefense.Engine.Bot
             // it cannot see this. Do not retry ArmageddonCommit without making the commit
             // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
         };
+
+        /// <summary>Shipped profile + the wiper pricing castle HP. Marc's chipper fix.</summary>
+        public static readonly HeuristicBotSettings ShipWiperHp = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, WiperPricesCastleHp = true, ChargeAwareEverywhere = true };
+
+        /// <summary>Same, at a 60s horizon -- a more generous read of what a chipper costs.</summary>
+        public static readonly HeuristicBotSettings ShipWiperHp60 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, WiperPricesCastleHp = true, ChargeAwareEverywhere = true,
+          WiperHpHorizonSeconds = 60.0 };
 
         /// <summary>Shipped profile + chip economics. The candidate for Marc's next play-test.</summary>
         public static readonly HeuristicBotSettings ShipPlusChip = new HeuristicBotSettings
@@ -4003,6 +4036,39 @@ namespace CastleDefense.Engine.Bot
 
                 // Cheapest unit that one-shots that, and is worth less than the stack it kills.
                 double maxWorth = committedEnemyValue * _settings.WiperMaxCostVsStackValue;
+
+                // ── PRICE THE CASTLE, NOT JUST THE ARMY (flag 14) ────────────────────
+                // Marc's suggestion, 2026-09-02: fold the lone-chipper case into the wiper
+                // rather than writing parallel logic for it. The blocker was never the unit
+                // count -- it is this budget. Against a single $3 chipper
+                // `committedEnemyValue * 0.35` is $1.05, so no unit in any roster qualifies
+                // and the wiper silently declines. That is why `bot-checksum` reports
+                // WIPE n=0 in every game.
+                //
+                // Pricing the enemy army answers "is this stack worth killing". The question
+                // a chipper poses is "what is it about to cost me", and the answer is castle
+                // HP, which has a real price on the repair ladder. So the budget also counts
+                // the HP the unblocked attackers will take over a bounded horizon.
+                //
+                // SELF-SCALING, hence no unit count and no hand-tuned floor. Early, a repair
+                // buys 10,000 HP for $20 ($0.002/HP) so the HP term is pennies and the bot
+                // correctly tanks the chip. Late, repair 7 costs $8,837 for 17,800 HP
+                // ($0.50/HP) and 10 DPS over 30s is $150 of castle -- at which point spending
+                // $18 to delete the thing is obviously right.
+                //
+                // RAISES the budget and never lowers it, so a stack that already justified a
+                // wipe still does. Killing also strictly dominates blocking where affordable:
+                // a blocker stops one swing, a kill stops all of them.
+                if (_settings.WiperPricesCastleHp)
+                {
+                    float bleed = threat?.UnblockedDps ?? projectedDps;
+                    if (bleed > 0.01f)
+                    {
+                        double hpAtRisk = bleed * _settings.WiperHpHorizonSeconds * DollarsPerHp(me);
+                        LastWiperHpBudget = hpAtRisk;
+                        maxWorth = Math.Max(maxWorth, hpAtRisk);
+                    }
+                }
                 UnitDefinition wiper = null;
                 foreach (var d in teamDef.Roster)
                 {
@@ -6232,6 +6298,9 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Castle-HP component of the wiper budget last decision. Diagnostic.</summary>
+        public double LastWiperHpBudget { get; private set; }
 
         /// <summary>Decisions where blocking was economically justified. Diagnostic.</summary>
         public long ChipEconomicsDecisions { get; private set; }
