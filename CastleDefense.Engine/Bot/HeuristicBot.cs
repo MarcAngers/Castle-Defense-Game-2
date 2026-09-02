@@ -1768,6 +1768,15 @@ namespace CastleDefense.Engine.Bot
         public bool ChargeAwareEverywhere { get; init; } = false;
 
         /// <summary>
+        /// Highest tier the charge-aware fallback may substitute. 4 by Marc's instruction: the
+        /// fallback exists to keep a body on the field when the intended purchase is
+        /// recharging, and a body is what the survival law prices -- not a cheaper copy of the
+        /// unit that was actually wanted. Above this the fallback declines and the decision
+        /// buys nothing. See the cap in SpendOnUnits for the measurement behind it.
+        /// </summary>
+        public int ChargeFallbackMaxTier { get; init; } = 4;
+
+        /// <summary>
         /// (3) BLOCK A LONE CHIPPING UNIT. Buy one cheap body whenever an enemy is standing
         /// on our castle with nothing of ours in contact with it -- regardless of what the
         /// EV budget says.
@@ -2441,6 +2450,36 @@ namespace CastleDefense.Engine.Bot
             RaceAwareSpending = true, RaceSafetySeconds = 0,
             ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
             ChargeAwareEverywhere = true, OneWiperAtATime = true };
+
+        /// <summary>Shipped, with the fallback uncapped -- reproduces the pre-2026-09-02 bot.</summary>
+        public static readonly HeuristicBotSettings ShipUncappedFallback = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 8 };
+
+        /// <summary>Shipped, fallback capped at tier 4. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipChaffFallback = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 4 };
+
+        /// <summary>Fallback capped at tier 2 -- stricter, pure chaff.</summary>
+        public static readonly HeuristicBotSettings ShipChaffFallback2 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 2 };
 
         // RaceSafetySeconds sweep. At +10 the gate is so strict the offensive branch runs 3
         // times a game: the tracker's income estimate for the opponent is an UPPER bound by
@@ -5944,6 +5983,23 @@ namespace CastleDefense.Engine.Bot
                 foreach (var def in roster)
                 {
                     if (def.Cost <= 0 || def.Cost > spendable) continue;
+
+                    // THE FALLBACK IS CHAFF ONLY (Marc, 2026-09-02). Without this cap it scans
+                    // the WHOLE roster carrying none of the tier floor or outclass discipline
+                    // the ranked pools encode, so a drained tier-7 pick was silently replaced
+                    // by the next most survivable thing -- bread at $338, 15.5 times a game,
+                    // 58% of reactive spend. Measured: 88% of all reactive tier-5+ purchases
+                    // came through here, most of them while the dominant enemy tier was 7 and
+                    // the pools had correctly excluded tier 6.
+                    //
+                    // The right substitute for a recharging answer is a BODY, not a cheaper
+                    // version of the answer: MoveAndFight stops a unit attacking the castle
+                    // whenever anything is in contact, so chaff buys the same seconds for 1-2%
+                    // of the price. If nothing at or below the cap has a charge, buy NOTHING --
+                    // the pools already decided what this decision wanted, and a decision that
+                    // cannot have it should wait rather than spend on a worse answer.
+                    if (def.Tier > _settings.ChargeFallbackMaxTier) continue;
+
                     if (!me.HasUnitCharge(def.Id)) continue;
                     double sc = byPower
                         ? RawPower(def, enemyHitDamage)

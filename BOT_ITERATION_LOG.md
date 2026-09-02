@@ -1034,3 +1034,57 @@ The fallback should not be free to leave the tier band the pools chose. Two opti
    and chaff is 7.7% of spend.
 
 (2) is the more interesting hypothesis and matches the survival law; (1) is the conservative one.
+
+## 26. Charge fallback capped at tier 4 — SHIPPED (Marc's rule)
+
+2026-09-02 · Marc: *"the fallbacks should not go above Tier 4. If there are no charges at Tier 4
+and below, don't spawn anything for that decision."*
+
+`ChargeFallbackMaxTier = 4`, applied inside the fallback's roster scan. Nothing at or below the
+cap with a charge means the decision buys **nothing** — the pools already decided what this
+decision wanted, and a decision that cannot have it should wait rather than substitute a worse
+answer at ten times the price.
+
+The reasoning is the survival law: the right stand-in for a recharging answer is a BODY, not a
+cheaper copy of the answer. `MoveAndFight` stops a unit attacking the castle whenever anything is
+in contact, so chaff buys the same seconds for 1-2% of the price.
+
+**Gauntlet vs 0240D8, n=40:**
+
+| | uncapped | **cap 4** | cap 2 |
+|---|---|---|---|
+| charge-fallback T5+ buys | 22.8 | **0.0** | 0.0 |
+| reactive T6 picks | x16.0 | **x1.0** | x0 |
+| reactive spend | $9,295 | **$6,500** | $8,121 |
+| wiper spend | $4,150 | **$2,087** | $4,473 |
+| total unit spend | $15,067 | **$11,576** | $12,594 |
+| win rate | 100% | 100% | 100% |
+
+**The substitution is eliminated outright** and unit spend falls 23%. Cap 2 is worse — mid-tier
+buys come back through matched/outclass instead and idle money balloons to $42,836 — so 4 is not
+merely Marc's instruction, it is also the better of the two tried.
+
+**Ladder** (referenced against the uncapped bot): nostart OVERALL 91.7 → 91.9 with the mirror
+49.5 → 50.6; headstart 92.2 → 91.9 with the mirror 58.0 → 56.4. Roughly neutral, small gain
+nostart, small loss headstart.
+
+**CHECKSUM MOVES.** 4 is the DEFAULT for `ChargeFallbackMaxTier`, so this changes bare
+`HeuristicBotSettings.Default` too: `bot-checksum --games 24` goes
+`26944708B774C609CA6D3E5ECA43815C` -> **`3EFC8EDB17850125BFCB555440AA0C40`**.
+`ShipUncappedFallback` reproduces the previous behaviour. Guards pass.
+
+### The pattern worth carrying forward
+
+Items 24, 25 and 26 were one question asked three times, and I got it wrong twice before Marc's
+pushback forced instrumentation:
+
+1. **"chaff is the problem"** — wrong, I counted units instead of dollars. Tiers 1-4 were 7.7%.
+2. **"the tier floor forces mid-tier buys"** — wrong, and Marc spotted the contradiction: with
+   five tier-7 units on the field the floor is 7 and tier 6 is *excluded*.
+3. **The fallback bypasses the floor entirely** — right, and only visible once the purchase route
+   was instrumented rather than reasoned about.
+
+Both wrong answers were plausible readings of code I had already read. The rule that would have
+saved the round trips: **when asked why the bot did something, instrument the decision rather than
+re-reading the logic that should have produced it.** The counters cost ten minutes; the two wrong
+diagnoses cost more than that and would have shipped a fix that made it worse.
