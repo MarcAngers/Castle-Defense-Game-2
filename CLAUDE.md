@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -1038,6 +1038,59 @@ and cannot favour a seat, but nothing measured before this date is comparable to
 measured after it -- win rates, game lengths, earned investments, the counter table, the
 human play record. `OpeningSquadSize = 0` and the money constant are the two knobs to
 restore the old opening if a historical comparison is needed.
+
+## Iterating on HeuristicBot
+
+Three files are the working set, added 2026-09-01. **Read them instead of re-deriving the
+engine or re-reading a previous session's transcript.**
+
+- **`BOT_MECHANICS.md`** — the engine's rules, written out once. Combat, targeting, the
+  derived-stat fallbacks, the three economy ladders with their price tables, charges,
+  `ignoreCost` paths, gadget XP, map effects, and a map of `Decide()`. Deriving this cost
+  ~3,000 lines of reading; the file exists so nobody pays that twice.
+- **`BOT_BACKLOG.md`** — the hypothesis queue. Every entry carries a MECHANISM and a
+  PREDICTED SIGNATURE naming what must move *and what must not*.
+- **`BOT_ITERATION_LOG.md`** — append-only results, kept or reverted.
+
+**The measurement is `ladder --variant <profile>`**, which plays a named
+`HeuristicBotSettings` profile against the committed reference on identical pre-generated
+specs, side-swapped, with Wilson intervals. It now also reports **units/sec, idle money and
+end-of-game castle HP**, because win rate alone cannot express a predicted signature. Use
+`--only HeuristicBot`; `--only Heuristic` also matches the four `SavingHeuristic@` contenders.
+
+**Every change ships behind a new flag defaulting to false**, and accepted flags stack in
+`HeuristicBotSettings.Accepted` rather than being promoted into the defaults. Promotion moves
+`bot-checksum`, every ladder baseline, `FLAGSHIP_BASELINE.md` and the shipped singleplayer
+opponent at once, so it is a deliberate decision, not a side effect.
+
+### The rule that came out of the first seven iterations
+
+One change was accepted and four were rejected, and **the four failures shared one
+mechanism: each opened a NEW SPENDING CHANNEL, and each lost earned investments.** The
+accepted change only re-allocated *which* unit was already being bought and moved earned
+invests by 0.00. Every cap in `HeuristicBot.cs` — `AttackSpendFraction`,
+`InvestPaceTargetSeconds`, `ReactiveFlowCap`, `AttackGateMinInvestment`,
+`reactiveSpendBudget` — was tuned assuming no other channel exists, and a new one bypasses
+all of them at once.
+
+**Prefer changes that re-allocate spend the bot is already making.** If a change must add a
+channel, take its money from an existing budget. That was tested directly: the identical
+auto-spawner feature cost **0.81** earned investments funded from savings and **0.01** funded
+from the attack allowance.
+
+### A ladder rung can be blind to the change you are measuring
+
+`ChipperBaseline` was added because the ladder could not adjudicate a defensive fix at all:
+every existing rung that the fix helped was already pinned at a 100% win-rate ceiling, so the
+ladder saw only its cost. **A benchmark that observes one side of a trade will reject every
+version of it forever and look rigorous doing so.** The new rung invests normally and keeps
+exactly one cheap unit alive on the enemy castle — the exploit Marc and `RolloutSearchBot`
+both use. Against it the fix moves end-of-game castle HP from 52.7% to 95.9%, and still does
+not move win rate, because that exploit does not beat HeuristicBot. Some changes can only be
+priced by Marc playing.
+
+**Note this rung changes the OVERALL figure**, so OVERALL is not comparable across the commit
+that added it. The per-rung rows are.
 
 ## Cleanup backlog
 

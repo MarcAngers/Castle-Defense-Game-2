@@ -60,7 +60,8 @@ contain it because the *spend* caps are unchanged — only the *choice* is. Watc
 
 ## 2. Buy the auto-spawner — `BuyAutoSpawner`
 
-**Status:** implemented, awaiting measurement
+**Status:** REVERTED twice (iterations 5 and 7). See the log. A third attempt needs a reason
+the cheap early rungs beat an investment rung on their own terms, not a new funding source.
 
 **Mechanism.** No bot in the project can buy it. Action 14 is absent from `GetActionMask`,
 and `RolloutSearchBot` builds candidates from `a = 8..1` plus `{9,10,11,12,13}`. But
@@ -95,7 +96,8 @@ deliberately conservative — cap at a low level (say ≤ 5, $860 cumulative) so
 
 ## 3. Block a lone chipping unit — `BlockSingleChipper`
 
-**Status:** implemented, measuring (Marc's own finding, 2026-09-01)
+**Status:** REVERTED v1 and v2, but the mechanism is CONFIRMED — see the log's Chipper
+entry. Deferred to Marc: try `ChipBlockV2Tight` for ten games. The ladder cannot price it.
 
 **Mechanism.** A single enemy unit parked on the castle is refused by all four defence
 paths simultaneously:
@@ -133,7 +135,8 @@ the permanent-reactive-spend pathology that this file's history documents repeat
 
 ## 4. Farm cheap gadget upgrades — `CheapGadgetUpgrades`
 
-**Status:** implemented, awaiting measurement
+**Status:** REVERTED hard (mirror 48.5 → 18.5). Retry needs a total-dollar budget for the
+whole upgrade path, not a per-cast test, and must be measured with `--defense wall` pinned.
 
 **Mechanism.** `AddGadgetXp` grants a flat **100 XP per cast**, for every gadget,
 regardless of effect, damage dealt or value destroyed. Upgrades trigger at
@@ -228,3 +231,27 @@ Carried forward from `CLAUDE.md` and the in-file history so no session burns a r
 - **Throughput matters here beyond wall clock.** `HeuristicBot` is `RolloutSearchBot`'s
   rollout policy for both sides, so anything that slows the prior costs search depth.
   Re-measure `search-test` before promoting any accepted flag to a default.
+
+---
+
+## Next up (queue as of 2026-09-01, after seven iterations)
+
+1. **`search-test --variant` (tooling, do this first).** `RolloutSearchBot` uses
+   `HeuristicBot` as both its policy prior and its rollout policy for **both sides**, and
+   `ChargeAwareFallback` costs ~35% throughput. Nothing tonight measured what that does to
+   search, because `search-test` takes no settings profile. This is a blocker on *promoting*
+   iteration 1 to a default, not on keeping it behind a flag.
+
+2. **Re-allocation candidates only** (see the rule above). The obvious untried one: the
+   wiper purchase and `DefensiveResponse`'s block spawn have the same no-charge-fallback
+   shape iteration 1 fixed in `SpendOnUnits`, and fixing them re-allocates rather than adds.
+   Cheap, and the mechanism is already proven.
+
+3. **`Act()` returns true for a queued action** (backlog item 6, untouched). Correctness,
+   not strength — but `boughtWiper`, `_lastWiperTick` and several counters are set on
+   purchases that have not happened and may still fail. Predicted signature: diagnostics
+   change, behaviour does not. If win rate moves, something depends on the bug.
+
+4. **Tier4Spam is the standing weakness.** The bot ends those games at ~14% castle HP and
+   iteration 1 did not help. Nothing in the current backlog targets it, and it is the only
+   ladder rung that is neither at a ceiling nor a mirror — i.e. the one with room to measure.

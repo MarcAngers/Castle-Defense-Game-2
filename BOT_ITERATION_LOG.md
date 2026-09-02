@@ -221,3 +221,41 @@ already making over changes that add a new reason to spend.** If a change must a
 it has to take its money from an existing budget rather than from savings — e.g. fund the
 auto-spawner from `_attackSpendAllowance` (it produces units, so it should compete with unit
 buying) rather than from money investing declined.
+
+## 7. AutoSpawnFromAttackBudget — INCONCLUSIVE (principle confirmed, change inert)
+
+2026-09-01 · The rule from iterations 1-6 applied: same feature as iteration 5, funded from
+the attack allowance (which buys units) instead of from savings (which buys rungs).
+
+**measured** — `ladder 400 --both`, seeds 12345 and 777, vs the iteration-1 baseline:
+
+| arm | mirror win rate | mirror earned invests |
+|---|---|---|
+| nostart s12345 | 48.5 → 48.6 | 6.80 → 6.81 |
+| headstart s12345 | 54.1 → **55.4** | 5.00 → 5.02 |
+| nostart s777 | 49.7 → **51.0** | 6.92 → 6.93 |
+| headstart s777 | 55.2 → 55.4 | 4.87 → 4.87 |
+
+**verdict:** INCONCLUSIVE — kept in the tree, NOT added to `Accepted`.
+
+**the principle held, and this is a clean controlled test of it.** Identical feature, only
+the funding source changed: from savings it cost **0.81** earned investments on the mirror
+rung; from the attack allowance it costs **0.01**. That is as direct a confirmation of
+"re-allocate, don't add" as this harness can produce.
+
+**but the change is close to inert.** Tier4Spam and Chipper come back *byte-identical* to the
+baseline in all four arms, which means it never fired at all in those matchups. It only fires
+in the long mirror games, where it is +0.1 / +1.3 / +1.3 / +0.2 — real in two arms, nothing in
+the other two.
+
+**why, and this is the useful part.** The attack allowance only accrues inside
+`SpendOnUnits(preferDefense: false)`, which `Decide()` gates behind
+`InvestmentCount >= AttackGateMinInvestment (6) && (Income >= 50 || hasIncomeAdvantage)`. So
+the budget this version spends from **does not exist until investment 6**, by which point the
+cheap early rungs the auto-spawner is actually good at are irrelevant. The funding rule that
+makes the change safe is the same rule that makes it too late to matter.
+
+**consequence for the backlog:** there may be no good home for the auto-spawner inside the
+current economy at all. It wants early money, and early money is exactly what this bot is
+correctly unwilling to spend. Any third attempt needs a reason why the early rungs beat an
+investment rung on their own terms — not a better place to take the money from.
