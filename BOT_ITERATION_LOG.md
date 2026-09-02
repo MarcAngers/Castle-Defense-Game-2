@@ -400,3 +400,74 @@ and the threshold was measuring the ladder's step size rather than the tracker's
 now asserts on the FRACTION of samples where we believe the opponent is on a lower rung than
 they are (must be under 10%; actual 3.1% and 4.9%). The residual transition lag itself is
 **unexplained** and worth a look — it should not exist under assume-ASAP.
+
+## 12. Replay gauntlet — Marc's acceptance-test idea, built (`--replay-gauntlet`)
+
+2026-09-02 · Plays a bot against Marc's recorded action stream from `9413D9` (White, his
+win, 279s). Gadget casts are re-aimed by the bot's own targeting rather than replayed at his
+recorded coordinates, per his requirement — v3 files DO store the position, so this
+deliberately routes 11/12/13 through `ApplyAction` instead of `ApplyRecorded`.
+
+Fidelity is 98%: his recorded actions almost all still land, so the replay is faithful as an
+action stream.
+
+### As designed, the win-rate metric REWARDS RUSHING and must not be used
+
+| bot | win rate | avg length | replay-Marc end HP | bot reaches ARMAGEDDON |
+|---|---|---|---|---|
+| PreRungCommit (oldest) | **100.0%** | 165s | 0.0% | 0% |
+| current default | 90.0% | 193s | 9.6% | 0% |
+| PreChargeAware | 85.0% | 202s | 13.3% | 0% |
+
+**The ordering is inverted.** `CommitToRung` gained +5 on the ladder and loses 10 here, and
+the arm that wins most is the one that kills a defenceless opponent fastest. A replayed human
+cannot react, so any change that trades rush speed for economy looks like a regression. Used
+as an acceptance test this would have rejected the single best change of the last two days.
+
+Marc's falsification condition — "if the bot beats the sequence first try, I'm wrong" — did
+fire. **It does not license the inference**, because the instrument is measuring a de-fanged
+opponent. Note the last column: the bot reaches ARMAGEDDON 0% of the time in *every* arm,
+including the one that wins 100%. Win rate here is completely insensitive to the thing he is
+actually reporting.
+
+### `--race` is the version that measures what he described
+
+Makes the human's castle invulnerable, removing the rush as a win condition and leaving only
+the economy race. Same device as the stall harness's `--protect-attacker`.
+
+**A bug worth recording: setting `IsInvulnerable` alone is a NO-OP.** `ProcessStatuses` clears
+it the moment `CurrentTick` passes `InvulnerableUntilTick`, which defaults to 0. The first
+version of race mode did exactly that and produced output *byte-identical* to the unprotected
+run — which is the only reason it was caught. Both fields must be set.
+
+**Result, 30 games, current default bot:**
+
+| | investments | ARMAGEDDON | end HP |
+|---|---|---|---|
+| replayed human | 8.00 | **100%** (at 272s) | 100% |
+| bot | 7.60 | **0%** | 0% |
+
+**Human first in 30, bot first in 0.** The bot dies to his ARMAGEDDON every single game.
+
+### WHERE THE MONEY GOES — the open question from item 7, answered
+
+Per game, averaged, in race mode:
+
+| | |
+|---|---|
+| units | **$51,127** |
+| gadgets | **$44,082** |
+| repairs | **$23,463** |
+| investments | $35,586 |
+| unspent | $23,639 |
+| **total earned** | **~$177,897** |
+
+**ARMAGEDDON costs $121,221. The bot earns $178,000 and spends $118,672 of it on units,
+gadgets and repairs.** It is not short of income — it has comfortably more than the rung
+costs. It spends the race away. Every one of Marc's three observations is confirmed by a
+line in that table.
+
+**Read `--race` as a diagnostic, never as a result.** The human cannot die, so the bot can
+never win it, and `killerInstinct` and the disengage system both read enemy castle HP and
+therefore never fire. What it isolates is the race, which is exactly the failure Marc
+reports: he survives the aggression, then wins on economy.

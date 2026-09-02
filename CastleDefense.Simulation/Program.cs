@@ -214,6 +214,15 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--replay-gauntlet")
+            {
+                // Plays a bot against one of Marc's recorded action streams. See
+                // ReplayGauntlet.cs -- in particular the note on what it does NOT measure.
+                GameDataManager.Initialize();
+                ReplayGauntlet.Run(args, FindRecordingsDir());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--economy-tracker-check")
             {
                 GameDataManager.Initialize();
@@ -1213,6 +1222,25 @@ namespace CastleDefense.Simulation
         // rejected approach's problem (a live-redriven P2 diverges too far from the real
         // trajectory over a whole game to be useful) or a hand-reconstructed formula's
         // risk of a subtle transcription/phase mistake.
+        /// <summary>
+        /// The LIVE recordings folder -- Marc's play record. Walks up from the binary rather
+        /// than hardcoding, because the binary sits several levels down in bin/. Deliberately
+        /// finds `recordings`, never `recordings-agent`: a gauntlet run reads the human corpus
+        /// and writes nothing, so there is nothing to keep out of it.
+        /// </summary>
+        static string FindRecordingsDir()
+        {
+            var d = new DirectoryInfo(AppContext.BaseDirectory);
+            for (int i = 0; i < 8 && d != null; i++, d = d.Parent)
+            {
+                var c1 = Path.Combine(d.FullName, "CastleDefenseGame2", "recordings");
+                if (Directory.Exists(c1)) return c1;
+                var c2 = Path.Combine(d.FullName, "recordings");
+                if (Directory.Exists(c2)) return c2;
+            }
+            return Path.Combine(AppContext.BaseDirectory, "recordings");
+        }
+
         static void TraceBotDeath(string replayDir, string gameId)
         {
             string path = Path.Combine(replayDir, gameId + ".replay");
