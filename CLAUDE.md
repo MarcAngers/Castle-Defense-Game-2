@@ -407,6 +407,45 @@ refinement pass which only deepened the top cells):
 Speed defence and Green/Red replicate the independent mirror-sweep balance findings, which
 is a useful validity check on the whole instrument.
 
+### RE-MEASURED 2026-09-02 after charges, the auto-spawner and ChargeAwareFallback
+
+`best-loadout` (new; see `CastleDefense.BotArena/BestLoadout.cs`) sweeps all 128 of the
+BOT's own loadouts against a discriminating pool, seat-alternated, common random numbers,
+n=100 specs x 2 seats per cell, two seeds:
+
+```
+CastleDefense.BotArena.exe best-loadout --games 100 --seed 12345
+```
+
+**`White,nuke,reinforcements` is rank 1 in both seeds** (100.0% / 99.5%). Ranks 2-3 in both
+are the same team and defence with a different offence, so the offence slot barely matters
+once White + reinforcements is fixed.
+
+Marginals, both seeds (seed 12345 / seed 777):
+
+| team | | offence | | defence | |
+|---|---|---|---|---|---|
+| White | **94.2 / 92.3** | freeze | 90.3 / 87.7 | reinforcements | **93.1 / 90.0** |
+| Orange | 92.7 / 89.2 | nuke | 90.0 / 87.5 | wall | 89.5 / 85.9 |
+| Black | 91.8 / 87.6 | firebomb | 89.1 / 86.1 | heal | 89.2 / 85.8 |
+| Purple | 91.3 / 88.7 | snipe | **83.4 / 80.4** | speed | **81.0 / 79.8** |
+| Yellow | **77.8 / 76.7** | | | | |
+
+The ORDERING replicates the 2026-08-18 counter-matrix marginals (White best, Yellow/Green
+worst, snipe worst offence, speed worst defence), which is a useful validity check on both
+instruments. **The one real change is that reinforcements pulled AWAY from heal and wall**,
+which were a near three-way tie before (55.7 / 55.6 / 55.2) and are now 93.1 vs 89.2 / 89.5.
+That is the charge mechanic showing up exactly where the mechanism predicts: reinforcements
+spawns five units with `ignoreCost`, so it is one of the only ways to put bodies on the field
+without spending a charge.
+
+Note the reinforcements builds earn FEWER investments than the wall/heal builds (4.61 vs
+5.72) and still win more, i.e. they convert money into board presence faster than the economy
+compounds it.
+
+**`vsClone` is at a 100% ceiling for every top-15 cell and carries no signal** — HumanClone is
+far weaker than Marc. Do not read that column as evidence about him.
+
 ### What this table is NOT
 
 - **It is not fitted against Marc.** Both seats are HeuristicBot. The absolute rates will not
