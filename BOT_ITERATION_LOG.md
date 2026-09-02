@@ -471,3 +471,44 @@ line in that table.
 never win it, and `killerInstinct` and the disengage system both read enemy castle HP and
 therefore never fire. What it isolates is the race, which is exactly the failure Marc
 reports: he survives the aggression, then wins on economy.
+
+## 13. AutoSpawnerInsteadOfUnits — WORKS, but it is a trade; cap 8 recommended
+
+2026-09-02 · Marc's instruction: the attack branch should buy the auto-spawner rather than a
+constant unit stream, with unit spam demoted to last-resort defence. Reactive spending is
+untouched, so the last-resort half is unchanged.
+
+**Two versions were needed.** Dropping the payback test alone still stalled at level 3.2 and
+left unit spend at $51,016 against a $51,508 baseline — it changed nothing. The allowance is a
+FLOW, so while short of the next level the branch fell through and spent it on a unit and it
+never accumulated. **Banking** fixes it, using TechEscalation's existing mechanism and its
+reachability deadlock guard.
+
+**The level cap turned out to be the whole story.**
+
+| | ladder OVERALL (4 arms) | ladder mirror h2h | race-mode ARMAGEDDON | gauntlet win |
+|---|---|---|---|---|
+| default | 90.5 / 90.9 / 90.6 / 90.7 | — | **0%** | 90% |
+| cap 8 | **90.7 / 91.1 / 91.0 / 91.0** | **+1.0 to +2.9** | **8%** | 80% |
+| cap 16 | 90.1 / 90.5 / 90.5 / 90.5 | −0.7 to −3.2 | 10% | 80% |
+
+Cap 16 banks toward $12,284 rungs and starves the board for too long; cap 8 reaches four free
+units/sec for $2,267 cumulative and then resumes normal play. Earned investments rise ~0.06 in
+both.
+
+**RECOMMENDED: cap 8** (`AutoSpawnFirst8`). It is the only arm positive on the ladder, which is
+the broadest instrument here (6,400 games per arm per mode), and it still takes race-mode
+ARMAGEDDON from 0% to 8% — the first time the bot has reached it in any measurement. Cap 16's
+race edge over cap 8 is one game in forty, i.e. noise.
+
+**Stated as a judgement call, not a measurement.** Both caps cost 10 points of plain gauntlet
+win rate (90% → 80%). I am discounting that because item 12 showed plain gauntlet win rate
+rewards rushing a replayed opponent who cannot react — it ranked the oldest bot first at 100%.
+But that is my reading of the instrument, not a fact, and it is the one number that says this
+change is bad. It deserves scrutiny.
+
+**Open inefficiency worth chasing next: banked money that is never spent.** Unspent at game end
+goes $4,952 → $18,114 (cap 8) in normal mode while unit spend is unchanged at ~$26,500. The bot
+banks and the game ends first. `TechEscalation` already has `TechTimeAware` for exactly this —
+refuse to hold when the wait would eat too much of the remaining game — and the auto-spawner
+banking has no equivalent.
