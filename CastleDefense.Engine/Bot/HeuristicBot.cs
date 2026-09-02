@@ -2114,6 +2114,31 @@ namespace CastleDefense.Engine.Bot
             KillerInstinctPushLatch = true,
         };
 
+        /// <summary>
+        /// EconomyBrakeProfile plus the cap-8 auto-spawner substitution -- the configuration
+        /// Marc is play-testing on 2026-09-02.
+        ///
+        /// A SEPARATE PROFILE rather than flags added to EconomyBrakeProfile, so that profile
+        /// keeps meaning what every number recorded against it means. Selected by
+        /// `Singleplayer:AutoSpawner` in appsettings.json; set it false to go straight back.
+        ///
+        /// Cap 8 rather than 16 on the measurements in BOT_ITERATION_LOG.md item 13: cap 8 is
+        /// the only arm positive on the ladder, and still takes race-mode ARMAGEDDON from 0%
+        /// to 8%. Both caps cost plain gauntlet win rate, which item 12 argues that instrument
+        /// overstates -- that argument is the load-bearing judgement here.
+        /// </summary>
+        public static readonly HeuristicBotSettings EconomyBrakeAutoSpawnProfile = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+            KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8,
+        };
+
         // ── Named presets for temporary ladder contenders ──
         // Each layers ONE tabled change on top of current default behaviour, so a retest
         // measures that change alone rather than re-litigating what is already committed.

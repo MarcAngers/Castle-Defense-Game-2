@@ -512,3 +512,37 @@ goes $4,952 → $18,114 (cap 8) in normal mode while unit spend is unchanged at 
 banks and the game ends first. `TechEscalation` already has `TechTimeAware` for exactly this —
 refuse to hold when the wait would eat too much of the remaining game — and the auto-spawner
 banking has no equivalent.
+
+## 14. CORRECTION — every A/B this session used the WRONG BASELINE
+
+2026-09-02 · The ladder's reference contender is `new HeuristicBotAdapter(side)`, i.e. bare
+`HeuristicBotSettings.Default`. **The deployed singleplayer bot is
+`HeuristicBotSettings.EconomyBrakeProfile`** (`Singleplayer:EconomyBrake = true`), which sets
+`RepairPriceCheck`, `RepairHpFloorPct`, `RepairMinIntervalSeconds`, `HazardAttackBlackout`,
+`KillerInstinctInvestLockoutSeconds` and `KillerInstinctPushLatch`.
+
+So every accept/reject margin recorded in items 1-13 is against **a bot Marc never faces**.
+
+**It is not a small difference.** On the replay gauntlet, `EconomyBrakeProfile` reaches
+ARMAGEDDON 22% of the time where the bare default reaches it ~0-2%. The deployed bot is far
+better at the race than the thing I was measuring against.
+
+**And it reverses item 13's verdict.** Gauntlet, `9413D9`, n=60, normal mode:
+
+| | win rate | ARMAGEDDON | race: human/bot first | end HP | unspent |
+|---|---|---|---|---|---|
+| EconomyBrakeProfile | 80% | 22% | 13 / 12 | 65.9 | $21,592 |
+| + auto-spawner cap 8 | **90%** | **27%** | **6 / 16** | **78.7** | **$13,907** |
+
+The substitution is **+10 points against the real baseline**, not −10. The banked-money
+inefficiency I flagged is also smaller in the change than in the baseline, so that concern was
+backwards too. In `--race` the two are indistinguishable (38% ARMAGEDDON each).
+
+**What survives from items 1-13:** the mechanisms. Charges really were failing silently, the
+gadget layer really was blind to the rung past count 3, banking really was the missing half of
+the substitution, and the money breakdown is a property of the game rather than of a profile.
+**What does not survive:** the margins, and any accept/reject decision that turned on a margin.
+
+**Rule going forward:** A/B against the profile that is actually deployed. The ladder needs a
+`--reference <profile>` option so its reference contender is not silently the bare default;
+until it has one, gauntlet runs must pass `--variant EconomyBrakeProfile` as the control arm.

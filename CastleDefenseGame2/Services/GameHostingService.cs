@@ -345,6 +345,14 @@ namespace CastleDefense.Api.Services
         /// (Singleplayer:EconomyBrake).</summary>
         public static bool SingleplayerEconomyBrake = false;
 
+        /// <summary>
+        /// EconomyBrake plus the cap-8 auto-spawner substitution. Highest precedence of the
+        /// singleplayer toggles. Recorded in the DB as `heuristic_autospawn8` so these games
+        /// can be told apart from earlier ones during analysis -- without that a play-test
+        /// game is indistinguishable from a brake-profile game in game_records.db.
+        /// </summary>
+        public static bool SingleplayerAutoSpawner = false;
+
         // Singleplayer's opponent: the same tuned HeuristicBot used throughout this
         // codebase's own benchmarking (CastleDefense.BotArena) and recording analysis
         // (--trace-human), not the deployed ONNX model. A fresh instance per game since
@@ -353,18 +361,21 @@ namespace CastleDefense.Api.Services
         public void SetupHeuristicOpponent(string gameId)
         {
             _heuristicOpponents[gameId] = new HeuristicBot(2,
-                SingleplayerEconomyBrake ? HeuristicBotSettings.EconomyBrakeProfile
+                SingleplayerAutoSpawner  ? HeuristicBotSettings.EconomyBrakeAutoSpawnProfile
+              : SingleplayerEconomyBrake ? HeuristicBotSettings.EconomyBrakeProfile
               : SingleplayerHazardFix  ? HeuristicBotSettings.RepairFixPlusHazardProfile
               : SingleplayerRepairFix  ? HeuristicBotSettings.RepairFixProfile
                                        : null);
             // Recorded in the DB so the two arms can be told apart when the replays are
             // analysed later -- without this a repair-fix game is indistinguishable from a
             // flagship game in game_records.db.
-            _opponentDescriptions[gameId] = SingleplayerEconomyBrake ? "heuristic_brake"
+            _opponentDescriptions[gameId] = SingleplayerAutoSpawner ? "heuristic_autospawn8"
+                                          : SingleplayerEconomyBrake ? "heuristic_brake"
                                           : SingleplayerHazardFix ? "heuristic_repair_hazard"
                                           : SingleplayerRepairFix ? "heuristic_repairfix" : "heuristic";
             Console.WriteLine($"[Opponent] {gameId}: HeuristicBot (seat 2)"
-                            + (SingleplayerEconomyBrake ? " + REPAIR + HAZARD + ECONOMY BRAKE"
+                            + (SingleplayerAutoSpawner ? " + REPAIR + HAZARD + ECONOMY BRAKE + AUTO-SPAWNER(cap 8)"
+                             : SingleplayerEconomyBrake ? " + REPAIR + HAZARD + ECONOMY BRAKE"
                              : SingleplayerHazardFix ? " + REPAIR FIX + HAZARD BLACKOUT"
                              : SingleplayerRepairFix ? " + REPAIR FIX" : " [flagship]"));
         }

@@ -127,6 +127,8 @@ GameHostingService.SingleplayerRepairFix =
     builder.Configuration.GetValue("Singleplayer:RepairFix", false);
 GameHostingService.SingleplayerHazardFix =
     builder.Configuration.GetValue("Singleplayer:HazardFix", false);
+GameHostingService.SingleplayerAutoSpawner =
+    builder.Configuration.GetValue("Singleplayer:AutoSpawner", false);
 GameHostingService.SingleplayerEconomyBrake =
     builder.Configuration.GetValue("Singleplayer:EconomyBrake", false);
 
