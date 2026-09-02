@@ -61,3 +61,52 @@ scan — average game length and units on the field both rise, which is the inte
 Still worth watching: `HeuristicBot` is `RolloutSearchBot`'s rollout policy for both sides,
 so a slower prior directly costs search depth. Re-measure `search-test` before ever
 promoting this to the default.
+
+## 2. BlockSingleChipper (v1) — REVERTED
+
+2026-09-01 · Marc's finding: a lone enemy on the castle is refused by all four defence
+paths, so it chips permanently for free. v1 bought one cheap body per enemy swing whenever
+an unblocked chipper was on our wall, priced at up to 2 seconds of income per body.
+
+**predicted:** castle HP *must* rise; money spent on units rises only slightly; earned
+invests *must NOT* fall; effect concentrated in long games and low-tier spam.
+
+**measured** — `ladder 400 --both`, seeds 12345 and 777, stacked on iteration 1 so the
+comparison is ChipBlock vs ChargeAware:
+
+| rung | HP% (ChargeAware → ChipBlock) | win rate | earned inv |
+|---|---|---|---|
+| DoNothing | 83.7 → **99.7** | 100 → 100 | 4.29 → 3.96 |
+| Tier1Spam | 47.1 → **84.4** | 100 → 100 | 5.38 → 5.39 |
+| Investor | 57.7 → **83.9** | 98.6 → 95.4 | 5.40 → 5.29 |
+| BalancedHuman | 56.3 → **87.5** | 100 → 99.8 | 5.56 → 5.59 |
+| HumanClone | 52.8 → **71.5** | 98.8 → **88.4** | 5.78 → 5.57 |
+| **Tier4Spam** | 14.3 → 10.9 | **80.4 → 27.8** | **4.72 → 2.28** |
+| HeuristicBot | 37.6 → 40.3 | 48.5 → 45.6 | 6.80 → 6.64 |
+| OVERALL | | **89.5 → 79.6** | |
+
+**verdict:** REVERTED. The blocking mechanism works exactly as designed — castle HP rose on
+every single rung, by up to +37 points. But the load-bearing negative prediction failed
+outright: earned invests against Tier4Spam more than halved.
+
+**diagnosis, and it is a specific arithmetic error, not bad luck.** The rate limit is the
+survival law — one body per enemy *swing* — and swing rate is what the roster clamps
+hardest. `GameDataManager` recomputes AttackSpeed and clamps it to [0.2, 5.0]; **tier-8
+units clamp at the BOTTOM (0.20/s) and tier-4 units clamp at the TOP (5.0/s)**. So the law
+demands ~0.2 bodies/sec against a tier 8 and up to **5 bodies/sec against tier 4** — a 25x
+difference. The stall findings' famous "$2/sec holds anything" figure is specifically
+*against a lone tier 8*. v1 gated the **price of each body** (2 seconds of income) but never
+the **rate of spending**, so against tier-4 pressure it bought ~5 bodies/sec on a $2/sec
+income and drained the wallet continuously — recreating the permanent-reactive-spend
+pathology `SpendOnUnits`' history documents four separate times.
+
+**the instrument is partly blind here, and that matters for reading this result.** Every
+rung where chip blocking helped (DoNothing, Tier1Spam, BalancedHuman) was already pinned at
+a 100% ceiling, so the ladder can show this change's *cost* but not its *benefit*. The
+benefit is not bleeding castle HP to an unanswered chipper over a long game, which is what
+Marc and `RolloutSearchBot` both exploit and what no ladder rung does. Weigh HumanClone
+accordingly — it is the only non-HeuristicBot-derived rung, and it fell 98.8 → 88.4, which
+is real evidence against v1 rather than an artefact of the ceiling.
+
+**next:** v2 caps chip spending as a fraction of income rather than capping the price of
+each body, so the survival law sets the rate only up to what the economy can actually fund.

@@ -1799,6 +1799,35 @@ namespace CastleDefense.Engine.Bot
         public float ChipBlockMaxCredit { get; init; } = 2f;
 
         /// <summary>
+        /// (3b) THE SPEND-RATE CAP v1 LACKED. Chip blocking may consume at most this
+        /// fraction of income, as a banked dollar allowance.
+        ///
+        /// WHY v1 FAILED, precisely. The rate limit is the survival law -- one body per enemy
+        /// SWING -- and swing rate is exactly what the roster clamps hardest.
+        /// GameDataManager recomputes AttackSpeed and clamps it to [0.2, 5.0]; tier-8 units
+        /// clamp at the BOTTOM (0.20/s) and tier-4 units clamp at the TOP (5.0/s). So the law
+        /// asks for ~0.2 bodies/sec against a tier 8 and up to 5 bodies/sec against tier 4 --
+        /// a 25x spread. The stall findings' "$2/sec holds anything" is specifically about a
+        /// lone tier 8.
+        ///
+        /// v1 capped the PRICE OF EACH BODY (ChipBlockIncomeSeconds) but never the RATE of
+        /// spending, so against tier-4 pressure it bought ~5 bodies/sec on a $2/sec income
+        /// and drained the wallet continuously. Earned investments against Tier4Spam more
+        /// than halved (4.72 -> 2.28) and that rung fell 80.4% -> 27.8%.
+        ///
+        /// A FLOW CAP IS THE ESTABLISHED SHAPE for this in this file -- see ReactiveFlowCap
+        /// and the attack allowance. It banks, so a quiet stretch still funds a real burst
+        /// when a chipper actually arrives, but cumulative chip spending can never outrun
+        /// cumulative income. When the law asks for more than the cap allows, the bot buys
+        /// what it can afford and otherwise does what it did before: out-economies the
+        /// opponent instead of trading with it.
+        /// </summary>
+        public double ChipBlockIncomeFraction { get; init; } = 0.25;
+
+        /// <summary>Seconds of chip allowance that may bank while nothing is attacking.</summary>
+        public double ChipAllowanceCapSeconds { get; init; } = 8.0;
+
+        /// <summary>
         /// (2) BUY THE AUTO-SPAWNER. No bot in the project can currently do this: action 14
         /// is absent from GetActionMask, and RolloutSearchBot builds its candidate list from
         /// `a = 8..1` plus {9,10,11,12,13}. But HeuristicBot bypasses the action space
@@ -2386,8 +2415,34 @@ namespace CastleDefense.Engine.Bot
 
         // Iteration 3 is A/B'd against Accepted (which already carries iteration 1), not
         // against bare defaults -- see Accepted's comment on why the stack is the baseline.
+        // v1, kept ONLY so the reverted result in BOT_ITERATION_LOG.md stays reproducible.
+        // ChipBlockIncomeFraction now defaults to 0.25, so v1's defining property -- no
+        // spend-rate cap at all -- has to be restated explicitly or this silently becomes v2.
         public static readonly HeuristicBotSettings ChipBlock =
-            new HeuristicBotSettings { ChargeAwareFallback = true, BlockSingleChipper = true };
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 1000.0,   // effectively uncapped
+            };
+
+        // v2: the flow cap v1 lacked. v1 is kept above so the pair can be re-run together.
+        public static readonly HeuristicBotSettings ChipBlockV2 =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 0.25,
+            };
+
+        // A tighter arm, in case 0.25 of income is still too much against fast swingers.
+        public static readonly HeuristicBotSettings ChipBlockV2Tight =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 0.10,
+            };
 
         public static readonly HeuristicBotSettings AutoSpawn =
             new HeuristicBotSettings { ChargeAwareFallback = true, BuyAutoSpawner = true };
@@ -3565,6 +3620,16 @@ namespace CastleDefense.Engine.Bot
                 }
 
                 LastChipperCount = unblocked;
+
+                // SPEND-RATE CAP (v2). Accrues whether or not anything is attacking, so a
+                // quiet stretch funds a real burst when a chipper arrives -- but cumulative
+                // chip spending can never outrun its share of cumulative income. This is the
+                // term v1 lacked; see ChipBlockIncomeFraction for what that cost.
+                double chipRate = me.Income * _settings.ChipBlockIncomeFraction;
+                _chipAllowance = Math.Min(
+                    _chipAllowance + chipRate * (DecisionIntervalTicks / 30f),
+                    chipRate * _settings.ChipAllowanceCapSeconds);
+
                 if (unblocked > 0 && chipSwingRate > 0f)
                 {
                     // One body per enemy SWING -- the survival law, applied directly. Credit
@@ -3579,7 +3644,12 @@ namespace CastleDefense.Engine.Bot
                         // is iteration 1's lesson applied at the point of use: without it this
                         // rule would inherit exactly the silent-failure mode it was written
                         // after.
-                        double budget = Math.Min(me.Money, me.Income * _settings.ChipBlockIncomeSeconds);
+                        // Bounded by money, by the per-body price cap, AND by the flow
+                        // allowance. The allowance is the binding one against fast-swinging
+                        // attackers, which is the whole v1 -> v2 change.
+                        double budget = Math.Min(me.Money,
+                                        Math.Min(me.Income * _settings.ChipBlockIncomeSeconds,
+                                                 _chipAllowance));
                         UnitDefinition cheapest = null;
                         foreach (var d in teamDef.Roster)
                         {
@@ -3593,6 +3663,10 @@ namespace CastleDefense.Engine.Bot
                             && Act(() => engine.SpawnUnit(_side, cheapest.Id)))
                         {
                             _chipCredit -= 1f;
+                            // Debit the allowance, or the cap is a ceiling never paid down:
+                            // it would bank to full and then permit every purchase, which is
+                            // no cap at all. Same reasoning as the reactive allowance debit.
+                            _chipAllowance = Math.Max(0, _chipAllowance - cheapest.Cost);
                             ChipBlocksBought++;
                             LastSpawnReason = "chipblock";
                             LastUnitsPurchased++;
@@ -5497,6 +5571,9 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Blocking credit owed, in bodies. See BlockSingleChipper.</summary>
         private float _chipCredit;
+
+        /// <summary>Dollars available for chip blocking. See ChipBlockIncomeFraction.</summary>
+        private double _chipAllowance;
 
         public long OffensiveSpendDecisions { get; private set; }
 
