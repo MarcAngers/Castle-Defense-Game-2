@@ -1707,6 +1707,44 @@ namespace CastleDefense.Engine.Bot
         // at InvestmentCount 8 triggers ARMAGEDDON (GameEngine.Invest -> ArmageddonEffect),
         // which shields us with divine_3 and rains meteors, firebombs, waves and nukes on the
         // enemy castle. So the whole job is: survive long enough to invest eight times.
+        /// <summary>
+        /// (1) CHARGE-AWARE PURCHASE FALLBACK. When the ranked pick has no charge left,
+        /// fall through to the best-scoring unit that is both affordable AND charged,
+        /// instead of making one attempt that silently fails.
+        ///
+        /// THE BUG THIS FIXES. Every filter in SpendOnUnits' pick pipeline -- RankPool,
+        /// outclassPick, matchedPick, the anyAffordable fallback, PowerPickAffordable and
+        /// TechEscalation -- tests `def.Cost &lt;= spendable` and nothing else. The method
+        /// then makes exactly ONE attempt, `Act(() =&gt; engine.SpawnUnit(_side, pick.def.Id))`,
+        /// with no fallback. Since unit charges shipped (2026-09-01) SpawnUnit refuses a
+        /// purchase with no charge left, so the bot converges on one unit id, drains its
+        /// five charges in under a second at six decisions/sec, and then re-picks that same
+        /// uncharged id for most of the rest of the game while a fully-charged second choice
+        /// sits unused.
+        ///
+        /// IT FAILS SILENTLY, which is why it survived. LastUnitsPurchased, ActionCounts[],
+        /// GameEngine.UnitsPurchased[] and MoneySpentOnUnits[] all increment on SUCCESS
+        /// only, so a refused purchase leaves no trace in any counter or log.
+        ///
+        /// MEASURED BEFORE THE FIX: `bot-checksum --games 4` gave 0.94-1.41 units/sec
+        /// (mean 1.14) against a six-decisions/sec cadence, with $39k-$55k left unspent at
+        /// the final tick. 1.14/sec is almost exactly PlayerState.UnitChargeRegenMs = 1000,
+        /// i.e. the refill rate of a SINGLE unit id -- the signature of a bot that never
+        /// rotates. CLAUDE.md independently records purchases falling 101.9 -> 35.4 per
+        /// 1000 ticks (-67%) when charges shipped.
+        ///
+        /// DELIBERATELY A FALLTHROUGH, NOT A PRE-FILTER. Filtering the ranked pools on
+        /// charges would change which unit is chosen even when the top pick IS available,
+        /// silently re-tuning the outclass rule and TechEscalation. This engages only on the
+        /// decisions that would otherwise have bought nothing at all, so on every other
+        /// decision the bot is byte-identical to the reference.
+        ///
+        /// SCOPED TO SpendOnUnits. The wiper purchase and DefensiveResponse's block spawn
+        /// have the same shape and are NOT covered here, so this iteration measures one
+        /// mechanism. See BOT_BACKLOG.md.
+        /// </summary>
+        public bool ChargeAwareFallback { get; init; } = false;
+
         public bool DefenceOnly { get; init; } = false;
 
         // Incoming castle DPS at which the attack is worth answering at all.
@@ -2219,6 +2257,34 @@ namespace CastleDefense.Engine.Bot
         // Siege threshold itself. Marc specified 2; 3 asks whether a stricter flag pays.
         public static readonly HeuristicBotSettings SiegeMin3 =
             new HeuristicBotSettings { SiegePreCast = true, RageOnSiege = true, SiegeMinUnits = 3 };
+
+        // ── BOT_BACKLOG.md iteration presets ──
+        // One flag each, layered on default behaviour, so `ladder --variant <name>` measures
+        // that change alone against the committed reference on identical specs.
+        public static readonly HeuristicBotSettings ChargeAware =
+            new HeuristicBotSettings { ChargeAwareFallback = true };
+
+        /// <summary>
+        /// EVERY FLAG ACCEPTED BY THE ITERATION LOOP SO FAR, stacked.
+        ///
+        /// Deliberately separate from the single-flag presets above, and deliberately NOT
+        /// promoted into the defaults. Flipping a default moves `bot-checksum`, every ladder
+        /// baseline, `FLAGSHIP_BASELINE.md` and the shipped singleplayer opponent all at
+        /// once -- that is Marc's call, not the loop's. Keeping the accepted set here means
+        /// the default bot stays byte-identical (checksum 47EC146D660B0D721B4DC224D8ACB7F9)
+        /// while one profile name turns the whole accepted set on.
+        ///
+        /// Stacking also matters for measurement: from iteration 2 onward each new flag is
+        /// A/B'd against THIS profile rather than against bare defaults, so interactions
+        /// between accepted changes are inside the comparison instead of outside it.
+        ///
+        /// See BOT_ITERATION_LOG.md for what each flag bought and what it cost.
+        /// </summary>
+        public static readonly HeuristicBotSettings Accepted =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,   // iteration 1 -- KEPT
+            };
         // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
         // costs 0.85 earned investments per game and loses 15 points head-to-head, so the
         // failure mode is ECONOMIC. Lower k = stricter = start spamming later, at higher
@@ -4726,6 +4792,44 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
+            // --- CHARGE-AWARE FALLBACK (flag 1) --------------------------------------
+            // The pick above was chosen on price alone. If it has no charge left, SpawnUnit
+            // will refuse it and this decision buys nothing -- so re-pick the best-scoring
+            // unit that is affordable AND charged. See ChargeAwareFallback's own comment for
+            // the measurement and for why this is a fallthrough rather than a pre-filter.
+            //
+            // Ranked by the SAME scorer that produced the original pick, so the fallback is
+            // "the next thing this bot wanted" rather than a differently-motivated choice:
+            // RawPower when the power pick or rich mode is in force, ScoreUnit otherwise.
+            if (_settings.ChargeAwareFallback && !me.HasUnitCharge(pick.def.Id))
+            {
+                bool byPower = useRawPower
+                    || (_settings.PowerPickAffordable && !preferDefense && !killerInstinct);
+
+                UnitDefinition best = null;
+                double bestScore = double.NegativeInfinity;
+                foreach (var def in roster)
+                {
+                    if (def.Cost <= 0 || def.Cost > spendable) continue;
+                    if (!me.HasUnitCharge(def.Id)) continue;
+                    double sc = byPower
+                        ? RawPower(def, enemyHitDamage)
+                        : ScoreUnit(def, preferDefense, enemyHitDamage,
+                                    _settings.MultiplicativeUnitValue, _settings.UnitValueCostExponent,
+                                    _settings.UnitValueCostExponentDefense);
+                    if (sc > bestScore) { bestScore = sc; best = def; }
+                }
+
+                // Nothing affordable has a charge -- every buyable unit is drained. Return
+                // rather than falling through to the doomed attempt below: the outcome is
+                // the same either way, but returning makes the decision honest and keeps
+                // ChargeFallbackEmpty a usable diagnostic.
+                if (best == null) { ChargeFallbackEmpty++; return; }
+
+                pick = (best, bestScore);
+                ChargeFallbacks++;
+            }
+
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
@@ -5110,6 +5214,20 @@ namespace CastleDefense.Engine.Bot
         public long HazardBlackoutDecisions { get; private set; }
 
         /// <summary>Times the offensive spend branch was entered.</summary>
+        /// <summary>
+        /// Decisions on which ChargeAwareFallback re-picked because the ranked choice had no
+        /// charge. Under the reference bot every one of these was a decision that bought
+        /// nothing at all and said so nowhere.
+        /// </summary>
+        public long ChargeFallbacks { get; private set; }
+
+        /// <summary>
+        /// Decisions where EVERY affordable unit was out of charges. This is the genuine
+        /// production ceiling; if it is large the roster is drained and the answer is a free
+        /// spawn source (the auto-spawner, reinforcements), not a better pick.
+        /// </summary>
+        public long ChargeFallbackEmpty { get; private set; }
+
         public long OffensiveSpendDecisions { get; private set; }
 
         /// <summary>Times it was entered while the blackout was up. Must stay 0.</summary>
