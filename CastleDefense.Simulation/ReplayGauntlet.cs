@@ -86,6 +86,7 @@ namespace CastleDefense.Simulation
             long attempted = 0, landed = 0;
             int humanWonRace = 0, botWonRace = 0;
             double botUnitSpend = 0, botRepairSpend = 0, botGadget = 0, botInvestSpend = 0, botEndMoney = 0;
+            double botAutoLevel = 0, botOffensiveDecisions = 0;
             double humanArmaSecs = 0, botArmaSecs = 0;
 
             for (int g = 0; g < games; g++)
@@ -180,6 +181,8 @@ namespace CastleDefense.Simulation
                 botUnitSpend += engine.MoneySpentOnUnits[2];
                 botGadget += botGadgetSpend;
                 botEndMoney += state.Player2.Money;
+                botAutoLevel += state.Player2.AutoSpawnLevel;
+                botOffensiveDecisions += bot.OffensiveSpendDecisions;
                 botHp += Pct(state.Player2);
                 humanHp += Pct(state.Player1);
                 ticks += state.CurrentTick - start;
@@ -201,6 +204,8 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"    repairs     {botRepairSpend / n,10:N0}");
             Console.WriteLine($"    investments {botInvestSpend / n,10:N0}");
             Console.WriteLine($"    unspent     {botEndMoney / n,10:N0}   <- and ARMAGEDDON costs 121,221");
+            Console.WriteLine($"    auto-spawner level reached {botAutoLevel / n,5:F1}   " +
+                              $"non-reactive attack decisions {botOffensiveDecisions / n,8:F0}");
 
             Console.WriteLine();
             Console.WriteLine($"  ARMAGEDDON RACE   human first in {humanWonRace}, bot first in {botWonRace}, " +

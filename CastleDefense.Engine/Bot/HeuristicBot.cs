@@ -1904,7 +1904,12 @@ namespace CastleDefense.Engine.Bot
         /// Highest auto-spawner level this rule will buy. 5 is $860 cumulative for 3 free
         /// bodies/sec; the ladder runs to 19 and $280,427, which is a different hypothesis.
         /// </summary>
-        public int AutoSpawnMaxLevel { get; init; } = 5;
+        /// Raised from 5 to 16 on 2026-09-02. Five was chosen when the question was "are the
+        /// cheap early rungs worth buying out of savings" ($860 cumulative). The question is
+        /// now "should this branch buy the machine instead of units", and the branch has
+        /// $51,127 a game to spend -- level 16 is $36,813 cumulative and the last level before
+        /// the ladder jumps to $43,614 for one rung.
+        public int AutoSpawnMaxLevel { get; init; } = 16;
 
         /// <summary>
         /// Buy a level only when it costs at most this fraction of the next investment
@@ -1945,6 +1950,28 @@ namespace CastleDefense.Engine.Bot
         /// the purchase is made in.
         /// </summary>
         public bool AutoSpawnFromAttackBudget { get; init; } = false;
+
+        /// <summary>
+        /// (11) THE AUTO-SPAWNER IS THE ATTACK BRANCH'S DEFAULT PURCHASE, instead of units.
+        /// Marc's instruction, 2026-09-02: "the unit stream logic should be adapted to using
+        /// the Autospawner instead. Spamming money on units should be a last resort defense
+        /// now instead of something that happens every game at a certain income level."
+        ///
+        /// WHAT THIS REPLACES, priced. `--replay-gauntlet --race` measured the bot spending
+        /// **$51,127 a game** on one-off units out of this branch, while ARMAGEDDON -- the rung
+        /// that ends the game and that it never reaches -- costs $121,221. The same $51,127
+        /// buys the auto-spawner ladder past level 16 ($36,813 cumulative), which is six free
+        /// units a second, of tiers [5,4,4,2,2,2], for the rest of the game.
+        ///
+        /// It also routes around the charge cap, which nothing else the bot can buy does:
+        /// auto-spawner units are `ignoreCost`, so they consume no charge and are not subject
+        /// to the one-purchase-per-decision pacing that limits bought units to ~1/sec per id.
+        ///
+        /// REACTIVE SPENDING IS UNTOUCHED. This is scoped to `!preferDefense &amp;&amp;
+        /// !killerInstinct`, so buying units to answer a threat -- the "last resort defense"
+        /// half of Marc's instruction -- still behaves exactly as before.
+        /// </summary>
+        public bool AutoSpawnerInsteadOfUnits { get; init; } = false;
 
         /// <summary>
         /// A level must repay its price in free unit value within this many seconds. Games
@@ -2536,6 +2563,15 @@ namespace CastleDefense.Engine.Bot
 
         public static readonly HeuristicBotSettings SelfAware =
             new HeuristicBotSettings { CommitToRung = true, ArmageddonCommit = true };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst8 =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8 };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst12 =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 12 };
 
         public static readonly HeuristicBotSettings AutoSpawnSub =
             new HeuristicBotSettings
@@ -5296,22 +5332,68 @@ namespace CastleDefense.Engine.Bot
             // Same budget, different buy. Placed here rather than in Decide() so it competes
             // with the unit this method was about to purchase, which is the whole point --
             // see AutoSpawnFromAttackBudget for why the funding source is the finding.
-            if (_settings.AutoSpawnFromAttackBudget && !preferDefense && !killerInstinct
+            if ((_settings.AutoSpawnerInsteadOfUnits || _settings.AutoSpawnFromAttackBudget)
+                && !preferDefense && !killerInstinct
                 && me.AutoSpawnLevel < Math.Min(_settings.AutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel))
             {
                 double price = me.AutoSpawnPrice;   // captured: UpgradeAutoSpawn moves it
                 if (price > 0 && price <= spendable)
                 {
-                    double gain = AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel + 1)
-                                - AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel);
-                    if (gain > 0 && price <= gain * _settings.AutoSpawnPaybackSeconds
-                        && Act(() => engine.UpgradeAutoSpawn(_side)))
+                    // TWO VALUATIONS, and the difference is the point of flag 11.
+                    //
+                    // AutoSpawnFromAttackBudget (flag 2b) required the level to repay its
+                    // price in MARGINAL roster-dollars per second within a payback window.
+                    // That reads the machine as an investment competing with a unit, and it
+                    // stalls at level 3: the step from [1,1] to [2,1] adds one dollar per
+                    // second of free units for $161, so nothing past it ever clears a 45s
+                    // payback. Measured inert -- Tier4Spam and Chipper came back
+                    // byte-identical.
+                    //
+                    // AutoSpawnerInsteadOfUnits (flag 11) drops the payback test entirely and
+                    // makes the machine the DEFAULT purchase of this branch. The reasoning is
+                    // Marc's, from watching it play: a one-off price buys units every second
+                    // for the rest of the game, where the same money buys one unit once. The
+                    // race-mode breakdown priced the alternative -- this branch currently
+                    // spends $51,127 a game on one-off units, which is the whole auto-spawner
+                    // ladder to level 17 several times over.
+                    bool worthIt = _settings.AutoSpawnerInsteadOfUnits;
+                    if (!worthIt)
+                    {
+                        double gain = AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel + 1)
+                                    - AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel);
+                        worthIt = gain > 0 && price <= gain * _settings.AutoSpawnPaybackSeconds;
+                    }
+
+                    if (worthIt && Act(() => engine.UpgradeAutoSpawn(_side)))
                     {
                         AutoSpawnLevelsBought++;
                         _attackSpendAllowance = Math.Max(0, _attackSpendAllowance - price);
                         _attackSpentThisCycle += price;
                         return;
                     }
+                }
+                else if (_settings.AutoSpawnerInsteadOfUnits && price > 0)
+                {
+                    // BANK RATHER THAN SPEND ON UNITS. Without this the substitution stalls at
+                    // level 3: the allowance is a FLOW, so while it is short of the next level
+                    // the branch falls through and spends it on a unit, and it never
+                    // accumulates. Measured -- the first version reached level 3.2 and left
+                    // unit spend at $51,016 against a $51,508 baseline, i.e. it changed almost
+                    // nothing.
+                    //
+                    // This is the same mechanism TechEscalation already uses for the same
+                    // reason ("bank this decision rather than spending the allowance on chaff
+                    // that would push the target further out of reach"), including its
+                    // deadlock guard: bank only toward a level the allowance CEILING can
+                    // actually reach, or the hold never ends and the branch buys nothing for
+                    // the rest of the game.
+                    double reachable = Math.Min(me.Money - gadgetReserve, allowanceCeiling);
+                    if (price <= reachable)
+                    {
+                        AutoSpawnBankedDecisions++;
+                        return;
+                    }
+                    // Unreachable at this income -- fall through and buy a unit as before.
                 }
             }
 
@@ -5784,6 +5866,9 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Decisions on which ArmageddonCommit closed the attack budget. Diagnostic.</summary>
         public long ArmageddonCommitDecisions { get; private set; }
+
+        /// <summary>Decisions spent banking toward the next auto-spawner level. Diagnostic.</summary>
+        public long AutoSpawnBankedDecisions { get; private set; }
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
