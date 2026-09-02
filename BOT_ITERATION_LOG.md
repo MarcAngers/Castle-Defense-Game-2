@@ -762,3 +762,46 @@ The `0.2 * nextMax` fallback only fires when that delta is under 1.
 
 So the wiper change is a real win on a different axis (Tier4Spam) and the chipper needs the HP
 valuation fixed first. Kept behind `WiperPricesCastleHp`, not shipped, pending that.
+
+## 21. Single-chipper investment clock — Marc's rule, SHIPPED at 30s
+
+2026-09-02 · Marc's rule from live play, replacing the HP-pricing approach rather than refining
+it: if the next rung is close, tank the chip and save; if it is far, match the threat now; at
+two or more attackers the existing wiper owns the decision.
+
+**It needs no new logic and no HP valuation.** It reuses `timeToInvestSeconds` — money still
+needed over income, both facts — and raises the wiper's budget for the single-attacker case.
+The tank-then-match behaviour Marc describes falls out rather than being scripted: while the
+rung is close the bot holds; the instant the investment lands, money drops to near zero and the
+next rung is dearer, so `timeToInvestSeconds` jumps and the rule flips to match.
+
+**It also sidesteps the circularity that sank item 20.** `DollarsPerHp` reads the repair ladder,
+and ladder position depends on how much the bot has already repaired — so against a chipper it
+never repairs, `RepairCount` stays 0, a repair still buys 10,000 HP for $20, and the bleed never
+looks expensive. The metric called HP cheap *because* the bot was tanking.
+
+### The tank window is the parameter that matters, and the PATIENT setting won
+
+| `ChipperTankSeconds` | Chipper (nostart) | Chipper end HP | OVERALL | gauntlet ARMAGEDDON |
+|---|---|---|---|---|
+| control | 97.8 / 96.8 | 49.6 / 57.7 | 91.7 / 91.7 | **55%** |
+| 8 | 99.4 / 95.0 | **59.2 / 62.7** | 91.6 / 91.5 | — |
+| 15 | **99.6** / 96.0 | 55.3 / 59.6 | 91.7 / 91.7 | **32%** |
+| **30 — shipped** | 99.4 / **97.1** | 51.8 / 58.6 | **91.8 / 91.9** | **55%** |
+
+At 15s the bot matches sooner, spends more, and **buys chipper defence with the win condition** —
+gauntlet ARMAGEDDON falls 55% → 32%. At 30s the race is untouched (55%, bot first in 29 of 60,
+identical to control) and the Chipper rung still improves in both modes. Tanking while the rung
+is close really is right, and matching only once it is far really is enough — the longer window
+vindicates Marc's framing over the impatient reading of it.
+
+**Shipped** into `EconomyBrakeAutoSpawnProfile` along with `ChargeAwareEverywhere`, which every
+arm measured alongside the clock carried — shipping without it would ship a configuration that
+was never measured. Guards pass: `--unit-charge-check`, `--economy-tracker-check`.
+
+### Not shipped: `WiperPricesCastleHp`
+
+The castle-HP wiper budget from item 20 is a real win on a different axis — **Tier4Spam +4.9 /
++3.2**, the standing weakness nothing else has moved — but combined with the clock it costs the
+mirror (51.7 → 46.1) and drops gauntlet ARMAGEDDON to 32%. Left behind its flag as a candidate
+for the Tier4Spam problem specifically, not as a chipper fix.

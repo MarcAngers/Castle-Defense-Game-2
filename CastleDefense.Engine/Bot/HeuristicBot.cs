@@ -2013,6 +2013,25 @@ namespace CastleDefense.Engine.Bot
         public bool WiperPricesCastleHp { get; init; } = false;
 
         /// <summary>
+        /// (15) Answer a SINGLE chipper on the investment clock: tank while the next rung is
+        /// close, match the threat as soon as it is not. Marc's rule from live play -- see the
+        /// block in Decide() for why this replaces pricing the HP rather than refining it.
+        /// </summary>
+        public bool ChipperInvestmentClock { get; init; } = false;
+
+        /// <summary>
+        /// How soon the next rung has to be for tanking to be the right answer. Below this the
+        /// bot holds and buys the rung first; above it, it kills the chipper now.
+        /// </summary>
+        public double ChipperTankSeconds { get; init; } = 15.0;
+
+        /// <summary>
+        /// Budget for matching a single chipper, in seconds of income. Bounds the response so
+        /// it buys a killer for the chipper rather than a tier 8 to swat a $1 unit.
+        /// </summary>
+        public double ChipperMatchIncomeSeconds { get; init; } = 4.0;
+
+        /// <summary>
         /// How far ahead to price the bleed. Bounded rather than "rest of the game" so the
         /// budget cannot balloon in a long game; 30s is about the horizon over which a chipper
         /// that is not answered actually matters.
@@ -2261,6 +2280,25 @@ namespace CastleDefense.Engine.Bot
             RaceAwareSpending = true,
             RaceSafetySeconds = 0,
 
+            // SINGLE-CHIPPER INVESTMENT CLOCK, added 2026-09-02 -- Marc's rule, at 30s.
+            //
+            // The tank window is the interesting parameter and the LONGER value won, which
+            // vindicates his framing over the impatient reading of it. At 15s the bot matches
+            // the chipper sooner, spends more, and the gauntlet ARMAGEDDON rate falls 55% ->
+            // 32% -- it buys chipper defence with the win condition. At 30s the race is
+            // untouched (55%, bot first in 29 of 60, identical to control) AND the Chipper rung
+            // improves: 97.8 -> 99.4 nostart with end castle HP 49.6 -> 51.8.
+            //
+            // Tanking while the rung is close really is right, and matching only once it is
+            // far really is enough.
+            ChipperInvestmentClock = true,
+            ChipperTankSeconds = 30.0,
+
+            // Applies the charge test to the wiper and DefensiveResponse too -- included
+            // because every arm measured alongside the clock carried it, so shipping without
+            // it would ship something that was never measured.
+            ChargeAwareEverywhere = true,
+
             // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
             //
             // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
@@ -2280,6 +2318,51 @@ namespace CastleDefense.Engine.Bot
             // it cannot see this. Do not retry ArmageddonCommit without making the commit
             // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
         };
+
+        /// <summary>Shipped profile + the single-chipper investment clock. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true };
+
+        /// <summary>Same, tanking only while the rung is within 8s rather than 15s.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock8 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, ChipperTankSeconds = 8.0 };
+
+        /// <summary>Same, tanking while the rung is within 30s -- more patient.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock30 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, ChipperTankSeconds = 30.0 };
+
+        /// <summary>The clock plus the castle-HP wiper budget, to see if they compose.</summary>
+        public static readonly HeuristicBotSettings ShipChipClockHp = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, WiperPricesCastleHp = true };
+
+        /// <summary>Control that matches the clock arms except for the clock itself.</summary>
+        public static readonly HeuristicBotSettings ShipControlCA = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, };
 
         /// <summary>Shipped profile + the wiper pricing castle HP. Marc's chipper fix.</summary>
         public static readonly HeuristicBotSettings ShipWiperHp = new HeuristicBotSettings
@@ -4059,6 +4142,43 @@ namespace CastleDefense.Engine.Bot
                 // RAISES the budget and never lowers it, so a stack that already justified a
                 // wipe still does. Killing also strictly dominates blocking where affordable:
                 // a blocker stops one swing, a kill stops all of them.
+                // ── SINGLE CHIPPER: TANK OR MATCH, ON THE INVESTMENT CLOCK (flag 15) ──
+                // Marc's rule from live play, 2026-09-02, and it replaces the HP-pricing
+                // approach rather than refining it:
+                //
+                //   "if you're able to reach the next investment soon, then it's worth it to
+                //    tank and save the money, then match the threat as soon as you've bought
+                //    that next investment. If you can't afford the next investment quickly,
+                //    you should match the threat immediately. As soon as there is more than
+                //    1 chipper, the wiper logic should take over."
+                //
+                // WHY THIS BEATS PRICING THE HP. DollarsPerHp is circular: it reads the repair
+                // ladder, and the ladder position depends on how much the bot has already
+                // repaired -- so against a chipper it never repairs, RepairCount stays 0, a
+                // repair still buys 10,000 HP for $20, and the bleed never looks expensive
+                // right up until the castle is gone. The metric calls HP cheap BECAUSE the bot
+                // has been tanking. Time-to-investment has no such loop: it is money still
+                // needed over income, both of which are facts.
+                //
+                // THE TANK-THEN-MATCH BEHAVIOUR FALLS OUT, it is not scripted. While the rung
+                // is close, timeToInvestSeconds is small and the bot holds. The instant the
+                // investment lands, money drops to near zero and the NEXT rung is dearer, so
+                // timeToInvestSeconds jumps, the rule flips to "match", and the bot buys --
+                // which is exactly the sequence Marc describes playing.
+                //
+                // STRICTLY ONE CHIPPER. At two or more the existing wiper logic owns the
+                // decision, on Marc's judgement that it is already good there.
+                if (_settings.ChipperInvestmentClock && committedEnemyCount == 1
+                    && !me.ArmageddonUsed
+                    && timeToInvestSeconds > _settings.ChipperTankSeconds)
+                {
+                    // The rung is far enough away that the money is not doing anything useful
+                    // yet, so stop the bleed. Bounded by a few seconds of income so this buys
+                    // a killer for the chipper, never a tier 8 to swat a $1 unit.
+                    double matchBudget = me.Income * _settings.ChipperMatchIncomeSeconds;
+                    if (matchBudget > maxWorth) { maxWorth = matchBudget; ChipperMatchDecisions++; }
+                }
+
                 if (_settings.WiperPricesCastleHp)
                 {
                     float bleed = threat?.UnblockedDps ?? projectedDps;
@@ -6298,6 +6418,9 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Decisions where the single-chipper clock authorised a match. Diagnostic.</summary>
+        public long ChipperMatchDecisions { get; private set; }
 
         /// <summary>Castle-HP component of the wiper budget last decision. Diagnostic.</summary>
         public double LastWiperHpBudget { get; private set; }
