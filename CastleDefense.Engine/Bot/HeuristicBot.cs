@@ -1879,6 +1879,38 @@ namespace CastleDefense.Engine.Bot
         public double AutoSpawnInvestCommitFraction { get; init; } = 0.5;
 
         /// <summary>
+        /// (2b) BUY THE AUTO-SPAWNER BY SUBSTITUTION, out of the money already earmarked for
+        /// units, instead of out of savings.
+        ///
+        /// THIS IS THE NIGHT'S MAIN FINDING APPLIED. Four hypotheses were rejected in a row
+        /// and they shared one mechanism: each opened a NEW spending channel and each lost
+        /// earned investments, because every cap in this file (AttackSpendFraction,
+        /// InvestPaceTargetSeconds, ReactiveFlowCap, AttackGateMinInvestment,
+        /// reactiveSpendBudget) was tuned assuming no other channel exists. The one change
+        /// that was kept -- ChargeAwareFallback -- only re-allocated WHICH unit was already
+        /// being bought, and moved earned invests by 0.00.
+        ///
+        /// v1 of the auto-spawner spent money the investment claim had declined, i.e. savings,
+        /// and cost 0.81 earned investments on the mirror rung. This version spends the ATTACK
+        /// ALLOWANCE instead. That is the honest place for it: the machine produces units, so
+        /// it should compete with buying a unit, not with buying a rung.
+        ///
+        /// PRICED IN ROSTER DOLLARS PER SECOND, not in units per second. Units/sec cannot tell
+        /// level 2 ([1,1]) from level 3 ([2,1]) -- both deliver 2/s and only the tier mix
+        /// differs -- so a rate-based value model stalls at the first rung that buys quality.
+        /// Summing the cycle's roster costs prices both at once, and it is the same currency
+        /// the purchase is made in.
+        /// </summary>
+        public bool AutoSpawnFromAttackBudget { get; init; } = false;
+
+        /// <summary>
+        /// A level must repay its price in free unit value within this many seconds. Games
+        /// average ~250 s, so 45 s is deliberately strict -- it buys only the rungs that are
+        /// obviously cheap rather than betting on the game running long.
+        /// </summary>
+        public double AutoSpawnPaybackSeconds { get; init; } = 45.0;
+
+        /// <summary>
         /// (4) FARM CHEAP GADGET UPGRADES. Replaces GadgetUpgradeSpam's income test with an
         /// absolute-cost one. See the gate itself in TryUpgradeSpam for the reasoning: XP is
         /// a flat 100 per cast for every gadget, so an upgrade is a FINITE purchase of
@@ -2446,6 +2478,13 @@ namespace CastleDefense.Engine.Bot
 
         public static readonly HeuristicBotSettings AutoSpawn =
             new HeuristicBotSettings { ChargeAwareFallback = true, BuyAutoSpawner = true };
+
+        public static readonly HeuristicBotSettings AutoSpawnSub =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                AutoSpawnFromAttackBudget = true,
+            };
 
         public static readonly HeuristicBotSettings CheapUpgrades =
             new HeuristicBotSettings
@@ -5138,6 +5177,29 @@ namespace CastleDefense.Engine.Bot
                 ChargeFallbacks++;
             }
 
+            // --- AUTO-SPAWNER AS A SUBSTITUTE PURCHASE (flag 2b) ---------------------
+            // Same budget, different buy. Placed here rather than in Decide() so it competes
+            // with the unit this method was about to purchase, which is the whole point --
+            // see AutoSpawnFromAttackBudget for why the funding source is the finding.
+            if (_settings.AutoSpawnFromAttackBudget && !preferDefense && !killerInstinct
+                && me.AutoSpawnLevel < Math.Min(_settings.AutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel))
+            {
+                double price = me.AutoSpawnPrice;   // captured: UpgradeAutoSpawn moves it
+                if (price > 0 && price <= spendable)
+                {
+                    double gain = AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel + 1)
+                                - AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel);
+                    if (gain > 0 && price <= gain * _settings.AutoSpawnPaybackSeconds
+                        && Act(() => engine.UpgradeAutoSpawn(_side)))
+                    {
+                        AutoSpawnLevelsBought++;
+                        _attackSpendAllowance = Math.Max(0, _attackSpendAllowance - price);
+                        _attackSpentThisCycle += price;
+                        return;
+                    }
+                }
+            }
+
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
@@ -5160,6 +5222,20 @@ namespace CastleDefense.Engine.Bot
         // Below ~1.5x the enemy's average hit, a unit is one-or-two-shot fodder that
         // never gets to swing back enough to matter -- crush its score rather than
         // excluding it outright (so it's still a fallback if literally nothing survives).
+        /// <summary>
+        /// Roster dollars of free units the auto-spawner delivers per second at
+        /// <paramref name="level"/>. The cycle repeats exactly once per second by
+        /// construction (units/sec IS the cycle length), so summing the cycle's unit costs
+        /// gives a per-second figure directly with no rate term.
+        /// </summary>
+        private static double AutoSpawnValuePerSecond(List<UnitDefinition> roster, int level)
+        {
+            double total = 0;
+            foreach (int tier in PlayerState.AutoSpawnCycle(level))
+                if (tier >= 1 && tier <= roster.Count) total += roster[tier - 1].Cost;
+            return total;
+        }
+
         private static double SurvivabilityMultiplier(UnitDefinition def, float enemyHitDamage)
         {
             if (enemyHitDamage <= 0) return 1.0;

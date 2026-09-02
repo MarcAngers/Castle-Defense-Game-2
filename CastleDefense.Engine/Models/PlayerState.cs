@@ -111,6 +111,19 @@ namespace CastleDefense.Engine.Models
             new[] { 8, 7, 7, 6, 6, 5 },          // 19
         };
 
+        /// <summary>
+        /// The tier cycle at <paramref name="level"/>, empty when not bought.
+        ///
+        /// Exposed so a bot can PRICE a level rather than just read its rate: the rate alone
+        /// cannot distinguish level 2 ([1,1]) from level 3 ([2,1]) -- both deliver 2 units/s
+        /// and only the tier mix differs -- so a value model built on units/sec stalls at the
+        /// first rung that buys quality instead of quantity. Returned as a read-only view so
+        /// the table itself stays immutable.
+        /// </summary>
+        public static IReadOnlyList<int> AutoSpawnCycle(int level)
+            => level <= 0 || level >= AutoSpawnCycles.Length
+                ? Array.Empty<int>() : AutoSpawnCycles[level];
+
         /// <summary>Units spawned per second at <paramref name="level"/>. 0 when not bought.</summary>
         public static int AutoSpawnUnitsPerSecond(int level)
             => level <= 0 || level >= AutoSpawnCycles.Length ? 0 : AutoSpawnCycles[level].Length;
