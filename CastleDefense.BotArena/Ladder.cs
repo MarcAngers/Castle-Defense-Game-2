@@ -83,6 +83,21 @@ namespace CastleDefense.BotArena
             public double EarnedInvests, OppEarnedInvests, Ticks;
             public int Games;
 
+            // ── PREDICTED-SIGNATURE DIAGNOSTICS (added 2026-09-01) ────────────────────
+            // Win rate alone cannot tell a change that worked from a change that worked
+            // for the wrong reason, and this project's whole failure mode is fitting to a
+            // number nobody re-derived. BOT_BACKLOG.md therefore requires every hypothesis
+            // to name what should move AND what must not; these are the quantities those
+            // predictions are written in.
+            //
+            // UnitsBought is the engine's own purchase counter, which excludes ignoreCost
+            // spawns -- so it measures DECISIONS THAT LANDED, not bodies on the field. That
+            // distinction is the point: a spawn refused for want of a charge increments
+            // nothing anywhere, which is exactly how the charge blind spot stayed invisible.
+            // EndMoney is the companion signal -- money that piled up because purchases
+            // silently failed.
+            public double UnitsBought, EndMoney, EndHpPct;
+
             public double WinRate => Games > 0 ? (double)Wins / Games : 0;
         }
 
@@ -212,6 +227,10 @@ namespace CastleDefense.BotArena
                     rec.EarnedInvests += cPlayer.InvestmentCount - cStartInvests;
                     rec.OppEarnedInvests += oPlayer.InvestmentCount - oStartInvests;
                     rec.Ticks += state.CurrentTick - startTick;
+                    rec.UnitsBought += engine.UnitsPurchased[cSide];
+                    rec.EndMoney += cPlayer.Money;
+                    rec.EndHpPct += cPlayer.CastleMaxHealth > 0
+                        ? 100.0 * cPlayer.CastleHealth / cPlayer.CastleMaxHealth : 0;
                     rec.Games++;
 
                     (contender as IDisposable)?.Dispose();
@@ -354,7 +373,7 @@ namespace CastleDefense.BotArena
             using var csv = new StreamWriter(csvPath);
             csv.WriteLine("mode,seed,contender,opponent,games,wins,losses,draws," +
                           "win_rate,ci_lo,ci_hi,earned_invests,opp_earned_invests,avg_ticks," +
-                          "elapsed_s,ticks_per_s");
+                          "elapsed_s,ticks_per_s,units_per_s,end_money,end_hp_pct");
 
             foreach (var m in modes)
             {
@@ -398,8 +417,8 @@ namespace CastleDefense.BotArena
                 foreach (var (cName, cMake) in contenders)
                 {
                     Console.WriteLine($"\n  {cName}");
-                    Console.WriteLine("    opponent                       win rate  earned inv   opp inv    avg s");
-                    Console.WriteLine("    " + new string('-', 70));
+                    Console.WriteLine("    opponent                       win rate  earned inv   opp inv    avg s  un/s     idle$  hp%");
+                    Console.WriteLine("    " + new string('-', 94));
 
                     int totWins = 0, totGames = 0;
                     // WALL CLOCK PER CONTENDER. Both contenders play the SAME pre-generated
@@ -425,7 +444,9 @@ namespace CastleDefense.BotArena
                         Console.WriteLine(
                             $"    {oName,-16} {r.WinRate,7:P1} [{lo,6:P1},{hi,6:P1}]  " +
                             $"{r.EarnedInvests / r.Games,10:F2} {r.OppEarnedInvests / r.Games,8:F2}  " +
-                            $"{r.Ticks / r.Games / 30.0,7:F1}");
+                            $"{r.Ticks / r.Games / 30.0,7:F1} " +
+                            $"{(r.Ticks > 0 ? r.UnitsBought / (r.Ticks / 30.0) : 0),6:F2} " +
+                            $"{r.EndMoney / r.Games,9:N0} {r.EndHpPct / r.Games,6:F1}");
 
                         csv.WriteLine($"{m},{seed},{cName},{oName},{r.Games},{r.Wins},{r.Losses}," +
                                       $"{r.Draws},{r.WinRate:F4},{lo:F4},{hi:F4}," +
@@ -433,12 +454,15 @@ namespace CastleDefense.BotArena
                                       $"{r.OppEarnedInvests / r.Games:F4}," +
                                       $"{r.Ticks / r.Games:F1}," +
                                       $"{rungSeconds:F2}," +
-                                      $"{(rungSeconds > 0 ? r.Ticks / rungSeconds : 0):F0}");
+                                      $"{(rungSeconds > 0 ? r.Ticks / rungSeconds : 0):F0}," +
+                                      $"{(r.Ticks > 0 ? r.UnitsBought / (r.Ticks / 30.0) : 0):F3}," +
+                                      $"{r.EndMoney / r.Games:F0}," +
+                                      $"{r.EndHpPct / r.Games:F1}");
                         csv.Flush();
                     }
 
                     var (alo, ahi) = WilsonInterval(totWins, totGames);
-                    Console.WriteLine("    " + new string('-', 70));
+                    Console.WriteLine("    " + new string('-', 94));
                     Console.WriteLine($"    {"OVERALL",-16} {(double)totWins / Math.Max(totGames, 1),7:P1} " +
                                       $"[{alo,6:P1},{ahi,6:P1}]   ({totGames} games)");
                     Console.WriteLine($"    {"THROUGHPUT",-16} {contenderSeconds,7:F1}s  " +
