@@ -1,5 +1,6 @@
 ﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
+using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Simulation
@@ -87,6 +88,7 @@ namespace CastleDefense.Simulation
             int humanWonRace = 0, botWonRace = 0;
             double botUnitSpend = 0, botRepairSpend = 0, botGadget = 0, botInvestSpend = 0, botEndMoney = 0;
             double botAutoLevel = 0, botOffensiveDecisions = 0;
+            double raceHeld = 0, raceHopeless = 0, chipperMatch = 0, raceDeficit = 0;
             double humanArmaSecs = 0, botArmaSecs = 0;
 
             for (int g = 0; g < games; g++)
@@ -182,6 +184,10 @@ namespace CastleDefense.Simulation
                 botGadget += botGadgetSpend;
                 botEndMoney += state.Player2.Money;
                 botAutoLevel += state.Player2.AutoSpawnLevel;
+                raceHeld += bot.RaceHeldPurchases;
+                raceHopeless += bot.RaceHopelessDecisions;
+                chipperMatch += bot.ChipperMatchDecisions;
+                raceDeficit += bot.LastRaceDeficitSeconds;
                 botOffensiveDecisions += bot.OffensiveSpendDecisions;
                 botHp += Pct(state.Player2);
                 humanHp += Pct(state.Player1);
@@ -204,6 +210,11 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"    repairs     {botRepairSpend / n,10:N0}");
             Console.WriteLine($"    investments {botInvestSpend / n,10:N0}");
             Console.WriteLine($"    unspent     {botEndMoney / n,10:N0}   <- and ARMAGEDDON costs 121,221");
+            Console.WriteLine($"  ECONOMY TRACKER (per game): offensive purchases HELD by the race gate " +
+                              $"{raceHeld / n,7:F0}, hopeless-zone decisions {raceHopeless / n,6:F0}, " +
+                              $"single-chipper matches {chipperMatch / n,5:F0}");
+            Console.WriteLine($"    final race deficit (ours minus theirs, seconds to ARMAGEDDON) " +
+                              $"{raceDeficit / n,8:F1}   negative = bot ahead");
             Console.WriteLine($"    auto-spawner level reached {botAutoLevel / n,5:F1}   " +
                               $"non-reactive attack decisions {botOffensiveDecisions / n,8:F0}");
 
@@ -292,6 +303,29 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"    unspent        {p1.Money,14:N0} {p2.Money,13:N0}");
             Console.WriteLine($"    units bought   {engine.UnitsPurchased[1],14:N0} {engine.UnitsPurchased[2],13:N0}");
 
+            // Which tiers each side reached for. Recorded actions include attempts that
+            // failed (ApplyAction stamps LastAction before the purchase is validated), so read
+            // these as INTENT; MoneySpentOnUnits above is the exact spend.
+            Console.WriteLine();
+            Console.WriteLine("  UNIT-BUY INTENT BY TIER (recorded actions 1-8)");
+            for (int side = 1; side <= 2; side++)
+            {
+                var stream = side == 1 ? rf.A1 : rf.A2;
+                var tiers = new int[9];
+                foreach (var a in stream) if (a >= 1 && a <= 8) tiers[a]++;
+                var roster = GameDataManager.Teams.Find(x => x.Color ==
+                    (side == 1 ? state.Player1.Team : state.Player2.Team))?.Roster;
+                var parts = new List<string>();
+                for (int ti = 1; ti <= 8; ti++)
+                    if (tiers[ti] > 0)
+                    {
+                        string nm = roster != null && ti <= roster.Count ? roster[ti - 1].Id : "?";
+                        int cost = roster != null && ti <= roster.Count ? roster[ti - 1].Cost : 0;
+                        parts.Add($"T{ti}({nm} ${cost}) x{tiers[ti]}");
+                    }
+                Console.WriteLine($"    P{side}: {string.Join("  ", parts)}");
+            }
+
             Console.WriteLine();
             Console.WriteLine("  WHAT THE BOT'S UNIT SPEND WOULD HAVE BOUGHT INSTEAD");
             double botUnits = engine.MoneySpentOnUnits[2];
@@ -306,6 +340,66 @@ namespace CastleDefense.Simulation
                               $"instead of {PlayerState.AutoSpawnUnitsPerSecond(p2.AutoSpawnLevel)}/sec " +
                               $"[{string.Join(",", PlayerState.AutoSpawnCycle(p2.AutoSpawnLevel))}]");
             Console.WriteLine($"    ARMAGEDDON costs 121,221; the bot ended on ${p2.Money:N0}.");
+        }
+
+        /// <summary>
+        /// Reconstructs a recorded game and prints WHEN each gadget upgrade landed for each
+        /// side, with the loser's progress toward the same upgrade at that moment. Written for
+        /// Marc's 0240D8 hypothesis: that he won the instant he reached reinforcements_3 while
+        /// the bot, one cast away from the same upgrade, spent on units instead.
+        ///
+        /// Gadget XP is a flat 100 per cast for every gadget (see BOT_MECHANICS.md), so
+        /// "casts remaining" is exact arithmetic, not an estimate.
+        /// </summary>
+        public static void Timeline(string[] args, string recordingsDir)
+        {
+            string target = args.Length > 1 ? args[1] : null;
+            if (target == null) { Console.WriteLine("usage: --replay-timeline <gameId|path>"); return; }
+            string path = File.Exists(target) ? target
+                        : Path.Combine(recordingsDir, "singleplayer", target + ".replay");
+            if (!File.Exists(path)) { Console.WriteLine($"No replay at {path}"); return; }
+
+            var rf = ReplayFile.Read(path);
+            var (state, engine) = rf.BuildStart();
+            long start = state.CurrentTick;
+
+            var events = new List<string>();
+            var casts = new int[3];
+            engine.OnGadgetUpgraded += (side, def) =>
+            {
+                double secs = (state.CurrentTick - start) / 30.0;
+                var them = side == 1 ? state.Player2 : state.Player1;
+                string fam = def.Id.Split('_')[0];
+                them.GadgetXp.TryGetValue(fam, out int oppXp);
+                // What the OTHER side still needed for the same family, in casts.
+                var oppDef = fam == (them.OffensiveGadget?.Id.Split('_')[0]) ? them.OffensiveGadget
+                           : fam == (them.DefensiveGadget?.Id.Split('_')[0]) ? them.DefensiveGadget
+                           : fam == (them.SignatureGadget?.Id.Split('_')[0]) ? them.SignatureGadget : null;
+                string oppNote = oppDef == null ? "" :
+                    $"  |  P{(side == 1 ? 2 : 1)} on {oppDef.Id}, xp {oppXp}/{oppDef.UpgradeCost}" +
+                    $" = {Math.Max(0, (int)Math.Ceiling((oppDef.UpgradeCost - oppXp) / 100.0))} casts away," +
+                    $" ${them.Money:N0} in hand";
+                events.Add($"  {secs,6:F0}s  P{side} -> {def.Id,-20}{oppNote}");
+            };
+            engine.OnGadgetCast += (side, id, pos) => { if (side >= 1 && side <= 2) casts[side]++; };
+
+            while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
+            {
+                engine.Tick();
+                long i = state.CurrentTick - start;
+                if (i < 0 || i >= rf.A1.Length) continue;
+                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
+                if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
+            }
+
+            Console.WriteLine($"=== UPGRADE TIMELINE -- {rf.GameId} ===");
+            Console.WriteLine($"  reconstructed {(state.CurrentTick - start) / 30.0:F0}s, winner P{state.WinnerSide}" +
+                              $" (recorded {rf.TickCount / 30.0:F0}s, winner P{rf.Winner})");
+            if (state.WinnerSide != rf.Winner)
+                Console.WriteLine("  NOTE: reconstruction diverged -- read as indicative.");
+            Console.WriteLine($"  total gadget casts: P1 {casts[1]}, P2 {casts[2]}");
+            Console.WriteLine();
+            foreach (var e in events) Console.WriteLine(e);
         }
 
         private static double AutoCost(int level)

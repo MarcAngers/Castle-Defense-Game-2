@@ -805,3 +805,64 @@ The castle-HP wiper budget from item 20 is a real win on a different axis — **
 +3.2**, the standing weakness nothing else has moved — but combined with the clock it costs the
 mirror (51.7 → 46.1) and drops gauntlet ARMAGEDDON to 32%. Left behind its flag as a candidate
 for the Tier4Spam problem specifically, not as a chipper fix.
+
+## 22. Marc's 0240D8 loss — his diagnosis is half right, and the half that is wrong matters
+
+2026-09-02 · New tools: `--replay-timeline` (when each gadget upgrade landed, with the other
+side's progress toward the same one) and unit-buy-by-tier in `--replay-spend`. Both reconstruct
+the recorded outcome exactly (259s, winner P1).
+
+### The gadget-upgrade hypothesis is NOT supported
+
+Marc: *"I won the moment I got the Reinforcements_3 upgrade. The bot didn't recognize that it was
+1 cast away from achieving that same level."*
+
+The bot **was** exactly 1 cast away — and it made that cast 5 seconds later:
+
+```
+  161s  P1 -> reinforcements_3   |  P2 on reinforcements_2, xp 800/900 = 1 cast away, $13,425 in hand
+  166s  P2 -> reinforcements_3   |  P1 on reinforcements_3, xp 0/1000 = 10 casts away
+```
+
+Every upgrade race that game was neck and neck — reinforcements_2 4s apart, cash_2 2s apart,
+nuke_2 12s apart, reinforcements_3 5s apart. **The bot did not lose the upgrade race.** Whatever
+lost the game, it was not failing to recognise it was one cast from reinforcements_3.
+
+### The overspending observation IS right, and it is the whole story
+
+| | Marc | bot |
+|---|---|---|
+| units | **$6,536 (4 units)** | **$35,927 (399 units)** |
+| gadgets | $22,712 | $21,872 |
+| repairs | **$47** | **$2,575** |
+| auto-spawner | $1,204 (lvl 6) | $1,658 (lvl 7) |
+| unspent | $7,044 | **$43,664** |
+
+**Unit-buy intent by tier:**
+
+```
+  P1: T6(bread $338) x1   T7(eggo $2066) x3
+  P2: T1 x92  T2 x59  T3 x67  T4 x92  T5 x62  T6 x16  T7 x11
+```
+
+Marc bought **four units, all tier 6-7**. The bot bought **399, of which 310 were tier 1-4 chaff
+at $3-18 each** — and still ended at 0% castle HP. The chaff bought nothing.
+
+Note the repair claim is directionally right but small: $2,575 against $35,927 of units. **Units
+are 93% of the waste.** Do not chase repairs first.
+
+### Why: the leak moved to the branch both fixes deliberately exempt
+
+`AutoSpawnerInsteadOfUnits` and the race gate are both scoped to `!preferDefense`, because Marc
+asked for defensive spend to stay allowed. So the offensive channel is now governed and **the
+money is going out the reactive one instead**.
+
+And reactive spending uses `ScoreUnit` cost-efficiency, which CLAUDE.md already records as
+"chronically defaults to the cheapest unit that still scores well". `RawPower` is deliberately
+restricted to `!preferDefense` because reactive RawPower regressed the ONNX models — **but that
+rejection was measured against models, not against a human casting reinforcements_3**, which
+puts five FREE tier-7 units on the field per cast and cleaves tier-1-4 chaff without noticing.
+
+**The next hypothesis is therefore: reactive defence needs a power floor against high-tier
+threats** — not more spending, and not less, but buying units that survive a swing. That is a
+re-allocation, which is the shape that has worked, and it targets 93% of the waste.
