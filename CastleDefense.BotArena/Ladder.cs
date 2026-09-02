@@ -118,6 +118,19 @@ namespace CastleDefense.BotArena
             return (Math.Max(0, centre - half), Math.Min(1, centre + half));
         }
 
+        /// <summary>Looks up a named static HeuristicBotSettings profile, listing them on miss.</summary>
+        private static HeuristicBotSettings ResolveProfile(string name)
+        {
+            var f = typeof(HeuristicBotSettings).GetField(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f != null) return (HeuristicBotSettings)f.GetValue(null);
+            Console.WriteLine($"[ladder] No HeuristicBotSettings profile named '{name}'. Available:");
+            foreach (var g in typeof(HeuristicBotSettings).GetFields(
+                         System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                Console.WriteLine("    " + g.Name);
+            return null;
+        }
+
         private static List<GameSpec> BuildSpecs(int count, int seed, bool headstart)
         {
             var rng = new Random(seed);
@@ -260,6 +273,7 @@ namespace CastleDefense.BotArena
             // the SAME specs inside ONE run, which is what makes both the win-rate deltas
             // and the throughput ratio paired rather than cross-run.
             var variants = new List<string>();
+            string reference = null;
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -269,6 +283,7 @@ namespace CastleDefense.BotArena
                     case "--csv" when i + 1 < args.Length: csvPath = args[++i]; break;
                     case "--only" when i + 1 < args.Length: only = args[++i]; break;
                     case "--variant" when i + 1 < args.Length: variants.Add(args[++i]); break;
+                    case "--reference" when i + 1 < args.Length: reference = args[++i]; break;
                     // Loadout pins. Applied AFTER BuildSpecs so the rng stream is untouched
                     // and a pinned run stays directly comparable to an unpinned one on the
                     // same seed -- everything except the pinned slot is the same game.
@@ -321,9 +336,19 @@ namespace CastleDefense.BotArena
             };
 
             // ── Contenders: HeuristicBot as the reference, plus every ONNX checkpoint ──
+            // THE REFERENCE ARM. Defaults to bare HeuristicBotSettings.Default, which is what
+            // it has always silently been -- and that is a trap: the DEPLOYED singleplayer bot
+            // is EconomyBrakeProfile, so every A/B run here before 2026-09-02 compared against
+            // a bot nobody plays. It is not a small difference; on the replay gauntlet the two
+            // reach ARMAGEDDON 22% and ~0-2% of the time respectively. Pass
+            // `--reference EconomyBrakeProfile` to measure against what is actually shipped.
+            var referenceSettings = reference == null ? null : ResolveProfile(reference);
+            if (reference != null && referenceSettings == null) return;
+
             var contenders = new List<(string name, Func<int, IArenaOpponent> make)>
             {
-                ("HeuristicBot", side => new HeuristicBotAdapter(side)),
+                (reference == null ? "HeuristicBot" : $"HeuristicBot[{reference}]",
+                 side => new HeuristicBotAdapter(side, referenceSettings)),
                 // Probe A's candidate rollout policy, at four commitment levels. Present as
                 // contenders because the probe's premise is that this is STRONGER than
                 // HeuristicBot; if the rows below do not beat the HeuristicBot row, the

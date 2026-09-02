@@ -214,6 +214,13 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--replay-spend")
+            {
+                GameDataManager.Initialize();
+                ReplayGauntlet.Spend(args, FindRecordingsDir());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-gauntlet")
             {
                 // Plays a bot against one of Marc's recorded action streams. See

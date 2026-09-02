@@ -2127,6 +2127,51 @@ namespace CastleDefense.Engine.Bot
         /// to 8%. Both caps cost plain gauntlet win rate, which item 12 argues that instrument
         /// overstates -- that argument is the load-bearing judgement here.
         /// </summary>
+        /// <summary>
+        /// EXACTLY what Marc play-tested on 2026-09-02 (games E5CA98, A8452A): the deployed
+        /// profile plus the cap-8 substitution, WITHOUT ArmageddonCommit. Kept by name so
+        /// those two games stay reproducible now that ArmageddonCommit has been folded into
+        /// EconomyBrakeAutoSpawnProfile -- same reason PreChargeAware and PreRungCommit exist.
+        /// </summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn8NoArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+        };
+
+        /// <summary>Deployed profile + cap-8 substitution + ARMAGEDDON commit. Re-tests a
+        /// flag rejected in item 10 against the CORRECT baseline -- see item 14.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            ArmageddonCommit = true,
+        };
+
+        /// <summary>Deployed profile + substitution at cap 15, the level Marc's E5CA98 unit
+        /// spend would have reached.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn15 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 15,
+        };
+
+        /// <summary>Both together.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn15Arma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 15,
+            ArmageddonCommit = true,
+        };
+
         public static readonly HeuristicBotSettings EconomyBrakeAutoSpawnProfile = new HeuristicBotSettings
         {
             RepairPriceCheck = true,
@@ -2137,6 +2182,25 @@ namespace CastleDefense.Engine.Bot
             KillerInstinctPushLatch = true,
             AutoSpawnerInsteadOfUnits = true,
             AutoSpawnMaxLevel = 8,
+
+            // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
+            //
+            // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
+            // $111,908, $9,313 short of ARMAGEDDON, having spent $24,500 on 552 units. And on
+            // the replay gauntlet it looked strictly better -- win 90.0 -> 91.7, ARMAGEDDON
+            // 27% -> 28%, end HP 78.7 -> 80.7, unspent 13,907 -> 11,483.
+            //
+            // The LADDER says otherwise, and it is measuring the thing the gauntlet cannot.
+            // Headstart OVERALL 92.0 -> 90.9, driven almost entirely by the CHIPPER rung:
+            // 98.8 -> 94.8, with the chipper's unspent money going 1,207 -> 2,799. Headstart
+            // games start at a higher InvestmentCount, so the bot reaches count 8 far more
+            // often, the commit zeroes its attack budget, and a lone unit sitting on its
+            // castle then goes unanswered -- exactly the failure the Chipper rung was built
+            // to detect, and exactly the unconditional-zeroing flaw item 10 named.
+            //
+            // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
+            // it cannot see this. Do not retry ArmageddonCommit without making the commit
+            // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
         };
 
         // ── Named presets for temporary ladder contenders ──

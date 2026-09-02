@@ -546,3 +546,62 @@ the substitution, and the money breakdown is a property of the game rather than 
 **Rule going forward:** A/B against the profile that is actually deployed. The ladder needs a
 `--reference <profile>` option so its reference contender is not silently the bare default;
 until it has one, gauntlet runs must pass `--variant EconomyBrakeProfile` as the control arm.
+
+## 15. Marc's two play-test games (E5CA98, A8452A) — and ArmageddonCommit shipped then reverted
+
+2026-09-02 · First games on `EconomyBrakeAutoSpawnProfile` (cap 8). Recorded as
+`heuristic_autospawn8`. New tool `--replay-spend <gameId>` replays BOTH action streams and
+reports where each side's money went; both games reconstructed to the recorded outcome exactly
+(262s/P1 and 256s/P2), so the numbers are trustworthy.
+
+### `E5CA98` — Marc won. Where the bot's money went:
+
+| | Marc | bot |
+|---|---|---|
+| units | $2,066 (**1 unit**) | **$24,500 (552 units)** |
+| gadgets | $22,472 | $33,992 |
+| investments | $50,522 | $50,522 |
+| auto-spawner | $4,243 (level 10) | $2,267 (level 8) |
+| **unspent** | $12,644 | **$111,908** |
+
+**The bot ended $9,313 short of ARMAGEDDON having spent $24,500 on units.** A third of that
+spend wins outright. That $24,500 would have taken the auto-spawner from level 8 to **15**
+(5 free units/sec of [5,4,3,2,2] instead of 4/sec of [4,2,1,1]).
+
+**Marc bought ONE unit; the bot bought 552.** He is already playing the strategy he is asking
+the bot to play.
+
+### Did the bot know it was losing the race? NO.
+
+`OpponentEconomy` is referenced nowhere in `HeuristicBot` or the web app. It is built and
+validated and wired into zero decisions. It changed nothing about how the bot played.
+
+### ArmageddonCommit: shipped on gauntlet evidence, reverted on ladder evidence
+
+Re-measured against the CORRECT baseline it looked strictly better on the replay gauntlet --
+win 90.0 -> 91.7, ARMAGEDDON 27% -> 28%, end HP 78.7 -> 80.7, unit spend 28,240 -> 26,476,
+unspent 13,907 -> 11,483 -- so it was shipped into the deployed profile.
+
+**The ladder then rejected it, and the ladder is right.** Referenced against
+`BrakeAutoSpawn8NoArma` (what Marc actually played):
+
+| | nostart OVERALL | headstart OVERALL | Chipper (headstart) |
+|---|---|---|---|
+| cap 8, no commit | 92.7 | **92.0** | **98.8** |
+| + ArmageddonCommit | 92.7 | **90.9** | **94.8** |
+
+Neutral in nostart, −1.1 in headstart, driven almost entirely by the **Chipper** rung falling
+4 points with its unspent money doubling. Headstart games begin at a higher InvestmentCount,
+so the bot hits count 8 far more often, the commit zeroes its attack budget, and a lone unit
+on its castle goes unanswered. That is exactly the unconditional-zeroing flaw item 10 named,
+and exactly what the Chipper rung was built to detect.
+
+**The gauntlet cannot see it** — its opponent is a passive replay that cannot punish an idle
+bot. Reverted. Do not retry without making the commit conditional on the rung being reachable
+AND on nothing needing an answer.
+
+**Process note, on me:** I shipped this into the deployed profile on gauntlet evidence alone,
+before running the ladder. It was caught before Marc played it, but the order was wrong --
+ship after both instruments, not between them.
+
+`BrakeAutoSpawn8NoArma` is kept so E5CA98 and A8452A stay reproducible by name.

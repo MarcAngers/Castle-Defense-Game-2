@@ -239,6 +239,86 @@ namespace CastleDefense.Simulation
             return total;
         }
 
+        /// <summary>
+        /// Replays BOTH recorded action streams into a fresh engine and reports where each
+        /// side's money went. Marc's ask, 2026-09-02: "how much the bot spent on units, and
+        /// how many upgrades that could have bought for the Autospawner."
+        ///
+        /// This reconstructs the ACTUAL game rather than sampling variations, so unlike the
+        /// gauntlet it uses ApplyRecorded -- the recorded gadget target is the right one here,
+        /// because the object is to reproduce what happened, not to re-aim in a new game.
+        /// </summary>
+        public static void Spend(string[] args, string recordingsDir)
+        {
+            string target = args.Length > 1 ? args[1] : null;
+            if (target == null) { Console.WriteLine("usage: --replay-spend <gameId|path>"); return; }
+            string path = File.Exists(target) ? target
+                        : Path.Combine(recordingsDir, "singleplayer", target + ".replay");
+            if (!File.Exists(path)) { Console.WriteLine($"No replay at {path}"); return; }
+
+            var rf = ReplayFile.Read(path);
+            var (state, engine) = rf.BuildStart();
+            long startTick = state.CurrentTick;
+
+            var gadget = new double[3];
+            engine.OnGadgetCast += (side, gadgetId, pos) =>
+            {
+                var gd = engine.GetGadgetDefinition(gadgetId);
+                if (gd != null && side >= 1 && side <= 2) gadget[side] += gd.Cost;
+            };
+
+            while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
+            {
+                engine.Tick();
+                long i = state.CurrentTick - startTick;
+                if (i < 0 || i >= rf.A1.Length) continue;
+                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
+                if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
+            }
+
+            Console.WriteLine($"=== SPEND BREAKDOWN -- {rf.GameId} ===");
+            Console.WriteLine($"  reconstructed {(state.CurrentTick - startTick) / 30.0:F0}s, " +
+                              $"winner P{state.WinnerSide} (recorded: {rf.TickCount / 30.0:F0}s, winner P{rf.Winner})");
+            if (state.WinnerSide != rf.Winner)
+                Console.WriteLine("  NOTE: reconstruction diverged from the recorded outcome -- read the numbers as indicative.");
+            Console.WriteLine();
+            Console.WriteLine("                        P1 (human)     P2 (bot)");
+            var p1 = state.Player1; var p2 = state.Player2;
+            Console.WriteLine($"    units          {engine.MoneySpentOnUnits[1],14:N0} {engine.MoneySpentOnUnits[2],13:N0}");
+            Console.WriteLine($"    gadgets        {gadget[1],14:N0} {gadget[2],13:N0}");
+            Console.WriteLine($"    repairs        {LadderCost(p1.RepairCount, true),14:N0} {LadderCost(p2.RepairCount, true),13:N0}");
+            Console.WriteLine($"    investments    {LadderCost(p1.InvestmentCount, false),14:N0} {LadderCost(p2.InvestmentCount, false),13:N0}");
+            Console.WriteLine($"    auto-spawner   {AutoCost(p1.AutoSpawnLevel),14:N0} {AutoCost(p2.AutoSpawnLevel),13:N0}   (levels {p1.AutoSpawnLevel} / {p2.AutoSpawnLevel})");
+            Console.WriteLine($"    unspent        {p1.Money,14:N0} {p2.Money,13:N0}");
+            Console.WriteLine($"    units bought   {engine.UnitsPurchased[1],14:N0} {engine.UnitsPurchased[2],13:N0}");
+
+            Console.WriteLine();
+            Console.WriteLine("  WHAT THE BOT'S UNIT SPEND WOULD HAVE BOUGHT INSTEAD");
+            double botUnits = engine.MoneySpentOnUnits[2];
+            int reach = p2.AutoSpawnLevel;
+            while (reach < PlayerState.MaxAutoSpawnLevel
+                   && AutoCost(reach + 1) - AutoCost(p2.AutoSpawnLevel) <= botUnits) reach++;
+            Console.WriteLine($"    unit spend ${botUnits:N0} on top of level {p2.AutoSpawnLevel} " +
+                              $"reaches AUTO-SPAWNER LEVEL {reach} " +
+                              $"(${AutoCost(reach) - AutoCost(p2.AutoSpawnLevel):N0} of it)");
+            Console.WriteLine($"    that is {PlayerState.AutoSpawnUnitsPerSecond(reach)} free units/sec of tiers " +
+                              $"[{string.Join(",", PlayerState.AutoSpawnCycle(reach))}] " +
+                              $"instead of {PlayerState.AutoSpawnUnitsPerSecond(p2.AutoSpawnLevel)}/sec " +
+                              $"[{string.Join(",", PlayerState.AutoSpawnCycle(p2.AutoSpawnLevel))}]");
+            Console.WriteLine($"    ARMAGEDDON costs 121,221; the bot ended on ${p2.Money:N0}.");
+        }
+
+        private static double AutoCost(int level)
+        {
+            double t = 0;
+            for (int i = 1; i <= level; i++)
+            {
+                double c = PlayerState.AutoSpawnPriceFor(i);
+                if (double.IsFinite(c)) t += c;
+            }
+            return t;
+        }
+
         private static double Pct(PlayerState p)
             => p.CastleMaxHealth > 0 ? 100.0 * p.CastleHealth / p.CastleMaxHealth : 0;
 
