@@ -1746,6 +1746,23 @@ namespace CastleDefense.Engine.Bot
         public bool ChargeAwareFallback { get; init; } = false;
 
         /// <summary>
+        /// (8) THE SAME CHARGE TEST ON THE THREE SPAWN PATHS ITERATION 1 LEFT OUT: the wiper
+        /// purchase in Decide(), FindWiper, and DefensiveResponse's blocking body.
+        ///
+        /// Iteration 1 was deliberately scoped to SpendOnUnits so one mechanism was measured
+        /// at a time. These three have the identical shape -- pick on price, one attempt, no
+        /// fallback -- and DefensiveResponse's case is the worst of the four, because
+        /// _blockCredit is only decremented inside `if (Act(...))`. A refused spawn there
+        /// banks credit up to MaxBlockCredit that can never be spent, so the bot believes it
+        /// is blocking at the survival law's rate while actually delivering one unit id's
+        /// charge regeneration. Its own doc comment still claims a ceiling of 6 bodies/sec.
+        ///
+        /// A RE-ALLOCATION, NOT A NEW CHANNEL -- it changes which unit is bought and never
+        /// how much is spent, which is the shape iterations 1-7 found to be the safe one.
+        /// </summary>
+        public bool ChargeAwareEverywhere { get; init; } = false;
+
+        /// <summary>
         /// (3) BLOCK A LONE CHIPPING UNIT. Buy one cheap body whenever an enemy is standing
         /// on our castle with nothing of ours in contact with it -- regardless of what the
         /// EV budget says.
@@ -2444,6 +2461,9 @@ namespace CastleDefense.Engine.Bot
         // that change alone against the committed reference on identical specs.
         public static readonly HeuristicBotSettings ChargeAware =
             new HeuristicBotSettings { ChargeAwareFallback = true };
+
+        public static readonly HeuristicBotSettings ChargeAwareAll =
+            new HeuristicBotSettings { ChargeAwareFallback = true, ChargeAwareEverywhere = true };
 
         // Iteration 3 is A/B'd against Accepted (which already carries iteration 1), not
         // against bare defaults -- see Accepted's comment on why the stack is the baseline.
@@ -3593,6 +3613,11 @@ namespace CastleDefense.Engine.Bot
                 foreach (var d in teamDef.Roster)
                 {
                     if (d.Cost <= 0 || d.Cost > me.Money || d.Cost > maxWorth) continue;
+                    // Same silent failure iteration 1 fixed in SpendOnUnits: without this the
+                    // wiper is chosen on price alone, SpawnUnit refuses it for want of a
+                    // charge, and the whole decision buys nothing while a charged alternative
+                    // that also one-shots the stack sits unconsidered.
+                    if (_settings.ChargeAwareEverywhere && !me.HasUnitCharge(d.Id)) continue;
                     if (d.Damage < toughest) continue;
                     if (wiper == null || d.Cost < wiper.Cost) wiper = d;
                 }
@@ -4327,7 +4352,10 @@ namespace CastleDefense.Engine.Bot
         private static UnitDefinition FindWiper(GameEngine engine, PlayerState me, List<UnitDefinition> roster,
                                                 List<Unit> enemyUnits, int myCastlePos, float radius,
                                                 out double killValue, bool ignoreMoney = false,
-                                                List<Unit> myUnits = null, bool countCoverage = true)
+                                                List<Unit> myUnits = null, bool countCoverage = true,
+                                                // Optional so the existing callers are unchanged; null means
+                                                // "no charge filtering", which is the committed behaviour.
+                                                HeuristicBotSettings settings = null)
         {
             killValue = 0;
 
@@ -4406,6 +4434,13 @@ namespace CastleDefense.Engine.Bot
             {
                 if (d.Cost <= 0) continue;
                 if (!ignoreMoney && d.Cost > me.Money) continue;
+                // Charges gate a purchase exactly as money does, so they belong beside the
+                // money test -- and behind !ignoreMoney for the same reason. The ignoreMoney
+                // caller is the "what would the best wiper be at any price" DIAGNOSTIC, and
+                // filtering that would make the alt-comparison it feeds report a cheaper
+                // alternative than the one it actually rejected.
+                if (!ignoreMoney && settings != null && settings.ChargeAwareEverywhere
+                    && !me.HasUnitCharge(d.Id)) continue;
 
                 // One swing reaches Range beyond this unit's own sprite edge, so a wide unit
                 // sweeps a deeper slice of the pile than a narrow one.
@@ -4501,6 +4536,12 @@ namespace CastleDefense.Engine.Bot
             {
                 var d = roster[i];
                 if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                // The block rate this method computes is meaningless if the body cannot be
+                // bought: _blockCredit is only decremented inside `if (Act(...))`, so a
+                // refused spawn banks credit to MaxBlockCredit that can never be spent, and
+                // the bot believes it is blocking at the survival law's rate while delivering
+                // one unit id's charge regen -- 1/sec against a documented ceiling of 6.
+                if (_settings.ChargeAwareEverywhere && !me.HasUnitCharge(d.Id)) continue;
                 if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
             }
 
@@ -4535,7 +4576,8 @@ namespace CastleDefense.Engine.Bot
             var wiper = FindWiper(engine, me, roster, enemyUnits, myCastlePos,
                                   _settings.WaveWipeRadius, out double wiperKillValue,
                                   myUnits: myUnitsNow,
-                                  countCoverage: _settings.WiperCountsFieldCoverage);
+                                  countCoverage: _settings.WiperCountsFieldCoverage,
+                                  settings: _settings);
             MeasureWipeReach(engine, me, wiper, enemyUnits, myCastlePos, _settings.WaveWipeRadius);
             bool wipeReady = wiper != null
                 && (nowTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds;
