@@ -1877,6 +1877,27 @@ namespace CastleDefense.Engine.Bot
         /// to take. AutoSpawnMaxLevel caps the ladder deliberately low so this measures
         /// "cheap early bodies" rather than "convert the whole economy into the machine".
         /// </summary>
+        /// <summary>
+        /// (9) Let the gadget layer commit to the investment rung at EVERY count, not just
+        /// the first three. See DeferForInvestment for the measurement that motivated it.
+        /// </summary>
+        /// PROMOTED TO DEFAULT 2026-09-02. Measured +5.0 to +5.6 points head-to-head in all
+        /// four arms (two seeds x two modes) with earned investments UP 0.11-0.15 -- the
+        /// mechanism working as designed, since committing to the rung is what buys the rung.
+        public bool CommitToRung { get; init; } = true;
+
+        /// <summary>
+        /// How close to the next rung counts as committed. 0.6 holds non-urgent gadget casts
+        /// once the bot is 60% of the way there. Lower is stricter.
+        /// </summary>
+        public double RungCommitFraction { get; init; } = 0.6;
+
+        /// <summary>
+        /// (10) Stop funding unit attacks once ARMAGEDDON is the only rung left. See the
+        /// block in SpendOnUnits for why RushArmageddon does not do this on the shipped path.
+        /// </summary>
+        public bool ArmageddonCommit { get; init; } = false;
+
         public bool BuyAutoSpawner { get; init; } = false;
 
         /// <summary>
@@ -2506,6 +2527,16 @@ namespace CastleDefense.Engine.Bot
         public static readonly HeuristicBotSettings AutoSpawn =
             new HeuristicBotSettings { ChargeAwareFallback = true, BuyAutoSpawner = true };
 
+        // Self-awareness fixes from Marc's 2026-09-02 replays -- see BOT_BACKLOG.md item 7.
+        public static readonly HeuristicBotSettings RungCommit =
+            new HeuristicBotSettings { CommitToRung = true };
+
+        public static readonly HeuristicBotSettings ArmaCommit =
+            new HeuristicBotSettings { ArmageddonCommit = true };
+
+        public static readonly HeuristicBotSettings SelfAware =
+            new HeuristicBotSettings { CommitToRung = true, ArmageddonCommit = true };
+
         public static readonly HeuristicBotSettings AutoSpawnSub =
             new HeuristicBotSettings
             {
@@ -2546,6 +2577,10 @@ namespace CastleDefense.Engine.Bot
         /// historical comparison needs to be able to reproduce it.
         /// Its checksum is 47EC146D660B0D721B4DC224D8ACB7F9 at `bot-checksum --games 24`.
         /// </summary>
+        /// <summary>The bot before CommitToRung was promoted (2026-09-02).</summary>
+        public static readonly HeuristicBotSettings PreRungCommit =
+            new HeuristicBotSettings { CommitToRung = false };
+
         public static readonly HeuristicBotSettings PreChargeAware =
             new HeuristicBotSettings { ChargeAwareFallback = false };
         // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
@@ -5001,6 +5036,31 @@ namespace CastleDefense.Engine.Bot
                     ? _settings.ArmageddonRushAttackFraction
                     : _settings.MinAttackFlowFraction;
 
+                // ARMAGEDDON IS THE WIN CONDITION, SO STOP FUNDING ANYTHING ELSE (flag 10).
+                //
+                // RushArmageddon already existed for this and DOES NOT WORK on the shipped
+                // path -- its own comment says the MinAttackFlowFraction floor "is the ONLY
+                // term keeping the attack funded (the residual is negative there)", which was
+                // true of the old InvestPaceTargetSeconds path. Under DynamicInvestPace
+                // (the default) investPaceRate is Income/(1+0.20), so the residual is always
+                // exactly Income/6 -- positive at every rung, however far away. At income
+                // 2500 that is $416.7/s of unit buying that continues regardless, and the
+                // floor (Income * 0.15 = 375/s) never binds, so zeroing it changes nothing.
+                //
+                // Once InvestmentCount has reached ArmageddonInvestmentCount there is nothing
+                // left on the ladder to buy but the end of the game. Units bought in that
+                // window are being bought INSTEAD of winning.
+                if (_settings.ArmageddonCommit && !me.ArmageddonUsed
+                    && me.InvestmentCount >= PlayerState.ArmageddonInvestmentCount)
+                {
+                    _attackSpendAllowance = 0;
+                    attackFlowRate = 0;
+                    allowanceCeiling = 0;
+                    spendable = 0;
+                    ArmageddonCommitDecisions++;
+                    return;
+                }
+
                 attackFlowRate = Math.Min(
                     me.Income * _settings.AttackSpendFraction,
                     Math.Max(me.Income - investPaceRate,
@@ -5600,7 +5660,38 @@ namespace CastleDefense.Engine.Bot
         // 0 for the whole rest of both games. "<=" keeps deferral active through the
         // exact crossover tick, giving the invest check first claim there instead of
         // losing every time to whichever gadget happens to be checked first.
-        private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice;
+        private bool DeferForInvestment(PlayerState me)
+        {
+            // ORIGINAL RULE, unchanged: hold a gadget while the FIRST few rungs are still
+            // being bought, because a gadget priced at the same $18 as the first rung
+            // competes with it directly.
+            if (me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice) return true;
+
+            // COMMIT TO THE RUNG (flag 9, 2026-09-02). The rule above is bounded to
+            // InvestmentCount < 3, so from the fourth rung onward the gadget layer has NO
+            // AWARENESS OF THE RUNG IT IS SAVING FOR and fires purely on cooldown. That is
+            // most expensive at the top of the ladder, where the rung is ARMAGEDDON at
+            // $121,221 and buying it ends the game outright.
+            //
+            // Found in Marc's three recorded games (2026-09-02): in both games he won, the
+            // bot reached InvestmentCount 8 -- max income, ARMAGEDDON the only thing left to
+            // buy -- and then finished holding $65,253 and $77,332 against that rung. Its
+            // gadget cast pattern was nearly IDENTICAL across won and lost games, which is
+            // the signature of a cadence that is not reading the game state at all.
+            //
+            // Deliberately a COMMIT fraction rather than a blanket hold: holding whenever
+            // money <= price would silence gadgets for the entire endgame, and gadgets are
+            // how the bot survives long enough to reach the rung. This only engages once the
+            // rung is genuinely close.
+            //
+            // The caller's own inDanger check still runs first everywhere this is used --
+            // see each callsite -- so this never withholds a defensive cast under threat.
+            if (_settings.CommitToRung && me.InvestmentPrice > 0 && !me.ArmageddonUsed
+                && me.Money >= me.InvestmentPrice * _settings.RungCommitFraction)
+                return true;
+
+            return false;
+        }
 
         // Sums the real, current incoming damage-per-second against OUR castle: only
         // enemy units already within their own attack Range of it count (the same
@@ -5690,6 +5781,9 @@ namespace CastleDefense.Engine.Bot
         /// spawn source (the auto-spawner, reinforcements), not a better pick.
         /// </summary>
         public long ChargeFallbackEmpty { get; private set; }
+
+        /// <summary>Decisions on which ArmageddonCommit closed the attack budget. Diagnostic.</summary>
+        public long ArmageddonCommitDecisions { get; private set; }
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }

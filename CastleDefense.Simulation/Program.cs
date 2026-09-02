@@ -214,6 +214,13 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--economy-tracker-check")
+            {
+                GameDataManager.Initialize();
+                EconomyTrackerCheck.Run(args);
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--auto-spawn-check")
             {
                 AutoSpawnCheck.Run(args.Skip(1).ToArray());

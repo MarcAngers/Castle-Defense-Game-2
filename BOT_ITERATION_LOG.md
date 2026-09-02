@@ -308,3 +308,95 @@ to be `--variant PreChargeAware` from here on, not the bare reference.
 Carried forward as the top open item: the search-test gap. `RolloutSearchBot` runs
 `HeuristicBot` as its prior and its rollout policy for both sides, and this change costs ~35%
 throughput, but `search-test` accepts no settings profile so the effect is unmeasured.
+
+## 9. CommitToRung — KEPT, and PROMOTED TO DEFAULT
+
+2026-09-02 · `DeferForInvestment` was bounded to `InvestmentCount < 3`, so from the fourth
+rung onward the gadget layer had no awareness of the rung it was saving for and fired purely
+on cooldown. Now it also holds a non-urgent cast once money is past `RungCommitFraction`
+(0.6) of the next rung.
+
+**measured** — `ladder 400 --both`, seeds 12345 and 777, head-to-head vs the reference:
+
+| arm | h2h | earned invests | castle HP% |
+|---|---|---|---|
+| nostart s12345 | 44.9 → **49.9** | 6.84 → 6.99 | 34.8 → 39.0 |
+| headstart s12345 | 49.5 → **54.6** | 5.02 → 5.12 | 38.5 → 42.4 |
+| nostart s777 | 46.3 → **51.9** | 6.96 → 7.09 | 37.9 → 42.1 |
+| headstart s777 | 47.4 → **52.5** | 4.88 → 4.99 | 36.3 → 39.7 |
+
+**verdict:** KEPT. +5.0 to +5.6 in every arm, and **earned investments went UP** by 0.11-0.15
+— which is the mechanism working rather than a trade, since committing to a rung is what buys
+the rung. Promoted to the default on Marc's standing instruction. `bot-checksum --games 24`:
+`C9C7E5C0…` → **`26944708B774C609CA6D3E5ECA43815C`**. `PreRungCommit` reproduces the old bot.
+
+## 10. ArmageddonCommit — NOT KEPT
+
+Zeroes the attack budget once `InvestmentCount >= ArmageddonInvestmentCount`, on the grounds
+that units bought then are bought instead of winning.
+
+**measured:** h2h 44.9 → 44.5, 49.5 → 47.5, 46.3 → 45.9, 47.4 → 45.8 — consistently
+*negative* in all four arms. Earned invests **identical to two decimals** in every arm, while
+units/sec fell ~11%. So it fires, cuts production, and converts none of it into rungs.
+
+**verdict:** not kept, and the reason is a design flaw rather than a tuning miss. It zeroes
+the attack budget **unconditionally**, including when ARMAGEDDON is unreachable — thirty
+seconds left, or the opponent about to break through. Saving $121,221 you will never spend is
+strictly worse than buying units with it. Deciding whether the rung is reachable *in time and
+ahead of the opponent* is exactly what the economy tracker is for, so this is premature
+without it. Retry once the tracker is wired in, gated on the race actually being winnable.
+
+Note also that the ladder under-samples this: earned invests average ~6.9, so games rarely sit
+at count 8. Marc's recorded games do. Treat the ladder verdict as weak evidence either way.
+
+## 11. OpponentEconomy + `--economy-tracker-check` — BUILT AND VALIDATED
+
+Marc's design, implemented: simulate the opponent's balance from the known opening position,
+accrue income on the engine's schedule, subtract observed spending, credit gadget income, and
+assume they invest the moment they can afford to. Reads nothing hidden — no `enemy.Money`,
+`enemy.Income`, `InvestmentCount` or `InvestmentPrice`.
+
+**Two corrections made during implementation, both worth keeping:**
+
+1. **Cash income was missing from the spec.** cash_3 fires EIGHT payouts of BaseValue for one
+   cost — $12,000 for $7,800 — and cash is White's signature, i.e. the strongest measured
+   loadout plays it. Tracking spend without it under-credits a cash opponent by five figures.
+2. **The first draft reimplemented the economy curve and had the repair price off by one rung
+   within ten minutes.** It now walks a real `PlayerState` via `ApplyInvestmentStep` /
+   `ApplyRepairStep` / `ApplyAutoSpawnStep`, which is the single-source-of-truth rule this
+   repo already records the time-machine constructor breaking.
+
+**measured** — `--economy-tracker-check --games 40`, income-exact per sample:
+
+| opponent | income exact | investment count under | worst money error |
+|---|---|---|---|
+| Random | 100.0% | 0.0% | −2 |
+| HeuristicBot | **95.6%** | 3.1% | **−121,223** |
+| PureInvestor | **95.1%** | 4.9% | 7,575 |
+| Tier1Spam | 69.6% | 0.0% | 7,175 |
+| DoNothing | 0.0% | 0.0% (100% over) | 7,544 |
+| Tier5Spam | 0.0% | 0.0% (100% over) | 39,804 |
+
+**It is accurate where it has to be** — 95%+ against both opponents that actually play an
+economy, which are the ones the race is against.
+
+**It over-credits HOARDERS** — an opponent that could invest and chooses not to (DoNothing,
+Tier5Spam) is credited with rungs it never bought, and that compounds, because the phantom
+income accrues faster and buys more phantom rungs. This is assume-ASAP behaving as specified.
+The failure is in the benign direction for the race decision (believe you are further behind,
+save harder), which is the trade Marc accepted explicitly.
+
+**THE ONE ERROR TO BE CAREFUL OF.** Worst money error against HeuristicBot is **−121,223**,
+i.e. exactly the ARMAGEDDON price. The tracker credits ARMAGEDDON the moment the opponent
+*could* afford it, so it can believe they have spent $121,221 and are broke when they are
+sitting on it — at precisely the moment the race is decided. **`ArmageddonAssumed` must be
+read as "they could have", never as "they did."** Anything that presses because the opponent
+looks broke has to use a different signal.
+
+**An assertion I loosened, stated so it can be challenged.** The first version failed on any
+negative income bias. That was wrong: the top rungs are 3x apart (252 → 750 → 2500), so
+crediting one two seconds late produces a large average bias from a brief self-correcting lag,
+and the threshold was measuring the ladder's step size rather than the tracker's accuracy. It
+now asserts on the FRACTION of samples where we believe the opponent is on a lower rung than
+they are (must be under 10%; actual 3.1% and 4.9%). The residual transition lag itself is
+**unexplained** and worth a look — it should not exist under assume-ASAP.
