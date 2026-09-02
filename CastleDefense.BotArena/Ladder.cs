@@ -305,6 +305,11 @@ namespace CastleDefense.BotArena
                 ("Tier1Spam",     side => new TierSpamBaseline(side, 1)),
                 ("Tier4Spam",     side => new TierSpamBaseline(side, 4)),
                 ("Investor",      side => new InvestorBaseline(side)),
+                // Plays the single-unit chip exploit deliberately. Added because the rungs
+                // above could show chip blocking's cost but not its benefit -- see
+                // ChipperBaseline. NOTE: adding a rung changes the OVERALL figure, so
+                // OVERALL is not comparable across this commit; the per-rung rows are.
+                ("Chipper",       side => new ChipperBaseline(side)),
                 ("BalancedHuman", side => new BalancedHumanBaseline(side)),
                 // The only rung not derived from HeuristicBot or from a spam pattern: a
                 // behaviour clone fitted to Marc's recorded games. Added because every

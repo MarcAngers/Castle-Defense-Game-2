@@ -110,3 +110,114 @@ is real evidence against v1 rather than an artefact of the ceiling.
 
 **next:** v2 caps chip spending as a fraction of income rather than capping the price of
 each body, so the survival law sets the rate only up to what the economy can actually fund.
+
+## 3. BlockSingleChipper v2 (flow-capped) — REVERTED, but see the Chipper finding below
+
+2026-09-01 · v2 adds the spend-rate cap v1 lacked: a banked dollar allowance capped at a
+fraction of income, the shape `ReactiveFlowCap` and the attack allowance already use.
+
+**measured** — `ladder 400 --both`, seed 12345, vs the iteration-1 baseline:
+
+| arm | OVERALL | Tier4Spam | HumanClone | mirror | invests (mirror) |
+|---|---|---|---|---|---|
+| ChargeAware (baseline) | 89.5 | 80.4 | 98.8 | 48.5 | 6.80 |
+| v1 (uncapped) | 79.6 | 27.8 | 88.4 | 45.6 | 6.64 |
+| v2 @ 0.25 income | 85.4 | 64.1 | 90.1 | 46.9 | 6.72 |
+| v2 @ 0.10 income | 87.0 | 71.9 | 92.7 | 47.7 | 6.81 |
+
+**verdict:** REVERTED. The cap works exactly as intended — the damage shrinks monotonically
+as the fraction falls — but it never reaches zero cost, and **the response is monotone all
+the way down, which means the ladder's optimum for this mechanism is spending nothing.**
+
+## 4. Chipper ladder rung — INSTRUMENT FIX, KEPT
+
+The three arms above all regressed, and the reason was not that the mechanism failed. Every
+rung it helps (DoNothing, Tier1Spam, BalancedHuman) was already pinned at a 100% ceiling, so
+the ladder could see the change's cost and was structurally blind to its benefit. **A
+benchmark that can only observe one side of a trade will reject every version of it forever
+and look rigorous doing so.**
+
+So `ChipperBaseline` was added: invests normally, keeps **exactly one** cheap unit alive on
+the enemy castle, never more. It plays the line Marc reported and `RolloutSearchBot` found.
+
+**measured** — `ladder 200 --nostart`, seed 12345:
+
+| arm | Chipper win rate | **castle HP vs Chipper** |
+|---|---|---|
+| reference | 99.0% | **52.7%** |
+| ChargeAware | 99.0% | **52.7%** |
+| ChipBlockV2 @0.25 | 99.5% | **95.9%** |
+| ChipBlockV2 @0.10 | 99.3% | **90.6%** |
+
+**The mechanism is confirmed and it is large: +43 points of end-of-game castle HP.** It does
+exactly what it was written to do.
+
+**And it still does not move win rate — 99.0 → 99.5.** That is the finding worth keeping:
+*the chip exploit does not beat HeuristicBot, so no bot-vs-bot ladder will ever value fixing
+it.* It matters against an opponent who converts a 47-point HP deficit into a win, which is
+Marc and which is SearchBot (it chips **and** presses). Pricing this change is therefore not
+something the loop can do — it needs Marc's own games.
+
+**recommendation, explicitly deferred to Marc:** leave `BlockSingleChipper` off by default,
+and try `ChipBlockV2Tight` (0.10 of income) for ten games. The ladder cost of that arm is
+−2.5 OVERALL and −0.04 earned invests; the benefit is the hole closing. Only he can say
+whether that trade is worth it, and the numbers above are what it costs.
+
+## 5. BuyAutoSpawner (v1) — REVERTED
+
+2026-09-01 · Buys auto-spawner levels (capped at 5, $860 cumulative) out of money the
+investment claim has already declined.
+
+**predicted:** units on field up without unit *purchases* rising; `MoneySpentOnUnits` must
+NOT move; invests may fall slightly — *if they fall a lot, the cap is too high*.
+
+**measured** (seed 12345): mirror rung **48.5 → 36.5**, OVERALL 89.5 → 87.1, earned invests
+on the mirror **6.80 → 5.99**, units/sec 2.47 → **1.76** (down), idle money 7,753 → 4,204.
+Headstart agrees: mirror 54.1 → 43.4, invests 5.00 → 4.37.
+
+**verdict:** REVERTED, and the "cap is too high" branch of my own prediction fired. Invests
+fell 0.81 on the mirror, which is enormous on a ladder where the whole spread between the
+reference and a good variant is ~0.05. units/sec falling is the tell: money went into the
+machine instead of into units, so this **displaced** spending rather than adding free bodies.
+
+## 6. CheapGadgetUpgrades — REVERTED (hard)
+
+2026-09-01 · Replaces `GadgetUpgradeSpam`'s income test with an absolute-cost one, on the
+grounds that an upgrade is a finite purchase of `ceil((UpgradeCost − xp)/100)` casts.
+
+**measured** (seed 12345): mirror **48.5 → 18.5**, castle HP 37.6 → **14.4**, OVERALL
+89.5 → 81.6, HumanClone 98.8 → 82.9, invests 6.80 → 5.62. Headstart: mirror 54.1 → 29.9.
+
+**verdict:** REVERTED. The worst arm of the night by a wide margin. The reasoning about XP
+being finite is still correct; the gate built on it spends far too much, far too early. Any
+retry needs a total-dollar budget for the whole upgrade path, not a per-cast affordability
+test — and it should be measured with `--defense wall` pinned, since a gadget is 1 of 4
+draws and this change is otherwise diluted into ~25% of games.
+
+---
+
+## THE PATTERN ACROSS ITERATIONS 1-6 — read this before proposing another change
+
+One change was kept and four were rejected, and **the four failures share a single
+mechanism**: every one of them opened a NEW SPENDING CHANNEL, and every one lost earned
+investments.
+
+| change | new spend? | Δ invests (mirror) | verdict |
+|---|---|---|---|
+| ChargeAwareFallback | no — re-allocates *which* unit | **0.00** | KEPT |
+| BlockSingleChipper v1 | yes | −0.16 (−2.44 vs Tier4Spam) | reverted |
+| BlockSingleChipper v2 | yes, capped | −0.08 | reverted |
+| BuyAutoSpawner | yes | **−0.81** | reverted |
+| CheapGadgetUpgrades | yes | **−1.18** | reverted |
+
+This bot's binding constraint is the investment race, and every cap in `HeuristicBot.cs`
+(`AttackSpendFraction`, `InvestPaceTargetSeconds`, `ReactiveFlowCap`, `AttackGateMinInvestment`,
+`reactiveSpendBudget`) was tuned assuming no other channel exists. A new channel bypasses all
+of them at once. It is the same finding the file's own history already records three times
+under "TESTED AND REJECTED", arrived at independently from four fresh directions.
+
+**Practical rule for the next hypothesis: prefer changes that re-allocate spend the bot is
+already making over changes that add a new reason to spend.** If a change must add a channel,
+it has to take its money from an existing budget rather than from savings — e.g. fund the
+auto-spawner from `_attackSpendAllowance` (it produces units, so it should compete with unit
+buying) rather than from money investing declined.
