@@ -636,28 +636,11 @@ class View {
             this.drawHealthText(x - 200, y - 10, 200, playerState.castleHealth, playerState.castleMaxHealth);
         }
 
-        // Divine's shield is drawn over the castle the same way it is over a unit -- see the
-        // matching block at the end of drawUnit, including the precedence: invulnerability
-        // (divine_3) OUTRANKS a plain shield, so a castle carrying both shows the invulnerable
-        // art rather than two overlays stacked on each other.
-        //
-        // The plain-shield case was missing until 2026-08-30. Divine gained the ability to
-        // shield the castle as well as the army, but only the health bar was taught about it
-        // (drawHealthBar's shield segment), so a shielded castle had a white sliver above it
-        // and nothing on the castle itself -- while a shielded UNIT visibly wore the bubble.
-        const castleOverlay =
-              playerState.isInvulnerable   ? loader.assets.gadgets['divine_3']
-            : playerState.castleShield > 0 ? loader.assets.gadgets['divine']
-            : null;
-
-        if (castleOverlay) {
-            // `x` is the ANCHOR, not the sprite's left edge. Side 2 is drawn mirrored out of
-            // that anchor (translate + scale(-1, 1)) and so occupies [x - 200, x], so the
-            // overlay -- which is NOT mirrored -- has to be moved to the same left edge.
-            // Keyed off `side` rather than the previous `if (x > 1000)`, which was really
-            // asking "is this side 2?" via a magic number that only holds at MAP_WIDTH 2000.
-            const overlayX = side === 2 ? x - 200 : x;
-            this.ctx.drawImage(castleOverlay, overlayX, y, 200, 200);
+        // If the player is invulnerable, draw a divine shield over their castle:
+        if (playerState.isInvulnerable) {
+            const shieldImage = loader.assets.gadgets['divine_3'];
+            if (x > 1000) x -= 200;
+            this.ctx.drawImage(shieldImage, x, y, 200, 200);
         }
     }
 
