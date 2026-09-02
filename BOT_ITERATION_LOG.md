@@ -259,3 +259,35 @@ makes the change safe is the same rule that makes it too late to matter.
 current economy at all. It wants early money, and early money is exactly what this bot is
 correctly unwilling to spend. Any third attempt needs a reason why the early rungs beat an
 investment rung on their own terms — not a better place to take the money from.
+
+## 8. ChargeAwareEverywhere — INCONCLUSIVE (correct, but the paths barely execute)
+
+2026-09-01 · The charge test applied to the three spawn paths iteration 1 deliberately left
+out: the wiper in `Decide()`, `FindWiper`, and `DefensiveResponse`'s blocking body.
+
+**measured** — `ladder 400 --both`, seeds 12345 and 777, vs the iteration-1 baseline.
+Mirror rung: 48.5 → 49.2, 54.1 → 54.1, 49.7 → 49.2, 55.2 → 55.6. OVERALL within 0.1
+everywhere. Earned invests identical to two decimals in all four arms.
+
+**verdict:** INCONCLUSIVE — flag kept in the tree, NOT added to `Accepted`, because nothing
+predicted actually moved.
+
+**why nothing moved, which is the useful part.** `bot-checksum --games 24` reports
+`WIPE n=0` in every game: **the wiper path essentially never fires** in the measured
+configuration. And `DefensiveResponse` only runs under `DefenceOnly`, which the ladder never
+exercises — it is the profile `GameHostingService` uses for `defwatch` spectator games. So
+this change is correct and it fixes a real silent failure, but it fixes it in code the
+benchmark barely executes.
+
+**keep it anyway, as correctness insurance rather than strength.** The `DefensiveResponse`
+case in particular is the worst instance of the bug — `_blockCredit` banks up to
+`MaxBlockCredit` on refused spawns, so the bot believes it is blocking at the survival law's
+rate while delivering one unit id's regen — and it will start mattering the moment anything
+raises the wiper's firing rate or `DefenceOnly` returns to the shipped path.
+
+**a placement detail worth not re-deriving:** the charge test is deliberately absent from
+`MeasureWipeReach` and sits behind `!ignoreMoney` inside `FindWiper`. Both of those callers
+are the "what would the best wiper have been at any price" DIAGNOSTIC, and filtering them
+would make the alternative-comparison report a wiper the bot never actually rejected. The
+first draft of this change patched `MeasureWipeReach` by mistake; the compiler caught it only
+because `settings` was out of scope there.
