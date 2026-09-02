@@ -89,6 +89,8 @@ namespace CastleDefense.Simulation
             double botUnitSpend = 0, botRepairSpend = 0, botGadget = 0, botInvestSpend = 0, botEndMoney = 0;
             double botAutoLevel = 0, botOffensiveDecisions = 0;
             double raceHeld = 0, raceHopeless = 0, chipperMatch = 0, raceDeficit = 0;
+            double spWiper = 0, spReactive = 0, spAttack = 0, spChip = 0;
+            var wiperTiers = new long[9];
             double humanArmaSecs = 0, botArmaSecs = 0;
 
             for (int g = 0; g < games; g++)
@@ -188,6 +190,9 @@ namespace CastleDefense.Simulation
                 raceHopeless += bot.RaceHopelessDecisions;
                 chipperMatch += bot.ChipperMatchDecisions;
                 raceDeficit += bot.LastRaceDeficitSeconds;
+                spWiper += bot.SpendWiper; spReactive += bot.SpendReactive;
+                spAttack += bot.SpendAttack; spChip += bot.SpendChipBlock;
+                for (int ti = 1; ti <= 8; ti++) wiperTiers[ti] += bot.WiperTierCounts[ti];
                 botOffensiveDecisions += bot.OffensiveSpendDecisions;
                 botHp += Pct(state.Player2);
                 humanHp += Pct(state.Player1);
@@ -210,6 +215,13 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"    repairs     {botRepairSpend / n,10:N0}");
             Console.WriteLine($"    investments {botInvestSpend / n,10:N0}");
             Console.WriteLine($"    unspent     {botEndMoney / n,10:N0}   <- and ARMAGEDDON costs 121,221");
+            Console.WriteLine($"  UNIT SPEND BY REASON (per game): wiper {spWiper / n,8:N0}  " +
+                              $"reactive {spReactive / n,8:N0}  attack {spAttack / n,8:N0}  " +
+                              $"chip-block {spChip / n,7:N0}");
+            var wt = new List<string>();
+            for (int ti = 1; ti <= 8; ti++) if (wiperTiers[ti] > 0) wt.Add($"T{ti} x{wiperTiers[ti] / n:F1}");
+            Console.WriteLine($"    wiper picks by tier: {string.Join("  ", wt)}");
+
             Console.WriteLine($"  ECONOMY TRACKER (per game): offensive purchases HELD by the race gate " +
                               $"{raceHeld / n,7:F0}, hopeless-zone decisions {raceHopeless / n,6:F0}, " +
                               $"single-chipper matches {chipperMatch / n,5:F0}");

@@ -4207,6 +4207,8 @@ namespace CastleDefense.Engine.Bot
                     && Act(() => engine.SpawnUnit(_side, wiper.Id)))
                 {
                     boughtWiper = true;
+                    SpendWiper += wiper.Cost;
+                    if (wiper.Tier >= 1 && wiper.Tier <= 8) WiperTierCounts[wiper.Tier]++;
                     LastSpawnReason = "wiper";
                     _lastWiperTick = state.CurrentTick;
                     LastUnitsPurchased++;
@@ -4319,6 +4321,7 @@ namespace CastleDefense.Engine.Bot
                             // no cap at all. Same reasoning as the reactive allowance debit.
                             _chipAllowance = Math.Max(0, _chipAllowance - cheapest.Cost);
                             ChipBlocksBought++;
+                            SpendChipBlock += cheapest.Cost;
                             LastSpawnReason = "chipblock";
                             LastUnitsPurchased++;
                             if (cheapest.Tier >= 1 && cheapest.Tier <= 8) ActionCounts[cheapest.Tier]++;
@@ -5946,6 +5949,7 @@ namespace CastleDefense.Engine.Bot
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
+                if (preferDefense) SpendReactive += pick.def.Cost; else SpendAttack += pick.def.Cost;
                 LastUnitsPurchased++;
                 if (!preferDefense && !killerInstinct)
                 {
@@ -6418,6 +6422,21 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>
+        /// Unit spend split by WHY the purchase was made. Added 2026-09-02 to settle whether the
+        /// wiper or reactive defence is buying the expensive units -- Marc's 0240D8 question.
+        /// Counted at the callsite, so it attributes dollars rather than unit counts, which is
+        /// the distinction that matters: in that game tier 1-4 chaff was 310 of 399 purchases
+        /// and only 7.7% of the money.
+        /// </summary>
+        public double SpendWiper { get; private set; }
+        public double SpendReactive { get; private set; }
+        public double SpendAttack { get; private set; }
+        public double SpendChipBlock { get; private set; }
+
+        /// <summary>Wiper purchases by the TIER of the unit bought. Diagnostic.</summary>
+        public long[] WiperTierCounts { get; } = new long[9];
 
         /// <summary>Decisions where the single-chipper clock authorised a match. Diagnostic.</summary>
         public long ChipperMatchDecisions { get; private set; }

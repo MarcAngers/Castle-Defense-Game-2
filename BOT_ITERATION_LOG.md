@@ -866,3 +866,61 @@ puts five FREE tier-7 units on the field per cast and cleaves tier-1-4 chaff wit
 **The next hypothesis is therefore: reactive defence needs a power floor against high-tier
 threats** — not more spending, and not less, but buying units that survive a swing. That is a
 re-allocation, which is the shape that has worked, and it targets 93% of the waste.
+
+## 23. CORRECTION to item 22, and the real mechanism behind Marc's 0240D8 loss
+
+2026-09-02 · Marc pushed back on item 22's "310 chaff units" framing and he was right. **I counted
+units instead of dollars.** In dollars:
+
+| tier | cost | count | spend | share |
+|---|---|---|---|---|
+| T1-T4 | $3-18 | 310 | **$2,771** | **7.7%** |
+| T5 alpacco | $81 | 62 | $5,022 | 14.0% |
+| T6 bread | $338 | 16 | $5,408 | 15.1% |
+| **T7 eggo** | **$2,066** | **11** | **$22,726** | **63.3%** |
+
+The chaff is 7.7% of the money and is doing exactly what it should — stalling. **Eleven tier-7
+units are 63% of the spend.** Item 22's conclusion pointed at the wrong tier and its proposed fix
+("a power floor on reactive defence") would have made this *worse*.
+
+### The code Marc was thinking of
+
+`WiperMinIntervalSeconds = 4.0` (HeuristicBot.cs:886), gating the wiper block at line 4108: a
+wiper needs time to walk in and swing before a second one can be judged necessary.
+
+### Attribution, measured rather than argued
+
+New: unit spend is now tallied by the reason it was bought (`SpendWiper` / `SpendReactive` /
+`SpendAttack` / `SpendChipBlock`), plus wiper picks by tier. Gauntlet against 0240D8, n=30:
+
+```
+UNIT SPEND BY REASON: wiper 6,216   reactive 9,077   attack 1,622   chip-block 0
+wiper picks by tier:  T4 x1.0   T7 x3.0
+```
+
+**The wiper does buy the tier 7s** — $6,198 of its $6,216 is three eggos. Marc's hypothesis is
+confirmed for the wiper's share. But the wiper is only ~37% of unit spend; **reactive is larger**,
+and it is buying tier 7 as well.
+
+### WHY reactive buys tier 7 — and it is an economic asymmetry, not a tuning miss
+
+```csharp
+int dominantEnemyTier = enemyUnits.GroupBy(u => u.Tier)
+    .OrderByDescending(g => g.Sum(u => (double)u.Damage)).First().Key;
+var outclassing = RankPool(dominantEnemyTier + 1);
+var tierMatched = RankPool(dominantEnemyTier);
+```
+
+The reactive pools are floored at the enemy's damage-weighted dominant tier. **Marc's
+`reinforcements_3` puts five FREE tier-7 units on the field per cast** — 5 x 5,180 damage = 25,900,
+which dominates everything else instantly. So `dominantEnemyTier` becomes 7 and reactive defence
+is *forced* to buy tier 7 or 8: eggo at $2,066 a unit.
+
+**Marc pays $1,440 for a cast that yields $10,330 of tier-7 units. The bot answers with real money
+at $2,066 each.** That is the asymmetry that loses the game, and it is invisible to the bot because
+`dominantEnemyTier` counts units on the field without asking what they cost the opponent.
+
+**Next hypothesis: tier-match against what the opponent PAID for, not what is on the field.** The
+`OpponentEconomy` tracker already distinguishes free spawns from purchases — it has to, to price
+their economy — so the information needed is already being computed. Blocking free units is what
+chaff is for, and the chaff is already only 7.7% of spend.
