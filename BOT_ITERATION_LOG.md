@@ -605,3 +605,59 @@ before running the ladder. It was caught before Marc played it, but the order wa
 ship after both instruments, not between them.
 
 `BrakeAutoSpawn8NoArma` is kept so E5CA98 and A8452A stay reproducible by name.
+
+## 16. RaceAwareSpending — the tracker wired in. A real trade, shipped for play-test.
+
+2026-09-02 · Marc's rule: spend offensively so long as the spend does not put the bot behind in
+the economic race; defensive spend stays allowed. `OpponentEconomy` is now instantiated by
+`HeuristicBot`, updated every tick, and fed enemy gadget casts via `OnGadgetCast`.
+
+### Correction during implementation: a per-item gate inverts the substitution
+
+The first version asked "does THIS purchase put me behind", comparing an item price against the
+race. A $3 tier-1 unit passes where a $102 auto-spawner level fails, so the gate systematically
+bought the cheapest thing available: **auto-spawn level collapsed 8.0 → 1.1 while unit spend
+ROSE $28,240 → $42,291.** It inverted the very substitution it was meant to protect.
+
+Reframed as a PHASE test — "am I ahead, so is this a spending phase at all" — which leaves the
+choice of what to buy to the substitution logic that already prefers the machine.
+
+### The threshold sweep, and why 0
+
+| `RaceSafetySeconds` | gauntlet win | ARMAGEDDON | race h/b | auto lvl | attack decisions |
+|---|---|---|---|---|---|
+| no gate | **90.0%** | 27% | 6 / 16 | 8.0 | 445 |
+| −120 / −60 / −30 | 90.0% | 27% | 6 / 16 | 8.0 | 445 | *(never binds)* |
+| **0** | 83.3% | **57%** | **13 / 30** | 7.5 | 227 |
+| +10 | 76.7% | **78%** | 18 / 41 | **1.1** | **3** |
+
+At +10 the bot essentially stops attacking. That is the tracker's documented bias doing it: its
+income estimate for the opponent is an UPPER bound by construction, so the bot systematically
+believes it is behind. **0 is the literal reading of Marc's rule and the only setting that both
+binds and leaves the auto-spawner intact.**
+
+### Ladder, referenced against what Marc played
+
+| | nostart OVERALL | headstart OVERALL | mirror h2h | Chipper |
+|---|---|---|---|---|
+| cap 8, no gate | **92.7** | **92.0** | 54.2 / 55.2 | **100.0 / 98.8** |
+| + race gate @0 | 92.3 | 91.6 | 54.0 / **56.3** | 98.0 / 97.0 |
+
+−0.4 OVERALL both modes, mirror head-to-head up in headstart, Chipper down 2. Earned
+investments up (7.26 → 7.31).
+
+### THE FLAW TO FIX NEXT, and it is visible in one column
+
+**Idle money explodes.** Against Chipper, unspent at game end goes **$725 → $26,192**; against
+HumanClone **$3,790 → $15,440**. The bot stops spending but the saved money never reaches
+ARMAGEDDON either — it is saving into a void, while against Chipper its castle drops 66.8 → 50.9
+because a lone unit chips it unanswered.
+
+The missing condition is the same one that sank `ArmageddonCommit` in item 15: **hold only if the
+rung is actually reachable before the game ends.** `TechEscalation` has `TechTimeAware` for
+exactly this shape. Until that is added, the gate is trading real board presence for savings it
+often cannot spend.
+
+**Shipped at 0 for play-test** because the race is the failure Marc reports and this is the only
+change that has moved it. It is reversible: `Singleplayer:AutoSpawner = false`, or set
+`RaceAwareSpending = false` in `EconomyBrakeAutoSpawnProfile`.

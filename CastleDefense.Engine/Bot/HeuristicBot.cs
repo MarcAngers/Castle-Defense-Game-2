@@ -1974,6 +1974,42 @@ namespace CastleDefense.Engine.Bot
         public bool AutoSpawnerInsteadOfUnits { get; init; } = false;
 
         /// <summary>
+        /// (12) GATE OFFENSIVE SPENDING ON THE ECONOMY RACE. Marc's rule, 2026-09-02: the bot
+        /// should be happy to spend offensively so long as the spend does not put it behind in
+        /// the economic race, while defensive spend stays allowed so it does not die.
+        ///
+        /// Uses OpponentEconomy, which reads nothing hidden -- see that file for the fairness
+        /// rule and for which direction each of its numbers errs.
+        ///
+        /// THREE ZONES, and the third one is load-bearing. Comparing seconds-to-ARMAGEDDON for
+        /// both sides gives:
+        ///   AHEAD with room  -> spend freely; the money is not needed for the race.
+        ///   CLOSE            -> hold. This is the case E5CA98 lost, where the bot finished
+        ///                       $9,313 short of the rung having spent $24,500 on 552 units.
+        ///   HOPELESSLY BEHIND-> spend anyway. If the race cannot be won by saving every
+        ///                       remaining dollar then saving buys nothing and force is the
+        ///                       only line left. Without this zone a losing bot sits on its
+        ///                       money and loses quietly, which is strictly worse.
+        ///
+        /// SCOPED TO OFFENSIVE SPENDING. Reactive defence and killerInstinct both bypass it,
+        /// so the bot can still buy what it needs to survive and still close out a won fight.
+        /// </summary>
+        public bool RaceAwareSpending { get; init; } = false;
+
+        /// <summary>
+        /// Seconds of ARMAGEDDON lead required before an offensive purchase is allowed. A
+        /// cushion, because the tracker's income estimate is an UPPER bound on theirs and its
+        /// money estimate a LOWER bound, so the comparison is close but not exact.
+        /// </summary>
+        public double RaceSafetySeconds { get; init; } = 10.0;
+
+        /// <summary>
+        /// How far behind counts as HOPELESS. Generous on purpose: this zone should be entered
+        /// only when the race is genuinely gone.
+        /// </summary>
+        public double RaceHopelessSeconds { get; init; } = 60.0;
+
+        /// <summary>
         /// A level must repay its price in free unit value within this many seconds. Games
         /// average ~250 s, so 45 s is deliberately strict -- it buys only the rungs that are
         /// obviously cheap rather than betting on the game running long.
@@ -2183,6 +2219,18 @@ namespace CastleDefense.Engine.Bot
             AutoSpawnerInsteadOfUnits = true,
             AutoSpawnMaxLevel = 8,
 
+            // RACE-AWARE OFFENSIVE SPENDING, added 2026-09-02 at RaceSafetySeconds = 0, which
+            // is Marc's rule stated literally: spend offensively only while still ahead in the
+            // race, with no cushion. The sweep is what picked 0 -- at -30 and below the gate
+            // never binds, and at +10 it is so strict the offensive branch runs three times a
+            // game and the auto-spawner collapses to level 1.1.
+            //
+            // IT IS A TRADE, not a free win. Replay gauntlet: ARMAGEDDON 27% -> 57% and the bot
+            // beats the replayed human to it 30 times of 60 against 16, but win rate falls
+            // 90.0 -> 83.3. Ladder: OVERALL -0.4, mirror head-to-head +1.1, Chipper -2.
+            RaceAwareSpending = true,
+            RaceSafetySeconds = 0,
+
             // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
             //
             // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
@@ -2201,6 +2249,66 @@ namespace CastleDefense.Engine.Bot
             // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
             // it cannot see this. Do not retry ArmageddonCommit without making the commit
             // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
+        };
+
+        // RaceSafetySeconds sweep. At +10 the gate is so strict the offensive branch runs 3
+        // times a game: the tracker's income estimate for the opponent is an UPPER bound by
+        // construction (assume-ASAP), so the bot systematically believes it is behind. Negative
+        // values let it attack while slightly behind, which is what that bias needs.
+        public static readonly HeuristicBotSettings RaceS0 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = 0 };
+
+        public static readonly HeuristicBotSettings RaceSm30 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -30 };
+
+        public static readonly HeuristicBotSettings RaceSm60 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -60 };
+
+        public static readonly HeuristicBotSettings RaceSm120 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -120 };
+
+        /// <summary>Deployed profile + cap-8 substitution + race-aware offensive spending.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRace = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8, RaceAwareSpending = true,
+        };
+
+        /// <summary>Race-aware at cap 15 -- the level E5CA98's unit spend would have reached.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRace15 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 15, RaceAwareSpending = true,
+        };
+
+        /// <summary>Race-aware plus the ARMAGEDDON commit. That flag failed UNCONDITIONALLY in
+        /// item 15 -- it zeroed the attack budget whether or not the rung was winnable, and the
+        /// Chipper rung caught it. Retried here only because the race gate can now tell.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRaceArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8, RaceAwareSpending = true, ArmageddonCommit = true,
         };
 
         // ── Named presets for temporary ladder contenders ──
@@ -3095,6 +3203,26 @@ namespace CastleDefense.Engine.Bot
         {
             var state = engine._state;
             if (state.IsGameOver) return;
+
+            // OPPONENT ECONOMY. Wired here rather than in the constructor because the bot is
+            // built before it is ever handed an engine. Subscribing to OnGadgetCast is what
+            // makes their gadget spending visible; GameEngine.Clone nulls that event, so a
+            // rollout copy tracks without gadget casts rather than double-counting them.
+            if (_settings.RaceAwareSpending)
+            {
+                if (_oppEconomy == null) _oppEconomy = new OpponentEconomy(_side == 1 ? 2 : 1);
+                if (!_oppEconomyWired)
+                {
+                    _oppEconomyWired = true;
+                    var eng = engine;
+                    eng.OnGadgetCast += (side, gadgetId, pos) =>
+                    {
+                        if (side != _side)
+                            _oppEconomy?.ObserveGadgetCast(eng.GetGadgetDefinition(gadgetId));
+                    };
+                }
+                _oppEconomy.Update(engine);
+            }
 
             // Drain first: one queued action per tick, ahead of any new decision. The queue
             // is shorter than the decision interval, so this never starves Decide().
@@ -4272,6 +4400,11 @@ namespace CastleDefense.Engine.Bot
                 // action-queue latency -- Update drains one queued action per tick BEFORE
                 // Decide() runs, so money can leave under an "attack" label on a tick where the
                 // blackout is already true, without the offensive branch having been entered.
+                // RACE GATE (flag 12). Offensive spending is a PHASE decision -- see
+                // RaceAllowsOffence. Reactive defence is upstream of this branch and
+                // untouched, so the bot can still buy what it needs to survive.
+                if (!RaceAllowsOffence(me)) return;
+
                 OffensiveSpendDecisions++;
                 if (LastHazardBlackout) OffensiveWhileBlackedOut++;
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct,
@@ -4377,6 +4510,44 @@ namespace CastleDefense.Engine.Bot
         /// second copy here would drift from it exactly the way the time-machine constructor
         /// once did.
         /// </summary>
+        /// <summary>
+        /// May we spend this much offensively without losing the ARMAGEDDON race? See
+        /// RaceAwareSpending for the three zones. Returns true -- unchanged behaviour -- when
+        /// the tracker is off.
+        /// </summary>
+        private bool RaceAllowsOffence(PlayerState me)
+        {
+            if (!_settings.RaceAwareSpending || _oppEconomy == null) return true;
+            if (me.ArmageddonUsed) return true;          // already won it
+
+            float mine = SecondsToArmageddon(me);
+            float theirs = SecondsToArmageddon(_oppEconomy.Snapshot());
+            LastRaceDeficitSeconds = mine - theirs;
+
+            // HOPELESS: we lose the race even spending nothing, so saving buys nothing and
+            // force is the only line left.
+            if (mine > theirs + _settings.RaceHopelessSeconds)
+            {
+                RaceHopelessDecisions++;
+                return true;
+            }
+
+            // A PHASE TEST, NOT A PER-ITEM PRICE TEST, and that distinction is the whole
+            // correction. The first version asked "does THIS purchase put me behind", which
+            // compares an item price against the race -- so a $3 tier-1 unit passed while a
+            // $102 auto-spawner level failed, and the gate systematically bought the cheapest
+            // thing available. Measured: auto-spawn level collapsed 8.0 -> 1.7 while unit
+            // spend ROSE 28,240 -> 42,291, i.e. it inverted the substitution it was supposed
+            // to protect.
+            //
+            // Asking instead "am I comfortably ahead, so is this a spending phase at all"
+            // leaves the choice of WHAT to buy to the substitution logic, which already
+            // prefers the machine.
+            bool ok = mine + _settings.RaceSafetySeconds <= theirs;
+            if (!ok) RaceHeldPurchases++;
+            return ok;
+        }
+
         private static float SecondsToArmageddon(PlayerState me)
         {
             if (me.ArmageddonUsed) return 0f;
@@ -5973,6 +6144,22 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Dollars available for chip blocking. See ChipBlockIncomeFraction.</summary>
         private double _chipAllowance;
+
+        /// <summary>
+        /// The opponent's economy as estimated from what a player can see. Null unless
+        /// RaceAwareSpending is on, so the default bot allocates nothing for it.
+        /// </summary>
+        private OpponentEconomy _oppEconomy;
+        private bool _oppEconomyWired;
+
+        /// <summary>Our seconds-to-ARMAGEDDON minus theirs, last decision. Negative = ahead.</summary>
+        public double LastRaceDeficitSeconds { get; private set; }
+
+        /// <summary>Offensive purchases refused because they would lose the race. Diagnostic.</summary>
+        public long RaceHeldPurchases { get; private set; }
+
+        /// <summary>Decisions in the hopeless zone, where the bot fights instead of saving.</summary>
+        public long RaceHopelessDecisions { get; private set; }
 
         public long OffensiveSpendDecisions { get; private set; }
 

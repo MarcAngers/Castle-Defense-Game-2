@@ -74,6 +74,13 @@ namespace CastleDefense.Engine.Bot
         /// <summary>Gadget income we have credited them (cash). Diagnostic.</summary>
         public double IncomeSeen { get; private set; }
 
+        /// <summary>
+        /// A copy of the modelled opponent, for callers that want PlayerState-shaped
+        /// arithmetic on it (HeuristicBot.SecondsToArmageddon in particular). A CLONE, so a
+        /// caller cannot mutate the estimate by walking a ladder on it.
+        /// </summary>
+        public PlayerState Snapshot() => _sim.Clone();
+
         // STARTS AT 0, NOT -1, and there is no "skip the first update" guard.
         //
         // The first draft set this to -1 and had Update return early the first time it was
