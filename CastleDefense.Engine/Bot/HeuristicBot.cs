@@ -1997,6 +1997,20 @@ namespace CastleDefense.Engine.Bot
         public bool RaceAwareSpending { get; init; } = false;
 
         /// <summary>
+        /// (13) ANSWER A CHIPPING ATTACKER WHEN THE ARITHMETIC SAYS SO, replacing the
+        /// count-based rules that made a lone unit invisible. See the block in Decide() for
+        /// the test and why it needs no threshold. Marc's instruction, 2026-09-02.
+        /// </summary>
+        public bool ChipEconomics { get; init; } = false;
+
+        /// <summary>
+        /// How much better than break-even the trade must be. 1.0 is break-even; above 1 is
+        /// stricter. Kept as a knob because the HP price comes from the repair ladder, which
+        /// moves by a factor of 250 across a game.
+        /// </summary>
+        public double ChipEconomicsMargin { get; init; } = 1.0;
+
+        /// <summary>
         /// Seconds of ARMAGEDDON lead required before an offensive purchase is allowed. A
         /// cushion, because the tracker's income estimate is an UPPER bound on theirs and its
         /// money estimate a LOWER bound, so the comparison is close but not exact.
@@ -2250,6 +2264,30 @@ namespace CastleDefense.Engine.Bot
             // it cannot see this. Do not retry ArmageddonCommit without making the commit
             // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
         };
+
+        /// <summary>Shipped profile + chip economics. The candidate for Marc's next play-test.</summary>
+        public static readonly HeuristicBotSettings ShipPlusChip = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, ChipEconomics = true };
+
+        /// <summary>Chip economics at a 2x margin -- only clearly profitable blocks.</summary>
+        public static readonly HeuristicBotSettings ShipPlusChip2x = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, ChipEconomics = true, ChipEconomicsMargin = 2.0 };
+
+        /// <summary>The shipped profile itself, addressable by name as a control arm.</summary>
+        public static readonly HeuristicBotSettings ShipControl = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, };
 
         // RaceSafetySeconds sweep. At +10 the gate is so strict the offensive branch runs 3
         // times a game: the tracker's income estimate for the opponent is an UPPER bound by
@@ -3608,6 +3646,61 @@ namespace CastleDefense.Engine.Bot
             // short time-to-death already implies real damage is landing -- the observed
             // estimator requires a measured HP drain and the projected one only counts
             // enemies already inside contact range of our own castle.
+            // ── CHIP ECONOMICS (flag 13) ─────────────────────────────────────────────
+            // Marc, 2026-09-02: the rule that stops the bot answering a SINGLE attacker was
+            // there to prevent expensive gadget casts on lone units, and it is very
+            // exploitable -- RolloutSearchBot found it, and the race gate made it worse by
+            // leaving the bot sitting on money while a lone unit chipped it.
+            //
+            // The count-based gates are replaced by an ECONOMIC one, which is what the earlier
+            // BlockSingleChipper attempts lacked. A blocker absorbs roughly its own HP of
+            // damage that would otherwise reach the castle, and castle HP has a real price --
+            // the repair ladder. So a body is worth buying when
+            //
+            //     blockerMaxHealth * DollarsPerHp(me)  >  blockerCost
+            //
+            // Note this SELF-SCALES with the game, which is why it needs no unit count and no
+            // hand-tuned threshold: early on, repairs are cheap (repair 1 buys 10,000 HP for
+            // $20, so HP is $0.002 each) and tanking a chipper is correctly the right answer.
+            // Late, repair 7 costs $8,837 for 17,800 HP -- $0.50 each -- and a $3 body that
+            // soaks 12 HP is suddenly worth $6. The rule turns itself on exactly when HP
+            // becomes the expensive resource.
+            //
+            // It raises inDanger and the reactive BUDGET rather than adding a new spending
+            // channel, which is the shape iterations 1-7 found to be the safe one.
+            bool chipWorthBlocking = false;
+            if (_settings.ChipEconomics && threat != null && threat.UnblockedDps > 0.01f
+                && !me.ArmageddonUsed)
+            {
+                double perHp = DollarsPerHp(me);
+                UnitDefinition body = null;
+                foreach (var d in teamDef.Roster)
+                {
+                    if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                    if (!me.HasUnitCharge(d.Id)) continue;
+                    if (body == null || d.Cost < body.Cost) body = d;
+                }
+                if (body != null)
+                {
+                    double saved = (body.MaxHealth + body.MaxShield) * perHp;
+                    if (saved > body.Cost * _settings.ChipEconomicsMargin)
+                    {
+                        chipWorthBlocking = true;
+                        ChipEconomicsDecisions++;
+                    }
+                }
+                LastChipBleedPerSecond = threat.UnblockedDps * perHp;
+            }
+
+            // DELIBERATELY NOT OR-ed INTO inDanger. The first version did exactly that and it
+            // cost 28 points -- gauntlet 83.3% -> 55.0%, with castle HP falling 74.5 -> 50.5
+            // even though the point was to protect the castle. `inDanger` is a global MODE
+            // flag: it gates the whole offensive branch, the attack disengage system and the
+            // reactive scorer at once, so raising it for "one body is worth buying" switches
+            // the bot out of attacking entirely. A coarse switch for a fine decision -- the
+            // same error shape as the first race gate.
+            //
+            // chipWorthBlocking instead authorises ONE cheap dedicated purchase below.
             bool inDanger = (enemyIsClose && !investmentRunwayIsSafe) || survivalEmergency;
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
@@ -3958,7 +4051,8 @@ namespace CastleDefense.Engine.Bot
             // above already owns the response, and layering a second purchase on the same
             // decision is what the one-purchase-per-decision pacing exists to prevent. This
             // rule is for the case that branch never sees -- see BlockSingleChipper.
-            if (_settings.BlockSingleChipper && !_settings.DefenceOnly && !inDanger && !boughtWiper)
+            if ((_settings.BlockSingleChipper || chipWorthBlocking)
+                && !_settings.DefenceOnly && !inDanger && !boughtWiper)
             {
                 // An enemy is "chipping" if it has reached our wall AND nothing of ours is in
                 // contact with it. The second half is what keeps this from re-buying against
@@ -4012,9 +4106,15 @@ namespace CastleDefense.Engine.Bot
                         // Bounded by money, by the per-body price cap, AND by the flow
                         // allowance. The allowance is the binding one against fast-swinging
                         // attackers, which is the whole v1 -> v2 change.
-                        double budget = Math.Min(me.Money,
-                                        Math.Min(me.Income * _settings.ChipBlockIncomeSeconds,
-                                                 _chipAllowance));
+                        // Under ChipEconomics the trade has ALREADY been priced -- a body
+                        // that soaks more castle HP than it costs is worth buying whatever the
+                        // income-flow allowance says, because the allowance is a proxy for
+                        // affordability and this is a direct valuation. The flow cap still
+                        // applies to the older BlockSingleChipper path.
+                        double budget = chipWorthBlocking
+                            ? me.Money
+                            : Math.Min(me.Money,
+                                Math.Min(me.Income * _settings.ChipBlockIncomeSeconds, _chipAllowance));
                         UnitDefinition cheapest = null;
                         foreach (var d in teamDef.Roster)
                         {
@@ -6132,6 +6232,12 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Decisions where blocking was economically justified. Diagnostic.</summary>
+        public long ChipEconomicsDecisions { get; private set; }
+
+        /// <summary>Dollars of castle HP the unblocked attackers are costing per second.</summary>
+        public double LastChipBleedPerSecond { get; private set; }
 
         /// <summary>Blocking bodies bought by BlockSingleChipper. Diagnostic.</summary>
         public long ChipBlocksBought { get; private set; }

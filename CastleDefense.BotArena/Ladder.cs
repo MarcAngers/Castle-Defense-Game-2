@@ -200,13 +200,48 @@ namespace CastleDefense.BotArena
             return (state, new GameEngine(state, null, s.EngineSeed));
         }
 
+        /// <summary>
+        /// PARALLEL, AND STILL BIT-FOR-BIT DETERMINISTIC. Games are independent given their
+        /// spec: each carries its own EngineSeed and every bot is constructed inside the loop,
+        /// so nothing is shared but GameDataManager's immutable definition tables.
+        ///
+        /// The determinism is not incidental. Results are written into a pre-sized array
+        /// indexed by spec and then folded IN INDEX ORDER, so the floating-point accumulations
+        /// (EarnedInvests, Ticks, EndMoney) are summed in exactly the sequence the serial
+        /// version used. Accumulating straight into a shared Record under a lock would give
+        /// the right answer to a few decimal places and a different CSV every run, which is
+        /// precisely the kind of quiet irreproducibility this file's header promises against.
+        ///
+        /// Verify rather than trust: same --seed twice should still diff clean.
+        /// </summary>
         private static Record PlayMatchup(
             Func<int, IArenaOpponent> makeContender,
             Func<int, IArenaOpponent> makeOpponent,
             List<GameSpec> specs)
         {
+            var slots = new Record[specs.Count];
+            System.Threading.Tasks.Parallel.For(0, specs.Count, i =>
+            {
+                slots[i] = PlayOneSpec(makeContender, makeOpponent, specs[i]);
+            });
+
             var rec = new Record();
-            foreach (var spec in specs)
+            foreach (var s in slots)
+            {
+                rec.Wins += s.Wins; rec.Losses += s.Losses; rec.Draws += s.Draws;
+                rec.EarnedInvests += s.EarnedInvests; rec.OppEarnedInvests += s.OppEarnedInvests;
+                rec.Ticks += s.Ticks; rec.Games += s.Games;
+                rec.UnitsBought += s.UnitsBought; rec.EndMoney += s.EndMoney; rec.EndHpPct += s.EndHpPct;
+            }
+            return rec;
+        }
+
+        private static Record PlayOneSpec(
+            Func<int, IArenaOpponent> makeContender,
+            Func<int, IArenaOpponent> makeOpponent,
+            GameSpec spec)
+        {
+            var rec = new Record();
             {
                 // Each spec played twice, sides swapped — removes any residual seat bias.
                 for (int pass = 0; pass < 2; pass++)

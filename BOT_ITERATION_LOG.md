@@ -661,3 +661,63 @@ often cannot spend.
 **Shipped at 0 for play-test** because the race is the failure Marc reports and this is the only
 change that has moved it. It is reversible: `Singleplayer:AutoSpawner = false`, or set
 `RaceAwareSpending = false` in `EconomyBrakeAutoSpawnProfile`.
+
+## 17. Ladder parallelised — 4.3x, and still bit-for-bit deterministic
+
+2026-09-02 · Marc noticed the ladder was barely using his CPU. It ran games in a serial
+`foreach`; they are independent given their spec, since each carries its own EngineSeed and
+every bot is constructed inside the loop.
+
+`Parallel.For` over specs, with results written into a pre-sized array and folded **in index
+order** so the floating-point accumulations are summed in exactly the serial sequence. A shared
+`Record` under a lock would have been right to a few decimals and produced a different CSV every
+run, which is the quiet irreproducibility this file's header promises against.
+
+**Verified, not assumed:** same `--seed` twice gives byte-identical gameplay columns. Only
+`elapsed_s` and `ticks_per_s` differ, as they must.
+
+On 20 cores: a 400-spec, both-modes, 3-contender run went from minutes to **91 seconds**;
+throughput ~695k -> ~3.0M ticks/s. Note the THROUGHPUT column is now parallel wall clock, so it
+is still a fair paired comparison between contenders in one run but is no longer a per-core cost.
+
+## 18. ChipEconomics — the mechanism is right, the plumbing does not fire
+
+2026-09-02 · Marc: remove the rule that stops the bot answering a single attacker, now that
+there are better economics for trading units against HP.
+
+The economic test itself is clean and needs no unit count and no tuned threshold: a blocker
+absorbs roughly its own HP of damage that would otherwise hit the castle, so buy it when
+`blockerMaxHealth * DollarsPerHp(me) > blockerCost`. It self-scales — repair 1 buys 10,000 HP
+for $20 ($0.002/HP) so tanking is correctly right early, while repair 7 costs $8,837 for 17,800
+HP ($0.50/HP) and a $3 body soaking 12 HP is then worth $6.
+
+**First attempt cost 28 points and is recorded as a warning.** OR-ing the result into `inDanger`
+took the gauntlet 83.3% -> 55.0% with castle HP falling 74.5 -> 50.5 — worse at the very thing
+it was for. `inDanger` is a global MODE flag gating the whole offensive branch, the disengage
+system and the reactive scorer at once. Same error shape as the first race gate: a coarse switch
+used for a fine decision.
+
+**Re-pointed at the dedicated purchase, it is a no-op.** Ladder referenced against `ShipControl`:
+OVERALL identical to three decimals, Chipper identical, unspent unchanged. The
+`BlockSingleChipper` credit/detection machinery it rides on is not firing — diagnosing that is
+the next step, not more economics.
+
+## 19. THE RACE GATE IS WHAT BROKE CHIPPER DEFENCE — reconsider shipping it
+
+The same run compared `ShipControl` (race gate at 0, currently shipped) against `RaceSm60`
+(threshold so low the gate never binds, i.e. the pre-gate bot):
+
+| | OVERALL | Chipper | Chipper unspent | Chipper end HP |
+|---|---|---|---|---|
+| RaceSm60 (gate off) | **92.2 / 92.2** | **100.0 / 98.6** | **$704 / $1,238** | **66.7 / 69.6** |
+| ShipControl (gate on) | 91.7 / 91.8 | 97.8 / 96.8 | **$26,223 / $18,753** | 49.6 / 57.7 |
+
+The gate costs 0.5 OVERALL, 2-3 points of Chipper win rate, **17 points of castle HP against a
+chipper**, and leaves **$26,223 idle**. Marc's instinct that the idle money and the chipper
+exploit were the same issue is right, but the causality runs the other way from what I assumed:
+the lone-chipper blind spot pre-existed, and **the race gate made it much worse** by keeping the
+bot from spending while it was being chipped.
+
+The race gate's case rests entirely on the gauntlet ARMAGEDDON column (27% -> 57%). Its cost is
+now measured on three columns instead of one. That trade is worse than item 16 reported and the
+decision to ship it should be revisited.
