@@ -291,3 +291,20 @@ are the "what would the best wiper have been at any price" DIAGNOSTIC, and filte
 would make the alternative-comparison report a wiper the bot never actually rejected. The
 first draft of this change patched `MeasureWipeReach` by mistake; the compiler caught it only
 because `settings` was out of scope there.
+
+---
+
+## PROMOTION — 2026-09-02
+
+`ChargeAwareFallback` promoted to the default on Marc's instruction. `Accepted` is now a
+bare `new HeuristicBotSettings()`, and `PreChargeAware` reproduces the pre-promotion bot.
+
+**`bot-checksum --games 24`: `47EC146D660B0D721B4DC224D8ACB7F9` -> `C9C7E5C0342D07AA43D65113768E5B9A`.**
+
+Everything measured in iterations 1-8 above was measured against the OLD default, which is
+now `PreChargeAware`. The A/B commands in those entries still work, but the baseline arm has
+to be `--variant PreChargeAware` from here on, not the bare reference.
+
+Carried forward as the top open item: the search-test gap. `RolloutSearchBot` runs
+`HeuristicBot` as its prior and its rollout policy for both sides, and this change costs ~35%
+throughput, but `search-test` accepts no settings profile so the effect is unmeasured.

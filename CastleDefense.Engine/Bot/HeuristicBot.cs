@@ -1743,7 +1743,12 @@ namespace CastleDefense.Engine.Bot
         /// have the same shape and are NOT covered here, so this iteration measures one
         /// mechanism. See BOT_BACKLOG.md.
         /// </summary>
-        public bool ChargeAwareFallback { get; init; } = false;
+        /// PROMOTED TO DEFAULT 2026-09-02 on Marc's instruction, after iteration 1 measured
+        /// +2.6 to +7.3 points head-to-head across four arms (two seeds x two modes,
+        /// 5,600 games per arm) with earned investments unmoved to two decimals. Set
+        /// ChargeAwareFallback = false, or use HeuristicBotSettings.PreChargeAware, to
+        /// reproduce anything measured before that date.
+        public bool ChargeAwareFallback { get; init; } = true;
 
         /// <summary>
         /// (8) THE SAME CHARGE TEST ON THE THREE SPAWN PATHS ITERATION 1 LEFT OUT: the wiper
@@ -2459,6 +2464,8 @@ namespace CastleDefense.Engine.Bot
         // ── BOT_BACKLOG.md iteration presets ──
         // One flag each, layered on default behaviour, so `ladder --variant <name>` measures
         // that change alone against the committed reference on identical specs.
+        // Identical to Default since the 2026-09-02 promotion. Kept so the commands in
+        // BOT_ITERATION_LOG.md still run; use PreChargeAware for the other arm now.
         public static readonly HeuristicBotSettings ChargeAware =
             new HeuristicBotSettings { ChargeAwareFallback = true };
 
@@ -2530,11 +2537,17 @@ namespace CastleDefense.Engine.Bot
         ///
         /// See BOT_ITERATION_LOG.md for what each flag bought and what it cost.
         /// </summary>
-        public static readonly HeuristicBotSettings Accepted =
-            new HeuristicBotSettings
-            {
-                ChargeAwareFallback = true,   // iteration 1 -- KEPT
-            };
+        public static readonly HeuristicBotSettings Accepted = new HeuristicBotSettings();
+
+        /// <summary>
+        /// The bot as it behaved BEFORE the 2026-09-02 promotion of ChargeAwareFallback.
+        /// Kept for the same reason RepairLegacy is: every benchmark, FLAGSHIP_BASELINE
+        /// figure and pinned checksum recorded before that date describes THIS bot, and a
+        /// historical comparison needs to be able to reproduce it.
+        /// Its checksum is 47EC146D660B0D721B4DC224D8ACB7F9 at `bot-checksum --games 24`.
+        /// </summary>
+        public static readonly HeuristicBotSettings PreChargeAware =
+            new HeuristicBotSettings { ChargeAwareFallback = false };
         // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
         // costs 0.85 earned investments per game and loses 15 points head-to-head, so the
         // failure mode is ECONOMIC. Lower k = stricter = start spamming later, at higher

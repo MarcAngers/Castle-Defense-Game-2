@@ -1262,6 +1262,14 @@ if (args.Length > 0 && args[0] == "paramsearch-attack")
     return;
 }
 
+if (args.Length > 0 && args[0] == "best-loadout")
+{
+    // Which loadout is the bot strongest with, averaged over everything else? See
+    // BestLoadout.cs for why this is neither counter-matrix nor dashboard.
+    BestLoadout.Run(args);
+    return;
+}
+
 if (args.Length > 0 && args[0] == "loadouts")
 {
     string opponent = args.Length > 1 ? args[1] : "balanced";

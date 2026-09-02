@@ -1063,6 +1063,22 @@ end-of-game castle HP**, because win rate alone cannot express a predicted signa
 `bot-checksum`, every ladder baseline, `FLAGSHIP_BASELINE.md` and the shipped singleplayer
 opponent at once, so it is a deliberate decision, not a side effect.
 
+### PROMOTED 2026-09-02: `ChargeAwareFallback` is now the default
+
+Marc's call, after iteration 1 measured +2.6 to +7.3 points head-to-head across four arms
+(two seeds x two modes, 5,600 games per arm) with earned investments unmoved to two decimals.
+
+**`bot-checksum --games 24` moves `47EC146D660B0D721B4DC224D8ACB7F9` ->
+`C9C7E5C0342D07AA43D65113768E5B9A`.** Every bot-vs-bot number recorded before this date
+describes the old bot, including `FLAGSHIP_BASELINE.md` and the counter table. Set
+`ChargeAwareFallback = false`, or use `HeuristicBotSettings.PreChargeAware`, to reproduce it.
+
+**Still open, and it is a real gap:** `RolloutSearchBot` uses `HeuristicBot` as both its
+policy prior and its rollout policy for BOTH sides, and this change costs ~35% throughput.
+Nothing has measured what that does to search, because `search-test` takes no settings
+profile. The search numbers in `FLAGSHIP_BASELINE.md` should be treated as unverified until
+it does.
+
 ### The rule that came out of the first seven iterations
 
 One change was accepted and four were rejected, and **the four failures shared one
