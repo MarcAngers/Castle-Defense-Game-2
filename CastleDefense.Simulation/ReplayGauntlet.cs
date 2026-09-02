@@ -91,6 +91,7 @@ namespace CastleDefense.Simulation
             double raceHeld = 0, raceHopeless = 0, chipperMatch = 0, raceDeficit = 0;
             double spWiper = 0, spReactive = 0, spAttack = 0, spChip = 0;
             var wiperTiers = new long[9];
+            var reactTiers = new long[9]; var atkTiers = new long[9];
             double humanArmaSecs = 0, botArmaSecs = 0;
 
             for (int g = 0; g < games; g++)
@@ -192,7 +193,12 @@ namespace CastleDefense.Simulation
                 raceDeficit += bot.LastRaceDeficitSeconds;
                 spWiper += bot.SpendWiper; spReactive += bot.SpendReactive;
                 spAttack += bot.SpendAttack; spChip += bot.SpendChipBlock;
-                for (int ti = 1; ti <= 8; ti++) wiperTiers[ti] += bot.WiperTierCounts[ti];
+                for (int ti = 1; ti <= 8; ti++)
+                {
+                    wiperTiers[ti] += bot.WiperTierCounts[ti];
+                    reactTiers[ti] += bot.ReactiveTierCounts[ti];
+                    atkTiers[ti] += bot.AttackTierCounts[ti];
+                }
                 botOffensiveDecisions += bot.OffensiveSpendDecisions;
                 botHp += Pct(state.Player2);
                 humanHp += Pct(state.Player1);
@@ -221,6 +227,15 @@ namespace CastleDefense.Simulation
             var wt = new List<string>();
             for (int ti = 1; ti <= 8; ti++) if (wiperTiers[ti] > 0) wt.Add($"T{ti} x{wiperTiers[ti] / n:F1}");
             Console.WriteLine($"    wiper picks by tier: {string.Join("  ", wt)}");
+            foreach (var (label, arr, roster) in new[]
+                     { ("reactive", reactTiers, (object)null), ("attack", atkTiers, (object)null) })
+            {
+                var parts = new List<string>();
+                double cash = 0;
+                for (int ti = 1; ti <= 8; ti++)
+                    if (arr[ti] > 0) parts.Add($"T{ti} x{arr[ti] / n:F1}");
+                Console.WriteLine($"    {label,-8} picks by tier: {string.Join("  ", parts)}");
+            }
 
             Console.WriteLine($"  ECONOMY TRACKER (per game): offensive purchases HELD by the race gate " +
                               $"{raceHeld / n,7:F0}, hopeless-zone decisions {raceHopeless / n,6:F0}, " +

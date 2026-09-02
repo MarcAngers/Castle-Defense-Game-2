@@ -924,3 +924,58 @@ at $2,066 each.** That is the asymmetry that loses the game, and it is invisible
 `OpponentEconomy` tracker already distinguishes free spawns from purchases — it has to, to price
 their economy — so the information needed is already being computed. Blocking free units is what
 chaff is for, and the chaff is already only 7.7% of spend.
+
+## 24. One wiper at a time — SHIPPED; and what actually sends the T5/T6 units
+
+2026-09-02 · Marc's two questions about 0240D8, answered by reading and by measurement.
+
+### Q1: is there logic delaying a repeat T7 until the first dies? NO.
+
+The only gate was `WiperMinIntervalSeconds = 4.0` — a wall clock, not a liveness test, permitting
+up to 64 buys in a 259s game. Nothing anywhere tracked whether a previously bought unit was still
+on the field. That is how 0240D8 saw **eleven tier-7 eggos for $22,726, 63% of unit spend**.
+
+`OneWiperAtATime` records the wiper's `InstanceId` and refuses a repeat while it lives. Keyed on
+instance rather than unit type, because the auto-spawner and reinforcements put units of the same
+type on the field for free and those are not the wiper.
+
+**Measured** (gauntlet vs 0240D8, n=40): wiper spend **$6,216 → $4,150**, T7 picks **3.0 → 2.0**,
+total unit spend $16,910 → $15,067. **Ladder unmoved** — OVERALL 91.8/91.9 both arms, every rung
+within noise, because ladder opponents rarely field a threat tough enough to trigger repeat
+expensive wipers (the historical `WIPE n=0`). No measured cost, real saving against a human-shaped
+opponent. Shipped.
+
+**A bug caught while writing it:** the first version captured the id from `state.Units.Last()`
+*after* the `Act(...)` call. `Act` returns **true when it merely QUEUES** the spawn for a later
+tick, so that read could grab an auto-spawner body or an enemy unit. The capture now happens
+inside the action where `SpawnUnit` actually succeeded. Same `Act()` false positive as backlog
+item 6 — it is worth fixing that generally.
+
+### Q2: what sends the T5 and T6 units? Reactive `SpendOnUnits`, forced by the tier floor.
+
+```
+wiper    picks by tier: T4 x1.0   T7 x3.0
+reactive picks by tier: T1 x46.0  T2 x10.0  T3 x8.0  T4 x47.5  T5 x8.4  T6 x15.5  T7 x1.0
+attack   picks by tier: T1 x14.0  T3 x6.0   T4 x21.0  T5 x10.0  T6 x1.0
+```
+
+The wiper picks only T4 and T7. **Reactive T6 bread is 15.5 x $338 = $5,239, 58% of all reactive
+spend** — the mid-tier drain Marc identified.
+
+It is not choosing mid-tier units, it is being **denied cheaper ones**:
+
+```csharp
+var outclassing = RankPool(dominantEnemyTier + 1);
+var tierMatched = RankPool(dominantEnemyTier);
+```
+
+Both pools are floored at the enemy's damage-weighted dominant tier, so whatever dominates the
+board sets a MINIMUM tier the bot may buy. Dominant 6 → bread $338 is the cheapest legal pick;
+dominant 7 → eggo $2,066. And `dominantEnemyTier` counts units on the field without asking what
+they cost the opponent, so Marc's FREE `reinforcements_3` squad — 5 x 5,180 damage — sets that
+floor at 7 for nothing.
+
+**Next, and it needs Marc's direction:** the floor is a tier-matching heuristic doing the job a
+stall stream should do. Chaff is 7.7% of spend and blocks anything, per the survival law. Two
+shapes: drop the floor when a stall stream is already holding, or exclude free-spawned units from
+`dominantEnemyTier`. The second is narrower; the first is closer to how he says he plays.

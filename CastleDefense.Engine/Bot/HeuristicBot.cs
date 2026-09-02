@@ -2020,6 +2020,15 @@ namespace CastleDefense.Engine.Bot
         public bool ChipperInvestmentClock { get; init; } = false;
 
         /// <summary>
+        /// (16) Refuse a second wiper while the last one is still alive. Marc's rule. The only
+        /// existing gate was WiperMinIntervalSeconds, a 4-second wall clock that permitted up
+        /// to 64 buys a game; 0240D8 saw eleven tier-7 units bought for $22,726, 63% of unit
+        /// spend. See the gate in Decide() -- buying the expensive unit is right, buying the
+        /// second one while the first still stands is not.
+        /// </summary>
+        public bool OneWiperAtATime { get; init; } = false;
+
+        /// <summary>
         /// How soon the next rung has to be for tanking to be the right answer. Below this the
         /// bot holds and buys the rung first; above it, it kills the chipper now.
         /// </summary>
@@ -2294,6 +2303,14 @@ namespace CastleDefense.Engine.Bot
             ChipperInvestmentClock = true,
             ChipperTankSeconds = 30.0,
 
+            // ONE WIPER AT A TIME, added 2026-09-02 on Marc's rule. In 0240D8 the bot bought
+            // eleven tier-7 units at $2,066 each -- $22,726, 63% of its entire unit spend --
+            // because the only gate on a repeat was a 4-second wall clock. Buying the
+            // expensive unit is the right play; buying the second one while the first is still
+            // standing is not. Gauntlet: wiper spend $6,216 -> $4,150 a game with the T7 count
+            // 3.0 -> 2.0, and the ladder is unmoved on every rung.
+            OneWiperAtATime = true,
+
             // Applies the charge test to the wiper and DefensiveResponse too -- included
             // because every arm measured alongside the clock carried it, so shipping without
             // it would ship something that was never measured.
@@ -2404,6 +2421,26 @@ namespace CastleDefense.Engine.Bot
             KillerInstinctPushLatch = true,
             AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
             RaceAwareSpending = true, RaceSafetySeconds = 0, };
+
+        /// <summary>Shipped profile, addressable by name as a control arm.</summary>
+        public static readonly HeuristicBotSettings ShipNow = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, };
+
+        /// <summary>Shipped + one wiper at a time. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipOneWiper = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true };
 
         // RaceSafetySeconds sweep. At +10 the gate is so strict the offensive branch runs 3
         // times a game: the tracker's income estimate for the opponent is an UPPER bound by
@@ -3200,6 +3237,21 @@ namespace CastleDefense.Engine.Bot
         private int _lastSeenInvestmentCount = -1;
         // Tick of the last wave-wipe purchase, bounding how often that check may fire.
         private long _lastWiperTick = long.MinValue / 4;
+
+        /// <summary>The last wiper we bought, so a repeat buy can be refused while it lives.</summary>
+        private Guid _lastWiperInstance = Guid.Empty;
+
+        /// <summary>
+        /// Is the wiper we last bought still on the field? Guid.Empty means we have never
+        /// bought one, or the spawn did not land, in which case there is nothing to wait for.
+        /// </summary>
+        private bool WiperStillAlive(GameState state)
+        {
+            if (!_settings.OneWiperAtATime || _lastWiperInstance == Guid.Empty) return false;
+            for (int i = 0; i < state.Units.Count; i++)
+                if (state.Units[i].InstanceId == _lastWiperInstance) return true;
+            return false;
+        }
 
         // The one wall each side may have on the field (WallEffect enforces the limit).
         // Refreshed once per decision and read by ProjectedPosition, which must not lead a
@@ -4105,7 +4157,21 @@ namespace CastleDefense.Engine.Bot
             bool boughtWiper = false;
             if (!_settings.DefenceOnly
                 && _settings.WiperOverRepair && committedEnemyCount > 0 && committedEnemyValue > 0
-                && (state.CurrentTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds)
+                && (state.CurrentTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds
+                // ── ONE WIPER AT A TIME (flag 16) ───────────────────────────────────
+                // Marc, 2026-09-02: "another T7 should not be bought unless the existing one
+                // dies." Until now the ONLY gate on a repeat wiper was WiperMinIntervalSeconds
+                // -- a wall clock, not a liveness test -- so at 4s it permitted up to 64 buys
+                // in a 259s game. In 0240D8 the bot bought ELEVEN tier-7 eggos at $2,066 each,
+                // $22,726 and 63% of its entire unit spend, while the previous ones were still
+                // standing.
+                //
+                // Buying the expensive unit is the RIGHT play -- it is what Marc does -- so the
+                // fix is not to stop buying it, only to stop buying a second one that the first
+                // makes redundant. Tracked by InstanceId rather than by counting units of that
+                // type, because the auto-spawner and reinforcements put units of the same type
+                // on the field for free and those are not the wiper.
+                && !WiperStillAlive(state))
             {
                 // Toughest thing in the stack. Shield absorbs before health (ApplyDamage), so
                 // a real one-shot has to cover both.
@@ -4204,7 +4270,20 @@ namespace CastleDefense.Engine.Bot
 
                 if (wiper != null
                     && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
-                    && Act(() => engine.SpawnUnit(_side, wiper.Id)))
+                    // THE ID IS CAPTURED INSIDE THE ACTION, not after it. Act() returns TRUE
+                    // when it merely QUEUES the call for a later tick, so reading
+                    // state.Units.Last() out here can pick up a completely unrelated unit --
+                    // an auto-spawner body, or the opponent's. Capturing where SpawnUnit
+                    // actually succeeded is the only point at which the last element of
+                    // _state.Units is known to be ours. Same Act() false-positive that
+                    // BOT_BACKLOG item 6 records.
+                    && Act(() =>
+                    {
+                        if (!engine.SpawnUnit(_side, wiper.Id)) return false;
+                        var us = engine._state.Units;
+                        _lastWiperInstance = us.Count > 0 ? us[us.Count - 1].InstanceId : Guid.Empty;
+                        return true;
+                    }))
                 {
                     boughtWiper = true;
                     SpendWiper += wiper.Cost;
@@ -5494,6 +5573,7 @@ namespace CastleDefense.Engine.Bot
                     .ToList();
             }
 
+            LastDominantEnemyTier = dominantEnemyTier;
             var outclassing = RankPool(dominantEnemyTier + 1);
             var tierMatched = RankPool(dominantEnemyTier);
             var anyAffordable = RankPool(0);
@@ -5949,7 +6029,8 @@ namespace CastleDefense.Engine.Bot
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
-                if (preferDefense) SpendReactive += pick.def.Cost; else SpendAttack += pick.def.Cost;
+                if (preferDefense) { SpendReactive += pick.def.Cost; if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ReactiveTierCounts[pick.def.Tier]++; }
+                else { SpendAttack += pick.def.Cost; if (pick.def.Tier >= 1 && pick.def.Tier <= 8) AttackTierCounts[pick.def.Tier]++; }
                 LastUnitsPurchased++;
                 if (!preferDefense && !killerInstinct)
                 {
@@ -6437,6 +6518,15 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Wiper purchases by the TIER of the unit bought. Diagnostic.</summary>
         public long[] WiperTierCounts { get; } = new long[9];
+
+        /// <summary>Reactive-defence and offensive purchases by tier. Diagnostic -- added to
+        /// answer "what is deciding to send the T5 and T6 units", which the wiper tally alone
+        /// could not, since the wiper was only picking T4 and T7.</summary>
+        public long[] ReactiveTierCounts { get; } = new long[9];
+        public long[] AttackTierCounts { get; } = new long[9];
+
+        /// <summary>Dominant enemy tier last seen by the reactive scorer. Diagnostic.</summary>
+        public int LastDominantEnemyTier { get; private set; }
 
         /// <summary>Decisions where the single-chipper clock authorised a match. Diagnostic.</summary>
         public long ChipperMatchDecisions { get; private set; }
