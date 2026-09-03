@@ -88,7 +88,7 @@ namespace CastleDefense.Simulation
             int humanWonRace = 0, botWonRace = 0;
             double botUnitSpend = 0, botRepairSpend = 0, botGadget = 0, botInvestSpend = 0, botEndMoney = 0;
             double botAutoLevel = 0, botOffensiveDecisions = 0;
-            double raceHeld = 0, raceHopeless = 0, chipperMatch = 0, raceDeficit = 0;
+            double raceHeld = 0, raceHopeless = 0, chipperMatch = 0, raceDeficit = 0, racePriced = 0;
             double spWiper = 0, spReactive = 0, spAttack = 0, spChip = 0;
             var wiperTiers = new long[9];
             var reactTiers = new long[9]; var atkTiers = new long[9];
@@ -134,7 +134,7 @@ namespace CastleDefense.Simulation
                 // "does it win the race" and became "what is it spending the race on".
                 // Gadget spend is summed from the cast event because nothing else totals it.
                 double botGadgetSpend = 0;
-                engine.OnGadgetCast += (side, gadgetId, pos) =>
+            engine.OnGadgetCast += (side, gadgetId, pos) =>
                 {
                     if (side != 2) return;
                     var gd = engine.GetGadgetDefinition(gadgetId);
@@ -191,6 +191,7 @@ namespace CastleDefense.Simulation
                 botAutoLevel += state.Player2.AutoSpawnLevel;
                 raceHeld += bot.RaceHeldPurchases;
                 raceHopeless += bot.RaceHopelessDecisions;
+                racePriced += bot.RacePricedHolds;
                 chipperMatch += bot.ChipperMatchDecisions;
                 raceDeficit += bot.LastRaceDeficitSeconds;
                 spWiper += bot.SpendWiper; spReactive += bot.SpendReactive;
@@ -251,6 +252,7 @@ namespace CastleDefense.Simulation
 
             Console.WriteLine($"  ECONOMY TRACKER (per game): offensive purchases HELD by the race gate " +
                               $"{raceHeld / n,7:F0}, hopeless-zone decisions {raceHopeless / n,6:F0}, " +
+                              $"priced holds {racePriced / n,6:F1}, " +
                               $"single-chipper matches {chipperMatch / n,5:F0}");
             Console.WriteLine($"    final race deficit (ours minus theirs, seconds to ARMAGEDDON) " +
                               $"{raceDeficit / n,8:F1}   negative = bot ahead");
@@ -311,6 +313,7 @@ namespace CastleDefense.Simulation
             long startTick = state.CurrentTick;
 
             var gadget = new double[3];
+            var armaTick = new long[3] { -1, -1, -1 };
             engine.OnGadgetCast += (side, gadgetId, pos) =>
             {
                 var gd = engine.GetGadgetDefinition(gadgetId);
@@ -324,6 +327,9 @@ namespace CastleDefense.Simulation
                 if (i < 0 || i >= rf.A1.Length) continue;
                 if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
                 if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
+
+                if (armaTick[1] < 0 && state.Player1.ArmageddonUsed) armaTick[1] = i;
+                if (armaTick[2] < 0 && state.Player2.ArmageddonUsed) armaTick[2] = i;
             }
 
             Console.WriteLine($"=== SPEND BREAKDOWN -- {rf.GameId} ===");
@@ -344,6 +350,7 @@ namespace CastleDefense.Simulation
             // silently omitted $121,221 from the human's column and made the bot look like it
             // had out-earned him 2.5x when the real ratio is 1.15x.
             Console.WriteLine($"    ARMAGEDDON     {(p1.ArmageddonUsed ? 121221 : 0),14:N0} {(p2.ArmageddonUsed ? 121221 : 0),13:N0}");
+            Console.WriteLine($"      bought at    {(armaTick[1] < 0 ? "never" : $"{armaTick[1] / 30.0:F0}s"),14} {(armaTick[2] < 0 ? "never" : $"{armaTick[2] / 30.0:F0}s"),13}");
             Console.WriteLine($"    auto-spawner   {AutoCost(p1.AutoSpawnLevel),14:N0} {AutoCost(p2.AutoSpawnLevel),13:N0}   (levels {p1.AutoSpawnLevel} / {p2.AutoSpawnLevel})");
             Console.WriteLine($"    unspent        {p1.Money,14:N0} {p2.Money,13:N0}");
             Console.WriteLine($"    units bought   {engine.UnitsPurchased[1],14:N0} {engine.UnitsPurchased[2],13:N0}");

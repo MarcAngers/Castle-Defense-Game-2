@@ -1088,3 +1088,92 @@ Both wrong answers were plausible readings of code I had already read. The rule 
 saved the round trips: **when asked why the bot did something, instrument the decision rather than
 re-reading the logic that should have produced it.** The counters cost ten minutes; the two wrong
 diagnoses cost more than that and would have shipped a fix that made it worse.
+
+---
+
+## 27. `RacePricePurchases` — the race gate prices the PURCHASE, not just the position
+
+**ACCEPTED** (Marc's call, 2026-09-03: "this is how this gate should have worked from the start").
+
+### The failure it fixes, from `73DBD4`
+
+At **175s**, with an **empty enemy field** — zero enemy units anywhere on the map — the bot
+bought a $23,000 tier 8. Instrumented with `--replay-why`, every alternative explanation is
+ruled out at the decision point:
+
+| candidate | verdict |
+|---|---|
+| wiper | FAILS — 0 committed units, budget `0.35 x $0 = $0` |
+| rich mode | no — $24,607 against a $69,000 threshold |
+| reactive defence | unreachable — nothing on the field |
+| **offensive push** | **this one** |
+
+The pick itself is not a malfunction. `MultiplicativeUnitValue` scores `effHP x DPS / cost`,
+which for White rises monotonically with tier:
+
+```
+T7 eggo  $ 2,066  hp   4,690  dmg  5,180 x 0.66/s   score      7,786
+T8 corn  $23,000  hp 105,820  dmg 40,500 x 0.20/s   score     42,857
+```
+
+Corn is rank 1 of the whole roster whenever it is affordable, and the survivability multiplier
+is not even involved (no enemies ⇒ 1.0 for everything). **Nothing in that formula knows $23,000
+is most of an investment rung.**
+
+The race gate was consulted and *approved* it:
+
+```
+RACE GATE: bot 69s to ARMAGEDDON, modelled human 81s -> offence ALLOWED
+AFTER PAYING $23,000: bot 100s vs human 81s -> BEHIND by 19s (cost 31s of race position)
+```
+
+`RaceAllowsOffence` runs in `Decide()` **before anything has been picked**, so it can only ask
+"am I ahead", never "am I still ahead after paying".
+
+### Why this is not the per-item gate that already failed
+
+The first race gate (item 12) priced items *before* choosing and **inverted the substitution**:
+a rejected $102 auto-spawner level fell through to a $3 unit, auto-spawn level collapsed
+8.0 → 1.7 and unit spend ROSE $28,240 → $42,291.
+
+**Position in `SpendOnUnits` is the whole correction.** The new check sits *after* the
+auto-spawner substitution block, so the machine keeps first refusal and only the fall-through
+unit purchase is priced — the inversion is structurally unreachable. And **a failure BANKS
+rather than downgrading**: buying a cheaper body with the same money is precisely the behaviour
+that produced the inversion. Reactive defence never reaches the line (`preferDefense`), so
+Marc's standing rule that defensive spend stays allowed is preserved.
+
+### Measured
+
+- **Ladder, n=400, 6,400 games/arm:** OVERALL 91.9% → **92.0%**, every rung inside its interval,
+  earned investments unchanged to two decimals. Costs nothing.
+- **Gauntlet on `B9A8D4`:** fires **21 times a game** and removes the tier-7 purchase from the
+  attack mix entirely (T1–T4 only afterwards). Win rate 100% in both arms, so the gauntlet
+  **cannot adjudicate it** — same instrument blindness that motivated `ChipperBaseline`.
+- **Gauntlet on `73DBD4`, the motivating game: byte-identical, 0 priced holds.** The live bot
+  there already wins the race 60/60, so the gate never binds. **The fix is justified by the
+  arithmetic at the actual decision point, not by the gauntlet reproducing the loss.** Stated
+  plainly because it is the weakest part of the evidence.
+- **`bot-checksum --games 24` UNCHANGED** at `3EFC8EDB17850125BFCB555440AA0C40` — the flag
+  defaults false, so every existing benchmark and the reference bot are untouched. It is enabled
+  only in `EconomyBrakeAutoSpawnProfile` (the shipped singleplayer opponent).
+  `HeuristicBotSettings.PreRacePriced` reproduces the previous deployed behaviour.
+
+### What it does NOT fix — cumulative bleed
+
+`B9A8D4` (most recent game, White mirror, Marc won) is the counter-example and it is not
+addressed by this change:
+
+```
+ARMAGEDDON  bought at   P1 260s   P2 262s      <- the bot lost the race by TWO SECONDS
+units       P1 $4,132 (2 units)   P2 $18,120 (144 units)
+```
+
+**$16,528 of that $18,120 is eight eggos at $2,066** — 91% of unit spend in 8 of 144 purchases.
+At income 2,500 that is **6.6 seconds of income, against a 2-second losing margin**. But no
+single $2,066 purchase moves the race clock by more than 0.83s, so a per-purchase test only
+catches them once the margin is already thin.
+
+The open problem is therefore **a budget, not a gate**: eight individually-affordable purchases
+that are collectively decisive. Next candidate is a cumulative race-spend allowance over the
+endgame phase rather than a per-item test.

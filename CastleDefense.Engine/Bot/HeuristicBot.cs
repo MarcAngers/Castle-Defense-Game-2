@@ -2077,6 +2077,24 @@ namespace CastleDefense.Engine.Bot
         public double RaceHopelessSeconds { get; init; } = 60.0;
 
         /// <summary>
+        /// Price the PURCHASE against the ARMAGEDDON race, not just the current position.
+        ///
+        /// RaceAllowsOffence runs in Decide() BEFORE anything has been picked, so all it can
+        /// ask is "am I ahead right now". It cannot ask "am I still ahead once I have paid",
+        /// and in 73DBD4 that gap cost the game: at 175s, with an EMPTY enemy field, the bot
+        /// was 69s from ARMAGEDDON against a modelled 81s for the human -- 12 seconds ahead,
+        /// so the gate allowed offence -- and spent $23,000 on a tier 8, which put it at 100s,
+        /// i.e. 19 seconds BEHIND. One purchase, 31 seconds of race position.
+        ///
+        /// The tier 8 was not a malfunction of the pick: MultiplicativeUnitValue scores
+        /// effHP x DPS / cost, which for White rises monotonically with tier, so corn scores
+        /// 42,857 against the tier 7's 7,786 and is simply rank 1 of the roster whenever it is
+        /// affordable. Nothing in that formula knows $23,000 is most of an investment rung.
+        /// This gate is where that gets priced.
+        /// </summary>
+        public bool RacePricePurchases { get; init; } = false;
+
+        /// <summary>
         /// A level must repay its price in free unit value within this many seconds. Games
         /// average ~250 s, so 45 s is deliberately strict -- it buys only the rungs that are
         /// obviously cheap rather than betting on the game running long.
@@ -2275,6 +2293,86 @@ namespace CastleDefense.Engine.Bot
             ArmageddonCommit = true,
         };
 
+        /// <summary>
+        /// The deployed profile as it stood BEFORE the priced race gate (games 73DBD4,
+        /// B9A8D4 and everything earlier). Kept by name so those recordings stay
+        /// reproducible -- same reason PreChargeAware and PreRungCommit exist.
+        /// </summary>
+        public static readonly HeuristicBotSettings PreRacePriced = new HeuristicBotSettings
+{
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+            KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8,
+
+            // RACE-AWARE OFFENSIVE SPENDING, added 2026-09-02 at RaceSafetySeconds = 0, which
+            // is Marc's rule stated literally: spend offensively only while still ahead in the
+            // race, with no cushion. The sweep is what picked 0 -- at -30 and below the gate
+            // never binds, and at +10 it is so strict the offensive branch runs three times a
+            // game and the auto-spawner collapses to level 1.1.
+            //
+            // IT IS A TRADE, not a free win. Replay gauntlet: ARMAGEDDON 27% -> 57% and the bot
+            // beats the replayed human to it 30 times of 60 against 16, but win rate falls
+            // 90.0 -> 83.3. Ladder: OVERALL -0.4, mirror head-to-head +1.1, Chipper -2.
+            RaceAwareSpending = true,
+            RaceSafetySeconds = 0,
+
+            // PRICED, not just phased -- 73DBD4. The phase test above allowed offence on a
+            // 12-second lead and a $23,000 tier 8 turned it into a 19-second deficit. See
+            // RacePricePurchases.
+            RacePricePurchases = false,
+
+            // SINGLE-CHIPPER INVESTMENT CLOCK, added 2026-09-02 -- Marc's rule, at 30s.
+            //
+            // The tank window is the interesting parameter and the LONGER value won, which
+            // vindicates his framing over the impatient reading of it. At 15s the bot matches
+            // the chipper sooner, spends more, and the gauntlet ARMAGEDDON rate falls 55% ->
+            // 32% -- it buys chipper defence with the win condition. At 30s the race is
+            // untouched (55%, bot first in 29 of 60, identical to control) AND the Chipper rung
+            // improves: 97.8 -> 99.4 nostart with end castle HP 49.6 -> 51.8.
+            //
+            // Tanking while the rung is close really is right, and matching only once it is
+            // far really is enough.
+            ChipperInvestmentClock = true,
+            ChipperTankSeconds = 30.0,
+
+            // ONE WIPER AT A TIME, added 2026-09-02 on Marc's rule. In 0240D8 the bot bought
+            // eleven tier-7 units at $2,066 each -- $22,726, 63% of its entire unit spend --
+            // because the only gate on a repeat was a 4-second wall clock. Buying the
+            // expensive unit is the right play; buying the second one while the first is still
+            // standing is not. Gauntlet: wiper spend $6,216 -> $4,150 a game with the T7 count
+            // 3.0 -> 2.0, and the ladder is unmoved on every rung.
+            OneWiperAtATime = true,
+
+            // Applies the charge test to the wiper and DefensiveResponse too -- included
+            // because every arm measured alongside the clock carried it, so shipping without
+            // it would ship something that was never measured.
+            ChargeAwareEverywhere = true,
+
+            // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
+            //
+            // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
+            // $111,908, $9,313 short of ARMAGEDDON, having spent $24,500 on 552 units. And on
+            // the replay gauntlet it looked strictly better -- win 90.0 -> 91.7, ARMAGEDDON
+            // 27% -> 28%, end HP 78.7 -> 80.7, unspent 13,907 -> 11,483.
+            //
+            // The LADDER says otherwise, and it is measuring the thing the gauntlet cannot.
+            // Headstart OVERALL 92.0 -> 90.9, driven almost entirely by the CHIPPER rung:
+            // 98.8 -> 94.8, with the chipper's unspent money going 1,207 -> 2,799. Headstart
+            // games start at a higher InvestmentCount, so the bot reaches count 8 far more
+            // often, the commit zeroes its attack budget, and a lone unit sitting on its
+            // castle then goes unanswered -- exactly the failure the Chipper rung was built
+            // to detect, and exactly the unconditional-zeroing flaw item 10 named.
+            //
+            // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
+            // it cannot see this. Do not retry ArmageddonCommit without making the commit
+            // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
+        };
+
         public static readonly HeuristicBotSettings EconomyBrakeAutoSpawnProfile = new HeuristicBotSettings
         {
             RepairPriceCheck = true,
@@ -2297,6 +2395,11 @@ namespace CastleDefense.Engine.Bot
             // 90.0 -> 83.3. Ladder: OVERALL -0.4, mirror head-to-head +1.1, Chipper -2.
             RaceAwareSpending = true,
             RaceSafetySeconds = 0,
+
+            // PRICED, not just phased -- 73DBD4. The phase test above allowed offence on a
+            // 12-second lead and a $23,000 tier 8 turned it into a 19-second deficit. See
+            // RacePricePurchases.
+            RacePricePurchases = true,
 
             // SINGLE-CHIPPER INVESTMENT CLOCK, added 2026-09-02 -- Marc's rule, at 30s.
             //
@@ -4955,6 +5058,33 @@ namespace CastleDefense.Engine.Bot
             return ok;
         }
 
+        /// <summary>
+        /// Would paying <paramref name="cost"/> leave us still ahead in the ARMAGEDDON race?
+        ///
+        /// The companion to RaceAllowsOffence, which is a PHASE test taken before anything is
+        /// picked. This one prices the actual item, and the two must agree on the hopeless
+        /// zone or they fight: there, saving cannot win the race at all, so force is the only
+        /// line left and neither gate holds anything back.
+        /// </summary>
+        private bool RacePurchaseAffordable(PlayerState me, double cost)
+        {
+            if (!_settings.RacePricePurchases) return true;
+            if (!_settings.RaceAwareSpending || _oppEconomy == null) return true;
+            if (me.ArmageddonUsed || cost <= 0) return true;
+
+            float mine = SecondsToArmageddon(me);
+            float theirs = SecondsToArmageddon(_oppEconomy.Snapshot());
+            if (mine > theirs + _settings.RaceHopelessSeconds) return true;   // hopeless: fight
+
+            var after = me.Clone();
+            after.Money -= cost;
+            if (after.Money < 0) after.Money = 0;
+
+            float mineAfter = SecondsToArmageddon(after);
+            LastRacePurchaseCostSeconds = mineAfter - mine;
+            return mineAfter + _settings.RaceSafetySeconds <= theirs;
+        }
+
         /// <summary>Diagnostic passthrough for offline replay analysis.</summary>
         public static float DiagSecondsToArmageddon(PlayerState me) => SecondsToArmageddon(me);
 
@@ -6092,6 +6222,26 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
+            // --- PRICED RACE TEST (flag 12b) ---------------------------------------
+            // POSITION IN THIS METHOD IS THE WHOLE CORRECTION. The first race gate priced
+            // items BEFORE choosing what to buy, so a rejected $102 auto-spawner level fell
+            // through to a $3 unit and the substitution INVERTED -- auto-spawn level 8.0 ->
+            // 1.7 while unit spend rose $28,240 -> $42,291. Sitting here, after the
+            // auto-spawner block above has already taken its turn, the machine keeps first
+            // refusal and only the fall-through unit purchase is priced. The inversion is
+            // structurally unreachable.
+            //
+            // A FAILURE BANKS, IT DOES NOT DOWNGRADE. Falling back to a cheaper body is
+            // exactly the behaviour that produced the inversion, and the survival law says a
+            // lesser body is not worth buying here anyway -- with the race lost the money is
+            // worth more in the rung. Reactive defence never reaches this line (preferDefense),
+            // so the bot can still buy what it needs to survive.
+            if (!preferDefense && pick.def != null && !RacePurchaseAffordable(me, pick.def.Cost))
+            {
+                RacePricedHolds++;
+                return;
+            }
+
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
@@ -6659,6 +6809,12 @@ namespace CastleDefense.Engine.Bot
 
         /// <summary>Decisions in the hopeless zone, where the bot fights instead of saving.</summary>
         public long RaceHopelessDecisions { get; private set; }
+
+        /// <summary>Purchases refused by the PRICED race test. Diagnostic.</summary>
+        public long RacePricedHolds { get; private set; }
+
+        /// <summary>Seconds of race position the last priced purchase would have cost.</summary>
+        public double LastRacePurchaseCostSeconds { get; private set; }
 
         public long OffensiveSpendDecisions { get; private set; }
 
