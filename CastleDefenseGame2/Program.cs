@@ -81,6 +81,21 @@ CounterPicker.TopK = builder.Configuration.GetValue("CounterPick:TopK", 1);
 // loadout so a difference in outcome is attributable to play rather than to loadout. Clear
 // it (empty string) to go back to counter-picking.
 CounterPicker.ForcedLoadout = builder.Configuration.GetValue("CounterPick:ForcedLoadout", "");
+if (!string.IsNullOrWhiteSpace(CounterPicker.ForcedLoadout))
+{
+    // Printed for the same reason the forced-map line below is: this is gameplay-affecting,
+    // it silently overrides the counter-picker, and nothing else on screen says it is on.
+    // Leaving it set by accident makes every singleplayer game -- and every recording of one
+    // -- incomparable to games played without it.
+    Console.WriteLine($"[counter-pick] FORCED loadout active: the bot plays " +
+                      $"{CounterPicker.ForcedLoadout} every singleplayer game, ignoring the " +
+                      $"counter table and the random roll. Clear CounterPick:ForcedLoadout to disable.");
+}
+else if (CounterPicker.Enabled)
+{
+    Console.WriteLine($"[counter-pick] enabled, TopK={CounterPicker.TopK} -- the bot answers " +
+                      $"your loadout from counter_table.csv.");
+}
 
 // TEMPORARY (2026-08-27): pins the map for EVERY hosted game rather than rolling one, so a
 // map's ambient animation can be looked at on demand while it is being built. An unknown or
@@ -112,6 +127,8 @@ GameHostingService.SingleplayerRepairFix =
     builder.Configuration.GetValue("Singleplayer:RepairFix", false);
 GameHostingService.SingleplayerHazardFix =
     builder.Configuration.GetValue("Singleplayer:HazardFix", false);
+GameHostingService.SingleplayerAutoSpawner =
+    builder.Configuration.GetValue("Singleplayer:AutoSpawner", false);
 GameHostingService.SingleplayerEconomyBrake =
     builder.Configuration.GetValue("Singleplayer:EconomyBrake", false);
 

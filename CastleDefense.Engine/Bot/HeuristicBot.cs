@@ -1707,6 +1707,416 @@ namespace CastleDefense.Engine.Bot
         // at InvestmentCount 8 triggers ARMAGEDDON (GameEngine.Invest -> ArmageddonEffect),
         // which shields us with divine_3 and rains meteors, firebombs, waves and nukes on the
         // enemy castle. So the whole job is: survive long enough to invest eight times.
+        /// <summary>
+        /// (1) CHARGE-AWARE PURCHASE FALLBACK. When the ranked pick has no charge left,
+        /// fall through to the best-scoring unit that is both affordable AND charged,
+        /// instead of making one attempt that silently fails.
+        ///
+        /// THE BUG THIS FIXES. Every filter in SpendOnUnits' pick pipeline -- RankPool,
+        /// outclassPick, matchedPick, the anyAffordable fallback, PowerPickAffordable and
+        /// TechEscalation -- tests `def.Cost &lt;= spendable` and nothing else. The method
+        /// then makes exactly ONE attempt, `Act(() =&gt; engine.SpawnUnit(_side, pick.def.Id))`,
+        /// with no fallback. Since unit charges shipped (2026-09-01) SpawnUnit refuses a
+        /// purchase with no charge left, so the bot converges on one unit id, drains its
+        /// five charges in under a second at six decisions/sec, and then re-picks that same
+        /// uncharged id for most of the rest of the game while a fully-charged second choice
+        /// sits unused.
+        ///
+        /// IT FAILS SILENTLY, which is why it survived. LastUnitsPurchased, ActionCounts[],
+        /// GameEngine.UnitsPurchased[] and MoneySpentOnUnits[] all increment on SUCCESS
+        /// only, so a refused purchase leaves no trace in any counter or log.
+        ///
+        /// MEASURED BEFORE THE FIX: `bot-checksum --games 4` gave 0.94-1.41 units/sec
+        /// (mean 1.14) against a six-decisions/sec cadence, with $39k-$55k left unspent at
+        /// the final tick. 1.14/sec is almost exactly PlayerState.UnitChargeRegenMs = 1000,
+        /// i.e. the refill rate of a SINGLE unit id -- the signature of a bot that never
+        /// rotates. CLAUDE.md independently records purchases falling 101.9 -> 35.4 per
+        /// 1000 ticks (-67%) when charges shipped.
+        ///
+        /// DELIBERATELY A FALLTHROUGH, NOT A PRE-FILTER. Filtering the ranked pools on
+        /// charges would change which unit is chosen even when the top pick IS available,
+        /// silently re-tuning the outclass rule and TechEscalation. This engages only on the
+        /// decisions that would otherwise have bought nothing at all, so on every other
+        /// decision the bot is byte-identical to the reference.
+        ///
+        /// SCOPED TO SpendOnUnits. The wiper purchase and DefensiveResponse's block spawn
+        /// have the same shape and are NOT covered here, so this iteration measures one
+        /// mechanism. See BOT_BACKLOG.md.
+        /// </summary>
+        /// PROMOTED TO DEFAULT 2026-09-02 on Marc's instruction, after iteration 1 measured
+        /// +2.6 to +7.3 points head-to-head across four arms (two seeds x two modes,
+        /// 5,600 games per arm) with earned investments unmoved to two decimals. Set
+        /// ChargeAwareFallback = false, or use HeuristicBotSettings.PreChargeAware, to
+        /// reproduce anything measured before that date.
+        public bool ChargeAwareFallback { get; init; } = true;
+
+        /// <summary>
+        /// (8) THE SAME CHARGE TEST ON THE THREE SPAWN PATHS ITERATION 1 LEFT OUT: the wiper
+        /// purchase in Decide(), FindWiper, and DefensiveResponse's blocking body.
+        ///
+        /// Iteration 1 was deliberately scoped to SpendOnUnits so one mechanism was measured
+        /// at a time. These three have the identical shape -- pick on price, one attempt, no
+        /// fallback -- and DefensiveResponse's case is the worst of the four, because
+        /// _blockCredit is only decremented inside `if (Act(...))`. A refused spawn there
+        /// banks credit up to MaxBlockCredit that can never be spent, so the bot believes it
+        /// is blocking at the survival law's rate while actually delivering one unit id's
+        /// charge regeneration. Its own doc comment still claims a ceiling of 6 bodies/sec.
+        ///
+        /// A RE-ALLOCATION, NOT A NEW CHANNEL -- it changes which unit is bought and never
+        /// how much is spent, which is the shape iterations 1-7 found to be the safe one.
+        /// </summary>
+        public bool ChargeAwareEverywhere { get; init; } = false;
+
+        /// <summary>
+        /// Highest tier the charge-aware fallback may substitute. 4 by Marc's instruction: the
+        /// fallback exists to keep a body on the field when the intended purchase is
+        /// recharging, and a body is what the survival law prices -- not a cheaper copy of the
+        /// unit that was actually wanted. Above this the fallback declines and the decision
+        /// buys nothing. See the cap in SpendOnUnits for the measurement behind it.
+        /// </summary>
+        public int ChargeFallbackMaxTier { get; init; } = 4;
+
+        /// <summary>
+        /// (3) BLOCK A LONE CHIPPING UNIT. Buy one cheap body whenever an enemy is standing
+        /// on our castle with nothing of ours in contact with it -- regardless of what the
+        /// EV budget says.
+        ///
+        /// THE HOLE. Marc's own report, 2026-09-01, after watching RolloutSearchBot exploit
+        /// it: the bot almost never clears a single unit off its castle. A lone attacker is
+        /// refused by all four defence paths at once, and each refusal is correct in
+        /// isolation:
+        ///   - time-to-death against one unit is 100+ s, so `investmentRunwayIsSafe` is true,
+        ///     `inDanger` is false, and SpendOnUnits(preferDefense) is never even called;
+        ///   - if it were, `runwayDeficitSeconds = max(0, timeToInvest - timeToDeath)` is 0,
+        ///     so `reactiveSpendBudget` is $0, `spendable` is 0, and nothing is affordable;
+        ///   - `waveWipeOpportunity` requires WaveWipeMinUnits = 3;
+        ///   - `survivalEmergency` requires time-to-death &lt;= 12 s.
+        ///
+        /// THIS IS A BAND-AID THAT OUTLIVED ITS PURPOSE. `reactiveSpendBudget` was added
+        /// after playtest D3596E, where the bot spent hundreds of dollars defending against a
+        /// single unit that DPS-vs-HP math showed was barely a threat. The cap was right; its
+        /// PRICE BASIS is not. It values the threat against TIME-TO-DEATH, when the correct
+        /// comparison is a $1-4 chump against the CUMULATIVE castle HP the unit will remove.
+        /// Only Repair heals a castle, so that damage is permanent and unbounded -- a rate
+        /// model cannot see a stock. Precisely the incoming-nuke blind spot inverted.
+        ///
+        /// WHY A BODY AND NOT DAMAGE. MoveAndFight attacks the castle only in an
+        /// `else if (castleInRange)` branch: one enemy body in contact means zero castle
+        /// damage that tick. Blocking is a hard stop, not a damage race, and a body absorbs
+        /// one swing whatever it costs -- so the cheapest unit is strictly the right buy.
+        ///
+        /// RATE-LIMITED BY THE SURVIVAL LAW, not by a flat interval. Credit accrues at the
+        /// summed attack rate of the unblocked chippers, so the bot buys exactly one body per
+        /// enemy swing and no more. Without that this becomes the permanent-reactive-spend
+        /// pathology this file documents four separate times.
+        /// </summary>
+        public bool BlockSingleChipper { get; init; } = false;
+
+        /// <summary>How close to our own wall an enemy must be to count as "on the castle".</summary>
+        public float ChipBlockDistance { get; init; } = 50f;
+
+        /// <summary>Edge gap under which one of our units counts as already blocking a chipper.</summary>
+        public float ChipBlockContactPad { get; init; } = 10f;
+
+        /// <summary>
+        /// Affordability discipline: the blocker may cost at most this many seconds of
+        /// income. At the opening income of $2/s this allows $4, which covers every team's
+        /// tier-1 unit ($1-$4), and it scales itself out of relevance as income grows. This
+        /// is what stops the rule competing with the first investment rung.
+        /// </summary>
+        public double ChipBlockIncomeSeconds { get; init; } = 2.0;
+
+        /// <summary>Cap on banked blocking credit, so a quiet spell cannot fund a burst.</summary>
+        public float ChipBlockMaxCredit { get; init; } = 2f;
+
+        /// <summary>
+        /// (3b) THE SPEND-RATE CAP v1 LACKED. Chip blocking may consume at most this
+        /// fraction of income, as a banked dollar allowance.
+        ///
+        /// WHY v1 FAILED, precisely. The rate limit is the survival law -- one body per enemy
+        /// SWING -- and swing rate is exactly what the roster clamps hardest.
+        /// GameDataManager recomputes AttackSpeed and clamps it to [0.2, 5.0]; tier-8 units
+        /// clamp at the BOTTOM (0.20/s) and tier-4 units clamp at the TOP (5.0/s). So the law
+        /// asks for ~0.2 bodies/sec against a tier 8 and up to 5 bodies/sec against tier 4 --
+        /// a 25x spread. The stall findings' "$2/sec holds anything" is specifically about a
+        /// lone tier 8.
+        ///
+        /// v1 capped the PRICE OF EACH BODY (ChipBlockIncomeSeconds) but never the RATE of
+        /// spending, so against tier-4 pressure it bought ~5 bodies/sec on a $2/sec income
+        /// and drained the wallet continuously. Earned investments against Tier4Spam more
+        /// than halved (4.72 -> 2.28) and that rung fell 80.4% -> 27.8%.
+        ///
+        /// A FLOW CAP IS THE ESTABLISHED SHAPE for this in this file -- see ReactiveFlowCap
+        /// and the attack allowance. It banks, so a quiet stretch still funds a real burst
+        /// when a chipper actually arrives, but cumulative chip spending can never outrun
+        /// cumulative income. When the law asks for more than the cap allows, the bot buys
+        /// what it can afford and otherwise does what it did before: out-economies the
+        /// opponent instead of trading with it.
+        /// </summary>
+        public double ChipBlockIncomeFraction { get; init; } = 0.25;
+
+        /// <summary>Seconds of chip allowance that may bank while nothing is attacking.</summary>
+        public double ChipAllowanceCapSeconds { get; init; } = 8.0;
+
+        /// <summary>
+        /// (2) BUY THE AUTO-SPAWNER. No bot in the project can currently do this: action 14
+        /// is absent from GetActionMask, and RolloutSearchBot builds its candidate list from
+        /// `a = 8..1` plus {9,10,11,12,13}. But HeuristicBot bypasses the action space
+        /// entirely -- it calls engine.Invest / Repair / SpawnUnit / UseGadget directly -- so
+        /// engine.UpgradeAutoSpawn is reachable with NO mask change, no observation-vector
+        /// change and no ONNX checkpoint invalidated.
+        ///
+        /// WHY IT IS WORTH A RUNG. It buys BODIES PER SECOND, which since the 2026-09-01
+        /// charge change is a resource money alone can no longer buy: auto-spawner units are
+        /// `ignoreCost`, so they consume no charge and are not subject to the
+        /// one-purchase-per-decision pacing. It is the only lever that raises the ceiling
+        /// iteration 1 merely stopped wasting.
+        ///
+        /// THE PRICES MAKE THE CASE. Level 1 is $102 for one free body per second, forever.
+        /// The survival law says one body per enemy SWING holds anything, and every tier-8
+        /// unit's AttackSpeed clamps at the BOTTOM of its range (0.20/s, one swing per five
+        /// seconds) -- so level 1 alone is five times the rate needed to neutralise a lone
+        /// tier 8, permanently, for a one-off $102. Level 5 is $860 cumulative for three
+        /// bodies per second.
+        ///
+        /// PRICED AGAINST THE INVESTMENT RUNG, NOT AGAINST MONEY. Every previous "spend
+        /// earlier" experiment in this file died by competing with investing, so the rule
+        /// only buys a level when it is cheap RELATIVE to the next rung and the runway is
+        /// already safe -- i.e. out of the same surplus the early-invest claim has declined
+        /// to take. AutoSpawnMaxLevel caps the ladder deliberately low so this measures
+        /// "cheap early bodies" rather than "convert the whole economy into the machine".
+        /// </summary>
+        /// <summary>
+        /// (9) Let the gadget layer commit to the investment rung at EVERY count, not just
+        /// the first three. See DeferForInvestment for the measurement that motivated it.
+        /// </summary>
+        /// PROMOTED TO DEFAULT 2026-09-02. Measured +5.0 to +5.6 points head-to-head in all
+        /// four arms (two seeds x two modes) with earned investments UP 0.11-0.15 -- the
+        /// mechanism working as designed, since committing to the rung is what buys the rung.
+        public bool CommitToRung { get; init; } = true;
+
+        /// <summary>
+        /// How close to the next rung counts as committed. 0.6 holds non-urgent gadget casts
+        /// once the bot is 60% of the way there. Lower is stricter.
+        /// </summary>
+        public double RungCommitFraction { get; init; } = 0.6;
+
+        /// <summary>
+        /// (10) Stop funding unit attacks once ARMAGEDDON is the only rung left. See the
+        /// block in SpendOnUnits for why RushArmageddon does not do this on the shipped path.
+        /// </summary>
+        public bool ArmageddonCommit { get; init; } = false;
+
+        public bool BuyAutoSpawner { get; init; } = false;
+
+        /// <summary>
+        /// Highest auto-spawner level this rule will buy. 5 is $860 cumulative for 3 free
+        /// bodies/sec; the ladder runs to 19 and $280,427, which is a different hypothesis.
+        /// </summary>
+        /// Raised from 5 to 16 on 2026-09-02. Five was chosen when the question was "are the
+        /// cheap early rungs worth buying out of savings" ($860 cumulative). The question is
+        /// now "should this branch buy the machine instead of units", and the branch has
+        /// $51,127 a game to spend -- level 16 is $36,813 cumulative and the last level before
+        /// the ladder jumps to $43,614 for one rung.
+        public int AutoSpawnMaxLevel { get; init; } = 16;
+
+        /// <summary>
+        /// Buy a level only when it costs at most this fraction of the next investment
+        /// price. Keeps the purchase inside the surplus rather than in front of the rung --
+        /// the failure mode of every rejected early-spend variant in this file.
+        /// </summary>
+        public double AutoSpawnMaxFractionOfRung { get; init; } = 0.5;
+
+        /// <summary>
+        /// Refuse to buy once money has climbed past this fraction of the next investment
+        /// price. Spending EARLY in an accumulation cycle costs the rung a little; spending
+        /// just before the rung lands costs it the whole cycle. Same shape as
+        /// UpgradeSpamInvestCommitFraction, and the same reason.
+        /// </summary>
+        public double AutoSpawnInvestCommitFraction { get; init; } = 0.5;
+
+        /// <summary>
+        /// (2b) BUY THE AUTO-SPAWNER BY SUBSTITUTION, out of the money already earmarked for
+        /// units, instead of out of savings.
+        ///
+        /// THIS IS THE NIGHT'S MAIN FINDING APPLIED. Four hypotheses were rejected in a row
+        /// and they shared one mechanism: each opened a NEW spending channel and each lost
+        /// earned investments, because every cap in this file (AttackSpendFraction,
+        /// InvestPaceTargetSeconds, ReactiveFlowCap, AttackGateMinInvestment,
+        /// reactiveSpendBudget) was tuned assuming no other channel exists. The one change
+        /// that was kept -- ChargeAwareFallback -- only re-allocated WHICH unit was already
+        /// being bought, and moved earned invests by 0.00.
+        ///
+        /// v1 of the auto-spawner spent money the investment claim had declined, i.e. savings,
+        /// and cost 0.81 earned investments on the mirror rung. This version spends the ATTACK
+        /// ALLOWANCE instead. That is the honest place for it: the machine produces units, so
+        /// it should compete with buying a unit, not with buying a rung.
+        ///
+        /// PRICED IN ROSTER DOLLARS PER SECOND, not in units per second. Units/sec cannot tell
+        /// level 2 ([1,1]) from level 3 ([2,1]) -- both deliver 2/s and only the tier mix
+        /// differs -- so a rate-based value model stalls at the first rung that buys quality.
+        /// Summing the cycle's roster costs prices both at once, and it is the same currency
+        /// the purchase is made in.
+        /// </summary>
+        public bool AutoSpawnFromAttackBudget { get; init; } = false;
+
+        /// <summary>
+        /// (11) THE AUTO-SPAWNER IS THE ATTACK BRANCH'S DEFAULT PURCHASE, instead of units.
+        /// Marc's instruction, 2026-09-02: "the unit stream logic should be adapted to using
+        /// the Autospawner instead. Spamming money on units should be a last resort defense
+        /// now instead of something that happens every game at a certain income level."
+        ///
+        /// WHAT THIS REPLACES, priced. `--replay-gauntlet --race` measured the bot spending
+        /// **$51,127 a game** on one-off units out of this branch, while ARMAGEDDON -- the rung
+        /// that ends the game and that it never reaches -- costs $121,221. The same $51,127
+        /// buys the auto-spawner ladder past level 16 ($36,813 cumulative), which is six free
+        /// units a second, of tiers [5,4,4,2,2,2], for the rest of the game.
+        ///
+        /// It also routes around the charge cap, which nothing else the bot can buy does:
+        /// auto-spawner units are `ignoreCost`, so they consume no charge and are not subject
+        /// to the one-purchase-per-decision pacing that limits bought units to ~1/sec per id.
+        ///
+        /// REACTIVE SPENDING IS UNTOUCHED. This is scoped to `!preferDefense &amp;&amp;
+        /// !killerInstinct`, so buying units to answer a threat -- the "last resort defense"
+        /// half of Marc's instruction -- still behaves exactly as before.
+        /// </summary>
+        public bool AutoSpawnerInsteadOfUnits { get; init; } = false;
+
+        /// <summary>
+        /// (12) GATE OFFENSIVE SPENDING ON THE ECONOMY RACE. Marc's rule, 2026-09-02: the bot
+        /// should be happy to spend offensively so long as the spend does not put it behind in
+        /// the economic race, while defensive spend stays allowed so it does not die.
+        ///
+        /// Uses OpponentEconomy, which reads nothing hidden -- see that file for the fairness
+        /// rule and for which direction each of its numbers errs.
+        ///
+        /// THREE ZONES, and the third one is load-bearing. Comparing seconds-to-ARMAGEDDON for
+        /// both sides gives:
+        ///   AHEAD with room  -> spend freely; the money is not needed for the race.
+        ///   CLOSE            -> hold. This is the case E5CA98 lost, where the bot finished
+        ///                       $9,313 short of the rung having spent $24,500 on 552 units.
+        ///   HOPELESSLY BEHIND-> spend anyway. If the race cannot be won by saving every
+        ///                       remaining dollar then saving buys nothing and force is the
+        ///                       only line left. Without this zone a losing bot sits on its
+        ///                       money and loses quietly, which is strictly worse.
+        ///
+        /// SCOPED TO OFFENSIVE SPENDING. Reactive defence and killerInstinct both bypass it,
+        /// so the bot can still buy what it needs to survive and still close out a won fight.
+        /// </summary>
+        public bool RaceAwareSpending { get; init; } = false;
+
+        /// <summary>
+        /// (13) ANSWER A CHIPPING ATTACKER WHEN THE ARITHMETIC SAYS SO, replacing the
+        /// count-based rules that made a lone unit invisible. See the block in Decide() for
+        /// the test and why it needs no threshold. Marc's instruction, 2026-09-02.
+        /// </summary>
+        public bool ChipEconomics { get; init; } = false;
+
+        /// <summary>
+        /// (14) Let the wiper's budget also count the CASTLE HP the unblocked attackers are
+        /// about to take, not only the value of the enemy stack. See the block in Decide().
+        /// This is what makes the wiper answer a lone chipper, which is the exploit
+        /// RolloutSearchBot found and which Marc asked to fold into the wiper rather than
+        /// solve with separate logic.
+        /// </summary>
+        public bool WiperPricesCastleHp { get; init; } = false;
+
+        /// <summary>
+        /// (15) Answer a SINGLE chipper on the investment clock: tank while the next rung is
+        /// close, match the threat as soon as it is not. Marc's rule from live play -- see the
+        /// block in Decide() for why this replaces pricing the HP rather than refining it.
+        /// </summary>
+        public bool ChipperInvestmentClock { get; init; } = false;
+
+        /// <summary>
+        /// (16) Refuse a second wiper while the last one is still alive. Marc's rule. The only
+        /// existing gate was WiperMinIntervalSeconds, a 4-second wall clock that permitted up
+        /// to 64 buys a game; 0240D8 saw eleven tier-7 units bought for $22,726, 63% of unit
+        /// spend. See the gate in Decide() -- buying the expensive unit is right, buying the
+        /// second one while the first still stands is not.
+        /// </summary>
+        public bool OneWiperAtATime { get; init; } = false;
+
+        /// <summary>
+        /// How soon the next rung has to be for tanking to be the right answer. Below this the
+        /// bot holds and buys the rung first; above it, it kills the chipper now.
+        /// </summary>
+        public double ChipperTankSeconds { get; init; } = 15.0;
+
+        /// <summary>
+        /// Budget for matching a single chipper, in seconds of income. Bounds the response so
+        /// it buys a killer for the chipper rather than a tier 8 to swat a $1 unit.
+        /// </summary>
+        public double ChipperMatchIncomeSeconds { get; init; } = 4.0;
+
+        /// <summary>
+        /// How far ahead to price the bleed. Bounded rather than "rest of the game" so the
+        /// budget cannot balloon in a long game; 30s is about the horizon over which a chipper
+        /// that is not answered actually matters.
+        /// </summary>
+        public double WiperHpHorizonSeconds { get; init; } = 30.0;
+
+        /// <summary>
+        /// How much better than break-even the trade must be. 1.0 is break-even; above 1 is
+        /// stricter. Kept as a knob because the HP price comes from the repair ladder, which
+        /// moves by a factor of 250 across a game.
+        /// </summary>
+        public double ChipEconomicsMargin { get; init; } = 1.0;
+
+        /// <summary>
+        /// Seconds of ARMAGEDDON lead required before an offensive purchase is allowed. A
+        /// cushion, because the tracker's income estimate is an UPPER bound on theirs and its
+        /// money estimate a LOWER bound, so the comparison is close but not exact.
+        /// </summary>
+        public double RaceSafetySeconds { get; init; } = 10.0;
+
+        /// <summary>
+        /// How far behind counts as HOPELESS. Generous on purpose: this zone should be entered
+        /// only when the race is genuinely gone.
+        /// </summary>
+        public double RaceHopelessSeconds { get; init; } = 60.0;
+
+        /// <summary>
+        /// Price the PURCHASE against the ARMAGEDDON race, not just the current position.
+        ///
+        /// RaceAllowsOffence runs in Decide() BEFORE anything has been picked, so all it can
+        /// ask is "am I ahead right now". It cannot ask "am I still ahead once I have paid",
+        /// and in 73DBD4 that gap cost the game: at 175s, with an EMPTY enemy field, the bot
+        /// was 69s from ARMAGEDDON against a modelled 81s for the human -- 12 seconds ahead,
+        /// so the gate allowed offence -- and spent $23,000 on a tier 8, which put it at 100s,
+        /// i.e. 19 seconds BEHIND. One purchase, 31 seconds of race position.
+        ///
+        /// The tier 8 was not a malfunction of the pick: MultiplicativeUnitValue scores
+        /// effHP x DPS / cost, which for White rises monotonically with tier, so corn scores
+        /// 42,857 against the tier 7's 7,786 and is simply rank 1 of the roster whenever it is
+        /// affordable. Nothing in that formula knows $23,000 is most of an investment rung.
+        /// This gate is where that gets priced.
+        /// </summary>
+        public bool RacePricePurchases { get; init; } = false;
+
+        /// <summary>
+        /// A level must repay its price in free unit value within this many seconds. Games
+        /// average ~250 s, so 45 s is deliberately strict -- it buys only the rungs that are
+        /// obviously cheap rather than betting on the game running long.
+        /// </summary>
+        public double AutoSpawnPaybackSeconds { get; init; } = 45.0;
+
+        /// <summary>
+        /// (4) FARM CHEAP GADGET UPGRADES. Replaces GadgetUpgradeSpam's income test with an
+        /// absolute-cost one. See the gate itself in TryUpgradeSpam for the reasoning: XP is
+        /// a flat 100 per cast for every gadget, so an upgrade is a FINITE purchase of
+        /// `ceil((UpgradeCost - xp) / 100)` casts, and pricing it as an infinite drain is
+        /// what defers it until it no longer matters. Requires GadgetUpgradeSpam = true.
+        /// </summary>
+        public bool CheapGadgetUpgrades { get; init; } = false;
+
+        /// <summary>
+        /// Total cost of finishing the next gadget upgrade, expressed in seconds of income.
+        /// At 25 s and the opening $2/s that allows a $50 ladder; it opens up as income
+        /// climbs, which is the intended shape -- cheap ladders early, expensive ones later.
+        /// </summary>
+        public double CheapUpgradeIncomeSeconds { get; init; } = 25.0;
+
         public bool DefenceOnly { get; init; } = false;
 
         // Incoming castle DPS at which the attack is worth answering at all.
@@ -1823,6 +2233,415 @@ namespace CastleDefense.Engine.Bot
             HazardAttackBlackout = true,
             KillerInstinctInvestLockoutSeconds = 5.0,
             KillerInstinctPushLatch = true,
+        };
+
+        /// <summary>
+        /// EconomyBrakeProfile plus the cap-8 auto-spawner substitution -- the configuration
+        /// Marc is play-testing on 2026-09-02.
+        ///
+        /// A SEPARATE PROFILE rather than flags added to EconomyBrakeProfile, so that profile
+        /// keeps meaning what every number recorded against it means. Selected by
+        /// `Singleplayer:AutoSpawner` in appsettings.json; set it false to go straight back.
+        ///
+        /// Cap 8 rather than 16 on the measurements in BOT_ITERATION_LOG.md item 13: cap 8 is
+        /// the only arm positive on the ladder, and still takes race-mode ARMAGEDDON from 0%
+        /// to 8%. Both caps cost plain gauntlet win rate, which item 12 argues that instrument
+        /// overstates -- that argument is the load-bearing judgement here.
+        /// </summary>
+        /// <summary>
+        /// EXACTLY what Marc play-tested on 2026-09-02 (games E5CA98, A8452A): the deployed
+        /// profile plus the cap-8 substitution, WITHOUT ArmageddonCommit. Kept by name so
+        /// those two games stay reproducible now that ArmageddonCommit has been folded into
+        /// EconomyBrakeAutoSpawnProfile -- same reason PreChargeAware and PreRungCommit exist.
+        /// </summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn8NoArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+        };
+
+        /// <summary>Deployed profile + cap-8 substitution + ARMAGEDDON commit. Re-tests a
+        /// flag rejected in item 10 against the CORRECT baseline -- see item 14.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            ArmageddonCommit = true,
+        };
+
+        /// <summary>Deployed profile + substitution at cap 15, the level Marc's E5CA98 unit
+        /// spend would have reached.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn15 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 15,
+        };
+
+        /// <summary>Both together.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawn15Arma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 15,
+            ArmageddonCommit = true,
+        };
+
+        /// <summary>
+        /// The deployed profile as it stood BEFORE the priced race gate (games 73DBD4,
+        /// B9A8D4 and everything earlier). Kept by name so those recordings stay
+        /// reproducible -- same reason PreChargeAware and PreRungCommit exist.
+        /// </summary>
+        public static readonly HeuristicBotSettings PreRacePriced = new HeuristicBotSettings
+{
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+            KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8,
+
+            // RACE-AWARE OFFENSIVE SPENDING, added 2026-09-02 at RaceSafetySeconds = 0, which
+            // is Marc's rule stated literally: spend offensively only while still ahead in the
+            // race, with no cushion. The sweep is what picked 0 -- at -30 and below the gate
+            // never binds, and at +10 it is so strict the offensive branch runs three times a
+            // game and the auto-spawner collapses to level 1.1.
+            //
+            // IT IS A TRADE, not a free win. Replay gauntlet: ARMAGEDDON 27% -> 57% and the bot
+            // beats the replayed human to it 30 times of 60 against 16, but win rate falls
+            // 90.0 -> 83.3. Ladder: OVERALL -0.4, mirror head-to-head +1.1, Chipper -2.
+            RaceAwareSpending = true,
+            RaceSafetySeconds = 0,
+
+            // PRICED, not just phased -- 73DBD4. The phase test above allowed offence on a
+            // 12-second lead and a $23,000 tier 8 turned it into a 19-second deficit. See
+            // RacePricePurchases.
+            RacePricePurchases = false,
+
+            // SINGLE-CHIPPER INVESTMENT CLOCK, added 2026-09-02 -- Marc's rule, at 30s.
+            //
+            // The tank window is the interesting parameter and the LONGER value won, which
+            // vindicates his framing over the impatient reading of it. At 15s the bot matches
+            // the chipper sooner, spends more, and the gauntlet ARMAGEDDON rate falls 55% ->
+            // 32% -- it buys chipper defence with the win condition. At 30s the race is
+            // untouched (55%, bot first in 29 of 60, identical to control) AND the Chipper rung
+            // improves: 97.8 -> 99.4 nostart with end castle HP 49.6 -> 51.8.
+            //
+            // Tanking while the rung is close really is right, and matching only once it is
+            // far really is enough.
+            ChipperInvestmentClock = true,
+            ChipperTankSeconds = 30.0,
+
+            // ONE WIPER AT A TIME, added 2026-09-02 on Marc's rule. In 0240D8 the bot bought
+            // eleven tier-7 units at $2,066 each -- $22,726, 63% of its entire unit spend --
+            // because the only gate on a repeat was a 4-second wall clock. Buying the
+            // expensive unit is the right play; buying the second one while the first is still
+            // standing is not. Gauntlet: wiper spend $6,216 -> $4,150 a game with the T7 count
+            // 3.0 -> 2.0, and the ladder is unmoved on every rung.
+            OneWiperAtATime = true,
+
+            // Applies the charge test to the wiper and DefensiveResponse too -- included
+            // because every arm measured alongside the clock carried it, so shipping without
+            // it would ship something that was never measured.
+            ChargeAwareEverywhere = true,
+
+            // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
+            //
+            // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
+            // $111,908, $9,313 short of ARMAGEDDON, having spent $24,500 on 552 units. And on
+            // the replay gauntlet it looked strictly better -- win 90.0 -> 91.7, ARMAGEDDON
+            // 27% -> 28%, end HP 78.7 -> 80.7, unspent 13,907 -> 11,483.
+            //
+            // The LADDER says otherwise, and it is measuring the thing the gauntlet cannot.
+            // Headstart OVERALL 92.0 -> 90.9, driven almost entirely by the CHIPPER rung:
+            // 98.8 -> 94.8, with the chipper's unspent money going 1,207 -> 2,799. Headstart
+            // games start at a higher InvestmentCount, so the bot reaches count 8 far more
+            // often, the commit zeroes its attack budget, and a lone unit sitting on its
+            // castle then goes unanswered -- exactly the failure the Chipper rung was built
+            // to detect, and exactly the unconditional-zeroing flaw item 10 named.
+            //
+            // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
+            // it cannot see this. Do not retry ArmageddonCommit without making the commit
+            // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
+        };
+
+        public static readonly HeuristicBotSettings EconomyBrakeAutoSpawnProfile = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true,
+            RepairHpFloorPct = 0.45f,
+            RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true,
+            KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8,
+
+            // RACE-AWARE OFFENSIVE SPENDING, added 2026-09-02 at RaceSafetySeconds = 0, which
+            // is Marc's rule stated literally: spend offensively only while still ahead in the
+            // race, with no cushion. The sweep is what picked 0 -- at -30 and below the gate
+            // never binds, and at +10 it is so strict the offensive branch runs three times a
+            // game and the auto-spawner collapses to level 1.1.
+            //
+            // IT IS A TRADE, not a free win. Replay gauntlet: ARMAGEDDON 27% -> 57% and the bot
+            // beats the replayed human to it 30 times of 60 against 16, but win rate falls
+            // 90.0 -> 83.3. Ladder: OVERALL -0.4, mirror head-to-head +1.1, Chipper -2.
+            RaceAwareSpending = true,
+            RaceSafetySeconds = 0,
+
+            // PRICED, not just phased -- 73DBD4. The phase test above allowed offence on a
+            // 12-second lead and a $23,000 tier 8 turned it into a 19-second deficit. See
+            // RacePricePurchases.
+            RacePricePurchases = true,
+
+            // SINGLE-CHIPPER INVESTMENT CLOCK, added 2026-09-02 -- Marc's rule, at 30s.
+            //
+            // The tank window is the interesting parameter and the LONGER value won, which
+            // vindicates his framing over the impatient reading of it. At 15s the bot matches
+            // the chipper sooner, spends more, and the gauntlet ARMAGEDDON rate falls 55% ->
+            // 32% -- it buys chipper defence with the win condition. At 30s the race is
+            // untouched (55%, bot first in 29 of 60, identical to control) AND the Chipper rung
+            // improves: 97.8 -> 99.4 nostart with end castle HP 49.6 -> 51.8.
+            //
+            // Tanking while the rung is close really is right, and matching only once it is
+            // far really is enough.
+            ChipperInvestmentClock = true,
+            ChipperTankSeconds = 30.0,
+
+            // ONE WIPER AT A TIME, added 2026-09-02 on Marc's rule. In 0240D8 the bot bought
+            // eleven tier-7 units at $2,066 each -- $22,726, 63% of its entire unit spend --
+            // because the only gate on a repeat was a 4-second wall clock. Buying the
+            // expensive unit is the right play; buying the second one while the first is still
+            // standing is not. Gauntlet: wiper spend $6,216 -> $4,150 a game with the T7 count
+            // 3.0 -> 2.0, and the ladder is unmoved on every rung.
+            OneWiperAtATime = true,
+
+            // Applies the charge test to the wiper and DefensiveResponse too -- included
+            // because every arm measured alongside the clock carried it, so shipping without
+            // it would ship something that was never measured.
+            ChargeAwareEverywhere = true,
+
+            // ArmageddonCommit was ADDED HERE and then REVERTED the same hour, 2026-09-02.
+            //
+            // The case for it was strong and specific: in Marc's E5CA98 the bot ended holding
+            // $111,908, $9,313 short of ARMAGEDDON, having spent $24,500 on 552 units. And on
+            // the replay gauntlet it looked strictly better -- win 90.0 -> 91.7, ARMAGEDDON
+            // 27% -> 28%, end HP 78.7 -> 80.7, unspent 13,907 -> 11,483.
+            //
+            // The LADDER says otherwise, and it is measuring the thing the gauntlet cannot.
+            // Headstart OVERALL 92.0 -> 90.9, driven almost entirely by the CHIPPER rung:
+            // 98.8 -> 94.8, with the chipper's unspent money going 1,207 -> 2,799. Headstart
+            // games start at a higher InvestmentCount, so the bot reaches count 8 far more
+            // often, the commit zeroes its attack budget, and a lone unit sitting on its
+            // castle then goes unanswered -- exactly the failure the Chipper rung was built
+            // to detect, and exactly the unconditional-zeroing flaw item 10 named.
+            //
+            // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
+            // it cannot see this. Do not retry ArmageddonCommit without making the commit
+            // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
+        };
+
+        /// <summary>Shipped profile + the single-chipper investment clock. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true };
+
+        /// <summary>Same, tanking only while the rung is within 8s rather than 15s.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock8 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, ChipperTankSeconds = 8.0 };
+
+        /// <summary>Same, tanking while the rung is within 30s -- more patient.</summary>
+        public static readonly HeuristicBotSettings ShipChipClock30 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, ChipperTankSeconds = 30.0 };
+
+        /// <summary>The clock plus the castle-HP wiper budget, to see if they compose.</summary>
+        public static readonly HeuristicBotSettings ShipChipClockHp = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, ChipperInvestmentClock = true, WiperPricesCastleHp = true };
+
+        /// <summary>Control that matches the clock arms except for the clock itself.</summary>
+        public static readonly HeuristicBotSettings ShipControlCA = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChargeAwareEverywhere = true, };
+
+        /// <summary>Shipped profile + the wiper pricing castle HP. Marc's chipper fix.</summary>
+        public static readonly HeuristicBotSettings ShipWiperHp = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, WiperPricesCastleHp = true, ChargeAwareEverywhere = true };
+
+        /// <summary>Same, at a 60s horizon -- a more generous read of what a chipper costs.</summary>
+        public static readonly HeuristicBotSettings ShipWiperHp60 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, WiperPricesCastleHp = true, ChargeAwareEverywhere = true,
+          WiperHpHorizonSeconds = 60.0 };
+
+        /// <summary>Shipped profile + chip economics. The candidate for Marc's next play-test.</summary>
+        public static readonly HeuristicBotSettings ShipPlusChip = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, ChipEconomics = true };
+
+        /// <summary>Chip economics at a 2x margin -- only clearly profitable blocks.</summary>
+        public static readonly HeuristicBotSettings ShipPlusChip2x = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, ChipEconomics = true, ChipEconomicsMargin = 2.0 };
+
+        /// <summary>The shipped profile itself, addressable by name as a control arm.</summary>
+        public static readonly HeuristicBotSettings ShipControl = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, };
+
+        /// <summary>Shipped profile, addressable by name as a control arm.</summary>
+        public static readonly HeuristicBotSettings ShipNow = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, };
+
+        /// <summary>Shipped + one wiper at a time. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipOneWiper = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true };
+
+        /// <summary>Shipped, with the fallback uncapped -- reproduces the pre-2026-09-02 bot.</summary>
+        public static readonly HeuristicBotSettings ShipUncappedFallback = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 8 };
+
+        /// <summary>Shipped, fallback capped at tier 4. Marc's rule.</summary>
+        public static readonly HeuristicBotSettings ShipChaffFallback = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 4 };
+
+        /// <summary>Fallback capped at tier 2 -- stricter, pure chaff.</summary>
+        public static readonly HeuristicBotSettings ShipChaffFallback2 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            ChargeAwareEverywhere = true, OneWiperAtATime = true, ChargeFallbackMaxTier = 2 };
+
+        // RaceSafetySeconds sweep. At +10 the gate is so strict the offensive branch runs 3
+        // times a game: the tracker's income estimate for the opponent is an UPPER bound by
+        // construction (assume-ASAP), so the bot systematically believes it is behind. Negative
+        // values let it attack while slightly behind, which is what that bias needs.
+        public static readonly HeuristicBotSettings RaceS0 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = 0 };
+
+        public static readonly HeuristicBotSettings RaceSm30 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -30 };
+
+        public static readonly HeuristicBotSettings RaceSm60 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -60 };
+
+        public static readonly HeuristicBotSettings RaceSm120 = new HeuristicBotSettings
+        {             RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8, RaceAwareSpending = true, RaceSafetySeconds = -120 };
+
+        /// <summary>Deployed profile + cap-8 substitution + race-aware offensive spending.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRace = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8, RaceAwareSpending = true,
+        };
+
+        /// <summary>Race-aware at cap 15 -- the level E5CA98's unit spend would have reached.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRace15 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 15, RaceAwareSpending = true,
+        };
+
+        /// <summary>Race-aware plus the ARMAGEDDON commit. That flag failed UNCONDITIONALLY in
+        /// item 15 -- it zeroed the attack budget whether or not the rung was winnable, and the
+        /// Chipper rung caught it. Retried here only because the race gate can now tell.</summary>
+        public static readonly HeuristicBotSettings BrakeAutoSpawnRaceArma = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true,
+            AutoSpawnMaxLevel = 8, RaceAwareSpending = true, ArmageddonCommit = true,
         };
 
         // ── Named presets for temporary ladder contenders ──
@@ -2219,6 +3038,117 @@ namespace CastleDefense.Engine.Bot
         // Siege threshold itself. Marc specified 2; 3 asks whether a stricter flag pays.
         public static readonly HeuristicBotSettings SiegeMin3 =
             new HeuristicBotSettings { SiegePreCast = true, RageOnSiege = true, SiegeMinUnits = 3 };
+
+        // ── BOT_BACKLOG.md iteration presets ──
+        // One flag each, layered on default behaviour, so `ladder --variant <name>` measures
+        // that change alone against the committed reference on identical specs.
+        // Identical to Default since the 2026-09-02 promotion. Kept so the commands in
+        // BOT_ITERATION_LOG.md still run; use PreChargeAware for the other arm now.
+        public static readonly HeuristicBotSettings ChargeAware =
+            new HeuristicBotSettings { ChargeAwareFallback = true };
+
+        public static readonly HeuristicBotSettings ChargeAwareAll =
+            new HeuristicBotSettings { ChargeAwareFallback = true, ChargeAwareEverywhere = true };
+
+        // Iteration 3 is A/B'd against Accepted (which already carries iteration 1), not
+        // against bare defaults -- see Accepted's comment on why the stack is the baseline.
+        // v1, kept ONLY so the reverted result in BOT_ITERATION_LOG.md stays reproducible.
+        // ChipBlockIncomeFraction now defaults to 0.25, so v1's defining property -- no
+        // spend-rate cap at all -- has to be restated explicitly or this silently becomes v2.
+        public static readonly HeuristicBotSettings ChipBlock =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 1000.0,   // effectively uncapped
+            };
+
+        // v2: the flow cap v1 lacked. v1 is kept above so the pair can be re-run together.
+        public static readonly HeuristicBotSettings ChipBlockV2 =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 0.25,
+            };
+
+        // A tighter arm, in case 0.25 of income is still too much against fast swingers.
+        public static readonly HeuristicBotSettings ChipBlockV2Tight =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                BlockSingleChipper = true,
+                ChipBlockIncomeFraction = 0.10,
+            };
+
+        public static readonly HeuristicBotSettings AutoSpawn =
+            new HeuristicBotSettings { ChargeAwareFallback = true, BuyAutoSpawner = true };
+
+        // Self-awareness fixes from Marc's 2026-09-02 replays -- see BOT_BACKLOG.md item 7.
+        public static readonly HeuristicBotSettings RungCommit =
+            new HeuristicBotSettings { CommitToRung = true };
+
+        public static readonly HeuristicBotSettings ArmaCommit =
+            new HeuristicBotSettings { ArmageddonCommit = true };
+
+        public static readonly HeuristicBotSettings SelfAware =
+            new HeuristicBotSettings { CommitToRung = true, ArmageddonCommit = true };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst8 =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8 };
+
+        public static readonly HeuristicBotSettings AutoSpawnFirst12 =
+            new HeuristicBotSettings { AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 12 };
+
+        public static readonly HeuristicBotSettings AutoSpawnSub =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                AutoSpawnFromAttackBudget = true,
+            };
+
+        public static readonly HeuristicBotSettings CheapUpgrades =
+            new HeuristicBotSettings
+            {
+                ChargeAwareFallback = true,
+                GadgetUpgradeSpam = true,     // CheapGadgetUpgrades only replaces its gate
+                CheapGadgetUpgrades = true,
+            };
+
+        /// <summary>
+        /// EVERY FLAG ACCEPTED BY THE ITERATION LOOP SO FAR, stacked.
+        ///
+        /// Deliberately separate from the single-flag presets above, and deliberately NOT
+        /// promoted into the defaults. Flipping a default moves `bot-checksum`, every ladder
+        /// baseline, `FLAGSHIP_BASELINE.md` and the shipped singleplayer opponent all at
+        /// once -- that is Marc's call, not the loop's. Keeping the accepted set here means
+        /// the default bot stays byte-identical (checksum 47EC146D660B0D721B4DC224D8ACB7F9)
+        /// while one profile name turns the whole accepted set on.
+        ///
+        /// Stacking also matters for measurement: from iteration 2 onward each new flag is
+        /// A/B'd against THIS profile rather than against bare defaults, so interactions
+        /// between accepted changes are inside the comparison instead of outside it.
+        ///
+        /// See BOT_ITERATION_LOG.md for what each flag bought and what it cost.
+        /// </summary>
+        public static readonly HeuristicBotSettings Accepted = new HeuristicBotSettings();
+
+        /// <summary>
+        /// The bot as it behaved BEFORE the 2026-09-02 promotion of ChargeAwareFallback.
+        /// Kept for the same reason RepairLegacy is: every benchmark, FLAGSHIP_BASELINE
+        /// figure and pinned checksum recorded before that date describes THIS bot, and a
+        /// historical comparison needs to be able to reproduce it.
+        /// Its checksum is 47EC146D660B0D721B4DC224D8ACB7F9 at `bot-checksum --games 24`.
+        /// </summary>
+        /// <summary>The bot before CommitToRung was promoted (2026-09-02).</summary>
+        public static readonly HeuristicBotSettings PreRungCommit =
+            new HeuristicBotSettings { CommitToRung = false };
+
+        public static readonly HeuristicBotSettings PreChargeAware =
+            new HeuristicBotSettings { ChargeAwareFallback = false };
         // k SWEEP. At k=0.30 (income >= cost/(cooldown*k), i.e. $20/s for speed) XP farming
         // costs 0.85 earned investments per game and loses 15 points head-to-head, so the
         // failure mode is ECONOMIC. Lower k = stricter = start spamming later, at higher
@@ -2450,6 +3380,21 @@ namespace CastleDefense.Engine.Bot
         // Tick of the last wave-wipe purchase, bounding how often that check may fire.
         private long _lastWiperTick = long.MinValue / 4;
 
+        /// <summary>The last wiper we bought, so a repeat buy can be refused while it lives.</summary>
+        private Guid _lastWiperInstance = Guid.Empty;
+
+        /// <summary>
+        /// Is the wiper we last bought still on the field? Guid.Empty means we have never
+        /// bought one, or the spawn did not land, in which case there is nothing to wait for.
+        /// </summary>
+        private bool WiperStillAlive(GameState state)
+        {
+            if (!_settings.OneWiperAtATime || _lastWiperInstance == Guid.Empty) return false;
+            for (int i = 0; i < state.Units.Count; i++)
+                if (state.Units[i].InstanceId == _lastWiperInstance) return true;
+            return false;
+        }
+
         // The one wall each side may have on the field (WallEffect enforces the limit).
         // Refreshed once per decision and read by ProjectedPosition, which must not lead a
         // unit straight through a blocker -- see ClampProjectionToCastle. Cached rather than
@@ -2606,6 +3551,26 @@ namespace CastleDefense.Engine.Bot
         {
             var state = engine._state;
             if (state.IsGameOver) return;
+
+            // OPPONENT ECONOMY. Wired here rather than in the constructor because the bot is
+            // built before it is ever handed an engine. Subscribing to OnGadgetCast is what
+            // makes their gadget spending visible; GameEngine.Clone nulls that event, so a
+            // rollout copy tracks without gadget casts rather than double-counting them.
+            if (_settings.RaceAwareSpending)
+            {
+                if (_oppEconomy == null) _oppEconomy = new OpponentEconomy(_side == 1 ? 2 : 1);
+                if (!_oppEconomyWired)
+                {
+                    _oppEconomyWired = true;
+                    var eng = engine;
+                    eng.OnGadgetCast += (side, gadgetId, pos) =>
+                    {
+                        if (side != _side)
+                            _oppEconomy?.ObserveGadgetCast(eng.GetGadgetDefinition(gadgetId));
+                    };
+                }
+                _oppEconomy.Update(engine);
+            }
 
             // Drain first: one queued action per tick, ahead of any new decision. The queue
             // is shorter than the decision interval, so this never starves Decide().
@@ -2991,6 +3956,61 @@ namespace CastleDefense.Engine.Bot
             // short time-to-death already implies real damage is landing -- the observed
             // estimator requires a measured HP drain and the projected one only counts
             // enemies already inside contact range of our own castle.
+            // ── CHIP ECONOMICS (flag 13) ─────────────────────────────────────────────
+            // Marc, 2026-09-02: the rule that stops the bot answering a SINGLE attacker was
+            // there to prevent expensive gadget casts on lone units, and it is very
+            // exploitable -- RolloutSearchBot found it, and the race gate made it worse by
+            // leaving the bot sitting on money while a lone unit chipped it.
+            //
+            // The count-based gates are replaced by an ECONOMIC one, which is what the earlier
+            // BlockSingleChipper attempts lacked. A blocker absorbs roughly its own HP of
+            // damage that would otherwise reach the castle, and castle HP has a real price --
+            // the repair ladder. So a body is worth buying when
+            //
+            //     blockerMaxHealth * DollarsPerHp(me)  >  blockerCost
+            //
+            // Note this SELF-SCALES with the game, which is why it needs no unit count and no
+            // hand-tuned threshold: early on, repairs are cheap (repair 1 buys 10,000 HP for
+            // $20, so HP is $0.002 each) and tanking a chipper is correctly the right answer.
+            // Late, repair 7 costs $8,837 for 17,800 HP -- $0.50 each -- and a $3 body that
+            // soaks 12 HP is suddenly worth $6. The rule turns itself on exactly when HP
+            // becomes the expensive resource.
+            //
+            // It raises inDanger and the reactive BUDGET rather than adding a new spending
+            // channel, which is the shape iterations 1-7 found to be the safe one.
+            bool chipWorthBlocking = false;
+            if (_settings.ChipEconomics && threat != null && threat.UnblockedDps > 0.01f
+                && !me.ArmageddonUsed)
+            {
+                double perHp = DollarsPerHp(me);
+                UnitDefinition body = null;
+                foreach (var d in teamDef.Roster)
+                {
+                    if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                    if (!me.HasUnitCharge(d.Id)) continue;
+                    if (body == null || d.Cost < body.Cost) body = d;
+                }
+                if (body != null)
+                {
+                    double saved = (body.MaxHealth + body.MaxShield) * perHp;
+                    if (saved > body.Cost * _settings.ChipEconomicsMargin)
+                    {
+                        chipWorthBlocking = true;
+                        ChipEconomicsDecisions++;
+                    }
+                }
+                LastChipBleedPerSecond = threat.UnblockedDps * perHp;
+            }
+
+            // DELIBERATELY NOT OR-ed INTO inDanger. The first version did exactly that and it
+            // cost 28 points -- gauntlet 83.3% -> 55.0%, with castle HP falling 74.5 -> 50.5
+            // even though the point was to protect the castle. `inDanger` is a global MODE
+            // flag: it gates the whole offensive branch, the attack disengage system and the
+            // reactive scorer at once, so raising it for "one body is worth buying" switches
+            // the bot out of attacking entirely. A coarse switch for a fine decision -- the
+            // same error shape as the first race gate.
+            //
+            // chipWorthBlocking instead authorises ONE cheap dedicated purchase below.
             bool inDanger = (enemyIsClose && !investmentRunwayIsSafe) || survivalEmergency;
             LastDecisionWasDanger = inDanger;
             LastThreatScore = threatScore;
@@ -3168,6 +4188,29 @@ namespace CastleDefense.Engine.Bot
                 return;
             }
 
+            // --- AUTO-SPAWNER (flag 2) ------------------------------------------------
+            // Deliberately placed AFTER the investment claim, so a rung we can afford is
+            // always taken first and this can only ever spend money investing has declined.
+            // Reaching this line means the claim above did not fire, i.e. money is below
+            // InvestmentPrice (or invest is dead because ARMAGEDDON has been bought).
+            //
+            // Called directly on the engine like Invest and Repair, NOT through ApplyAction:
+            // that is what keeps action 14 out of the mask, the observation vector unchanged
+            // and every ONNX checkpoint valid. See BuyAutoSpawner.
+            if (_settings.BuyAutoSpawner
+                && investmentRunwayIsSafe && !survivalEmergency && !nukeEmergency
+                && me.AutoSpawnLevel < Math.Min(_settings.AutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel)
+                && me.Money >= me.AutoSpawnPrice
+                // Cheap relative to the rung it delays...
+                && me.AutoSpawnPrice <= me.InvestmentPrice * _settings.AutoSpawnMaxFractionOfRung
+                // ...and bought EARLY in the accumulation cycle rather than on its doorstep.
+                && me.Money < me.InvestmentPrice * _settings.AutoSpawnInvestCommitFraction
+                && Act(() => engine.UpgradeAutoSpawn(_side)))
+            {
+                AutoSpawnLevelsBought++;
+                return;
+            }
+
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
             TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
@@ -3256,7 +4299,21 @@ namespace CastleDefense.Engine.Bot
             bool boughtWiper = false;
             if (!_settings.DefenceOnly
                 && _settings.WiperOverRepair && committedEnemyCount > 0 && committedEnemyValue > 0
-                && (state.CurrentTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds)
+                && (state.CurrentTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds
+                // ── ONE WIPER AT A TIME (flag 16) ───────────────────────────────────
+                // Marc, 2026-09-02: "another T7 should not be bought unless the existing one
+                // dies." Until now the ONLY gate on a repeat wiper was WiperMinIntervalSeconds
+                // -- a wall clock, not a liveness test -- so at 4s it permitted up to 64 buys
+                // in a 259s game. In 0240D8 the bot bought ELEVEN tier-7 eggos at $2,066 each,
+                // $22,726 and 63% of its entire unit spend, while the previous ones were still
+                // standing.
+                //
+                // Buying the expensive unit is the RIGHT play -- it is what Marc does -- so the
+                // fix is not to stop buying it, only to stop buying a second one that the first
+                // makes redundant. Tracked by InstanceId rather than by counting units of that
+                // type, because the auto-spawner and reinforcements put units of the same type
+                // on the field for free and those are not the wiper.
+                && !WiperStillAlive(state))
             {
                 // Toughest thing in the stack. Shield absorbs before health (ApplyDamage), so
                 // a real one-shot has to cover both.
@@ -3270,19 +4327,109 @@ namespace CastleDefense.Engine.Bot
 
                 // Cheapest unit that one-shots that, and is worth less than the stack it kills.
                 double maxWorth = committedEnemyValue * _settings.WiperMaxCostVsStackValue;
+
+                // ── PRICE THE CASTLE, NOT JUST THE ARMY (flag 14) ────────────────────
+                // Marc's suggestion, 2026-09-02: fold the lone-chipper case into the wiper
+                // rather than writing parallel logic for it. The blocker was never the unit
+                // count -- it is this budget. Against a single $3 chipper
+                // `committedEnemyValue * 0.35` is $1.05, so no unit in any roster qualifies
+                // and the wiper silently declines. That is why `bot-checksum` reports
+                // WIPE n=0 in every game.
+                //
+                // Pricing the enemy army answers "is this stack worth killing". The question
+                // a chipper poses is "what is it about to cost me", and the answer is castle
+                // HP, which has a real price on the repair ladder. So the budget also counts
+                // the HP the unblocked attackers will take over a bounded horizon.
+                //
+                // SELF-SCALING, hence no unit count and no hand-tuned floor. Early, a repair
+                // buys 10,000 HP for $20 ($0.002/HP) so the HP term is pennies and the bot
+                // correctly tanks the chip. Late, repair 7 costs $8,837 for 17,800 HP
+                // ($0.50/HP) and 10 DPS over 30s is $150 of castle -- at which point spending
+                // $18 to delete the thing is obviously right.
+                //
+                // RAISES the budget and never lowers it, so a stack that already justified a
+                // wipe still does. Killing also strictly dominates blocking where affordable:
+                // a blocker stops one swing, a kill stops all of them.
+                // ── SINGLE CHIPPER: TANK OR MATCH, ON THE INVESTMENT CLOCK (flag 15) ──
+                // Marc's rule from live play, 2026-09-02, and it replaces the HP-pricing
+                // approach rather than refining it:
+                //
+                //   "if you're able to reach the next investment soon, then it's worth it to
+                //    tank and save the money, then match the threat as soon as you've bought
+                //    that next investment. If you can't afford the next investment quickly,
+                //    you should match the threat immediately. As soon as there is more than
+                //    1 chipper, the wiper logic should take over."
+                //
+                // WHY THIS BEATS PRICING THE HP. DollarsPerHp is circular: it reads the repair
+                // ladder, and the ladder position depends on how much the bot has already
+                // repaired -- so against a chipper it never repairs, RepairCount stays 0, a
+                // repair still buys 10,000 HP for $20, and the bleed never looks expensive
+                // right up until the castle is gone. The metric calls HP cheap BECAUSE the bot
+                // has been tanking. Time-to-investment has no such loop: it is money still
+                // needed over income, both of which are facts.
+                //
+                // THE TANK-THEN-MATCH BEHAVIOUR FALLS OUT, it is not scripted. While the rung
+                // is close, timeToInvestSeconds is small and the bot holds. The instant the
+                // investment lands, money drops to near zero and the NEXT rung is dearer, so
+                // timeToInvestSeconds jumps, the rule flips to "match", and the bot buys --
+                // which is exactly the sequence Marc describes playing.
+                //
+                // STRICTLY ONE CHIPPER. At two or more the existing wiper logic owns the
+                // decision, on Marc's judgement that it is already good there.
+                if (_settings.ChipperInvestmentClock && committedEnemyCount == 1
+                    && !me.ArmageddonUsed
+                    && timeToInvestSeconds > _settings.ChipperTankSeconds)
+                {
+                    // The rung is far enough away that the money is not doing anything useful
+                    // yet, so stop the bleed. Bounded by a few seconds of income so this buys
+                    // a killer for the chipper, never a tier 8 to swat a $1 unit.
+                    double matchBudget = me.Income * _settings.ChipperMatchIncomeSeconds;
+                    if (matchBudget > maxWorth) { maxWorth = matchBudget; ChipperMatchDecisions++; }
+                }
+
+                if (_settings.WiperPricesCastleHp)
+                {
+                    float bleed = threat?.UnblockedDps ?? projectedDps;
+                    if (bleed > 0.01f)
+                    {
+                        double hpAtRisk = bleed * _settings.WiperHpHorizonSeconds * DollarsPerHp(me);
+                        LastWiperHpBudget = hpAtRisk;
+                        maxWorth = Math.Max(maxWorth, hpAtRisk);
+                    }
+                }
                 UnitDefinition wiper = null;
                 foreach (var d in teamDef.Roster)
                 {
                     if (d.Cost <= 0 || d.Cost > me.Money || d.Cost > maxWorth) continue;
+                    // Same silent failure iteration 1 fixed in SpendOnUnits: without this the
+                    // wiper is chosen on price alone, SpawnUnit refuses it for want of a
+                    // charge, and the whole decision buys nothing while a charged alternative
+                    // that also one-shots the stack sits unconsidered.
+                    if (_settings.ChargeAwareEverywhere && !me.HasUnitCharge(d.Id)) continue;
                     if (d.Damage < toughest) continue;
                     if (wiper == null || d.Cost < wiper.Cost) wiper = d;
                 }
 
                 if (wiper != null
                     && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
-                    && Act(() => engine.SpawnUnit(_side, wiper.Id)))
+                    // THE ID IS CAPTURED INSIDE THE ACTION, not after it. Act() returns TRUE
+                    // when it merely QUEUES the call for a later tick, so reading
+                    // state.Units.Last() out here can pick up a completely unrelated unit --
+                    // an auto-spawner body, or the opponent's. Capturing where SpawnUnit
+                    // actually succeeded is the only point at which the last element of
+                    // _state.Units is known to be ours. Same Act() false-positive that
+                    // BOT_BACKLOG item 6 records.
+                    && Act(() =>
+                    {
+                        if (!engine.SpawnUnit(_side, wiper.Id)) return false;
+                        var us = engine._state.Units;
+                        _lastWiperInstance = us.Count > 0 ? us[us.Count - 1].InstanceId : Guid.Empty;
+                        return true;
+                    }))
                 {
                     boughtWiper = true;
+                    SpendWiper += wiper.Cost;
+                    if (wiper.Tier >= 1 && wiper.Tier <= 8) WiperTierCounts[wiper.Tier]++;
                     LastSpawnReason = "wiper";
                     _lastWiperTick = state.CurrentTick;
                     LastUnitsPurchased++;
@@ -3306,6 +4453,108 @@ namespace CastleDefense.Engine.Bot
             else if (inDanger && !boughtWiper)
             {
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget);
+            }
+
+            // --- BLOCK A LONE CHIPPER (flag 3) ---------------------------------------
+            // Gated on !inDanger deliberately: when inDanger is true the reactive branch
+            // above already owns the response, and layering a second purchase on the same
+            // decision is what the one-purchase-per-decision pacing exists to prevent. This
+            // rule is for the case that branch never sees -- see BlockSingleChipper.
+            if ((_settings.BlockSingleChipper || chipWorthBlocking)
+                && !_settings.DefenceOnly && !inDanger && !boughtWiper)
+            {
+                // An enemy is "chipping" if it has reached our wall AND nothing of ours is in
+                // contact with it. The second half is what keeps this from re-buying against
+                // an attacker that is already held -- a blocked unit deals no castle damage,
+                // so it needs nothing further spent on it.
+                int unblocked = 0;
+                float chipSwingRate = 0f;
+                foreach (var e in enemyUnits)
+                {
+                    // e's "enemy castle" IS ours, so the engine's own geometry answers this
+                    // rather than a second copy of the leading-edge convention that has
+                    // already been got backwards once (see GetDistanceToEnemyCastle).
+                    if (engine.GetDistanceToEnemyCastle(e) > _settings.ChipBlockDistance) continue;
+
+                    bool blocked = false;
+                    foreach (var m in myUnits)
+                    {
+                        float gap = _side == 1
+                            ? e.Position - (m.Position + m.Width)
+                            : m.Position - (e.Position + e.Width);
+                        if (gap <= _settings.ChipBlockContactPad) { blocked = true; break; }
+                    }
+                    if (!blocked) { unblocked++; chipSwingRate += e.AttackSpeed; }
+                }
+
+                LastChipperCount = unblocked;
+
+                // SPEND-RATE CAP (v2). Accrues whether or not anything is attacking, so a
+                // quiet stretch funds a real burst when a chipper arrives -- but cumulative
+                // chip spending can never outrun its share of cumulative income. This is the
+                // term v1 lacked; see ChipBlockIncomeFraction for what that cost.
+                double chipRate = me.Income * _settings.ChipBlockIncomeFraction;
+                _chipAllowance = Math.Min(
+                    _chipAllowance + chipRate * (DecisionIntervalTicks / 30f),
+                    chipRate * _settings.ChipAllowanceCapSeconds);
+
+                if (unblocked > 0 && chipSwingRate > 0f)
+                {
+                    // One body per enemy SWING -- the survival law, applied directly. Credit
+                    // rather than a flat interval so a fast-swinging chipper is answered at
+                    // its own rate instead of an arbitrary one.
+                    _chipCredit = Math.Min(_chipCredit + chipSwingRate * (DecisionIntervalTicks / 30f),
+                                           _settings.ChipBlockMaxCredit);
+
+                    if (_chipCredit >= 1f)
+                    {
+                        // Cheapest body that is affordable AND has a charge. The charge test
+                        // is iteration 1's lesson applied at the point of use: without it this
+                        // rule would inherit exactly the silent-failure mode it was written
+                        // after.
+                        // Bounded by money, by the per-body price cap, AND by the flow
+                        // allowance. The allowance is the binding one against fast-swinging
+                        // attackers, which is the whole v1 -> v2 change.
+                        // Under ChipEconomics the trade has ALREADY been priced -- a body
+                        // that soaks more castle HP than it costs is worth buying whatever the
+                        // income-flow allowance says, because the allowance is a proxy for
+                        // affordability and this is a direct valuation. The flow cap still
+                        // applies to the older BlockSingleChipper path.
+                        double budget = chipWorthBlocking
+                            ? me.Money
+                            : Math.Min(me.Money,
+                                Math.Min(me.Income * _settings.ChipBlockIncomeSeconds, _chipAllowance));
+                        UnitDefinition cheapest = null;
+                        foreach (var d in teamDef.Roster)
+                        {
+                            if (d.Cost <= 0 || d.Cost > budget) continue;
+                            if (!me.HasUnitCharge(d.Id)) continue;
+                            if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
+                        }
+
+                        if (cheapest != null
+                            && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
+                            && Act(() => engine.SpawnUnit(_side, cheapest.Id)))
+                        {
+                            _chipCredit -= 1f;
+                            // Debit the allowance, or the cap is a ceiling never paid down:
+                            // it would bank to full and then permit every purchase, which is
+                            // no cap at all. Same reasoning as the reactive allowance debit.
+                            _chipAllowance = Math.Max(0, _chipAllowance - cheapest.Cost);
+                            ChipBlocksBought++;
+                            SpendChipBlock += cheapest.Cost;
+                            LastSpawnReason = "chipblock";
+                            LastUnitsPurchased++;
+                            if (cheapest.Tier >= 1 && cheapest.Tier <= 8) ActionCounts[cheapest.Tier]++;
+                        }
+                    }
+                }
+                else
+                {
+                    // Nothing to block. Drop the credit rather than banking it, so the rule
+                    // cannot save up during a quiet game and dump bodies later.
+                    _chipCredit = 0f;
+                }
             }
 
             // Fallback investment check: the primary one now happens at the very top of
@@ -3661,6 +4910,11 @@ namespace CastleDefense.Engine.Bot
                 // action-queue latency -- Update drains one queued action per tick BEFORE
                 // Decide() runs, so money can leave under an "attack" label on a tick where the
                 // blackout is already true, without the offensive branch having been entered.
+                // RACE GATE (flag 12). Offensive spending is a PHASE decision -- see
+                // RaceAllowsOffence. Reactive defence is upstream of this branch and
+                // untouched, so the bot can still buy what it needs to survive.
+                if (!RaceAllowsOffence(me)) return;
+
                 OffensiveSpendDecisions++;
                 if (LastHazardBlackout) OffensiveWhileBlackedOut++;
                 SpendOnUnits(engine, me, teamDef.Roster, preferDefense: false, enemyUnits, killerInstinct,
@@ -3766,6 +5020,74 @@ namespace CastleDefense.Engine.Bot
         /// second copy here would drift from it exactly the way the time-machine constructor
         /// once did.
         /// </summary>
+        /// <summary>
+        /// May we spend this much offensively without losing the ARMAGEDDON race? See
+        /// RaceAwareSpending for the three zones. Returns true -- unchanged behaviour -- when
+        /// the tracker is off.
+        /// </summary>
+        private bool RaceAllowsOffence(PlayerState me)
+        {
+            if (!_settings.RaceAwareSpending || _oppEconomy == null) return true;
+            if (me.ArmageddonUsed) return true;          // already won it
+
+            float mine = SecondsToArmageddon(me);
+            float theirs = SecondsToArmageddon(_oppEconomy.Snapshot());
+            LastRaceDeficitSeconds = mine - theirs;
+
+            // HOPELESS: we lose the race even spending nothing, so saving buys nothing and
+            // force is the only line left.
+            if (mine > theirs + _settings.RaceHopelessSeconds)
+            {
+                RaceHopelessDecisions++;
+                return true;
+            }
+
+            // A PHASE TEST, NOT A PER-ITEM PRICE TEST, and that distinction is the whole
+            // correction. The first version asked "does THIS purchase put me behind", which
+            // compares an item price against the race -- so a $3 tier-1 unit passed while a
+            // $102 auto-spawner level failed, and the gate systematically bought the cheapest
+            // thing available. Measured: auto-spawn level collapsed 8.0 -> 1.7 while unit
+            // spend ROSE 28,240 -> 42,291, i.e. it inverted the substitution it was supposed
+            // to protect.
+            //
+            // Asking instead "am I comfortably ahead, so is this a spending phase at all"
+            // leaves the choice of WHAT to buy to the substitution logic, which already
+            // prefers the machine.
+            bool ok = mine + _settings.RaceSafetySeconds <= theirs;
+            if (!ok) RaceHeldPurchases++;
+            return ok;
+        }
+
+        /// <summary>
+        /// Would paying <paramref name="cost"/> leave us still ahead in the ARMAGEDDON race?
+        ///
+        /// The companion to RaceAllowsOffence, which is a PHASE test taken before anything is
+        /// picked. This one prices the actual item, and the two must agree on the hopeless
+        /// zone or they fight: there, saving cannot win the race at all, so force is the only
+        /// line left and neither gate holds anything back.
+        /// </summary>
+        private bool RacePurchaseAffordable(PlayerState me, double cost)
+        {
+            if (!_settings.RacePricePurchases) return true;
+            if (!_settings.RaceAwareSpending || _oppEconomy == null) return true;
+            if (me.ArmageddonUsed || cost <= 0) return true;
+
+            float mine = SecondsToArmageddon(me);
+            float theirs = SecondsToArmageddon(_oppEconomy.Snapshot());
+            if (mine > theirs + _settings.RaceHopelessSeconds) return true;   // hopeless: fight
+
+            var after = me.Clone();
+            after.Money -= cost;
+            if (after.Money < 0) after.Money = 0;
+
+            float mineAfter = SecondsToArmageddon(after);
+            LastRacePurchaseCostSeconds = mineAfter - mine;
+            return mineAfter + _settings.RaceSafetySeconds <= theirs;
+        }
+
+        /// <summary>Diagnostic passthrough for offline replay analysis.</summary>
+        public static float DiagSecondsToArmageddon(PlayerState me) => SecondsToArmageddon(me);
+
         private static float SecondsToArmageddon(PlayerState me)
         {
             if (me.ArmageddonUsed) return 0f;
@@ -3914,7 +5236,10 @@ namespace CastleDefense.Engine.Bot
         private static UnitDefinition FindWiper(GameEngine engine, PlayerState me, List<UnitDefinition> roster,
                                                 List<Unit> enemyUnits, int myCastlePos, float radius,
                                                 out double killValue, bool ignoreMoney = false,
-                                                List<Unit> myUnits = null, bool countCoverage = true)
+                                                List<Unit> myUnits = null, bool countCoverage = true,
+                                                // Optional so the existing callers are unchanged; null means
+                                                // "no charge filtering", which is the committed behaviour.
+                                                HeuristicBotSettings settings = null)
         {
             killValue = 0;
 
@@ -3993,6 +5318,13 @@ namespace CastleDefense.Engine.Bot
             {
                 if (d.Cost <= 0) continue;
                 if (!ignoreMoney && d.Cost > me.Money) continue;
+                // Charges gate a purchase exactly as money does, so they belong beside the
+                // money test -- and behind !ignoreMoney for the same reason. The ignoreMoney
+                // caller is the "what would the best wiper be at any price" DIAGNOSTIC, and
+                // filtering that would make the alt-comparison it feeds report a cheaper
+                // alternative than the one it actually rejected.
+                if (!ignoreMoney && settings != null && settings.ChargeAwareEverywhere
+                    && !me.HasUnitCharge(d.Id)) continue;
 
                 // One swing reaches Range beyond this unit's own sprite edge, so a wide unit
                 // sweeps a deeper slice of the pile than a narrow one.
@@ -4088,6 +5420,12 @@ namespace CastleDefense.Engine.Bot
             {
                 var d = roster[i];
                 if (d.Cost <= 0 || d.Cost > me.Money) continue;
+                // The block rate this method computes is meaningless if the body cannot be
+                // bought: _blockCredit is only decremented inside `if (Act(...))`, so a
+                // refused spawn banks credit to MaxBlockCredit that can never be spent, and
+                // the bot believes it is blocking at the survival law's rate while delivering
+                // one unit id's charge regen -- 1/sec against a documented ceiling of 6.
+                if (_settings.ChargeAwareEverywhere && !me.HasUnitCharge(d.Id)) continue;
                 if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
             }
 
@@ -4122,7 +5460,8 @@ namespace CastleDefense.Engine.Bot
             var wiper = FindWiper(engine, me, roster, enemyUnits, myCastlePos,
                                   _settings.WaveWipeRadius, out double wiperKillValue,
                                   myUnits: myUnitsNow,
-                                  countCoverage: _settings.WiperCountsFieldCoverage);
+                                  countCoverage: _settings.WiperCountsFieldCoverage,
+                                  settings: _settings);
             MeasureWipeReach(engine, me, wiper, enemyUnits, myCastlePos, _settings.WaveWipeRadius);
             bool wipeReady = wiper != null
                 && (nowTick - _lastWiperTick) / 30.0 >= _settings.WiperMinIntervalSeconds;
@@ -4406,6 +5745,7 @@ namespace CastleDefense.Engine.Bot
                     .ToList();
             }
 
+            LastDominantEnemyTier = dominantEnemyTier;
             var outclassing = RankPool(dominantEnemyTier + 1);
             var tierMatched = RankPool(dominantEnemyTier);
             var anyAffordable = RankPool(0);
@@ -4533,6 +5873,31 @@ namespace CastleDefense.Engine.Bot
                     ? _settings.ArmageddonRushAttackFraction
                     : _settings.MinAttackFlowFraction;
 
+                // ARMAGEDDON IS THE WIN CONDITION, SO STOP FUNDING ANYTHING ELSE (flag 10).
+                //
+                // RushArmageddon already existed for this and DOES NOT WORK on the shipped
+                // path -- its own comment says the MinAttackFlowFraction floor "is the ONLY
+                // term keeping the attack funded (the residual is negative there)", which was
+                // true of the old InvestPaceTargetSeconds path. Under DynamicInvestPace
+                // (the default) investPaceRate is Income/(1+0.20), so the residual is always
+                // exactly Income/6 -- positive at every rung, however far away. At income
+                // 2500 that is $416.7/s of unit buying that continues regardless, and the
+                // floor (Income * 0.15 = 375/s) never binds, so zeroing it changes nothing.
+                //
+                // Once InvestmentCount has reached ArmageddonInvestmentCount there is nothing
+                // left on the ladder to buy but the end of the game. Units bought in that
+                // window are being bought INSTEAD of winning.
+                if (_settings.ArmageddonCommit && !me.ArmageddonUsed
+                    && me.InvestmentCount >= PlayerState.ArmageddonInvestmentCount)
+                {
+                    _attackSpendAllowance = 0;
+                    attackFlowRate = 0;
+                    allowanceCeiling = 0;
+                    spendable = 0;
+                    ArmageddonCommitDecisions++;
+                    return;
+                }
+
                 attackFlowRate = Math.Min(
                     me.Income * _settings.AttackSpendFraction,
                     Math.Max(me.Income - investPaceRate,
@@ -4638,7 +6003,12 @@ namespace CastleDefense.Engine.Bot
             var pick = matchedPick.def != null && outclassPick.def != null && outclassPick.score < matchedPick.score * 0.9
                 ? matchedPick
                 : (outclassPick.def != null ? outclassPick : matchedPick);
-            if (pick.def == null) pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+            bool viaAnyAffordable = false;
+            if (pick.def == null)
+            {
+                pick = anyAffordable.FirstOrDefault(x => x.def.Cost > 0 && x.def.Cost <= spendable);
+                viaAnyAffordable = pick.def != null;
+            }
             if (pick.def == null) return;
 
             // --- POWER PICK (flag 9) -------------------------------------------------
@@ -4726,9 +6096,168 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
+            // --- CHARGE-AWARE FALLBACK (flag 1) --------------------------------------
+            // The pick above was chosen on price alone. If it has no charge left, SpawnUnit
+            // will refuse it and this decision buys nothing -- so re-pick the best-scoring
+            // unit that is affordable AND charged. See ChargeAwareFallback's own comment for
+            // the measurement and for why this is a fallthrough rather than a pre-filter.
+            //
+            // Ranked by the SAME scorer that produced the original pick, so the fallback is
+            // "the next thing this bot wanted" rather than a differently-motivated choice:
+            // RawPower when the power pick or rich mode is in force, ScoreUnit otherwise.
+            bool viaChargeFallback = false;
+            if (_settings.ChargeAwareFallback && !me.HasUnitCharge(pick.def.Id))
+            {
+                bool byPower = useRawPower
+                    || (_settings.PowerPickAffordable && !preferDefense && !killerInstinct);
+
+                UnitDefinition best = null;
+                double bestScore = double.NegativeInfinity;
+                foreach (var def in roster)
+                {
+                    if (def.Cost <= 0 || def.Cost > spendable) continue;
+
+                    // THE FALLBACK IS CHAFF ONLY (Marc, 2026-09-02). Without this cap it scans
+                    // the WHOLE roster carrying none of the tier floor or outclass discipline
+                    // the ranked pools encode, so a drained tier-7 pick was silently replaced
+                    // by the next most survivable thing -- bread at $338, 15.5 times a game,
+                    // 58% of reactive spend. Measured: 88% of all reactive tier-5+ purchases
+                    // came through here, most of them while the dominant enemy tier was 7 and
+                    // the pools had correctly excluded tier 6.
+                    //
+                    // The right substitute for a recharging answer is a BODY, not a cheaper
+                    // version of the answer: MoveAndFight stops a unit attacking the castle
+                    // whenever anything is in contact, so chaff buys the same seconds for 1-2%
+                    // of the price. If nothing at or below the cap has a charge, buy NOTHING --
+                    // the pools already decided what this decision wanted, and a decision that
+                    // cannot have it should wait rather than spend on a worse answer.
+                    if (def.Tier > _settings.ChargeFallbackMaxTier) continue;
+
+                    if (!me.HasUnitCharge(def.Id)) continue;
+                    double sc = byPower
+                        ? RawPower(def, enemyHitDamage)
+                        : ScoreUnit(def, preferDefense, enemyHitDamage,
+                                    _settings.MultiplicativeUnitValue, _settings.UnitValueCostExponent,
+                                    _settings.UnitValueCostExponentDefense);
+                    if (sc > bestScore) { bestScore = sc; best = def; }
+                }
+
+                // Nothing affordable has a charge -- every buyable unit is drained. Return
+                // rather than falling through to the doomed attempt below: the outcome is
+                // the same either way, but returning makes the decision honest and keeps
+                // ChargeFallbackEmpty a usable diagnostic.
+                if (best == null) { ChargeFallbackEmpty++; return; }
+
+                pick = (best, bestScore);
+                ChargeFallbacks++;
+                viaChargeFallback = true;
+            }
+
+            // --- AUTO-SPAWNER AS A SUBSTITUTE PURCHASE (flag 2b) ---------------------
+            // Same budget, different buy. Placed here rather than in Decide() so it competes
+            // with the unit this method was about to purchase, which is the whole point --
+            // see AutoSpawnFromAttackBudget for why the funding source is the finding.
+            if ((_settings.AutoSpawnerInsteadOfUnits || _settings.AutoSpawnFromAttackBudget)
+                && !preferDefense && !killerInstinct
+                && me.AutoSpawnLevel < Math.Min(_settings.AutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel))
+            {
+                double price = me.AutoSpawnPrice;   // captured: UpgradeAutoSpawn moves it
+                if (price > 0 && price <= spendable)
+                {
+                    // TWO VALUATIONS, and the difference is the point of flag 11.
+                    //
+                    // AutoSpawnFromAttackBudget (flag 2b) required the level to repay its
+                    // price in MARGINAL roster-dollars per second within a payback window.
+                    // That reads the machine as an investment competing with a unit, and it
+                    // stalls at level 3: the step from [1,1] to [2,1] adds one dollar per
+                    // second of free units for $161, so nothing past it ever clears a 45s
+                    // payback. Measured inert -- Tier4Spam and Chipper came back
+                    // byte-identical.
+                    //
+                    // AutoSpawnerInsteadOfUnits (flag 11) drops the payback test entirely and
+                    // makes the machine the DEFAULT purchase of this branch. The reasoning is
+                    // Marc's, from watching it play: a one-off price buys units every second
+                    // for the rest of the game, where the same money buys one unit once. The
+                    // race-mode breakdown priced the alternative -- this branch currently
+                    // spends $51,127 a game on one-off units, which is the whole auto-spawner
+                    // ladder to level 17 several times over.
+                    bool worthIt = _settings.AutoSpawnerInsteadOfUnits;
+                    if (!worthIt)
+                    {
+                        double gain = AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel + 1)
+                                    - AutoSpawnValuePerSecond(roster, me.AutoSpawnLevel);
+                        worthIt = gain > 0 && price <= gain * _settings.AutoSpawnPaybackSeconds;
+                    }
+
+                    if (worthIt && Act(() => engine.UpgradeAutoSpawn(_side)))
+                    {
+                        AutoSpawnLevelsBought++;
+                        _attackSpendAllowance = Math.Max(0, _attackSpendAllowance - price);
+                        _attackSpentThisCycle += price;
+                        return;
+                    }
+                }
+                else if (_settings.AutoSpawnerInsteadOfUnits && price > 0)
+                {
+                    // BANK RATHER THAN SPEND ON UNITS. Without this the substitution stalls at
+                    // level 3: the allowance is a FLOW, so while it is short of the next level
+                    // the branch falls through and spends it on a unit, and it never
+                    // accumulates. Measured -- the first version reached level 3.2 and left
+                    // unit spend at $51,016 against a $51,508 baseline, i.e. it changed almost
+                    // nothing.
+                    //
+                    // This is the same mechanism TechEscalation already uses for the same
+                    // reason ("bank this decision rather than spending the allowance on chaff
+                    // that would push the target further out of reach"), including its
+                    // deadlock guard: bank only toward a level the allowance CEILING can
+                    // actually reach, or the hold never ends and the branch buys nothing for
+                    // the rest of the game.
+                    double reachable = Math.Min(me.Money - gadgetReserve, allowanceCeiling);
+                    if (price <= reachable)
+                    {
+                        AutoSpawnBankedDecisions++;
+                        return;
+                    }
+                    // Unreachable at this income -- fall through and buy a unit as before.
+                }
+            }
+
+            // --- PRICED RACE TEST (flag 12b) ---------------------------------------
+            // POSITION IN THIS METHOD IS THE WHOLE CORRECTION. The first race gate priced
+            // items BEFORE choosing what to buy, so a rejected $102 auto-spawner level fell
+            // through to a $3 unit and the substitution INVERTED -- auto-spawn level 8.0 ->
+            // 1.7 while unit spend rose $28,240 -> $42,291. Sitting here, after the
+            // auto-spawner block above has already taken its turn, the machine keeps first
+            // refusal and only the fall-through unit purchase is priced. The inversion is
+            // structurally unreachable.
+            //
+            // A FAILURE BANKS, IT DOES NOT DOWNGRADE. Falling back to a cheaper body is
+            // exactly the behaviour that produced the inversion, and the survival law says a
+            // lesser body is not worth buying here anyway -- with the race lost the money is
+            // worth more in the rung. Reactive defence never reaches this line (preferDefense),
+            // so the bot can still buy what it needs to survive.
+            if (!preferDefense && pick.def != null && !RacePurchaseAffordable(me, pick.def.Cost))
+            {
+                RacePricedHolds++;
+                return;
+            }
+
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
+                if (preferDefense)
+                {
+                    SpendReactive += pick.def.Cost;
+                    if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ReactiveTierCounts[pick.def.Tier]++;
+                    if (pick.def.Tier >= 5)
+                    {
+                        MidBuyByDominantTier[Math.Clamp(dominantEnemyTier, 0, 9)]++;
+                        if (viaChargeFallback) MidBuyViaChargeFallback++;
+                        else if (viaAnyAffordable) MidBuyViaAnyAffordable++;
+                        else MidBuyViaMatchedOrOutclass++;
+                    }
+                }
+                else { SpendAttack += pick.def.Cost; if (pick.def.Tier >= 1 && pick.def.Tier <= 8) AttackTierCounts[pick.def.Tier]++; }
                 LastUnitsPurchased++;
                 if (!preferDefense && !killerInstinct)
                 {
@@ -4748,6 +6277,20 @@ namespace CastleDefense.Engine.Bot
         // Below ~1.5x the enemy's average hit, a unit is one-or-two-shot fodder that
         // never gets to swing back enough to matter -- crush its score rather than
         // excluding it outright (so it's still a fallback if literally nothing survives).
+        /// <summary>
+        /// Roster dollars of free units the auto-spawner delivers per second at
+        /// <paramref name="level"/>. The cycle repeats exactly once per second by
+        /// construction (units/sec IS the cycle length), so summing the cycle's unit costs
+        /// gives a per-second figure directly with no rate term.
+        /// </summary>
+        private static double AutoSpawnValuePerSecond(List<UnitDefinition> roster, int level)
+        {
+            double total = 0;
+            foreach (int tier in PlayerState.AutoSpawnCycle(level))
+                if (tier >= 1 && tier <= roster.Count) total += roster[tier - 1].Cost;
+            return total;
+        }
+
         private static double SurvivabilityMultiplier(UnitDefinition def, float enemyHitDamage)
         {
             if (enemyHitDamage <= 0) return 1.0;
@@ -4803,6 +6346,10 @@ namespace CastleDefense.Engine.Bot
             }
             return baseScore * SurvivabilityMultiplier(def, enemyHitDamage);
         }
+
+        /// <summary>Diagnostic passthrough to ScoreUnit for offline replay analysis.</summary>
+        public static double DiagScore(UnitDefinition def, bool preferDefense, float enemyHitDamage, bool multiplicative)
+            => ScoreUnit(def, preferDefense, enemyHitDamage, multiplicative);
 
         private static double RawPower(UnitDefinition def, float enemyHitDamage)
         {
@@ -4892,7 +6439,31 @@ namespace CastleDefense.Engine.Bot
             double cooldownSeconds = def.CooldownMs / 1000.0;
             if (cooldownSeconds <= 0) return false;
             double k = def.Id.Contains('_') ? _settings.UpgradeSpamK2 : _settings.UpgradeSpamK1;
-            if (k <= 0 || me.Income < def.Cost / (cooldownSeconds * k)) return false;
+
+            // ── CHEAP-UPGRADE GATE (flag 4) ────────────────────────────────────────
+            // The income test above asks "can we afford to spam this FOREVER". That is the
+            // wrong question for an upgrade, which is a FINITE purchase: XP is a flat 100
+            // per cast for every gadget regardless of effect, so the next tier costs exactly
+            // ceil((UpgradeCost - xp) / 100) casts and not one more. Pricing a finite
+            // purchase as an infinite drain is why the k gate only ever fires once the bot
+            // is rich, which is after the upgrade has stopped mattering.
+            //
+            // The cheapest ladders are enormous and land early: wall -> wall_2 is 3 casts x
+            // $50 = $150 to turn a 400 HP wall into a 6,000 HP one; reinforcements_3 ends at
+            // five FREE tier-7 units per cast on a 10 s cooldown, charge-free.
+            //
+            // Every self-harm guard below is untouched and still runs. That is not optional:
+            // the first version of this path lost 73% of games to an opponent that does
+            // NOTHING, by farming XP with the nuke -- which damages both castles.
+            if (_settings.CheapGadgetUpgrades)
+            {
+                string famCost = def.Id.Split('_')[0].ToLowerInvariant();
+                int xpNow = me.GadgetXp.TryGetValue(famCost, out var gx) ? gx : 0;
+                int castsLeft = Math.Max(1, (int)Math.Ceiling((def.UpgradeCost - xpNow) / 100.0));
+                double totalToUpgrade = castsLeft * (double)def.Cost;
+                if (totalToUpgrade > me.Income * _settings.CheapUpgradeIncomeSeconds) return false;
+            }
+            else if (k <= 0 || me.Income < def.Cost / (cooldownSeconds * k)) return false;
 
             // STAGGER against every other slot, so one gadget is always available.
             if (_lastAnyGadgetCastTick >= 0 &&
@@ -5033,7 +6604,38 @@ namespace CastleDefense.Engine.Bot
         // 0 for the whole rest of both games. "<=" keeps deferral active through the
         // exact crossover tick, giving the invest check first claim there instead of
         // losing every time to whichever gadget happens to be checked first.
-        private bool DeferForInvestment(PlayerState me) => me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice;
+        private bool DeferForInvestment(PlayerState me)
+        {
+            // ORIGINAL RULE, unchanged: hold a gadget while the FIRST few rungs are still
+            // being bought, because a gadget priced at the same $18 as the first rung
+            // competes with it directly.
+            if (me.InvestmentCount < 3 && me.Money <= me.InvestmentPrice) return true;
+
+            // COMMIT TO THE RUNG (flag 9, 2026-09-02). The rule above is bounded to
+            // InvestmentCount < 3, so from the fourth rung onward the gadget layer has NO
+            // AWARENESS OF THE RUNG IT IS SAVING FOR and fires purely on cooldown. That is
+            // most expensive at the top of the ladder, where the rung is ARMAGEDDON at
+            // $121,221 and buying it ends the game outright.
+            //
+            // Found in Marc's three recorded games (2026-09-02): in both games he won, the
+            // bot reached InvestmentCount 8 -- max income, ARMAGEDDON the only thing left to
+            // buy -- and then finished holding $65,253 and $77,332 against that rung. Its
+            // gadget cast pattern was nearly IDENTICAL across won and lost games, which is
+            // the signature of a cadence that is not reading the game state at all.
+            //
+            // Deliberately a COMMIT fraction rather than a blanket hold: holding whenever
+            // money <= price would silence gadgets for the entire endgame, and gadgets are
+            // how the bot survives long enough to reach the rung. This only engages once the
+            // rung is genuinely close.
+            //
+            // The caller's own inDanger check still runs first everywhere this is used --
+            // see each callsite -- so this never withholds a defensive cast under threat.
+            if (_settings.CommitToRung && me.InvestmentPrice > 0 && !me.ArmageddonUsed
+                && me.Money >= me.InvestmentPrice * _settings.RungCommitFraction)
+                return true;
+
+            return false;
+        }
 
         // Sums the real, current incoming damage-per-second against OUR castle: only
         // enemy units already within their own attack Range of it count (the same
@@ -5110,6 +6712,110 @@ namespace CastleDefense.Engine.Bot
         public long HazardBlackoutDecisions { get; private set; }
 
         /// <summary>Times the offensive spend branch was entered.</summary>
+        /// <summary>
+        /// Decisions on which ChargeAwareFallback re-picked because the ranked choice had no
+        /// charge. Under the reference bot every one of these was a decision that bought
+        /// nothing at all and said so nowhere.
+        /// </summary>
+        public long ChargeFallbacks { get; private set; }
+
+        /// <summary>
+        /// Decisions where EVERY affordable unit was out of charges. This is the genuine
+        /// production ceiling; if it is large the roster is drained and the answer is a free
+        /// spawn source (the auto-spawner, reinforcements), not a better pick.
+        /// </summary>
+        public long ChargeFallbackEmpty { get; private set; }
+
+        /// <summary>Decisions on which ArmageddonCommit closed the attack budget. Diagnostic.</summary>
+        public long ArmageddonCommitDecisions { get; private set; }
+
+        /// <summary>Decisions spent banking toward the next auto-spawner level. Diagnostic.</summary>
+        public long AutoSpawnBankedDecisions { get; private set; }
+
+        /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
+        public long AutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>
+        /// Unit spend split by WHY the purchase was made. Added 2026-09-02 to settle whether the
+        /// wiper or reactive defence is buying the expensive units -- Marc's 0240D8 question.
+        /// Counted at the callsite, so it attributes dollars rather than unit counts, which is
+        /// the distinction that matters: in that game tier 1-4 chaff was 310 of 399 purchases
+        /// and only 7.7% of the money.
+        /// </summary>
+        public double SpendWiper { get; private set; }
+        public double SpendReactive { get; private set; }
+        public double SpendAttack { get; private set; }
+        public double SpendChipBlock { get; private set; }
+
+        /// <summary>Wiper purchases by the TIER of the unit bought. Diagnostic.</summary>
+        public long[] WiperTierCounts { get; } = new long[9];
+
+        /// <summary>Reactive-defence and offensive purchases by tier. Diagnostic -- added to
+        /// answer "what is deciding to send the T5 and T6 units", which the wiper tally alone
+        /// could not, since the wiper was only picking T4 and T7.</summary>
+        public long[] ReactiveTierCounts { get; } = new long[9];
+        public long[] AttackTierCounts { get; } = new long[9];
+
+        /// <summary>Dominant enemy tier last seen by the reactive scorer. Diagnostic.</summary>
+        public int LastDominantEnemyTier { get; private set; }
+
+        /// <summary>
+        /// For every reactive purchase of TIER 5 OR ABOVE: what the dominant enemy tier was at
+        /// the time, and by which route the pick was made. Marc's question -- if five tier-7
+        /// units set the floor to 7, the bot cannot legally buy tier 6, so something other than
+        /// the floor must be choosing them.
+        /// </summary>
+        public long[] MidBuyByDominantTier { get; } = new long[10];
+        public long MidBuyViaChargeFallback { get; private set; }
+        public long MidBuyViaAnyAffordable { get; private set; }
+        public long MidBuyViaMatchedOrOutclass { get; private set; }
+
+        /// <summary>Decisions where the single-chipper clock authorised a match. Diagnostic.</summary>
+        public long ChipperMatchDecisions { get; private set; }
+
+        /// <summary>Castle-HP component of the wiper budget last decision. Diagnostic.</summary>
+        public double LastWiperHpBudget { get; private set; }
+
+        /// <summary>Decisions where blocking was economically justified. Diagnostic.</summary>
+        public long ChipEconomicsDecisions { get; private set; }
+
+        /// <summary>Dollars of castle HP the unblocked attackers are costing per second.</summary>
+        public double LastChipBleedPerSecond { get; private set; }
+
+        /// <summary>Blocking bodies bought by BlockSingleChipper. Diagnostic.</summary>
+        public long ChipBlocksBought { get; private set; }
+
+        /// <summary>Unblocked enemies on our castle last decision. Diagnostic.</summary>
+        public int LastChipperCount { get; private set; }
+
+        /// <summary>Blocking credit owed, in bodies. See BlockSingleChipper.</summary>
+        private float _chipCredit;
+
+        /// <summary>Dollars available for chip blocking. See ChipBlockIncomeFraction.</summary>
+        private double _chipAllowance;
+
+        /// <summary>
+        /// The opponent's economy as estimated from what a player can see. Null unless
+        /// RaceAwareSpending is on, so the default bot allocates nothing for it.
+        /// </summary>
+        private OpponentEconomy _oppEconomy;
+        private bool _oppEconomyWired;
+
+        /// <summary>Our seconds-to-ARMAGEDDON minus theirs, last decision. Negative = ahead.</summary>
+        public double LastRaceDeficitSeconds { get; private set; }
+
+        /// <summary>Offensive purchases refused because they would lose the race. Diagnostic.</summary>
+        public long RaceHeldPurchases { get; private set; }
+
+        /// <summary>Decisions in the hopeless zone, where the bot fights instead of saving.</summary>
+        public long RaceHopelessDecisions { get; private set; }
+
+        /// <summary>Purchases refused by the PRICED race test. Diagnostic.</summary>
+        public long RacePricedHolds { get; private set; }
+
+        /// <summary>Seconds of race position the last priced purchase would have cost.</summary>
+        public double LastRacePurchaseCostSeconds { get; private set; }
+
         public long OffensiveSpendDecisions { get; private set; }
 
         /// <summary>Times it was entered while the blackout was up. Must stay 0.</summary>

@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -406,6 +406,45 @@ refinement pass which only deepened the top cells):
 
 Speed defence and Green/Red replicate the independent mirror-sweep balance findings, which
 is a useful validity check on the whole instrument.
+
+### RE-MEASURED 2026-09-02 after charges, the auto-spawner and ChargeAwareFallback
+
+`best-loadout` (new; see `CastleDefense.BotArena/BestLoadout.cs`) sweeps all 128 of the
+BOT's own loadouts against a discriminating pool, seat-alternated, common random numbers,
+n=100 specs x 2 seats per cell, two seeds:
+
+```
+CastleDefense.BotArena.exe best-loadout --games 100 --seed 12345
+```
+
+**`White,nuke,reinforcements` is rank 1 in both seeds** (100.0% / 99.5%). Ranks 2-3 in both
+are the same team and defence with a different offence, so the offence slot barely matters
+once White + reinforcements is fixed.
+
+Marginals, both seeds (seed 12345 / seed 777):
+
+| team | | offence | | defence | |
+|---|---|---|---|---|---|
+| White | **94.2 / 92.3** | freeze | 90.3 / 87.7 | reinforcements | **93.1 / 90.0** |
+| Orange | 92.7 / 89.2 | nuke | 90.0 / 87.5 | wall | 89.5 / 85.9 |
+| Black | 91.8 / 87.6 | firebomb | 89.1 / 86.1 | heal | 89.2 / 85.8 |
+| Purple | 91.3 / 88.7 | snipe | **83.4 / 80.4** | speed | **81.0 / 79.8** |
+| Yellow | **77.8 / 76.7** | | | | |
+
+The ORDERING replicates the 2026-08-18 counter-matrix marginals (White best, Yellow/Green
+worst, snipe worst offence, speed worst defence), which is a useful validity check on both
+instruments. **The one real change is that reinforcements pulled AWAY from heal and wall**,
+which were a near three-way tie before (55.7 / 55.6 / 55.2) and are now 93.1 vs 89.2 / 89.5.
+That is the charge mechanic showing up exactly where the mechanism predicts: reinforcements
+spawns five units with `ignoreCost`, so it is one of the only ways to put bodies on the field
+without spending a charge.
+
+Note the reinforcements builds earn FEWER investments than the wall/heal builds (4.61 vs
+5.72) and still win more, i.e. they convert money into board presence faster than the economy
+compounds it.
+
+**`vsClone` is at a 100% ceiling for every top-15 cell and carries no signal** — HumanClone is
+far weaker than Marc. Do not read that column as evidence about him.
 
 ### What this table is NOT
 
@@ -1038,6 +1077,75 @@ and cannot favour a seat, but nothing measured before this date is comparable to
 measured after it -- win rates, game lengths, earned investments, the counter table, the
 human play record. `OpeningSquadSize = 0` and the money constant are the two knobs to
 restore the old opening if a historical comparison is needed.
+
+## Iterating on HeuristicBot
+
+Three files are the working set, added 2026-09-01. **Read them instead of re-deriving the
+engine or re-reading a previous session's transcript.**
+
+- **`BOT_MECHANICS.md`** — the engine's rules, written out once. Combat, targeting, the
+  derived-stat fallbacks, the three economy ladders with their price tables, charges,
+  `ignoreCost` paths, gadget XP, map effects, and a map of `Decide()`. Deriving this cost
+  ~3,000 lines of reading; the file exists so nobody pays that twice.
+- **`BOT_BACKLOG.md`** — the hypothesis queue. Every entry carries a MECHANISM and a
+  PREDICTED SIGNATURE naming what must move *and what must not*.
+- **`BOT_ITERATION_LOG.md`** — append-only results, kept or reverted.
+
+**The measurement is `ladder --variant <profile>`**, which plays a named
+`HeuristicBotSettings` profile against the committed reference on identical pre-generated
+specs, side-swapped, with Wilson intervals. It now also reports **units/sec, idle money and
+end-of-game castle HP**, because win rate alone cannot express a predicted signature. Use
+`--only HeuristicBot`; `--only Heuristic` also matches the four `SavingHeuristic@` contenders.
+
+**Every change ships behind a new flag defaulting to false**, and accepted flags stack in
+`HeuristicBotSettings.Accepted` rather than being promoted into the defaults. Promotion moves
+`bot-checksum`, every ladder baseline, `FLAGSHIP_BASELINE.md` and the shipped singleplayer
+opponent at once, so it is a deliberate decision, not a side effect.
+
+### PROMOTED 2026-09-02: `ChargeAwareFallback` is now the default
+
+Marc's call, after iteration 1 measured +2.6 to +7.3 points head-to-head across four arms
+(two seeds x two modes, 5,600 games per arm) with earned investments unmoved to two decimals.
+
+**`bot-checksum --games 24` moves `47EC146D660B0D721B4DC224D8ACB7F9` ->
+`C9C7E5C0342D07AA43D65113768E5B9A`.** Every bot-vs-bot number recorded before this date
+describes the old bot, including `FLAGSHIP_BASELINE.md` and the counter table. Set
+`ChargeAwareFallback = false`, or use `HeuristicBotSettings.PreChargeAware`, to reproduce it.
+
+**Still open, and it is a real gap:** `RolloutSearchBot` uses `HeuristicBot` as both its
+policy prior and its rollout policy for BOTH sides, and this change costs ~35% throughput.
+Nothing has measured what that does to search, because `search-test` takes no settings
+profile. The search numbers in `FLAGSHIP_BASELINE.md` should be treated as unverified until
+it does.
+
+### The rule that came out of the first seven iterations
+
+One change was accepted and four were rejected, and **the four failures shared one
+mechanism: each opened a NEW SPENDING CHANNEL, and each lost earned investments.** The
+accepted change only re-allocated *which* unit was already being bought and moved earned
+invests by 0.00. Every cap in `HeuristicBot.cs` — `AttackSpendFraction`,
+`InvestPaceTargetSeconds`, `ReactiveFlowCap`, `AttackGateMinInvestment`,
+`reactiveSpendBudget` — was tuned assuming no other channel exists, and a new one bypasses
+all of them at once.
+
+**Prefer changes that re-allocate spend the bot is already making.** If a change must add a
+channel, take its money from an existing budget. That was tested directly: the identical
+auto-spawner feature cost **0.81** earned investments funded from savings and **0.01** funded
+from the attack allowance.
+
+### A ladder rung can be blind to the change you are measuring
+
+`ChipperBaseline` was added because the ladder could not adjudicate a defensive fix at all:
+every existing rung that the fix helped was already pinned at a 100% win-rate ceiling, so the
+ladder saw only its cost. **A benchmark that observes one side of a trade will reject every
+version of it forever and look rigorous doing so.** The new rung invests normally and keeps
+exactly one cheap unit alive on the enemy castle — the exploit Marc and `RolloutSearchBot`
+both use. Against it the fix moves end-of-game castle HP from 52.7% to 95.9%, and still does
+not move win rate, because that exploit does not beat HeuristicBot. Some changes can only be
+priced by Marc playing.
+
+**Note this rung changes the OVERALL figure**, so OVERALL is not comparable across the commit
+that added it. The per-rung rows are.
 
 ## Cleanup backlog
 

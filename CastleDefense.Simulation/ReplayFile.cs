@@ -143,13 +143,23 @@ namespace CastleDefense.Simulation
         /// The seed is derived from the game id, so each game is independent and stable and
         /// adding a replay does not perturb the others.
         /// </summary>
-        public (GameState state, GameEngine engine) BuildStart()
+        /// <summary>
+        /// Rebuilds the opening position. <paramref name="seedOverride"/> and
+        /// <paramref name="mapOverride"/> exist for the replay gauntlet, which needs the SAME
+        /// action stream played out under DIFFERENT engine randomness -- otherwise the
+        /// reconstruction is one deterministic game and carries one bit of information.
+        /// Both default to null, so every existing caller reproduces the recorded game exactly.
+        /// </summary>
+        public (GameState state, GameEngine engine) BuildStart(int? seedOverride = null,
+                                                               TeamColour? mapOverride = null)
         {
             int timeSkip = (int)(StartingTick / (30 * 30));
             // v3 records the map that was actually rolled; v2 did not, so a v2 rebuild has
             // always played on a DIFFERENT randomly-drawn map than the recorded game.
-            var state = HasV3 ? new GameState(Map, new Random(EngineSeed)) : new GameState();
-            if (HasV3) { state.Map = Map; state.ShadowMap = ShadowMap; }
+            int seed = seedOverride ?? (HasV3 ? EngineSeed : SeedFor(GameId));
+            var map = mapOverride ?? Map;
+            var state = HasV3 ? new GameState(map, new Random(seed)) : new GameState();
+            if (HasV3) { state.Map = map; state.ShadowMap = mapOverride.HasValue ? false : ShadowMap; }
             state.Player1 = new PlayerState(timeSkip);
             state.Player2 = new PlayerState(timeSkip);
             state.Player1.Side = 1;
@@ -173,7 +183,7 @@ namespace CastleDefense.Simulation
             if (l2.Length == 3) state.Player2.SetLoadout(l2);
             // v3 replays the ACTUAL engine stream; v2 falls back to the game-id hash, which
             // is stable and independent per game but is not the stream the game was played on.
-            return (state, new GameEngine(state, null, HasV3 ? EngineSeed : SeedFor(GameId)));
+            return (state, new GameEngine(state, null, seed));
         }
 
         /// <summary>Stable hash of the 6-char game id. String.GetHashCode is randomised per

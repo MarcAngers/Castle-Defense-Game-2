@@ -83,6 +83,21 @@ namespace CastleDefense.BotArena
             public double EarnedInvests, OppEarnedInvests, Ticks;
             public int Games;
 
+            // ── PREDICTED-SIGNATURE DIAGNOSTICS (added 2026-09-01) ────────────────────
+            // Win rate alone cannot tell a change that worked from a change that worked
+            // for the wrong reason, and this project's whole failure mode is fitting to a
+            // number nobody re-derived. BOT_BACKLOG.md therefore requires every hypothesis
+            // to name what should move AND what must not; these are the quantities those
+            // predictions are written in.
+            //
+            // UnitsBought is the engine's own purchase counter, which excludes ignoreCost
+            // spawns -- so it measures DECISIONS THAT LANDED, not bodies on the field. That
+            // distinction is the point: a spawn refused for want of a charge increments
+            // nothing anywhere, which is exactly how the charge blind spot stayed invisible.
+            // EndMoney is the companion signal -- money that piled up because purchases
+            // silently failed.
+            public double UnitsBought, EndMoney, EndHpPct;
+
             public double WinRate => Games > 0 ? (double)Wins / Games : 0;
         }
 
@@ -101,6 +116,19 @@ namespace CastleDefense.BotArena
             double centre = (p + z * z / (2.0 * n)) / d;
             double half = z * Math.Sqrt(p * (1 - p) / n + z * z / (4.0 * n * n)) / d;
             return (Math.Max(0, centre - half), Math.Min(1, centre + half));
+        }
+
+        /// <summary>Looks up a named static HeuristicBotSettings profile, listing them on miss.</summary>
+        private static HeuristicBotSettings ResolveProfile(string name)
+        {
+            var f = typeof(HeuristicBotSettings).GetField(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f != null) return (HeuristicBotSettings)f.GetValue(null);
+            Console.WriteLine($"[ladder] No HeuristicBotSettings profile named '{name}'. Available:");
+            foreach (var g in typeof(HeuristicBotSettings).GetFields(
+                         System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                Console.WriteLine("    " + g.Name);
+            return null;
         }
 
         private static List<GameSpec> BuildSpecs(int count, int seed, bool headstart)
@@ -172,13 +200,48 @@ namespace CastleDefense.BotArena
             return (state, new GameEngine(state, null, s.EngineSeed));
         }
 
+        /// <summary>
+        /// PARALLEL, AND STILL BIT-FOR-BIT DETERMINISTIC. Games are independent given their
+        /// spec: each carries its own EngineSeed and every bot is constructed inside the loop,
+        /// so nothing is shared but GameDataManager's immutable definition tables.
+        ///
+        /// The determinism is not incidental. Results are written into a pre-sized array
+        /// indexed by spec and then folded IN INDEX ORDER, so the floating-point accumulations
+        /// (EarnedInvests, Ticks, EndMoney) are summed in exactly the sequence the serial
+        /// version used. Accumulating straight into a shared Record under a lock would give
+        /// the right answer to a few decimal places and a different CSV every run, which is
+        /// precisely the kind of quiet irreproducibility this file's header promises against.
+        ///
+        /// Verify rather than trust: same --seed twice should still diff clean.
+        /// </summary>
         private static Record PlayMatchup(
             Func<int, IArenaOpponent> makeContender,
             Func<int, IArenaOpponent> makeOpponent,
             List<GameSpec> specs)
         {
+            var slots = new Record[specs.Count];
+            System.Threading.Tasks.Parallel.For(0, specs.Count, i =>
+            {
+                slots[i] = PlayOneSpec(makeContender, makeOpponent, specs[i]);
+            });
+
             var rec = new Record();
-            foreach (var spec in specs)
+            foreach (var s in slots)
+            {
+                rec.Wins += s.Wins; rec.Losses += s.Losses; rec.Draws += s.Draws;
+                rec.EarnedInvests += s.EarnedInvests; rec.OppEarnedInvests += s.OppEarnedInvests;
+                rec.Ticks += s.Ticks; rec.Games += s.Games;
+                rec.UnitsBought += s.UnitsBought; rec.EndMoney += s.EndMoney; rec.EndHpPct += s.EndHpPct;
+            }
+            return rec;
+        }
+
+        private static Record PlayOneSpec(
+            Func<int, IArenaOpponent> makeContender,
+            Func<int, IArenaOpponent> makeOpponent,
+            GameSpec spec)
+        {
+            var rec = new Record();
             {
                 // Each spec played twice, sides swapped — removes any residual seat bias.
                 for (int pass = 0; pass < 2; pass++)
@@ -212,6 +275,10 @@ namespace CastleDefense.BotArena
                     rec.EarnedInvests += cPlayer.InvestmentCount - cStartInvests;
                     rec.OppEarnedInvests += oPlayer.InvestmentCount - oStartInvests;
                     rec.Ticks += state.CurrentTick - startTick;
+                    rec.UnitsBought += engine.UnitsPurchased[cSide];
+                    rec.EndMoney += cPlayer.Money;
+                    rec.EndHpPct += cPlayer.CastleMaxHealth > 0
+                        ? 100.0 * cPlayer.CastleHealth / cPlayer.CastleMaxHealth : 0;
                     rec.Games++;
 
                     (contender as IDisposable)?.Dispose();
@@ -241,6 +308,7 @@ namespace CastleDefense.BotArena
             // the SAME specs inside ONE run, which is what makes both the win-rate deltas
             // and the throughput ratio paired rather than cross-run.
             var variants = new List<string>();
+            string reference = null;
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -250,6 +318,7 @@ namespace CastleDefense.BotArena
                     case "--csv" when i + 1 < args.Length: csvPath = args[++i]; break;
                     case "--only" when i + 1 < args.Length: only = args[++i]; break;
                     case "--variant" when i + 1 < args.Length: variants.Add(args[++i]); break;
+                    case "--reference" when i + 1 < args.Length: reference = args[++i]; break;
                     // Loadout pins. Applied AFTER BuildSpecs so the rng stream is untouched
                     // and a pinned run stays directly comparable to an unpinned one on the
                     // same seed -- everything except the pinned slot is the same game.
@@ -286,6 +355,11 @@ namespace CastleDefense.BotArena
                 ("Tier1Spam",     side => new TierSpamBaseline(side, 1)),
                 ("Tier4Spam",     side => new TierSpamBaseline(side, 4)),
                 ("Investor",      side => new InvestorBaseline(side)),
+                // Plays the single-unit chip exploit deliberately. Added because the rungs
+                // above could show chip blocking's cost but not its benefit -- see
+                // ChipperBaseline. NOTE: adding a rung changes the OVERALL figure, so
+                // OVERALL is not comparable across this commit; the per-rung rows are.
+                ("Chipper",       side => new ChipperBaseline(side)),
                 ("BalancedHuman", side => new BalancedHumanBaseline(side)),
                 // The only rung not derived from HeuristicBot or from a spam pattern: a
                 // behaviour clone fitted to Marc's recorded games. Added because every
@@ -297,9 +371,19 @@ namespace CastleDefense.BotArena
             };
 
             // ── Contenders: HeuristicBot as the reference, plus every ONNX checkpoint ──
+            // THE REFERENCE ARM. Defaults to bare HeuristicBotSettings.Default, which is what
+            // it has always silently been -- and that is a trap: the DEPLOYED singleplayer bot
+            // is EconomyBrakeProfile, so every A/B run here before 2026-09-02 compared against
+            // a bot nobody plays. It is not a small difference; on the replay gauntlet the two
+            // reach ARMAGEDDON 22% and ~0-2% of the time respectively. Pass
+            // `--reference EconomyBrakeProfile` to measure against what is actually shipped.
+            var referenceSettings = reference == null ? null : ResolveProfile(reference);
+            if (reference != null && referenceSettings == null) return;
+
             var contenders = new List<(string name, Func<int, IArenaOpponent> make)>
             {
-                ("HeuristicBot", side => new HeuristicBotAdapter(side)),
+                (reference == null ? "HeuristicBot" : $"HeuristicBot[{reference}]",
+                 side => new HeuristicBotAdapter(side, referenceSettings)),
                 // Probe A's candidate rollout policy, at four commitment levels. Present as
                 // contenders because the probe's premise is that this is STRONGER than
                 // HeuristicBot; if the rows below do not beat the HeuristicBot row, the
@@ -354,7 +438,7 @@ namespace CastleDefense.BotArena
             using var csv = new StreamWriter(csvPath);
             csv.WriteLine("mode,seed,contender,opponent,games,wins,losses,draws," +
                           "win_rate,ci_lo,ci_hi,earned_invests,opp_earned_invests,avg_ticks," +
-                          "elapsed_s,ticks_per_s");
+                          "elapsed_s,ticks_per_s,units_per_s,end_money,end_hp_pct");
 
             foreach (var m in modes)
             {
@@ -398,8 +482,8 @@ namespace CastleDefense.BotArena
                 foreach (var (cName, cMake) in contenders)
                 {
                     Console.WriteLine($"\n  {cName}");
-                    Console.WriteLine("    opponent                       win rate  earned inv   opp inv    avg s");
-                    Console.WriteLine("    " + new string('-', 70));
+                    Console.WriteLine("    opponent                       win rate  earned inv   opp inv    avg s  un/s     idle$  hp%");
+                    Console.WriteLine("    " + new string('-', 94));
 
                     int totWins = 0, totGames = 0;
                     // WALL CLOCK PER CONTENDER. Both contenders play the SAME pre-generated
@@ -425,7 +509,9 @@ namespace CastleDefense.BotArena
                         Console.WriteLine(
                             $"    {oName,-16} {r.WinRate,7:P1} [{lo,6:P1},{hi,6:P1}]  " +
                             $"{r.EarnedInvests / r.Games,10:F2} {r.OppEarnedInvests / r.Games,8:F2}  " +
-                            $"{r.Ticks / r.Games / 30.0,7:F1}");
+                            $"{r.Ticks / r.Games / 30.0,7:F1} " +
+                            $"{(r.Ticks > 0 ? r.UnitsBought / (r.Ticks / 30.0) : 0),6:F2} " +
+                            $"{r.EndMoney / r.Games,9:N0} {r.EndHpPct / r.Games,6:F1}");
 
                         csv.WriteLine($"{m},{seed},{cName},{oName},{r.Games},{r.Wins},{r.Losses}," +
                                       $"{r.Draws},{r.WinRate:F4},{lo:F4},{hi:F4}," +
@@ -433,12 +519,15 @@ namespace CastleDefense.BotArena
                                       $"{r.OppEarnedInvests / r.Games:F4}," +
                                       $"{r.Ticks / r.Games:F1}," +
                                       $"{rungSeconds:F2}," +
-                                      $"{(rungSeconds > 0 ? r.Ticks / rungSeconds : 0):F0}");
+                                      $"{(rungSeconds > 0 ? r.Ticks / rungSeconds : 0):F0}," +
+                                      $"{(r.Ticks > 0 ? r.UnitsBought / (r.Ticks / 30.0) : 0):F3}," +
+                                      $"{r.EndMoney / r.Games:F0}," +
+                                      $"{r.EndHpPct / r.Games:F1}");
                         csv.Flush();
                     }
 
                     var (alo, ahi) = WilsonInterval(totWins, totGames);
-                    Console.WriteLine("    " + new string('-', 70));
+                    Console.WriteLine("    " + new string('-', 94));
                     Console.WriteLine($"    {"OVERALL",-16} {(double)totWins / Math.Max(totGames, 1),7:P1} " +
                                       $"[{alo,6:P1},{ahi,6:P1}]   ({totGames} games)");
                     Console.WriteLine($"    {"THROUGHPUT",-16} {contenderSeconds,7:F1}s  " +

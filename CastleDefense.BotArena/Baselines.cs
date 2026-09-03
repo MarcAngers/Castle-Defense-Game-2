@@ -1,4 +1,4 @@
-using CastleDefense.Engine;
+﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
@@ -139,6 +139,68 @@ namespace CastleDefense.BotArena
                 if (score > bestScore) { bestScore = score; best = def; }
             }
             if (best != null) engine.SpawnUnit(_side, best.Id);
+        }
+    }
+
+    /// <summary>
+    /// Invests like InvestorBaseline, but keeps EXACTLY ONE cheap unit alive on the enemy
+    /// castle at all times -- and never more.
+    ///
+    /// WHY THIS RUNG EXISTS. It is an instrument fix, added 2026-09-01 after the ladder
+    /// failed to adjudicate BlockSingleChipper. Every existing rung that the chip-blocking
+    /// change helped (DoNothing, Tier1Spam, BalancedHuman) was already pinned at a 100%
+    /// ceiling, so the ladder could show that change's COST and was structurally blind to
+    /// its BENEFIT. A benchmark that can only see one side of a trade will reject every
+    /// version of it, forever, and look rigorous doing so.
+    ///
+    /// So this rung plays the exploit deliberately. It is the line Marc reported from live
+    /// play and that RolloutSearchBot found on its own: one unblocked body chips a castle
+    /// permanently and for free, because MoveAndFight only lets a unit damage a castle in
+    /// its `else if (castleInRange)` branch -- so a single attacker with nothing in contact
+    /// is never interrupted -- and because only Repair heals a castle, making that damage a
+    /// stock rather than a rate. HeuristicBot's whole danger model is rates, so one unit
+    /// reads as ~100 seconds of runway and is refused by all four defence paths at once.
+    ///
+    /// ONE UNIT IS THE ENTIRE POINT, so the count is enforced rather than aimed at: sending
+    /// two would trip WaveWipeMinUnits and make this an ordinary pressure bot. It also
+    /// deliberately buys the CHEAPEST unit, not the best one -- the exploit is that the
+    /// damage is unanswered, not that it is large.
+    /// </summary>
+    public class ChipperBaseline : IArenaOpponent
+    {
+        private readonly int _side;
+        private const int IntervalTicks = 5;
+        private long _next;
+
+        public ChipperBaseline(int side) => _side = side;
+
+        public void Update(GameEngine engine)
+        {
+            var state = engine._state;
+            if (state.IsGameOver || state.CurrentTick < _next) return;
+            _next = state.CurrentTick + IntervalTicks;
+
+            var me = _side == 1 ? state.Player1 : state.Player2;
+
+            // Economy first, exactly like InvestorBaseline -- and for the same reason its
+            // comment gives: a rung that only pokes is a rung that loses to anything.
+            if (me.Money >= me.InvestmentPrice && engine.Invest(_side)) return;
+
+            // Never more than one. The opening squad is spawned by the engine, not by us,
+            // so wait it out rather than topping up on top of it.
+            if (state.Units.Any(u => u.Side == _side)) return;
+
+            var teamDef = GameDataManager.Teams.FirstOrDefault(t => t.Color == me.Team);
+            if (teamDef == null) return;
+
+            UnitDefinition cheapest = null;
+            foreach (var def in teamDef.Roster)
+            {
+                if (def.Cost <= 0 || def.Cost > me.Money) continue;
+                if (!me.HasUnitCharge(def.Id)) continue;
+                if (cheapest == null || def.Cost < cheapest.Cost) cheapest = def;
+            }
+            if (cheapest != null) engine.SpawnUnit(_side, cheapest.Id);
         }
     }
 
