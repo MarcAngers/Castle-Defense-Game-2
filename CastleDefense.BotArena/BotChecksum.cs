@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
@@ -235,16 +235,17 @@ namespace CastleDefense.BotArena
                   .Append(',').Append(p1Spawns).Append('\n');
                 row += $"{engine.MoneySpentOnUnits[1],9:F0}{engine.MoneySpentOnUnits[2],9:F0}";
                 row += $"  FOELOST={foeLost:F0} FOESEEN={seenFoe.Values.Sum():F0} OWNSEEN={seenOwn.Values.Sum():F0}";
-                // Gadget casts per side. reinforcements_3 buys 5 tier-7 units ($10,330 of
-                // White army) for $1,440 on a 10s cooldown -- a 7.2x multiplier no unit
-                // purchase can match -- so "did each side actually fire its defensive
-                // gadget" is a first-order economic question, not a detail.
+                // Gadget casts per side. reinforcements_3 buys $6,000 of free roster value
+                // for a $2,000 cast on a 10s cooldown -- a 3x multiplier no unit purchase can
+                // match -- so "did each side actually fire its defensive gadget" is a
+                // first-order economic question, not a detail. (Before the 2026-09-03
+                // rebalance it was a flat five tier-7 units, $10,330 of White army, at 7.2x.)
                 row += $"  REP p1={p1.ActionCounts[10]} p2={p2.ActionCounts[10]}";
                 row += $"  HZB={p1.HazardBlackoutDecisions} KLOCK={p1.KillerLockedDecisions} T1={state.Player1.Team} T2={state.Player2.Team}";
                 row += $"  GAD p1 off={p1.ActionCounts[11]} def={p1.ActionCounts[12]} sig={p1.ActionCounts[13]}"
                      + $" | p2 off={p2.ActionCounts[11]} def={p2.ActionCounts[12]} sig={p2.ActionCounts[13]}";
                 // The CAST COUNT hides the tier, and the tier is the whole story: the same
-                // 28 casts are 5 tier-1 units each on the base gadget and 5 tier-7 on tier 3.
+                // 28 casts are $16 of units each on the base gadget and $6,000 each on tier 3.
                 row += $"  DEFGAD p1={state.Player1.DefensiveGadget?.Id} p2={state.Player2.DefensiveGadget?.Id}";
                 row += $"  WIPE n={p1.WipeCount} reach={p1.WipeValueReached:F0} cred={p1.WipeValueCredited:F0} paid={p1.WipeSpend:F0} "
                     + $"altkill={p1.WipeBestAltKill:F0} altcost={p1.WipeBestAltCost:F0} altdiff={p1.WipeBestAltCount}";

@@ -24,6 +24,22 @@ namespace CastleDefense.Engine.Data
         private const float ATTACK_SPEED_MULTIPLIER = 1f;
         private const int COOLDOWN_PER_DOLLAR = 800;
 
+        /// <summary>
+        /// Bounds the derived attack speed is clamped into, in attacks per second.
+        ///
+        /// THE FLOOR IS THE TIER-8 SWING PERIOD AND NOTHING ELSE'S. The Doggo Formula produces
+        /// raw values from 0.013 to 0.054/s for the eight aces -- two orders of magnitude below
+        /// anything playable -- so every one of them lands exactly on this floor, and no other
+        /// unit in the roster is anywhere near it. Changing it therefore reprices all eight
+        /// aces together and touches nothing else.
+        ///
+        /// RAISED 0.20 -> 0.33 on 2026-09-03 (one swing per 3s, was one per 5s), which is a
+        /// **65% DPS buff to every tier 8** and moves the chump-blocking arithmetic with it --
+        /// see the survival law in CLAUDE.md, whose S term is a sum of exactly these numbers.
+        /// </summary>
+        private const float MIN_ATTACK_SPEED = 0.33f;
+        private const float MAX_ATTACK_SPEED = 5.0f;
+
         public static void Initialize()
         {
             Teams.Clear();
@@ -121,7 +137,7 @@ namespace CastleDefense.Engine.Data
                     }
                 }
 
-                float finalAps = Math.Clamp(calculatedAps, 0.2f, 5.0f);
+                float finalAps = Math.Clamp(calculatedAps, MIN_ATTACK_SPEED, MAX_ATTACK_SPEED);
 
                 // --- APPLY BALANCING FORMULAS ---
                 int charges = Math.Max(1, 25 / (price > 0 ? price : 1));

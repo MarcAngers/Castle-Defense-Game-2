@@ -112,7 +112,7 @@ namespace CastleDefense.Simulation
                     // OnGadgetAnimation, which is what made the recorder miss 28 of 52 casts.
                     engine.OnGadgetCast += (side, gadgetId, pos) =>
                     {
-                        if (side == 1) tracker.ObserveGadgetCast(engine.GetGadgetDefinition(gadgetId));
+                        if (side == 1) tracker.ObserveGadgetCast(engine.GetGadgetDefinition(gadgetId), state.Player1.Team);
                     };
 
                     acc.Games++;

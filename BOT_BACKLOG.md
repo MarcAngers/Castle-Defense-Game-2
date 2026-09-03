@@ -73,9 +73,10 @@ money alone can no longer buy — auto-spawner units are `ignoreCost` and theref
 no charges and are not subject to the one-purchase-per-decision pacing.
 
 **Value.** Level 1 costs **$102** for 1 free body/s forever. The survival law says one body
-per enemy *swing* holds anything, and every tier-8 clamps at 0.20 swings/s — so level 1 is
-5x the rate needed to neutralise a lone tier 8, permanently, for a one-time $102. Level 5
-is $860 cumulative for 3 bodies/s.
+per enemy *swing* holds anything, and every tier-8 clamps at the roster floor — **0.33
+swings/s since 2026-09-03, was 0.20** — so level 1 is 3x the rate needed to neutralise a lone
+tier 8, permanently, for a one-time $102. (It was 5x before the floor was raised; the case is
+weaker but still holds.) Level 5 is $860 cumulative for 3 bodies/s.
 
 **Change.** A rung-buying rule in the same slot as invest: buy the next auto-spawner level
 when it is cheap relative to the next investment rung and the runway is safe. Start

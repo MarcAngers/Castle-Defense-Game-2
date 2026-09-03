@@ -264,6 +264,18 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--reinforcements-check")
+            {
+                ReinforcementsCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--wave-check")
+            {
+                WaveCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-format-check")
             {
                 ReplayFormatCheck.Run(args.Skip(1).ToArray());

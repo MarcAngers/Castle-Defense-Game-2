@@ -665,6 +665,15 @@ if (args.Length > 0 && args[0] == "counter-matrix")
     return;
 }
 
+// THE BALANCE DASHBOARD. Every loadout vs every loadout in both seats, HeuristicBot mirror
+// only, writing dashboard.html. This is what "update the balance dashboard" means -- see
+// BalanceMatrix.cs for why neither `dashboard` nor `counter-matrix` answers this question.
+if (args.Length > 0 && args[0] == "balance-matrix")
+{
+    BalanceMatrix.Run(args);
+    return;
+}
+
 if (args.Length > 0 && args[0] == "dashboard")
 {
     // Sweeps the FULL team x offense x defense cross-tab (8 x 4 x 4 = 128 cells) for

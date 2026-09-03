@@ -433,3 +433,25 @@ defends against still happens -- for the other reason, fractional income. Second
 numbers in prose are a rot generator**: every `file.cs:NNN` reference checked in this pass
 had drifted, several by more than a thousand lines. Prefer a symbol name; it moves with the
 code.
+
+## Two wave defects, found 2026-09-03 and deliberately left alone
+
+Both surfaced while adding the knockback cap to `WaveHazard`. Both are BALANCE-affecting, so
+neither was fixed in the same pass — a silent extra change would have muddied the in-game
+testing the cap was built for. Fix them deliberately, and re-run `bot-checksum` when you do.
+
+- **`knockbackDist` is not restored after a tier-8 unit.** `WaveHazard.ProcessEffect` does
+  `if (enemy.Tier == 8) knockbackDist = 25;` inside its loop over enemies and never puts the
+  value back, so **every unit processed after the first tier-8 in that tick is launched 25
+  instead of the level's real distance** (500 / 1500 / 3000). It is order-dependent — it
+  follows `state.Units` order — and completely invisible unless a tier 8 is caught in the
+  wave. The fix is a local inside the loop; the question to answer first is whether any
+  existing balance measurement was taken with it active.
+
+- **Level 2's knockback disagrees with its own CSV row.** `master_gadgets.csv` gives
+  `wave_2` a KNOCKBACK of **1000**, which is what the Collection screen prints to the player;
+  `WaveHazard.ProcessEffect` hardcodes **1500**. Levels 1 and 3 match their rows (500 and
+  3000), so this is a single wrong number rather than a wholesale disconnect. Note the new
+  knockback CAP *does* read the CSV (`WaveEffect.CapFor` uses `BaseValue / 10`), so the two
+  halves of the same gadget are now sourced differently — which is the real reason to close
+  this rather than the discrepancy itself.

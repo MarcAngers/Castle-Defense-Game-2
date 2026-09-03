@@ -436,12 +436,17 @@ worst, snipe worst offence, speed worst defence), which is a useful validity che
 instruments. **The one real change is that reinforcements pulled AWAY from heal and wall**,
 which were a near three-way tie before (55.7 / 55.6 / 55.2) and are now 93.1 vs 89.2 / 89.5.
 That is the charge mechanic showing up exactly where the mechanism predicts: reinforcements
-spawns five units with `ignoreCost`, so it is one of the only ways to put bodies on the field
+spawns free units with `ignoreCost`, so it is one of the only ways to put bodies on the field
 without spending a charge.
 
 Note the reinforcements builds earn FEWER investments than the wall/heal builds (4.61 vs
 5.72) and still win more, i.e. they convert money into board presence faster than the economy
 compounds it.
+
+**BOTH SWEEPS ARE STALE FOR REINFORCEMENTS SINCE 2026-09-03** — it paid a FLAT FIVE units of
+a fixed tier when they were measured, which is the payout the rebalance below removed. Its
+93.1 / 90.0 and its 3.6-point lead over wall and heal describe a gadget that no longer
+exists. The rest of each table is unaffected.
 
 **`vsClone` is at a 100% ceiling for every top-15 cell and carries no signal** — HumanClone is
 far weaker than Marc. Do not read that column as evidence about him.
@@ -597,9 +602,19 @@ investing, no repairs. 22,700 runs measured 2026-08-21.
 **The stall threshold is the attacker's ATTACK PERIOD, not its DPS or HP.** `MoveAndFight` sets
 `CurrentSpeed = 0` and attacks the UNIT whenever any enemy is in range, so reaching the castle
 requires `FindTargetsFast` to come back empty: one body in contact is a hard stop, not a damage
-race. Every tier-8 unit has AttackSpeed clamped to 0.20/s, and across all 8 teams **one chump
-per 5.00s holds to the 1200s horizon while one per 5.17s does not**. Price of delay against a
-lone attacker: **$2.00/s**, 0.04% of the test income.
+race. Every tier-8 unit has AttackSpeed clamped to the roster floor, and across all 8 teams
+**one chump per 5.00s holds to the 1200s horizon while one per 5.17s does not**. Price of delay
+against a lone attacker: **$2.00/s**, 0.04% of the test income.
+
+> **STALE FOR TIER 8 SINCE 2026-09-03.** The whole 22,700-run sweep was measured with
+> `MIN_ATTACK_SPEED` at **0.20/s**; it is now **0.33/s**, one swing per 3.03s instead of 5.00s.
+> Only the eight aces sat on that floor, so **every tier-8 number in this section and in
+> `stall/FINDINGS.md` scales by 1.65x and no other tier moves at all**: the holding threshold
+> goes 5.00s → ~3.03s and the price of delay $2.00/s → **~$3.30/s**. That is DERIVED from the
+> survival law (`r = S` for infinite survival, and S is a sum of exactly these attack rates),
+> not re-measured — the sweep has not been re-run. Force-size multipliers, escort behaviour and
+> the anchor findings are ratios between tier-8 cells and should survive; the absolute dollar
+> figures should not be quoted.
 
 **Force size costs superlinearly.** `ClampToContact` skips FRIENDLY units, so a force does not
 queue behind its own front member — all of it overlaps at one contact point and all of it
@@ -710,7 +725,9 @@ killing one needs ~2,000 bodies, past the 600s game limit.
 **Unrelated balance finding the sweep turned up:** against an undefended castle a tier-4 stream
 razes it in comparable time to a single tier 8 for a median **28× less money** — tier 4 moves
 7–23 px/tick against a tier 8's 1–5, and its attack speed clamps at the TOP of the range (5.0/s)
-where a tier 8's clamps at the BOTTOM (0.2/s). Untested against a defended castle.
+where a tier 8's clamps at the BOTTOM (0.33/s since 2026-09-03, 0.2/s when this was measured).
+The 28x is therefore an overstatement now — the spread between the clamps narrowed from 25x to
+15x — but the direction is unchanged. Untested against a defended castle.
 
 ## Disconnection, rejoin, and WINS BY DEFAULT
 
@@ -916,6 +933,375 @@ squad. The client's decorative crowd derives its count from the same tick rather
 local timer, so the units standing outside the castle empty onto the field exactly in step.
 
 **Starting money (BALANCE).** `PlayerState` now starts at **$10**, not $0.
+
+## Reinforcements pays a VALUE BUDGET, not a fixed squad
+
+Rebalanced 2026-09-03, on the `balance-updates` branch. It used to spawn a flat **five units
+of tier `BaseValue`** — so reinforcements_3 handed over five tier-7 units, **$10,330 of White
+roster value for a $3,000 cast**, and reinforcements_2 five tier-5 for $405 at $180. The
+payout was untethered from the price.
+
+`BaseValue` is now an **EFFICIENCY MULTIPLIER**, not a tier, and `BaseLabel` reads
+`EFFICIENCY` instead of `UNIT TIER`:
+
+| level | cost | multiplier | budget |
+|---|---|---|---|
+| 1 | $12 | x1.33 | $16 |
+| 2 | $180 | x1.5 | $270 |
+| 3 | **$2,000** (was $3,000) | x3 | $6,000 |
+
+The budget is `ceil(Cost * BaseValue)` — ceiling, like every other price in the game, which is
+what makes level 1 $16 rather than $15.
+
+**Composition is greedy from the top, but it MOVES ON ONE UNIT EARLY**, then the squad is
+sent in reverse. Each unit type is bought while there is still room for TWO of it; the moment
+only one more would fit, the budget drops to the next type down. The count is
+`floor(remaining / cost) - 1`, not `floor(remaining / cost)`.
+
+That single `- 1` is what makes it an army rather than a handful of big units. $6,000 of White:
+
+| | old rule | current rule |
+|---|---|---|
+| legg $2,066 | 2 | 1 |
+| bread $338 | 5 | 10 |
+| alpacco $81 | 2 | 5 |
+| ringo $18 | 0 | 7 |
+| squirt $9 / catto $4 / doggo $3 | 1 / 1 / 1 | 1 / 2 / 2 |
+| **total** | **12 units, $6,000** | **28 units, $6,000** |
+
+Each tier hands its "last affordable copy" of budget down, where it buys several bodies instead
+of one. **The cheapest unit is exempt** — there is nothing below it to hand a remainder to, so
+it buys `floor(remaining / cost)` outright; otherwise up to two tier-1 prices would be stranded
+at the bottom of every cast.
+
+Cadence is **one unit every 15 ticks** (0.5s at 30 Hz). The flat-five version ran
+`delay = 0,10,20,30,40` and the first cut of this rewrite kept that 10-tick spacing; at 28
+units it read as a firehose. At 15 ticks a level-3 squad takes ~14 seconds to finish walking
+out, so its tail joins a battle its head is already in. Squad sizes now run 3–7 at level 1,
+11–17 at level 2 and 23–32 at level 3 depending on the team's price curve.
+
+**Two rules that are the balance content rather than bookkeeping:**
+
+- **ORDER IS REVERSED — the lowest tier walks out FIRST.** The chumps meet whatever is already
+  on the field and the expensive units arrive behind a screen instead of leading it. The
+  chump-blocking section explains why that matters more than it looks: a body absorbs one enemy
+  swing whatever it is, so the cheap units are the efficient blockers and the tier 7 wants to
+  arrive after something else has taken contact.
+- **THE LAST DOLLARS ARE NOT DISCARDED.** If anything is left once even the cheapest unit is
+  out of reach, the squad **overspends by one tier-1** rather than letting it evaporate.
+  Without it a $15.96 level-1 cast rounds down to nothing on a team whose tier 1 costs $4,
+  and the gadget's value would depend on how neatly a roster divides the budget. Eight of the
+  24 cells land over budget as a result, by at most one tier-1 price: Blue $17 and White $18
+  against $16 at level 1; Black, Blue, Orange and White $271 against $270 at level 2; Black
+  $6,001 and Orange $6,003 against $6,000 at level 3.
+
+**Tier 8 is unreachable at every level** — the cheapest is Purple's $12,760 against a $6,000
+maximum budget — so this cannot hand anyone an ace. Nothing enforces that; it falls out of the
+prices, and a tier-8 repricing below $6,000 would put one in the squad.
+
+**`ReinforcementsEffect.BuildSquad` is the single source of truth**, and there is a second
+caller: `OpponentEconomy.ObserveGadgetCast` has to know which free units to expect so it does
+not charge the opponent for them, and it now asks the effect rather than owing "5 of tier
+BaseValue". That call needed the caster's TEAM, which is why `ObserveGadgetCast` takes a
+`TeamColour` — the team colour is drawn on screen, so reading it keeps the tracker's fairness
+rule intact. Reimplementing the composition there is the drift that section already warns
+about for the economy ladders.
+
+**Guarded by `--reinforcements-check`** (`CastleDefense.Simulation`), which checks the CSV
+against an independently transcribed design table, reproduces Marc's hand-worked White level-3
+squad unit for unit, asserts four composition invariants across all 8 teams x 3 levels, and
+then casts the gadget in a real tick loop to confirm the cadence, the arrival order, and that
+the units are free of both money and charges.
+
+### This is a balance change and it invalidates every bot-vs-bot benchmark
+
+`bot-checksum --games 24` moves `C9C7E5C0342D07AA43D65113768E5B9A` →
+`17659AA8C69B0F9548D376D362BA9DDC` (and again to `4821D039CFF0A7D4FF63925ACE2ABCDD` once the
+move-on-one-early rule and the 15-tick cadence landed). Reinforcements is one of the four defence gadgets every
+sweep rolls, so this reaches `FLAGSHIP_BASELINE.md`, the counter table, `best-loadout` and
+every ladder baseline — see the note added to the 2026-09-02 `best-loadout` section above.
+Trained ONNX models are unaffected in shape (the mask is still 14 wide, the observation vector
+untouched) but were trained against the old payout.
+
+**A second CSV rebalance the same day moved it again, to
+`2331685BD8897846177C7BD579056662`** — Marc's edits to `master_gadgets.csv`: cash cost
+$65/$975/$7,800 → $75/$1,125/$9,000 with `Delay` 48 → 115 and cooldowns 15s → 18/18/20s,
+nuke `Radius` 150 → 300 and 300 → 400, meteor `Radius` 750 → 500. `17659AA…` is reproducible
+by reverting those rows, which is how the cash animation rewrite below was shown to be
+presentation-only.
+
+## The cash drop flies in on a plane
+
+Rebuilt 2026-09-03, on the `balance-updates` branch. The crate used to materialise above the
+drop point and float down with nothing to explain where it came from. A plane now flies in
+from the OPPOSITE side of the map, takes 3 seconds to make its run, and releases the crate
+over the allied castle — which is what the extra cast delay in the CSV was added to cover.
+
+**The level-3 bug this fixed is worth naming, because it was a two-place mismatch, not a
+timing bug.** `CashEffect.Execute` raised `TriggerGadgetAnimation` at cast time AND again on
+each of level 3's eight payouts — **nine animations for eight crates**. On screen that read
+as one crate falling alone, a pause, and then the rest. The effect now raises it exactly once
+per cast at every level, and the client draws the whole run from that single trigger.
+
+**PAYOUTS ARE UNCHANGED AND THAT WAS VERIFIED, NOT ASSUMED.** Level 3 still pays 8 x
+`BaseValue` at `Delay + 0/10/.../70` ticks; levels 1-2 still pay once at `Delay`. Proof:
+`bot-checksum --games 24` with Marc's CSV edits reverted in the build output returns
+`17659AA8C69B0F9548D376D362BA9DDC`, bit-identical to the pre-change run. The rewrite is
+presentation only.
+
+### The timeline is a two-sided contract, and one side is a CSV column
+
+```
+cast ──PLANE_MS(3000)──▶ release 1 ──CRATE_FALL_MS(2000)──▶ crate lands ──TEXT_MS(1500)──▶
+                            └─PAYOUT_INTERVAL_MS─▶ release 2 ...   (level 3 only)
+```
+
+- `CashAnimator.PAYOUT_INTERVAL_MS` **mirrors `CashEffect.PayoutIntervalTicks`** (10 ticks).
+  One crate per payout, on the payout's own cadence. Change one without the other and the
+  crates drift away from the money.
+- A crate lands at `PLANE_MS + CRATE_FALL_MS` = **5,000 ms = 150 ticks**, and `Delay` IS
+  150 (set 2026-09-03), so the money arrives exactly as the crate touches down. Those two
+  numbers are a contract: shortening the fall or lengthening the plane's run without moving
+  `Delay` desynchronises the payout from the crate.
+
+### Why the level-3 plane does not hold the level-1 speed
+
+Levels 1-2 release one crate, so the plane's 3 s run ends over the drop point and that is the
+whole story. Level 3 releases eight over 2,333 ms, and a plane still travelling at the
+level-1 speed covers **1,322 px in that window** — it would rain most of its crates off the
+edge of a 2,000 px map.
+
+So the speed is solved for the WHOLE run instead, from the constraint that the run-in takes
+`PLANE_MS` and the LAST crate lands on the drop point:
+
+```
+releaseX0 = (dropX + f * planeStartX) / (1 + f),   f = dropWindowMs / PLANE_MS
+```
+
+Seat 1 level 3: the plane enters at x=2209, releases its first crate at x=1135, and the eight
+land evenly across ~835 px ending at x=300 in front of the castle. Seat 2 mirrors it exactly.
+**The trade is that at level 3 the plane's total crossing takes 5.3 s rather than 3 s**; the
+run-in before the FIRST crate is 3 s at every level, which is the part the cast delay covers.
+
+Two details that are not incidental:
+
+- **Both plane sprites face LEFT**, so seat 1 draws them as authored and seat 2 mirrors them
+  about the sprite centre. `cash_plane_3` is the level-3 variant, `cash_plane` levels 1-2;
+  both are in `asset-loader.js`'s `gadgetAssetList` or they silently do not load.
+- **The crate now leaves the plane's belly, not the top of the screen.** `PLANE_Y` is 10
+  (raised from 30 so the plane reads as up in the sky rather than skimming the hilltops), so
+  the crate falls ~266 px instead of 410 in the same 2,000 ms — visibly slower, correct for a
+  parachute, and the 2,000 ms is the payout anchor and must not be shortened to compensate.
+  Seat 1's run never passes behind the money box: the box covers world x ≈ 13–277 with the
+  camera home, and the plane travels 2209 → 300. Seat 2 enters through it, at the start of its
+  run rather than at the drop.
+
+### Verifying an animation in this repo
+
+`requestAnimationFrame` is throttled when the browser pane is not frontmost, so screenshotting
+a 9-second animation samples frozen frames and proves nothing — three attempts produced a
+static `$104` and no plane. What works is a throwaway page under `wwwroot/` that imports the
+real animator, sets `timer` to fixed values and draws each into its own canvas: one static
+filmstrip, no timing dependence, and it exercises the shipped module rather than a copy.
+Delete the page afterwards — `wwwroot` is served.
+
+## The wave has a knockback budget
+
+Added 2026-09-03, on the `balance-updates` branch. A wave used to sweep the full map for its
+whole `HazardDuration` and launch everything it overlapped, so **its power scaled with however
+many units happened to be on the field** — against a big army it was unbounded. It now carries
+a cap, spends it, and collapses.
+
+| level | cap | where it comes from |
+|---|---|---|
+| 1 | 50 | `BaseValue / 10` (KNOCKBACK 500) |
+| 2 | 100 | `BaseValue / 10` (KNOCKBACK 1,000) |
+| 3 | **1,000** | flat, NOT BaseValue/10 (which would be 300) |
+
+Level 3 is deliberately outside the rule: the Tsunami is meant to be effectively uncapped, and
+nothing puts 1,000 units on one side of the field, so a level-3 wave still crosses the whole
+map and expires on `HazardDuration` exactly as before. `WaveEffect.CapFor` is the one place
+this is decided.
+
+**DISTINCT UNITS, NOT HITS.** A unit standing inside the wave is pushed on every tick it
+overlaps, exactly as before; only the FIRST of those ticks costs budget. Counting hits would
+make the cap depend on the wave's width and speed rather than on how many units it caught —
+a 50-unit cap would then be spent on a handful of bodies, which is a completely different
+balance change wearing the same number.
+
+**Measured bite:** a level-1 wave against 120 tier-1 units spends its 50 and dies at tick 41
+of a 150-tick duration — roughly a quarter of the way across. Against a thin field it still
+crosses normally.
+
+### The variable duration needed no new plumbing, and that is not luck
+
+`wave-animator.js` already drove **both** its position and its lifetime off the real
+`WaveHazard` in the broadcast state rather than off a client clock — a previous fix for the
+wave disappearing before units stopped being knocked back. So "the wave falls away early"
+is one line in `WaveHazard.ProcessEffect` (`ExpiresAtTick = CurrentTick`) and the client
+follows on its own. **The hazard leaving `GameState.Hazards` is the ONLY signal the client
+gets**; there is no separate message, and adding a field to the wire would cost per-tick
+egress on a wire that was deliberately trimmed 3.95x.
+
+What the client adds is `FALLOUT_MS` (400ms): the wave dives out of the world and the screen
+shake ramps to zero, instead of blinking off the instant the hazard vanishes. That path is now
+the NORMAL one rather than a rarity.
+
+**THE FALL-OUT IS A DIVE, NOT A DROP, and both halves of that matter.** It keeps travelling at
+its OWN real speed (`MAP_WIDTH / duration`, so the slow tsunami leans less than a fast level-1
+wave — 80px against 160px over the 400ms) while the sink runs on **p squared** rather than p.
+The quadratic is what makes the path read as a dive: the first frames are almost all forward
+motion and the last almost all downward, i.e. an object that carried its momentum and then
+fell. Linear sink with no drift — the first cut — looked like the wave stopping dead and
+falling through the floor.
+
+### WaveHazard holds the only reference-typed field on any hazard
+
+`_launched` (a `HashSet<Guid>` of units already charged against the cap) is exactly the case
+`Hazard.Clone`'s own doc comment warns about: a `MemberwiseClone` would share it between a
+search rollout and the live game, so a rollout's wave would silently spend the real wave's
+budget — only in games where a search bot happened to be thinking while a wave was crossing.
+`Clone()` is overridden to copy the set, and `--wave-check` asserts the isolation directly by
+advancing a clone and checking the original's count did not move.
+
+### The wave's crest was going through the HUD, and one constant could not fix it
+
+The sprite is drawn `waveSize` tall upward from its foot, where `waveSize` is the gadget's
+`Radius` — 100 / 200 / 400. At the shared foot of y=400 (the top edge of `#hud-bottom`) that
+puts level 3's crest at **−5**, i.e. off the top of the canvas and through the money box.
+Levels 1 and 2 top out at 295 and 195 and were never close.
+
+**Lowering all three was tried and measured, and it is worse**: level 3 needs +138 logical
+units to clear the HUD on a landscape phone, and moving level 1 down by that buries it
+entirely behind the shop bar. So the foot is a CLAMP — each level is pushed down only by its
+own overshoot. The baseline is 410 (10 into the shop bar rather than balanced on its lip) and
+level 3 clamps to ~548, putting its crest 10 below the HUD; levels 1 and 2 sit on the baseline.
+
+`HUD_MARGIN` (10) is the gap the clamp keeps between the crest at the peak of its bob and the
+HUD's bottom edge. Without it the clamp lands the crest EXACTLY on that edge, which still
+reads as touching — the wave visibly kisses the income line once a second as it bobs. Crests
+now sit at 305 / 205 / 143 against a HUD bottom of 133.
+
+**The clearance is MEASURED, not hardcoded, because the HUD and the canvas do not scale
+together.** The HUD is a DOM box in fixed CSS pixels (~100px); the canvas is scaled by
+`innerHeight / 500`. That 100px is **133 logical units on a landscape phone and nearer 50 on
+a tall desktop window** — a constant tuned for either is wrong on the other. `wave-animator.js`
+reads `#hud-top`'s bottom once in the constructor and falls back to 133.
+
+### A string-vs-number bug this uncovered
+
+`asset-loader` stores every gadget CSV column as the **string** it parsed. `waveSize` had
+always been that string; it survived because the only uses were `waveSize / 2` and
+`drawImage`, both of which coerce. The moment it met a `+`, in the clamp above, `"400"`
+concatenated instead of adding and the clamp silently evaluated to the unclamped baseline —
+no error, no warning, just the old behaviour. `waveSize` and `hazardTicks` are now `Number()`d
+at the source. **The same trap waits for any other `gadgetData` field used in arithmetic.**
+
+### Two pre-existing wave defects found while reading, and deliberately NOT fixed
+
+Both are balance-affecting, and Marc is mid-testing; changing them silently would muddy his
+results.
+
+- **`knockbackDist` is not restored after a tier-8 unit.** `ProcessEffect` does
+  `if (enemy.Tier == 8) knockbackDist = 25;` inside the loop over enemies and never puts it
+  back, so **every unit processed after the first tier-8 in that tick gets 25 instead of the
+  level's real distance**. Order-dependent, and invisible unless a tier 8 is in the wave.
+- **Level 2's knockback disagrees with its own CSV row.** `master_gadgets.csv` says
+  `KNOCKBACK 1000` and the Collection screen prints that; `WaveHazard` hardcodes **1500**.
+  Levels 1 and 3 match (500 / 3000). The cap reads the CSV, so the two halves of the gadget
+  are now sourced differently.
+
+### This is a balance change
+
+`bot-checksum --games 24` moves `2331685BD8897846177C7BD579056662` →
+`BC3AFB8FE8F9384DA568B03123FBF511`. Wave is Blue's signature, so it is in every sweep that
+rolls Blue. The reinforcements composition change that followed took it to
+`4821D039CFF0A7D4FF63925ACE2ABCDD`, and raising the attack-speed floor took it to
+**`609A34BBDC80D7FE520606B3B0776F42`**, which is the current value.
+
+## The attack-speed floor is 0.33/s, and it is a tier-8-only knob
+
+Raised 2026-09-03 from **0.20** (one swing per 5.00s) to **0.33** (one per 3.03s).
+`GameDataManager.MIN_ATTACK_SPEED` / `MAX_ATTACK_SPEED` name the two bounds; the CSV's own
+`AttackSpeed` column is ignored, the value being recomputed from the Doggo Formula and then
+clamped.
+
+**IT TOUCHES EXACTLY EIGHT UNITS, AND THAT WAS CHECKED RATHER THAN ASSUMED.** Running the
+formula over all 64 roster rows: the eight tier-8 aces produce raw values of **0.013 to
+0.054/s** — one to two orders of magnitude below anything playable — so every one of them
+lands on the floor, while **no other unit in the game is anywhere near it** (the next lowest
+is comfortably above 0.33). So this is a **65% DPS buff to every ace and a byte-for-byte
+no-op for the other 56 rows**.
+
+The two consequences worth carrying:
+
+- **The clamp spread narrowed from 25x to 15x.** Tier 4/5 units still clamp at the TOP
+  (5.0/s). The survival law asks for one body per enemy SWING, so the defensive rate a tier 8
+  demands rose by the same 1.65x while tier 4's did not move.
+- **Every tier-8 figure in the chump-blocking record is stale by 1.65x** — the holding
+  threshold 5.00s → ~3.03s, the price of delay $2.00/s → ~$3.30/s. Those are DERIVED from the
+  law, not re-measured; `stall/FINDINGS.md` carries the same banner and the 22,700-run sweep
+  has not been re-run.
+
+`bot-checksum --games 24` moves `4821D039CFF0A7D4FF63925ACE2ABCDD` →
+**`609A34BBDC80D7FE520606B3B0776F42`**.
+
+## "Update the balance dashboard" means `balance-matrix`
+
+Added 2026-09-03 to Marc's spec. **This is the command; it replaces `dashboard` for balance
+work.**
+
+```
+CastleDefense.BotArena.exe balance-matrix [--games N] [--out DIR] [--from-csv]
+```
+
+128 loadouts x 128 opponents = **16,384 ordered cells**, one game each, HeuristicBot on both
+sides. Every unordered matchup is therefore played TWICE, once in each seat. **16,384 games in
+2m07s** on 18 threads (estimate printed before the run is 2m10s). Writes
+`dashboard/balance_matrix.csv` (one row per game) and regenerates `dashboard/dashboard.html`.
+
+`--from-csv` rebuilds the HTML from an existing CSV without replaying anything, so a
+presentation tweak costs nothing.
+
+### Why neither existing sweep answered this
+
+| | `dashboard` | `counter-matrix` | `balance-matrix` |
+|---|---|---|---|
+| opponent loadout | random, **not recorded** | swept | swept |
+| seats | alternated | **fixed** (sp seating) | both, by construction |
+| map recorded | no | no | **yes** |
+| games / time | 24,960 / 4m55s | 16,384 / 2m10s at n=1 | 16,384 / 2m07s |
+| ONNX opponents | 15, **~80% of wall time** | none | none |
+
+The old `dashboard` marginalised over exactly the variable balance work wants to condition on,
+and spent most of its wall clock on ONNX models that say nothing about game balance.
+
+### THE MAP SEED IS THE ONE REAL DESIGN DEPARTURE
+
+`counter-matrix` derives its map from the GAME INDEX ALONE — deliberate common random numbers,
+so cell i of every cell plays the identical board. **At one game per cell that would put all
+16,384 games on a single map**, and every map changes the rules, so the whole sweep would
+describe one map and the map column would be a constant.
+
+So `balance-matrix` seeds the map and the engine from the **unordered pair**. The two seatings
+of {A,B} share a map and an RNG stream — which is the one pairing that matters here, since it
+makes the seat comparison within a matchup exact — while different matchups spread across all
+maps. Observed spread: ~2,000 games on each of the 8 base maps plus ~110-150 on each shadow
+variant.
+
+### Reading it
+
+**Marginals are the signal; cells are noise.** A team appears in 16 loadouts against 128
+opponents in both seats, so even n=1 gives it 4,096 games (95% CI ±1.5pp). A single loadout
+gets 256 games (±6pp) and a single loadout PAIR gets 2. Read the marginal tables and the
+team-vs-team matrix; treat the top/bottom-12 list as an ordering, not as rates.
+
+**Every tally counts a game once per SIDE, not once per game.** That is what makes the
+marginals seat-unbiased, and it is also the subtle bit: on the team-vs-team DIAGONAL the row
+team is on both sides, so the game lands in the bucket twice, once as a win and once as a loss,
+and a mirror correctly reads ~50%. Counting it once instead scored every mirror as a guaranteed
+win and put the whole diagonal at 93-98% — caught on the first render, and the diagonal sitting
+near 50% is the check that it is still right.
 
 ## Unit charges
 

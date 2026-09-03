@@ -286,9 +286,17 @@ function updateUI(state) {
             : MAX_UNIT_CHARGES;
         const cdTicks = (pState.unitCooldowns && pState.unitCooldowns[unitId]) || 0;
 
-        // Same wash as the gadgets: the overlay is the fraction of the regen second still
-        // to run, so it drains to nothing exactly as the next charge lands.
-        const pct = cdTicks > 0 ? (cdTicks / UNIT_CHARGE_REGEN_TICKS) * 100 : 0;
+        // Same wash as the gadgets, but ONLY WHILE THE UNIT IS ACTUALLY UNBUYABLE.
+        //
+        // The server's regen timer runs after ANY spend -- dropping 5 charges to 4 starts it
+        // just as surely as dropping 1 to 0 -- so keying the wash on `cdTicks > 0` alone
+        // flashed it across the button on every single purchase, when the unit was still
+        // four charges from being refused. The wash is supposed to mean "you cannot buy this
+        // right now", which is what the greying below means, so the two now agree.
+        //
+        // At zero charges the same timer IS the time until the button works again, so the
+        // overlay still drains to nothing exactly as the charge lands.
+        const pct = (charges <= 0 && cdTicks > 0) ? (cdTicks / UNIT_CHARGE_REGEN_TICKS) * 100 : 0;
         charDiv.style.setProperty('--cooldown-pct', `${pct}%`);
 
         // Grey out when broke OR out of charges -- the two reasons a click would be refused.

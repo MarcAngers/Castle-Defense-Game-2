@@ -45,7 +45,16 @@ export default async function initGadgetInfo() {
             statsHtml += `<span><strong>DURATION:</strong> ${Number(data.statusduration / 30).toFixed(2)}s</span>`;
         }
         
-        statsHtml += `<span><strong>${(data.baselabel || 'VALUE').toUpperCase()}:</strong> ${data.basevalue || 0}`;
+        // EFFICIENCY is stored as a MULTIPLIER in master_gadgets.csv (Reinforcements: 1.33 /
+        // 1.5 / 3) because that is what the engine multiplies the gadget's cost by. A player
+        // reads "133%" far more readily than "1.33", so the conversion happens here, at the
+        // one place the number is shown, rather than by storing a second representation the
+        // engine would then have to divide back down.
+        const baseLabel = (data.baselabel || 'VALUE').toUpperCase();
+        const baseValue = baseLabel === 'EFFICIENCY'
+            ? `${Math.round((Number(data.basevalue) || 0) * 100)}%`
+            : (data.basevalue || 0);
+        statsHtml += `<span><strong>${baseLabel}:</strong> ${baseValue}`;
         if (data.baselabel == 'DMG' || data.baselabel == 'DPS') {
             statsHtml += ` <img src="${loader.assets.tooltips.sword.src}" alt="DMG">`;
         }

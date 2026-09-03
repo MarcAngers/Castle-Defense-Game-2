@@ -193,6 +193,10 @@ class AssetLoader {
         const gadgetAssetList = [
             'blackhole',
             'cash',
+            // The cargo planes the cash drop flies in on. cash_plane_3 is the level-3
+            // variant; both face LEFT and are mirrored for seat 2 (see cash-animator.js).
+            'cash_plane',
+            'cash_plane_3',
             'divine',
             'divine_3',
             'firebomb',

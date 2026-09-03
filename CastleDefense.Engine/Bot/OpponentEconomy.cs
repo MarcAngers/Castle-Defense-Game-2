@@ -1,5 +1,6 @@
 ﻿using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Definitions;
+using CastleDefense.Engine.Gadgets;
 using CastleDefense.Engine.Models;
 
 namespace CastleDefense.Engine.Bot
@@ -113,8 +114,15 @@ namespace CastleDefense.Engine.Bot
 
         public OpponentEconomy(int enemySide) => _enemySide = enemySide;
 
-        /// <summary>Charge an observed gadget cast, and credit what it pays back.</summary>
-        public void ObserveGadgetCast(GadgetDefinition def)
+        /// <summary>
+        /// Charge an observed gadget cast, and credit what it pays back.
+        ///
+        /// <paramref name="casterTeam"/> is the OPPONENT'S team colour, which is drawn on
+        /// screen and so fair to read (see the fairness rule on the class). It is needed
+        /// because Reinforcements' squad is now composed from that team's roster prices
+        /// rather than being five units of a fixed tier.
+        /// </summary>
+        public void ObserveGadgetCast(GadgetDefinition def, TeamColour casterTeam)
         {
             if (def == null) return;
             Spend(def.Cost);
@@ -130,10 +138,21 @@ namespace CastleDefense.Engine.Bot
                 IncomeSeen += paid;
             }
 
-            // Reinforcements hands them five FREE units of tier BaseValue, so those must not
-            // be charged for when they walk on.
+            // Reinforcements hands them a squad of FREE units, so those must not be charged
+            // for when they walk on.
+            //
+            // ASK THE EFFECT, DO NOT REDERIVE IT. The squad used to be five units of tier
+            // BaseValue and could be owed with one line; since the 2026-09-03 rebalance
+            // BaseValue is an EFFICIENCY MULTIPLIER and the composition is a greedy spend of
+            // ceil(Cost * BaseValue) over the caster's roster. Reimplementing that here is
+            // the drift this file's class note already warns about for the economy ladders --
+            // ReinforcementsEffect.BuildSquad is the one source of truth.
             if (def.Id != null && def.Id.StartsWith("reinforcements"))
-                OweFree((int)def.BaseValue, 5);
+            {
+                var team = GameDataManager.Teams.Find(t => t.Color == casterTeam);
+                foreach (var u in ReinforcementsEffect.BuildSquad(def, team))
+                    OweFree(u.Tier, 1);
+            }
         }
 
         private void Spend(double amount)

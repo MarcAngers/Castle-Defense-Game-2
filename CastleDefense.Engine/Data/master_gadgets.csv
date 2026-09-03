@@ -1,6 +1,6 @@
 ID,Name,Slot,NextTierId,Targeted,Cost,UpgradeCost,BaseValue,BaseLabel,Radius,Delay,PushForce,HazardDuration,StatusName,StatusDuration,CooldownMs,Description
-nuke,Bomb,Offense,nuke_2,1,20,500,200,DMG,150,48,50000,0,,0,7500,Big area damage. Hurts both Castles.
-nuke_2,Missile,Offense,nuke_3,1,300,700,3000,DMG,300,48,750000,0,,0,10000,Huge area damage. Hurts both Castles.
+nuke,Bomb,Offense,nuke_2,1,20,500,200,DMG,300,48,50000,0,,0,7500,Big area damage. Hurts both Castles.
+nuke_2,Missile,Offense,nuke_3,1,300,700,3000,DMG,400,48,750000,0,,0,10000,Huge area damage. Hurts both Castles.
 nuke_3,Nuke,Offense,,1,4000,,24000,DMG,600,48,1500000,0,,0,18000,Massive area damage. Hurts both Castles.
 snipe,Water Gun,Offense,snipe_2,1,30,400,1500,DMG,0,70,500000,0,,0,10000,Snipes a single target for big damage and knockback.
 snipe_2,Rifle,Offense,snipe_3,1,450,900,22500,DMG,0,70,7500000,0,,0,10000,Snipes a single target for huge damage and knockback.
@@ -20,12 +20,12 @@ wall_3,The Biggest Wall,Defense,,1,5000,,48000,HP,0,0,0,0,,0,10000,"Spawns an ne
 speed,Speed Boost,Defense,speed_2,0,30,700,1.5,SPD MULT,0,0,0,0,SPEED,90,5000,Boosts speed of all allied units.
 speed_2,Mega Speed Boost,Defense,speed_3,0,450,1500,2,SPD MULT,0,0,0,0,SPEED,150,5000,Significantly boosts speed of all allied units.
 speed_3,Turbo Speed Boost,Defense,,0,3600,,10,SPD MULT,0,0,0,0,SPEED,300,10000,Boosts speed of all allied units to the max!
-reinforcements,Reinforcements,Defense,reinforcements_2,0,12,600,1,UNIT TIER,0,0,0,0,,0,6000,Spawns 5 reinforcement units.
-reinforcements_2,Reinforcements,Defense,reinforcements_3,0,180,900,5,UNIT TIER,0,0,0,0,,0,8000,Spawns 5 strong reinforcement units.
-reinforcements_3,Reinforcements,Defense,,0,3000,,7,UNIT TIER,0,0,0,0,,0,10000,Spawns 5 of the strongest reinforcement units.
-cash,Cash Drop,Signature,cash_2,0,65,500,100,CASH AMOUNT,0,48,0,0,,0,15000,Air drops a quick cash injection.
-cash_2,Mega Cash Drop,Signature,cash_3,0,975,900,1500,CASH AMOUNT,0,48,0,0,,0,15000,Air drops a large crate of cash.
-cash_3,Raining Cash,Signature,,0,7800,,1500,CASH AMOUNT,0,48,0,0,,0,15000,Crates of cash rain from the sky for the next 10 seconds!
+reinforcements,Reinforcements,Defense,reinforcements_2,0,12,600,1.33,EFFICIENCY,0,0,0,0,,0,6000,Spawns $16 worth of free units. The weakest walk out first.
+reinforcements_2,Reinforcements,Defense,reinforcements_3,0,180,900,1.5,EFFICIENCY,0,0,0,0,,0,8000,Spawns $270 worth of free units. The weakest walk out first.
+reinforcements_3,Reinforcements,Defense,,0,2000,,3,EFFICIENCY,0,0,0,0,,0,10000,Spawns $6000 worth of free units. The weakest walk out first.
+cash,Cash Drop,Signature,cash_2,0,75,700,100,CASH AMOUNT,0,110,0,0,,0,18000,Air drops a quick cash injection.
+cash_2,Mega Cash Drop,Signature,cash_3,0,1125,1100,1500,CASH AMOUNT,0,110,0,0,,0,18000,Air drops a large crate of cash.
+cash_3,Raining Cash,Signature,,0,9000,,1500,CASH AMOUNT,0,110,0,0,,0,20000,Crates of cash rain from the sky for the next 10 seconds!
 rage,Rage,Signature,rage_2,0,30,500,2,DMG MULT,0,0,0,0,RAGE,90,5000,"Works all units up into a rage, boosting damage."
 rage_2,Rage,Signature,rage_3,0,450,1100,4,DMG MULT,0,0,0,0,RAGE,120,5000,"Works all units up into a seething rage, boosting damage significantly."
 rage_3,Rage,Signature,,0,3600,,10,DMG MULT,0,0,0,0,RAGE,150,10000,"Works all units up into a furious rage, becoming so angry they deal 10x their regular damage!"
@@ -39,8 +39,8 @@ divine,Shield,Signature,divine_2,0,50,400,100,SHIELD,0,48,0,0,,150,10000,Provide
 divine_2,Big Shield,Signature,divine_3,0,750,1100,2500,SHIELD,0,48,0,0,,300,10000,Provides a large shield to all allied units. Absorbing damage and preventing knockback.
 divine_3,Divine Shield,Signature,,0,6000,,10000,SHIELD,0,48,0,0,,300,30000,Calls to the gods for divine intervention. Blessing your castle and all allied units with complete invulnerability!
 meteor,Meteor Strike,Signature,meteor_2,1,50,400,500,DMG,300,70,100000,0,BURN,90,10000,"Calls down a meteor from the sky, dealing damage to enemy units and setting them on fire."
-meteor_2,Mega Meteor Strike,Signature,meteor_3,1,500,700,2500,DMG,750,70,1500000,0,BURN,90,12000,"Calls down multiple huge meteors, dealing big damage to enemy units and setting them on fire."
-meteor_3,Meteor Shower,Signature,,1,9000,,2500,DMG,750,70,1500000,0,BURN,90,15000,Brings forth a deadly meteor shower to pummel the enemy forces!
+meteor_2,Mega Meteor Strike,Signature,meteor_3,1,500,700,2500,DMG,500,70,1500000,0,BURN,90,12000,"Calls down multiple huge meteors, dealing big damage to enemy units and setting them on fire."
+meteor_3,Meteor Shower,Signature,,1,9000,,2500,DMG,500,70,1500000,0,BURN,90,15000,Brings forth a deadly meteor shower to pummel the enemy forces!
 wave,Wave,Signature,wave_2,0,40,500,500,KNOCKBACK,100,0,0,150,,0,15000,"Sends a wave across the map to the opposing castle, pushing all enemies back."
 wave_2,Tidal Wave,Signature,wave_3,0,600,900,1000,KNOCKBACK,200,0,0,210,,0,15000,"Sends a huge wave across the map to the opposing castle, pushing all enemies back even farther."
 wave_3,Tsunami,Signature,,0,4800,,3000,KNOCKBACK,400,0,0,300,,0,30000,"A massive tsunami crashes towards the enemy castle, sending all but the most powerful units flying backwards!"

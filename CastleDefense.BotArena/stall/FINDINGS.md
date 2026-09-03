@@ -1,5 +1,22 @@
 # Chump-blocking: measured findings
 
+> ## STALE FOR TIER 8 SINCE 2026-09-03
+>
+> Everything here was measured with the roster's attack-speed floor
+> (`GameDataManager.MIN_ATTACK_SPEED`) at **0.20/s**. It is now **0.33/s** — one swing per
+> 3.03s instead of 5.00s.
+>
+> Only the eight tier-8 aces ever sat on that floor (every other unit's raw computed value is
+> already above 0.33), so the change is surgical: **every tier-8 figure below scales by 1.65x
+> and no other tier moves at all.** The holding threshold goes 5.00s → ~3.03s; the price of
+> delay against a lone tier 8 goes $2.00/s → ~$3.30/s.
+>
+> That scaling is DERIVED from the survival law (`t(r) = T_walk + K/(S − r)`, where S is a sum
+> of exactly these attack rates), not re-measured — the 22,700-run sweep has not been re-run.
+> Ratios between tier-8 cells (force-size multipliers, escort cost, the anchor comparison)
+> should survive it; absolute dollar figures for tier 8 should not be quoted.
+
+
 Everything here comes from `CastleDefense.BotArena.exe stall-test` (source: `../StallTest.cs`).
 Raw CSVs sit next to this file. Measured 2026-08-21. Three experiments: a single
 attacker, then attacking forces with escorts, then the defender's anchor answer.

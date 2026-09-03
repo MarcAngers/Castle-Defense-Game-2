@@ -1835,11 +1835,13 @@ namespace CastleDefense.Engine.Bot
         ///
         /// WHY v1 FAILED, precisely. The rate limit is the survival law -- one body per enemy
         /// SWING -- and swing rate is exactly what the roster clamps hardest.
-        /// GameDataManager recomputes AttackSpeed and clamps it to [0.2, 5.0]; tier-8 units
-        /// clamp at the BOTTOM (0.20/s) and tier-4 units clamp at the TOP (5.0/s). So the law
-        /// asks for ~0.2 bodies/sec against a tier 8 and up to 5 bodies/sec against tier 4 --
-        /// a 25x spread. The stall findings' "$2/sec holds anything" is specifically about a
-        /// lone tier 8.
+        /// GameDataManager recomputes AttackSpeed and clamps it to
+        /// [MIN_ATTACK_SPEED, MAX_ATTACK_SPEED]; tier-8 units clamp at the BOTTOM and tier-4
+        /// units clamp at the TOP (5.0/s). So the law asks for one body per tier-8 swing and
+        /// up to 5 bodies/sec against tier 4. The floor was RAISED 0.20 -> 0.33 on 2026-09-03,
+        /// which narrowed that spread from 25x to 15x and made every ace 65% harder to hold.
+        /// The stall findings' "$2/sec holds anything" is specifically about a lone tier 8 AND
+        /// specifically about the old 0.20 floor -- it is now nearer $3.30/sec.
         ///
         /// v1 capped the PRICE OF EACH BODY (ChipBlockIncomeSeconds) but never the RATE of
         /// spending, so against tier-4 pressure it bought ~5 bodies/sec on a $2/sec income
@@ -1874,10 +1876,11 @@ namespace CastleDefense.Engine.Bot
         ///
         /// THE PRICES MAKE THE CASE. Level 1 is $102 for one free body per second, forever.
         /// The survival law says one body per enemy SWING holds anything, and every tier-8
-        /// unit's AttackSpeed clamps at the BOTTOM of its range (0.20/s, one swing per five
-        /// seconds) -- so level 1 alone is five times the rate needed to neutralise a lone
-        /// tier 8, permanently, for a one-off $102. Level 5 is $860 cumulative for three
-        /// bodies per second.
+        /// unit's AttackSpeed clamps at the BOTTOM of its range -- 0.33/s since 2026-09-03,
+        /// one swing per three seconds -- so level 1 alone is three times the rate needed to
+        /// neutralise a lone tier 8, permanently, for a one-off $102. (It was five times at
+        /// the old 0.20 floor; the case is weaker but still holds.) Level 5 is $860 cumulative
+        /// for three bodies per second.
         ///
         /// PRICED AGAINST THE INVESTMENT RUNG, NOT AGAINST MONEY. Every previous "spend
         /// earlier" experiment in this file died by competing with investing, so the rule
@@ -3566,7 +3569,8 @@ namespace CastleDefense.Engine.Bot
                     eng.OnGadgetCast += (side, gadgetId, pos) =>
                     {
                         if (side != _side)
-                            _oppEconomy?.ObserveGadgetCast(eng.GetGadgetDefinition(gadgetId));
+                            _oppEconomy?.ObserveGadgetCast(eng.GetGadgetDefinition(gadgetId),
+                                (side == 1 ? eng._state.Player1 : eng._state.Player2).Team);
                     };
                 }
                 _oppEconomy.Update(engine);
@@ -5264,10 +5268,20 @@ namespace CastleDefense.Engine.Bot
             // handing it. Measured on the pinned mirror before this existed: between 160s and
             // 210s it paid $22,726 for 11 tier-7 units while 25 identical tier-7 units arrived
             // free from its own reinforcements_3, and tier-7 purchases were 96% of its entire
-            // unit budget for the game. ReinforcementsEffect spawns the first of its five
+            // unit budget for the game. ReinforcementsEffect spawns the first of its squad
             // immediately, so from the moment a wave is cast it is on the field to be counted --
             // which is why the observed-only rule catches almost all of what a predictive one
             // would, without having to forecast a battle.
+            //
+            // WEAKER SINCE THE 2026-09-03 REBALANCE, and knowingly so. The squad now arrives
+            // LOWEST TIER FIRST, so what is immediately observable is a chump and the tier 7
+            // lands at the back of the stream -- 110 ticks later on White at level 3. The
+            // coverage credit for the expensive units therefore appears late, and in that
+            // window the bot can still buy a unit its own gadget is about to deliver. Closing
+            // that needs the queued PendingEffects to be counted as incoming coverage, which
+            // is the predictive model this rule deliberately avoided; the observation stands
+            // that it is a much smaller error than the $22,726 above, because the flat
+            // five-tier-7 payout is gone too.
             //
             // The coverage test deliberately mirrors the purchase test below, including its
             // optimism: both credit a single unit with everything it one-shots in reach, though
@@ -6450,7 +6464,7 @@ namespace CastleDefense.Engine.Bot
             //
             // The cheapest ladders are enormous and land early: wall -> wall_2 is 3 casts x
             // $50 = $150 to turn a 400 HP wall into a 6,000 HP one; reinforcements_3 ends at
-            // five FREE tier-7 units per cast on a 10 s cooldown, charge-free.
+            // $6,000 of FREE roster value per cast on a 10 s cooldown, charge-free.
             //
             // Every self-harm guard below is untouched and still runs. That is not optional:
             // the first version of this path lost 73% of games to an opponent that does

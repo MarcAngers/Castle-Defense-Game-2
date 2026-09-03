@@ -111,13 +111,20 @@ AttackSpeed, DPS, Speed, Width, Height, Description`. There is **no** `Range`,
 tier < 6   ->  tier   * 2 * Speed / Damage
 tier < 7   ->  tier^2     * Speed / Damage
 tier >= 7  ->  tier^3     * Speed / Damage
-clamped to [0.2, 5.0]
+clamped to [0.33, 5.0]      # MIN/MAX_ATTACK_SPEED in GameDataManager
 ```
 
-This clamp is load-bearing for the survival law. **Every tier-8 unit clamps at the BOTTOM
-(0.20/s = one swing per 5 s); tier-4/5 units clamp at the TOP (5.0/s).** That is why a
-tier-4 stream razes an undefended castle far faster per dollar than a tier 8, and why one
-chump per 5.00 s holds any tier 8 indefinitely.
+This clamp is load-bearing for the survival law. **Every tier-8 unit clamps at the BOTTOM;
+tier-4/5 units clamp at the TOP (5.0/s).** That is why a tier-4 stream razes an undefended
+castle far faster per dollar than a tier 8, and why a steady chump feed holds any tier 8
+indefinitely.
+
+**The floor was raised 0.20 -> 0.33 on 2026-09-03** (one swing per 3.03 s, was per 5.00 s).
+It is a floor only the eight aces ever touch — every other unit's raw value is already above
+0.33 — so it is a **65% DPS buff to every tier 8 and a no-op everywhere else**. It also moves
+the chump-blocking arithmetic: the holding threshold goes 5.00 s -> ~3.03 s and the spread
+between the two clamps narrows from 25x to 15x. Numbers measured before that date are stale
+for tier 8; see the note in CLAUDE.md's chump-blocking section.
 
 ### Siege (tier 8 only)
 
@@ -281,7 +288,11 @@ and does not touch `UnitsPurchased` / `MoneySpentOnUnits`. There are four:
 1. **Opening squad** — 5 free tier-1 per side, on ticks 1 / 31 / 61 / 91 / 121. Keyed on
    absolute `CurrentTick`, so league games (which start at `30*30*timeSkip`) get none.
 2. **Auto-spawner**
-3. **Reinforcements gadget** — 5 units of tier `BaseValue`, scheduled at delays 0/10/20/30/40
+3. **Reinforcements gadget** — a squad worth `ceil(Cost * BaseValue)` of roster value,
+   scheduled 15 ticks apart, **lowest tier first**. `BaseValue` is an EFFICIENCY MULTIPLIER
+   (x1.33 / x1.5 / x3), not a tier, since the 2026-09-03 rebalance, and each tier stops
+   buying while one more copy would still fit so the remainder falls to cheaper units.
+   3-7 units at level 1, 11-17 at level 2, 23-32 at level 3, depending on the price curve.
 4. **Wall gadget**
 
 Because these bypass charges, they are the **only** ways to exceed the per-unit-id rate
@@ -303,25 +314,25 @@ value**, and the number of casts needed is `UpgradeCost / 100`:
 | family | L1 cost | casts to L2 | casts L2→L3 | what the upgrade buys |
 |---|---|---|---|---|
 | wall | $50 | 3 | 7 | 400 HP → 6,000 HP → 48,000 HP |
-| reinforcements | $12 | 6 | 9 | 5× tier-1 → 5× tier-5 → 5× tier-7, all free |
+| reinforcements | $12 | 6 | 9 | $16 → $270 → $6,000 of free units |
 | nuke | $20 | 5 | 7 | 200 → 3,000 → 24,000 dmg |
 | freeze | $15 | 7 | 15 | 90 → 150 → 180 tick freeze |
 | firebomb | $18 | 9 | 14 | 10 → 70 → 400 DPS |
 | snipe | $30 | 4 | 9 | 1,500 → 22,500 → 55,000 dmg |
 | heal | $25 | 7 | 15 | 15 → 90 → 500 HPS |
 | speed | $30 | 7 | 15 | ×1.5 → ×2 → ×10 speed |
-| cash | $65 | 5 | 9 | $100 → $1,500 → raining |
+| cash | $75 | 7 | 11 | $100 → $1,500 → 8x $1,500 |
 | rage | $30 | 5 | 11 | ×2 → ×4 → ×10 damage |
 | divine | $50 | 4 | 11 | 100 → 2,500 → 10,000 shield (L3 = invulnerability) |
 | meteor | $50 | 4 | 7 | 500 → 2,500 dmg |
 | goo | $70 | 4 | 7 | 20 → 300 → 2,400 HPS, radius 200 → 1000 |
 | poison | $65 | 4 | 7 | 22 → 165 → 1,320 DPS |
-| wave | $40 | 5 | 9 | 500 → 1,000 → 3,000 knockback |
+| wave | $40 | 5 | 9 | 500 → 1,000 → 3,000 knockback, cap 50 → 100 → 1,000 units |
 | blackhole | $80 | 5 | 14 | 16 → 240 → 1,920 DPS |
 
 `wall` → `wall_2` is **3 casts × $50 = $150 to turn a 400 HP wall into a 6,000 HP one.**
-`reinforcements` → `reinforcements_3` is 15 casts total and yields **5 free tier-7 units
-per cast on a 10 s cooldown, charge-free.**
+`reinforcements` → `reinforcements_3` is 15 casts total and yields **$6,000 of free roster
+value per cast on a 10 s cooldown, charge-free** — for a $2,000 cast, so x3.
 
 Casting with `position == -1` routes through `GadgetTargeting.AutoTarget`, which may return
 `null` — that **refuses** the cast: no money spent, no cooldown started, `ApplyAction`

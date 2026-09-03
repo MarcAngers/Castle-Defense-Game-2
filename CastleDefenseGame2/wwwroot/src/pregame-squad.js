@@ -57,12 +57,26 @@ class PreGameSquad {
     constructor() {
         this.units = [];
         this.gameId = null;
+        this.key = null;
     }
 
-    /// Build both sides' squads for this game. Idempotent per game id, so the frame loop can
-    /// call it every frame without rebuilding (and re-randomising) the crowd each time.
+    /// Build both sides' squads for this game. Idempotent per game id AND per pair of teams,
+    /// so the frame loop can call it every frame without rebuilding (and re-randomising) the
+    /// crowd -- but a team that was not known when the crowd was first built still corrects
+    /// itself the moment it arrives.
+    ///
+    /// THE TEAMS ARE PART OF THE KEY BECAUSE ONE OF THEM CAN BE A LIE AT BUILD TIME.
+    /// `TeamColour.Black` is 0, so an unassigned PlayerState.Team serialises as Black rather
+    /// than as anything obviously missing. In multiplayer P1 joins first and is sent the
+    /// state immediately, at which point P2 has no team yet -- so P1's copy of P2 reads as
+    /// Black, and P1 alone saw the opponent's crowd as Black tier-1s for the whole game while
+    /// P2 saw both sides correctly. Keying on the game id alone cached that first wrong
+    /// answer forever, because the real units carry their own definitionId and looked right,
+    /// which is why only the pre-game crowd was affected.
     ensure(state, gameId) {
-        if (this.gameId === gameId && this.units.length) return;
+        const key = state ? `${gameId}:${state.player1?.team}:${state.player2?.team}` : gameId;
+        if (this.key === key && this.units.length) return;
+        this.key = key;
         this.gameId = gameId;
         this.units = [];
         if (!state) return;
@@ -96,6 +110,7 @@ class PreGameSquad {
     reset() {
         this.units = [];
         this.gameId = null;
+        this.key = null;
     }
 
     /// deltaMs comes from the render loop, so the hop runs at the same speed on any refresh
