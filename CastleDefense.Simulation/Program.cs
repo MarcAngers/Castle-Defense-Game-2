@@ -214,6 +214,20 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--replay-why")
+            {
+                GameDataManager.Initialize();
+                ReplayGauntlet.Why(args, FindRecordingsDir());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--replay-economy")
+            {
+                GameDataManager.Initialize();
+                ReplayGauntlet.Economy(args, FindRecordingsDir());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-timeline")
             {
                 GameDataManager.Initialize();

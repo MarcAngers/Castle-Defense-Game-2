@@ -4955,6 +4955,9 @@ namespace CastleDefense.Engine.Bot
             return ok;
         }
 
+        /// <summary>Diagnostic passthrough for offline replay analysis.</summary>
+        public static float DiagSecondsToArmageddon(PlayerState me) => SecondsToArmageddon(me);
+
         private static float SecondsToArmageddon(PlayerState me)
         {
             if (me.ArmageddonUsed) return 0f;
@@ -6193,6 +6196,10 @@ namespace CastleDefense.Engine.Bot
             }
             return baseScore * SurvivabilityMultiplier(def, enemyHitDamage);
         }
+
+        /// <summary>Diagnostic passthrough to ScoreUnit for offline replay analysis.</summary>
+        public static double DiagScore(UnitDefinition def, bool preferDefense, float enemyHitDamage, bool multiplicative)
+            => ScoreUnit(def, preferDefense, enemyHitDamage, multiplicative);
 
         private static double RawPower(UnitDefinition def, float enemyHitDamage)
         {

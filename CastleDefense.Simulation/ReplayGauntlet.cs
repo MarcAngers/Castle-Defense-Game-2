@@ -338,6 +338,12 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"    gadgets        {gadget[1],14:N0} {gadget[2],13:N0}");
             Console.WriteLine($"    repairs        {LadderCost(p1.RepairCount, true),14:N0} {LadderCost(p2.RepairCount, true),13:N0}");
             Console.WriteLine($"    investments    {LadderCost(p1.InvestmentCount, false),14:N0} {LadderCost(p2.InvestmentCount, false),13:N0}");
+            // ARMAGEDDON IS NOT IN THE INVESTMENT LADDER. Buying it does NOT run
+            // ApplyInvestmentStep -- InvestmentCount stays at 8 and ArmageddonUsed is set
+            // instead -- so LadderCost(InvestmentCount) misses it entirely. In 73DBD4 that
+            // silently omitted $121,221 from the human's column and made the bot look like it
+            // had out-earned him 2.5x when the real ratio is 1.15x.
+            Console.WriteLine($"    ARMAGEDDON     {(p1.ArmageddonUsed ? 121221 : 0),14:N0} {(p2.ArmageddonUsed ? 121221 : 0),13:N0}");
             Console.WriteLine($"    auto-spawner   {AutoCost(p1.AutoSpawnLevel),14:N0} {AutoCost(p2.AutoSpawnLevel),13:N0}   (levels {p1.AutoSpawnLevel} / {p2.AutoSpawnLevel})");
             Console.WriteLine($"    unspent        {p1.Money,14:N0} {p2.Money,13:N0}");
             Console.WriteLine($"    units bought   {engine.UnitsPurchased[1],14:N0} {engine.UnitsPurchased[2],13:N0}");
@@ -439,6 +445,177 @@ namespace CastleDefense.Simulation
             Console.WriteLine($"  total gadget casts: P1 {casts[1]}, P2 {casts[2]}");
             Console.WriteLine();
             foreach (var e in events) Console.WriteLine(e);
+        }
+
+        /// <summary>
+        /// Dumps the per-second economy of a recorded game to CSV: both sides' money, income,
+        /// investment count, castle HP, plus the cumulative spend split by category. Written so
+        /// Marc can see the shape of a game rather than only its totals.
+        /// </summary>
+        public static void Economy(string[] args, string recordingsDir)
+        {
+            string target = args.Length > 1 ? args[1] : null;
+            string outPath = null;
+            for (int i = 1; i < args.Length; i++)
+                if (args[i] == "--csv" && i + 1 < args.Length) outPath = args[++i];
+            if (target == null) { Console.WriteLine("usage: --replay-economy <gameId> [--csv path]"); return; }
+            string path = File.Exists(target) ? target
+                        : Path.Combine(recordingsDir, "singleplayer", target + ".replay");
+            if (!File.Exists(path)) { Console.WriteLine($"No replay at {path}"); return; }
+            outPath ??= $"economy_{Path.GetFileNameWithoutExtension(path)}.csv";
+
+            var rf = ReplayFile.Read(path);
+            var (state, engine) = rf.BuildStart();
+            long start = state.CurrentTick;
+
+            var gadget = new double[3];
+            engine.OnGadgetCast += (side, id, pos) =>
+            {
+                var gd = engine.GetGadgetDefinition(id);
+                if (gd != null && side >= 1 && side <= 2) gadget[side] += gd.Cost;
+            };
+            var upgrades = new List<string>();
+            engine.OnGadgetUpgraded += (side, def) =>
+                upgrades.Add($"{(state.CurrentTick - start) / 30.0:F0},{side},{def.Id}");
+
+            using var w = new StreamWriter(outPath);
+            w.WriteLine("second,p1_money,p1_income,p1_invest,p1_hp_pct,p1_repairs,p1_units_spent,p1_gadget_spent," +
+                        "p2_money,p2_income,p2_invest,p2_hp_pct,p2_repairs,p2_units_spent,p2_gadget_spent");
+
+            while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
+            {
+                engine.Tick();
+                long i = state.CurrentTick - start;
+                if (i >= 0 && i < rf.A1.Length)
+                {
+                    if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
+                    if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
+                }
+                if (i % 30 != 0) continue;
+                var a = state.Player1; var b = state.Player2;
+                w.WriteLine($"{i / 30},{a.Money:F0},{a.Income:F0},{a.InvestmentCount},{Pct(a):F1}," +
+                            $"{LadderCost(a.RepairCount, true):F0},{engine.MoneySpentOnUnits[1]:F0},{gadget[1]:F0}," +
+                            $"{b.Money:F0},{b.Income:F0},{b.InvestmentCount},{Pct(b):F1}," +
+                            $"{LadderCost(b.RepairCount, true):F0},{engine.MoneySpentOnUnits[2]:F0},{gadget[2]:F0}");
+            }
+            Console.WriteLine($"wrote {outPath}  ({(state.CurrentTick - start) / 30}s, winner P{state.WinnerSide})");
+            Console.WriteLine("upgrades (second,side,gadget):");
+            foreach (var u in upgrades) Console.WriteLine("  " + u);
+        }
+
+        /// <summary>
+        /// Prints every expensive unit purchase in a recorded game with the decision context
+        /// around it -- money, enemy board, and each gate in the wiper's own test. Written for
+        /// Marc's 73DBD4 question: why did the bot buy a $23,000 tier 8?
+        ///
+        /// Recorded actions are attempts, and the action id alone says nothing about which
+        /// branch chose it, so this reconstructs the state at that tick and re-evaluates the
+        /// gates rather than inferring them.
+        /// </summary>
+        public static void Why(string[] args, string recordingsDir)
+        {
+            string target = args.Length > 1 ? args[1] : null;
+            double minCost = 500;
+            for (int i = 1; i < args.Length; i++)
+                if (args[i] == "--min" && i + 1 < args.Length) minCost = double.Parse(args[++i]);
+            if (target == null) { Console.WriteLine("usage: --replay-why <gameId> [--min cost]"); return; }
+            string path = File.Exists(target) ? target
+                        : Path.Combine(recordingsDir, "singleplayer", target + ".replay");
+            if (!File.Exists(path)) { Console.WriteLine($"No replay at {path}"); return; }
+
+            var rf = ReplayFile.Read(path);
+            var (state, engine) = rf.BuildStart();
+            long start = state.CurrentTick;
+            var botTeam = GameDataManager.Teams.Find(t => t.Color == state.Player2.Team);
+            int botCastle = GameEngine.MAP_WIDTH - 200;
+
+            Console.WriteLine($"=== EXPENSIVE BOT PURCHASES -- {rf.GameId} (>= ${minCost:N0}) ===");
+            Console.WriteLine("The bot is P2. WaveWipeRadius is 500px from its own wall.");
+
+            var oppEcon = new CastleDefense.Engine.Bot.OpponentEconomy(1);
+            while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
+            {
+                engine.Tick();
+                long i = state.CurrentTick - start;
+                if (i < 0 || i >= rf.A1.Length) continue;
+                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
+
+                oppEcon.Update(engine);
+
+                byte a = rf.A2[i];
+                if (a >= 1 && a <= 8 && botTeam != null && a - 1 < botTeam.Roster.Count)
+                {
+                    var def = botTeam.Roster[a - 1];
+                    if (def.Cost >= minCost)
+                    {
+                        var me = state.Player2;
+                        // The enemy board, as the wiper's own tests measure it.
+                        double committedVal = 0; int committedN = 0; double toughest = 0;
+                        string toughestId = "-";
+                        foreach (var u in state.Units)
+                        {
+                            if (u.Side == 2) continue;
+                            if (Math.Abs(u.Position - botCastle) > 500) continue;
+                            committedN++;
+                            committedVal += CastleDefense.Engine.Gadgets.GadgetTargeting.UnitCost(engine, u);
+                            double ehp = u.CurrentHealth + u.CurrentShield;
+                            if (ehp > toughest) { toughest = ehp; toughestId = u.DefinitionId; }
+                        }
+                        double topCost = botTeam.Roster.Where(x => x.Cost > 0)
+                            .Select(x => (double)x.Cost).DefaultIfEmpty(1).Max();
+                        // Cheapest unit that one-shots the toughest committed enemy.
+                        var oneShot = botTeam.Roster.Where(d => d.Cost > 0 && d.Damage >= toughest)
+                            .OrderBy(d => d.Cost).FirstOrDefault();
+
+                        Console.WriteLine($"{i / 30,5}s  BOUGHT {def.Id} (T{def.Tier}) ${def.Cost:N0}");
+                        Console.WriteLine($"        bot money ${me.Money:N0}  income ${me.Income:N0}/s  " +
+                                          $"invest {me.InvestmentCount}  hp {100.0 * me.CastleHealth / Math.Max(1, me.CastleMaxHealth):F0}%");
+                        Console.WriteLine($"        enemy committed within 500px: {committedN} units, " +
+                                          $"value ${committedVal:N0}, toughest {toughestId} @ {toughest:N0} ehp");
+                        // --- what the OFFENSIVE branch was choosing between ---------
+                        float enemyHit = 0;
+                        int domTier = 0; double domDmg = 0; var tierDmg = new Dictionary<int,double>();
+                        foreach (var u in state.Units)
+                        {
+                            if (u.Side == 2) continue;
+                            if (u.Damage > enemyHit) enemyHit = u.Damage;
+                            tierDmg.TryGetValue(u.Tier, out double d);
+                            tierDmg[u.Tier] = d + u.Damage;
+                        }
+                        foreach (var kv in tierDmg) if (kv.Value > domDmg) { domDmg = kv.Value; domTier = kv.Key; }
+                        Console.WriteLine($"        enemy field: {state.Units.Count(x => x.Side == 1)} units, " +
+                                          $"dominant tier T{domTier}, biggest single hit {enemyHit:N0}");
+                        foreach (var d in botTeam.Roster.Where(x => x.Tier >= domTier && x.Cost > 0).OrderBy(x => x.Tier))
+                        {
+                            double sc = CastleDefense.Engine.Bot.HeuristicBot.DiagScore(d, false, enemyHit, true);
+                            Console.WriteLine($"          T{d.Tier} {d.Id,-12} ${d.Cost,7:N0}  hp {d.MaxHealth,7:N0}  " +
+                                              $"dmg {d.Damage,6:N0} x {d.AttackSpeed:F2}/s  affordable {(d.Cost <= me.Money ? "yes" : "NO ")}  " +
+                                              $"score {sc,12:N0}");
+                        }
+
+                        float mineSec = CastleDefense.Engine.Bot.HeuristicBot.DiagSecondsToArmageddon(me);
+                        var oppSnap = oppEcon.Snapshot();
+                        float theirSec = CastleDefense.Engine.Bot.HeuristicBot.DiagSecondsToArmageddon(oppSnap);
+                        var afterBuy = me.Clone(); afterBuy.Money -= def.Cost;
+                        float afterSec = CastleDefense.Engine.Bot.HeuristicBot.DiagSecondsToArmageddon(afterBuy);
+                        Console.WriteLine($"        RACE GATE: bot {mineSec:F0}s to ARMAGEDDON, modelled human {theirSec:F0}s " +
+                                          $"(tracker: money ${oppSnap.Money:N0}, income ${oppSnap.Income:N0}/s, invest {oppSnap.InvestmentCount}) " +
+                                          $"-> offence {(mineSec <= theirSec ? "ALLOWED" : "HELD")}");
+                        Console.WriteLine($"        AFTER PAYING ${def.Cost:N0}: bot {afterSec:F0}s vs human {theirSec:F0}s " +
+                                          $"-> {(afterSec <= theirSec ? "still ahead" : $"BEHIND by {afterSec - theirSec:F0}s")} " +
+                                          $"(the purchase cost {afterSec - mineSec:F0}s of race position)");
+
+                        Console.WriteLine($"        WIPER gates: cheapest one-shot = " +
+                                          $"{(oneShot?.Id ?? "none")} ${oneShot?.Cost ?? 0:N0}   " +
+                                          $"budget = 0.35 x ${committedVal:N0} = ${committedVal * 0.35:N0}   " +
+                                          $"-> {(oneShot != null && oneShot.Cost <= committedVal * 0.35 ? "PASSES" : "FAILS")}");
+                        Console.WriteLine($"        RICH MODE: money >= 3 x topCost (${topCost * 3:N0})? " +
+                                          $"{(me.Money >= topCost * 3 ? "YES -> switches to RawPower ranking" : "no")}");
+                        Console.WriteLine();
+                    }
+                }
+                if (a != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, a);
+            }
         }
 
         private static double AutoCost(int level)
