@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Replay — Castle Defense Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/analysis/analysis.css">
+</head>
+<body>
+<div id="bar"></div>
+<div class="wrap">
+  <div id="content">
+    <h1>Rebuilding…</h1>
+    <p class="sub"><span class="spinner"></span> Replaying the recorded action stream. A five-minute game takes
+       a moment; nothing is cached, so this runs against the build that is loaded right now.</p>
+  </div>
+</div>
+
+<script type="module">
+import { topBar, getJson, el, fmt, lineChart, esc } from '/analysis/analysis.js';
+document.getElementById('bar').replaceWith(topBar('/analysis/replays.html'));
+
+const id = new URLSearchParams(location.search).get('id');
+const root = document.getElementById('content');
+
+if (!id) {
+  root.replaceChildren(el('h1', { text: 'No replay selected' }),
+    el('p', { class: 'sub' }, el('a', { href: '/analysis/replays.html', text: 'Pick one from the list' })));
+} else {
+  load();
+}
+
+async function load() {
+  let d;
+  try { d = await getJson('/api/analysis/replay/' + encodeURIComponent(id)); }
+  catch (e) {
+    root.replaceChildren(el('h1', { text: 'Could not build the report' }), el('p', { class: 'sub', text: e.message }));
+    return;
+  }
+  root.replaceChildren(...report(d));
+}
+
+function report(d) {
+  const out = [];
+  const dead = d.fidelity.perfect ? null : d.fidelity.trustedUntilSecond;
+  const S = d.samples;
+  const lastSec = S.length ? S[S.length - 1].second : 0;
+
+  out.push(el('h1', {}, `Game ${d.id}`));
+  out.push(el('p', { class: 'sub' },
+    `${fmt.when(d.playedAt)} · ${modeLabel(d.mode)}${d.opponentType ? ' vs ' + d.opponentType : ''} · map ${d.map}${d.shadowMap ? ' (shadow)' : ''} · `,
+    d.recorded.winner ? `P${d.recorded.winner} won` : 'draw',
+    ` · ${fmt.clock(d.recorded.ticks / 30)} · replay v${d.formatVersion}`));
+
+  // ── the two banners that decide whether any of this is believable ──────────
+  // A RECORDED fingerprint and a BACKFILLED one are both shown, and never as the same thing.
+  // v4 replays wrote theirs down; older ones carry what --backfill-balance recovered from git
+  // history, which is a derivation whose confidence the tool reports honestly.
+  const rec = d.balance.source === 'recorded';
+  const gHash = rec ? d.balance.recordedGadgets : d.balance.inferredGadgets;
+  const rHash = rec ? d.balance.recordedRoster : d.balance.inferredRoster;
+  const prov = rec
+    ? 'recorded by the engine at game over (replay v4)'
+    : d.balance.source === 'verified'
+      ? 'recovered from git history and confirmed by rebuilding the game'
+      : d.balance.source === 'ambiguous'
+        ? 'recovered from git history; several versions reproduce this game equally well'
+        : 'derived from the commit timeline — the rebuild could not confirm it';
+
+  if (!gHash) {
+    out.push(el('div', { class: 'callout' },
+      `No balance fingerprint for this game: it predates the v4 replay format and `,
+      `--backfill-balance has not been run over this corpus yet.`));
+  } else if (d.balance.status !== 'Match') {
+    out.push(el('div', { class: 'callout bad' },
+      el('strong', { text: 'Balance data has changed since this game was played. ' }),
+      `The rebuild below runs under different rules than the game did (${balWord(d.balance.status)}), `,
+      `so it does not necessarily reproduce it. Played under `,
+      el('code', { text: gHash }), ' / ', el('code', { text: rHash || '—' }),
+      `, current is `, el('code', { text: d.balance.currentGadgets }), ' / ',
+      el('code', { text: d.balance.currentRoster }), '. ',
+      el('span', { class: 'muted', text: prov + '.' }),
+      d.balance.inferenceDetail && !rec
+        ? el('div', { class: 'note', style: 'margin-top:6px' }, d.balance.inferenceDetail) : null));
+  } else if (!rec && d.balance.source === 'dated' && !d.fidelity.perfect) {
+    // THE TIMELINE AND THE REBUILD DISAGREE, and the timeline is the weaker witness. It says
+    // the balance data has not changed since this game; the rebuild says the game does not
+    // replay. Both cannot be right, so claim neither -- a confident green "match" here is
+    // worse than saying nothing. Game 1F3C07 is exactly this: played three minutes after the
+    // CSV was saved but before it was ever built, so the timeline picks a version the engine
+    // had not loaded yet.
+    out.push(el('div', { class: 'callout warn' },
+      el('strong', { text: 'The commit timeline and the rebuild disagree. ' }),
+      `By date this game should have been played under the master CSVs loaded now `,
+      `(`, el('code', { text: gHash }), `) — but it does not replay, so it was not. `,
+      `Either it ran on a working-tree version that was never committed (the engine reads its `,
+      `build output, which can lag the source by hours), or engine code has changed since. `,
+      el('span', { class: 'muted', text: prov + '.' })));
+  } else {
+    out.push(el('div', { class: 'callout good' },
+      `Balance data matches: this game was played under the same master CSVs that are loaded now `,
+      `(`, el('code', { text: gHash }), `). `,
+      el('span', { class: 'muted', text: prov + '.' })));
+  }
+
+  // TWO INDEPENDENT TESTS, AND BOTH HAVE TO PASS.
+  //
+  // The failed-action count is the sharp one, but it is only as strong as the number of
+  // actions there were to fail — a game with seven actions can replay all seven and still
+  // land somewhere else entirely. So the outcome is checked against the row captured live
+  // at game over as well, and "exact" is claimed only when both agree.
+  const gt = d.groundTruth;
+  if (!d.fidelity.perfect) {
+    out.push(el('div', { class: 'callout bad' },
+      el('strong', { text: `Reconstruction diverges at ${d.fidelity.trustedUntilSecond}s. ` }),
+      `${d.fidelity.p1Failed} of ${d.fidelity.p1Attempted} P1 and ${d.fidelity.p2Failed} of ${d.fidelity.p2Attempted} P2 `,
+      `recorded actions failed to replay — first at tick ${d.fidelity.firstFailureTick} (P${d.fidelity.firstFailureSide}, action ${d.fidelity.firstFailureAction}). `,
+      `The recorder only ever writes an action the live engine accepted, so a refusal means this rebuild's state `,
+      `has drifted from the real game's. Everything past the marker on the charts is shaded and should not be read.`));
+  } else if (gt && gt.exact) {
+    out.push(el('div', { class: 'callout good' },
+      el('strong', { text: 'Reconstruction is exact. ' }),
+      `All ${d.fidelity.p1Attempted} P1 and ${d.fidelity.p2Attempted} P2 recorded actions replayed cleanly, and the `,
+      `rebuild ends on tick ${d.rebuilt.ticks} with P1 on ${fmt.money(d.rebuilt.p1Money)} and P2 on ${fmt.money(d.rebuilt.p2Money)} — `,
+      `matching what the database captured live at game over.`));
+  } else if (gt) {
+    const diffs = [
+      !gt.ticksMatch ? `it ends on tick ${d.rebuilt.ticks} against a recorded ${d.recorded.ticks}` : null,
+      !gt.winnerMatch ? `it gives the game to P${d.rebuilt.winner} rather than P${d.recorded.winner}` : null,
+      !gt.moneyMatch ? `final money is ${fmt.money(d.rebuilt.p1Money)} / ${fmt.money(d.rebuilt.p2Money)} against a recorded ${fmt.money(d.recorded.p1Money)} / ${fmt.money(d.recorded.p2Money)}` : null
+    ].filter(Boolean);
+    out.push(el('div', { class: 'callout warn' },
+      el('strong', { text: 'Every recorded action replayed, but the rebuild does not land where the real game did. ' }),
+      `None of the ${d.fidelity.p1Attempted + d.fidelity.p2Attempted} recorded actions failed — but that test is only `,
+      `as strong as the number of actions there were to fail, and this game had ${d.fidelity.p1Attempted + d.fidelity.p2Attempted}. `,
+      `Against the row captured live at game over, ${diffs.join('; ')}. `,
+      `Read the shape of the economy here, not the exact figures.`));
+  } else {
+    out.push(el('div', { class: 'callout' },
+      `All ${d.fidelity.p1Attempted} P1 and ${d.fidelity.p2Attempted} P2 recorded actions replayed cleanly. `,
+      `There is no database row for this game, so the rebuilt outcome could not be checked against ground truth.`));
+  }
+
+  // ── loadouts ───────────────────────────────────────────────────────────────
+  out.push(el('h2', { text: 'Loadouts' }));
+  out.push(el('div', { class: 'card scroll' }, table(
+    ['', 'Team', 'Offence', 'Defence', 'Signature'],
+    [1, 2].map(side => {
+      const t = side === 1 ? d.teams.p1 : d.teams.p2;
+      const isBot = d.botSide === side;
+      return [
+        el('span', {}, el('span', { class: 'badge ' + (side === 1 ? 'p1' : 'p2'), text: 'P' + side }),
+          isBot ? el('span', { class: 'muted', text: ' bot' }) : el('span', { class: 'muted', text: ' human' })),
+        t.team,
+        tier(t.start.off, t.end.off), tier(t.start.def, t.end.def), tier(t.start.sig, t.end.sig)
+      ];
+    }))));
+  out.push(el('p', { class: 'note' },
+    'Start tier → end tier where a gadget upgraded mid-game. ',
+    d.botProfile ? `The bot ran the ${d.botProfile} settings profile.` : ''));
+
+  // ── charts ─────────────────────────────────────────────────────────────────
+  const armaMarks = [];
+  if (d.armageddon.p1) armaMarks.push({ x: d.armageddon.p1Second, label: 'P1 ARMAGEDDON' });
+  if (d.armageddon.p2) armaMarks.push({ x: d.armageddon.p2Second, label: 'P2 ARMAGEDDON' });
+
+  const investDots = [];
+  for (let i = 1; i < S.length; i++) {
+    if (S[i].p1Invest > S[i - 1].p1Invest) investDots.push({ x: S[i].second, y: S[i].p1Money, cls: 'd1' });
+    if (S[i].p2Invest > S[i - 1].p2Invest) investDots.push({ x: S[i].second, y: S[i].p2Money, cls: 'd2' });
+  }
+
+  out.push(el('h2', { text: 'Economy' }));
+  out.push(chartCard('Money held', S.map(s => ({ x: s.second, y1: s.p1Money, y2: s.p2Money })),
+    { deadFrom: dead, marks: armaMarks, dots: investDots },
+    'Dots mark an investment. ARMAGEDDON is an invest action taken at the top rung, so it shows as a cliff rather than as spending.'));
+
+  out.push(chartCard('Income', S.map(s => ({ x: s.second, y1: s.p1Income, y2: s.p2Income })),
+    { deadFrom: dead, marks: armaMarks, fmtY: fmt.rate },
+    'The economy ladder has eight rungs; being one rung up is what "ahead economically" means on this page, whatever either side has banked.'));
+
+  out.push(chartCard('Cumulative spend (units + gadgets + repairs)',
+    S.map(s => ({ x: s.second, y1: s.p1Units + s.p1Gadgets + s.p1Repairs, y2: s.p2Units + s.p2Gadgets + s.p2Repairs })),
+    { deadFrom: dead, marks: armaMarks },
+    'Auto-spawner upgrades and ARMAGEDDON are not in this total — neither is a unit, a gadget or a repair.'));
+
+  out.push(chartCard('Units on the field', S.map(s => ({ x: s.second, y1: s.p1Alive, y2: s.p2Alive })),
+    { deadFrom: dead, marks: armaMarks, fmtY: v => String(Math.round(v)), height: 200 },
+    'What the money actually bought, as opposed to what it cost.'));
+
+  // ── breakdown ──────────────────────────────────────────────────────────────
+  const last = S[S.length - 1] || {};
+  out.push(el('h2', { text: 'Breakdown' }));
+  out.push(el('div', { class: 'card scroll' }, table(
+    ['', 'P1', 'P2', 'source'],
+    [
+      ['Final money', fmt.money(d.recorded.p1Money), fmt.money(d.recorded.p2Money), 'recorded live'],
+      ['Final income', fmt.rate(d.recorded.p1Income), fmt.rate(d.recorded.p2Income), 'recorded live'],
+      ['Final castle', fmt.pct(d.recorded.p1HpPct), fmt.pct(d.recorded.p2HpPct), 'recorded live'],
+      ['Investments', String(last.p1Invest ?? '—'), String(last.p2Invest ?? '—'), 'rebuilt'],
+      ['Spent on units', fmt.money(last.p1Units), fmt.money(last.p2Units), 'rebuilt'],
+      ['Spent on gadgets', fmt.money(last.p1Gadgets), fmt.money(last.p2Gadgets), 'rebuilt'],
+      ['Spent on repairs', fmt.money(last.p1Repairs), fmt.money(last.p2Repairs), 'rebuilt'],
+      ['Auto-spawner level', String(last.p1Auto ?? 0), String(last.p2Auto ?? 0), 'rebuilt'],
+      ['ARMAGEDDON', armaText(d, 1), armaText(d, 2), 'rebuilt'],
+      ['Rebuilt final money', fmt.money(d.rebuilt.p1Money), fmt.money(d.rebuilt.p2Money),
+        el('span', { class: gt && gt.exact ? 'badge good' : 'badge warn', text: gt && gt.exact ? 'matches' : 'diverged' })]
+    ])));
+  out.push(el('p', { class: 'note' },
+    '"recorded live" comes straight from game_records.db, captured from the true PlayerState at game over with no '
+    + 'resimulation. "rebuilt" is re-simulated and is only as good as the fidelity banner above says it is.'));
+
+  // ── upgrades ───────────────────────────────────────────────────────────────
+  if (d.upgrades.length) {
+    out.push(el('h2', { text: 'Gadget upgrades' }));
+    out.push(el('div', { class: 'card scroll' }, table(['Time', 'Side', 'Reached'],
+      d.upgrades.map(u => [fmt.clock(u.second), el('span', { class: 'badge ' + (u.side === 1 ? 'p1' : 'p2'), text: 'P' + u.side }), fmt.gadget(u.gadget)]))));
+  }
+
+  // ── highlights ─────────────────────────────────────────────────────────────
+  out.push(el('h2', { text: `Highlights — ${d.highlights.length} economy swing${d.highlights.length === 1 ? '' : 's'}` }));
+  out.push(el('p', { class: 'note', style: 'margin-top:0' },
+    'A swing is a change in who is ahead economically. The lead is hierarchical: whoever is up an income rung is ahead, '
+    + 'full stop, and only when both sit on the same rung does money held decide it. A new leader has to hold the lead '
+    + 'for four seconds before it counts, so two banks a few dollars apart do not trade the lead every second.'));
+
+  if (!d.highlights.length) {
+    out.push(el('div', { class: 'card' }, el('p', { class: 'note', style: 'margin:0', text:
+      'The economy lead never changed hands in this game.' })));
+  }
+  for (const h of d.highlights) out.push(highlightCard(h, d));
+
+  return out;
+}
+
+function highlightCard(h, d) {
+  const kids = [
+    el('div', { class: 'hl-head' },
+      el('span', { class: 'hl-time', text: fmt.clock(h.second) }),
+      el('span', { class: 'badge ' + (h.leader === 1 ? 'p1' : 'p2'), text: 'P' + h.leader + ' ahead' }),
+      el('span', { class: 'badge', text: 'on ' + h.basis }),
+      el('span', { class: 'hl-title', text: h.headline })),
+    el('div', { class: 'hl-body' },
+      `P1 ${fmt.rate(h.p1Income)} · ${fmt.money(h.p1Money)} · ${h.p1Invest} invests`,
+      el('br'),
+      `P2 ${fmt.rate(h.p2Income)} · ${fmt.money(h.p2Money)} · ${h.p2Invest} invests`),
+    el('div', { class: 'hl-actions' },
+      el('span', {}, el('span', { class: 'badge p1', text: 'P1 did' }), ' ', h.p1Actions.length ? h.p1Actions.join(', ') : el('span', { class: 'muted', text: 'nothing' })),
+      el('span', {}, el('span', { class: 'badge p2', text: 'P2 did' }), ' ', h.p2Actions.length ? h.p2Actions.join(', ') : el('span', { class: 'muted', text: 'nothing' })))
+  ];
+
+  if (h.bot) {
+    kids.push(el('div', { class: 'hl-body', style: 'border-top:1px solid var(--line);padding-top:9px;margin-top:9px' },
+      el('span', { class: 'badge acc', text: 'bot thinking' }), ' ',
+      el('span', { text: h.bot.summary })));
+    if (h.bot.note) kids.push(el('div', { class: 'callout warn', style: 'margin-top:8px;font-size:12.5px' }, h.bot.note));
+    const det = el('details', { class: 'gates' },
+      el('summary', { text: `the gates at this moment (${h.bot.gates.length}) — re-derived from state, not recorded` }),
+      ...h.bot.gates.map(g => el('div', { class: 'gate' },
+        el('span', { class: 'dot ' + (g.open ? 'open' : 'shut') }),
+        el('span', { class: 'gname', text: g.name }),
+        el('span', { style: 'flex:1' }, g.detail),
+        el('span', { class: 'gsrc', text: g.source }))));
+    kids.push(det);
+  }
+  return el('div', { class: 'hl' }, ...kids);
+}
+
+// Unlike the replay LIST — which reads the v4 header because it cannot resimulate 300 games
+// — the report watches PlayerState.ArmageddonUsed during the rebuild, so it works on v3
+// replays as well. It is only as good as the fidelity banner, like everything else rebuilt.
+function armaText(d, side) {
+  const used = side === 1 ? d.armageddon.p1 : d.armageddon.p2;
+  const at = side === 1 ? d.armageddon.p1Second : d.armageddon.p2Second;
+  return used ? `bought at ${fmt.clock(at)}` : 'never';
+}
+
+function tier(start, end) {
+  if (!start && !end) return '—';
+  if (!start || start === end) return fmt.gadget(end || start);
+  return el('span', {}, fmt.gadget(start), el('span', { class: 'muted', text: ' → ' }), fmt.gadget(end));
+}
+
+function modeLabel(m) {
+  return ({ sp: 'singleplayer', mp: 'multiplayer', practice: 'practice', accept: 'acceptance test',
+            league: 'league', watch: 'spectated', defwatch: 'defence watch' })[m] || (m || 'unknown mode');
+}
+
+function balWord(s) {
+  return s === 'GadgetsChanged' ? 'master_gadgets.csv differs'
+       : s === 'RosterChanged' ? 'master_roster.csv differs'
+       : 'both master CSVs differ';
+}
+
+function chartCard(title, points, opts, note) {
+  return el('div', { class: 'card' },
+    el('div', { style: 'font-weight:600;font-size:13.5px' }, title),
+    el('div', { class: 'legend' },
+      el('span', {}, el('i', { class: 'l1' }), 'P1'),
+      el('span', {}, el('i', { class: 'l2' }), 'P2')),
+    lineChart(points, { ...opts, title }),
+    note ? el('p', { class: 'note', text: note }) : null);
+}
+
+function table(headers, rows) {
+  return el('table', {},
+    el('thead', {}, el('tr', {}, headers.map((h, i) => el('th', { class: i > 0 && i < headers.length - 1 ? '' : '' }, h)))),
+    el('tbody', {}, rows.map(r => el('tr', {}, r.map(c => el('td', {}, typeof c === 'string' ? c : c))))));
+}
+</script>
+</body>
+</html>

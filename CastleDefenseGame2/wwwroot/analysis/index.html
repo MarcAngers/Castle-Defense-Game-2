@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Castle Defense — Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/analysis/analysis.css">
+</head>
+<body>
+<div id="bar"></div>
+<div class="wrap">
+  <h1>Analysis</h1>
+  <p class="sub">Everything that gets looked at repeatedly, in one place. Nothing here is cached — reports are
+     generated on demand so they can never describe a build that is no longer running.</p>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <h2 style="margin-top:0">Balance dashboard</h2>
+      <p class="note" id="dash-state">checking…</p>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <a class="btn" href="/analysis/dashboard.html">Open dashboard</a>
+        <button id="run" class="primary">Update dashboard</button>
+      </div>
+      <p class="note">16,384 games, HeuristicBot both seats, about two minutes. The sweep is deterministic, so an
+         unchanged build reproduces the previous run exactly and the &Delta; column means what it says.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Replays</h2>
+      <p class="note" id="rep-state">checking…</p>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <a class="btn" href="/analysis/replays.html">Browse replays</a>
+      </div>
+      <p class="note">Every recorded game, filterable by category and sortable on any column. Opening one rebuilds it
+         and reports the economy, the swings, and — for singleplayer — what the bot's own gates said at each swing.</p>
+    </div>
+  </div>
+
+  <div id="runbox" hidden>
+    <h2>Dashboard update</h2>
+    <div class="card">
+      <p class="note" id="run-state" style="margin-top:0"></p>
+      <div class="log" id="run-log"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { topBar, getJson, el, fmt } from '/analysis/analysis.js';
+document.getElementById('bar').replaceWith(topBar('/analysis/'));
+
+const runBtn = document.getElementById('run');
+const runBox = document.getElementById('runbox');
+const runState = document.getElementById('run-state');
+const runLog = document.getElementById('run-log');
+const dashState = document.getElementById('dash-state');
+
+async function refreshDash() {
+  try {
+    const s = await getJson('/api/analysis/dashboard/status');
+    dashState.textContent = s.generated
+      ? `Last generated ${s.generated}.`
+      : 'Not generated yet — run an update to build it.';
+    if (!s.available) {
+      dashState.textContent += ' (update-dashboard.bat not found — not a source checkout.)';
+      runBtn.disabled = true;
+    } else if (!s.allowed) {
+      // Deliberately explicit rather than a dead button: this is a policy refusal,
+      // not a failure, and saying so is the difference between the two.
+      runBtn.disabled = true;
+      runBtn.title = 'Only available from the machine running the server.';
+      dashState.textContent += ' Updating is available on localhost only.';
+    }
+    return s;
+  } catch (e) {
+    dashState.textContent = 'Could not read dashboard status: ' + e.message;
+    return null;
+  }
+}
+
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    for (;;) {
+      const s = await getJson('/api/analysis/dashboard/status');
+      runLog.textContent = (s.log || []).join('\n');
+      runLog.scrollTop = runLog.scrollHeight;
+      if (!s.running) {
+        const ok = s.exitCode === 0;
+        runState.innerHTML = ok
+          ? `<strong>Done</strong> in ${fmt.secs(s.elapsedSeconds)}. <a href="/analysis/dashboard.html">Open the dashboard</a>.`
+          : `<strong>Failed</strong> (exit ${s.exitCode}) after ${fmt.secs(s.elapsedSeconds)} — see the log.`;
+        runBtn.disabled = false;
+        runBtn.innerHTML = 'Update dashboard';
+        await refreshDash();
+        break;
+      }
+      runState.innerHTML = `<span class="spinner"></span> Running — ${fmt.secs(s.elapsedSeconds)} elapsed. Roughly two minutes in total.`;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  } finally { polling = false; }
+}
+
+runBtn.addEventListener('click', async () => {
+  runBtn.disabled = true;
+  runBtn.innerHTML = '<span class="spinner"></span> Running…';
+  runBox.hidden = false;
+  runState.textContent = 'Starting…';
+  runLog.textContent = '';
+  try {
+    await fetch('/api/analysis/dashboard/run', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args: '' })
+    }).then(async r => { if (!r.ok) throw new Error((await r.json()).error || r.statusText); });
+    poll();
+  } catch (e) {
+    runState.textContent = 'Could not start: ' + e.message;
+    runBtn.disabled = false;
+    runBtn.innerHTML = 'Update dashboard';
+  }
+});
+
+(async () => {
+  const s = await refreshDash();
+  // A run started from the dashboard page keeps going if you navigate here, so pick it up.
+  if (s && s.running) { runBox.hidden = false; runBtn.disabled = true; runBtn.innerHTML = '<span class="spinner"></span> Running…'; poll(); }
+  try {
+    const r = await getJson('/api/analysis/replays');
+    const n = r.rows.length;
+    const cats = {};
+    for (const row of r.rows) cats[row.category] = (cats[row.category] || 0) + 1;
+    const top = Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ');
+    document.getElementById('rep-state').innerHTML =
+      `<strong>${n}</strong> recorded game${n === 1 ? '' : 's'} — ${top}.`
+      + (r.redirected ? ` <span class="badge warn">redirected corpus</span>` : '');
+  } catch (e) {
+    document.getElementById('rep-state').textContent = 'Could not read the replay list: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

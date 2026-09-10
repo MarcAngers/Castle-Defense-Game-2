@@ -8,6 +8,7 @@ using CastleDefense.Engine;
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {
@@ -335,7 +336,7 @@ namespace CastleDefense.Simulation
 
             // Game selection is shared with --export-policy-table so the metric is always
             // scored on the same population a cloned rung is fitted to.
-            var selected = ReplayFile.SelectHumanGames(replayDir, "divergence", allGames, filter, half);
+            var selected = ReplayCorpus.SelectHumanGames(replayDir, "divergence", allGames, filter, half);
 
             Console.WriteLine($"[divergence] shadow = {botKind}, window = {interval} ticks " +
                               $"({interval / 30.0:F2}s), {selected.Count} replays");

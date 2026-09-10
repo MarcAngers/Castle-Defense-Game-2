@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Replays — Castle Defense Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/analysis/analysis.css">
+</head>
+<body>
+<div id="bar"></div>
+<div class="wrap" style="max-width:1400px">
+  <h1>Replays</h1>
+  <p class="sub" id="sub">loading…</p>
+
+  <div class="card" style="margin-top:14px">
+    <div class="chips" id="cats"></div>
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <input id="q" type="text" placeholder="filter by id, team, loadout, map, opponent…" size="34">
+      <span class="note" id="count" style="margin:0"></span>
+    </div>
+  </div>
+
+  <div class="card scroll" style="padding:0;margin-top:12px">
+    <table id="tbl">
+      <thead><tr id="head"></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <p class="note">A game whose loser disconnected was not decided by play — those are filed as
+     <em>Disconnected</em> or <em>Abandoned</em> whatever mode they were played in, and no win rate is
+     computed anywhere on this page. <em>Re-rolled</em> means seat 1 never acted at all.
+     <span class="badge warn">stale</span> in the balance column means the master CSVs have changed since
+     that game was played, so a reconstruction of it will not reproduce it. A trailing
+     <strong>*</strong> means that fingerprint was recovered from git history by
+     <code>--backfill-balance</code> rather than recorded by the engine at the time; hover for which.</p>
+</div>
+
+<script type="module">
+import { topBar, getJson, el, fmt, esc } from '/analysis/analysis.js';
+document.getElementById('bar').replaceWith(topBar('/analysis/replays.html'));
+
+const COLS = [
+  { key: 'playedAt',   label: 'Played',   cell: r => el('span', { style: 'white-space:nowrap' }, fmt.whenShort(r.playedAt)) },
+  { key: 'id',         label: 'ID',       cell: r => el('span', { class: 'mono', text: r.id }) },
+  { key: 'category',   label: 'Category', cell: r => el('span', { class: 'badge ' + catClass(r.category), text: r.category }) },
+  { key: 'p1Team',     label: 'P1',       cell: r => loadoutCell(r.p1Team, r.p1Loadout, r.winner === 1) },
+  { key: 'p2Team',     label: 'P2',       cell: r => loadoutCell(r.p2Team, r.p2Loadout, r.winner === 2) },
+  { key: 'map',        label: 'Map',      cell: r => (r.map ? (r.shadowMap ? r.map + ' (shadow)' : r.map) : '—') },
+  { key: 'result',     label: 'Result',   cell: r => el('span', { class: 'badge ' + (r.winner === 1 ? 'p1' : r.winner === 2 ? 'p2' : ''), text: r.winner ? 'P' + r.winner + ' won' : 'draw' }) },
+  { key: 'armageddon', label: 'Armageddon', cell: r => armaCell(r) },
+  { key: 'durationSeconds', label: 'Length', num: true, cell: r => fmt.clock(r.durationSeconds) },
+  { key: 'opponentType', label: 'Opponent', cell: r => r.opponentType || '—' },
+  { key: 'balanceStatus', label: 'Balance', cell: r => balanceCell(r) }
+];
+
+function catClass(c) {
+  return c === 'Abandoned' || c === 'Disconnected' ? 'bad'
+       : c === 'Re-rolled' ? 'warn'
+       : c === 'Singleplayer' ? 'good' : '';
+}
+function loadoutCell(team, loadout, won) {
+  return el('div', {},
+    el('div', { style: won ? 'font-weight:600' : '' }, team || '—'),
+    el('div', { class: 'muted', style: 'font-size:11.5px' }, (loadout || '—').split(' / ').map(fmt.gadget).join(' / ')));
+}
+function armaCell(r) {
+  if (r.armageddon == null) return el('span', { class: 'muted', title: 'recorded before the replay format tracked this (v4)', text: '—' });
+  if (r.armageddon === 'no') return el('span', { class: 'muted', text: 'no' });
+  return el('span', { class: 'badge acc', text: r.armageddon === 'both' ? 'both' : r.armageddon });
+}
+// The badge says match/stale; the tooltip says how we know. A recorded fingerprint (v4) and
+// one recovered from git history are both usable, but they are not the same claim.
+function balanceCell(r) {
+  const src = r.balanceSource;
+  const how = src === 'recorded' ? 'recorded in the replay (v4)'
+            : src === 'verified' ? 'recovered from git history, confirmed by rebuilding the game'
+            : src === 'ambiguous' ? 'recovered from git history; several versions fit'
+            : src === 'dated' ? 'derived from the commit timeline, unconfirmed'
+            : 'no fingerprint';
+  const dot = src && src !== 'recorded' ? '*' : '';
+  if (r.balanceStatus === 'match') return el('span', { class: 'badge good', title: how, text: 'match' + dot });
+  if (r.balanceStatus === 'unknown') return el('span', { class: 'muted', title: how, text: '—' });
+  return el('span', { class: 'badge warn', title: r.balanceStatus + ' — ' + how, text: 'stale' + dot });
+}
+
+let rows = [], cat = 'All', sortKey = 'playedAt', sortDir = -1;
+
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  let view = rows.filter(r => cat === 'All' || r.category === cat);
+  if (q) view = view.filter(r => [r.id, r.p1Team, r.p2Team, r.p1Loadout, r.p2Loadout, r.map,
+                                  r.opponentType, r.category, r.mode]
+                                  .some(v => (v || '').toLowerCase().includes(q)));
+  view.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * sortDir;
+  });
+
+  const head = document.getElementById('head');
+  head.replaceChildren(...COLS.map(c => {
+    const th = el('th', { class: 'sortable' + (c.num ? ' num' : ''), 'data-dir': c.key === sortKey ? String(sortDir) : null },
+      c.label, el('span', { class: 'arrow', text: c.key === sortKey ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅' }));
+    th.addEventListener('click', () => {
+      if (sortKey === c.key) sortDir = -sortDir; else { sortKey = c.key; sortDir = c.key === 'playedAt' ? -1 : 1; }
+      render();
+    });
+    return th;
+  }));
+
+  const body = document.getElementById('body');
+  body.replaceChildren(...view.map(r => {
+    const tr = el('tr', { class: 'clickable' },
+      ...COLS.map(c => { const td = el('td', { class: c.num ? 'num' : null }); const v = c.cell(r);
+                         td.append(typeof v === 'string' ? v : v); return td; }));
+    tr.addEventListener('click', () => { location.href = '/analysis/replay.html?id=' + encodeURIComponent(r.id); });
+    return tr;
+  }));
+  document.getElementById('count').textContent = `${view.length} of ${rows.length} shown`;
+}
+
+(async () => {
+  try {
+    const data = await getJson('/api/analysis/replays');
+    rows = data.rows;
+    document.getElementById('sub').innerHTML =
+      `${rows.length} recorded games from <code>${esc(data.recordingsRoot)}</code>`
+      + (data.redirected ? ' <span class="badge warn">redirected — not the human corpus</span>' : '');
+
+    const counts = {};
+    for (const r of rows) counts[r.category] = (counts[r.category] || 0) + 1;
+    const cats = ['All', ...Object.keys(counts).sort((a, b) => counts[b] - counts[a])];
+    document.getElementById('cats').replaceChildren(...cats.map(c => {
+      const n = c === 'All' ? rows.length : counts[c];
+      const b = el('button', { class: 'chip' + (c === cat ? ' on' : '') }, c, el('span', { class: 'n', text: String(n) }));
+      b.addEventListener('click', () => {
+        cat = c;
+        document.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        render();
+      });
+      return b;
+    }));
+    document.getElementById('q').addEventListener('input', render);
+    render();
+  } catch (e) {
+    document.getElementById('sub').textContent = 'Could not load replays: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

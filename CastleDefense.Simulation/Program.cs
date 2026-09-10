@@ -276,8 +276,32 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            if (args.Length >= 1 && args[0] == "--snipe-check")
+            {
+                SnipeCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--attack-speed-mod-check")
+            {
+                AttackSpeedModCheck.Run(args.Skip(1).ToArray());
+                return;
+            }
+
+            if (args.Length >= 1 && args[0] == "--backfill-balance")
+            {
+                // Deliberately does NOT call GameDataManager.Initialize() first: the whole
+                // job is to initialise it repeatedly against historical CSVs pulled out of
+                // git, and loading the current one here would only be a wasted parse.
+                BalanceBackfill.Run(args, FindRecordingsDir());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-format-check")
             {
+                // Needed since v4: the recorder writes GameDataManager's CSV fingerprints
+                // into the tail, and the check asserts they are actually populated.
+                GameDataManager.Initialize();
                 ReplayFormatCheck.Run(args.Skip(1).ToArray());
                 return;
             }

@@ -18,6 +18,44 @@ namespace CastleDefense.Engine.Data
         public static List<TeamDefinition> Teams { get; private set; } = new List<TeamDefinition>();
         public static List<GadgetDefinition> Gadgets { get; private set; } = new List<GadgetDefinition>();
 
+        /// <summary>
+        /// Content fingerprints of the two master CSVs as they were when Initialize() ran.
+        /// Empty until then, and empty for a file that could not be read.
+        ///
+        /// WHY THESE EXIST. A .replay records one action byte per tick and nothing about the
+        /// RULES those actions were taken under, so replaying a game against a different
+        /// master_gadgets.csv silently produces a different game -- and it fails quietly,
+        /// deep into the match, rather than at the seam. That is not hypothetical: game
+        /// 1F3C07 was played with freeze's UpgradeCost at 700 and rebuilt against 500, so
+        /// the rebuild upgraded two casts early, stamped freeze_2's 560-tick cooldown at the
+        /// upgrade (PlayerState.AddGadgetXp does that), and refused a recorded cast 171
+        /// ticks inside it. The reconstruction then ended 70 seconds before the real game.
+        /// Diagnosing that cost a session; a recorded fingerprint turns it into a banner.
+        ///
+        /// NORMALISED BEFORE HASHING -- lines are joined with "\n" -- because git rewrites
+        /// line endings on checkout on this machine (`LF will be replaced by CRLF`), and a
+        /// fingerprint that trips on that would cry wolf on every clone.
+        /// </summary>
+        public static string GadgetsFileHash { get; private set; } = "";
+        public static string RosterFileHash { get; private set; } = "";
+
+        /// <summary>
+        /// Short, stable content hash of a CSV: SHA-256 over the newline-normalised text,
+        /// first 8 bytes as hex. 16 chars costs ~34 bytes in a replay (0.25% of the mean
+        /// 13 KB file) and collides at a rate nothing here will ever meet.
+        /// </summary>
+        public static string HashDataFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return "";
+                var text = string.Join("\n", File.ReadAllLines(path));
+                var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text));
+                return Convert.ToHexString(bytes, 0, 8).ToLowerInvariant();
+            }
+            catch { return ""; }
+        }
+
         private const int DAMAGE_MULTIPLIER = 1;
         private const int HEALTH_MULTIPLIER = 1;
         private const int PRICE_MULTIPLIER = 1;
@@ -40,18 +78,45 @@ namespace CastleDefense.Engine.Data
         private const float MIN_ATTACK_SPEED = 0.33f;
         private const float MAX_ATTACK_SPEED = 5.0f;
 
-        public static void Initialize()
+        /// <summary>Where the last <see cref="Initialize"/> read its CSVs from.</summary>
+        public static string DataDirectory { get; private set; }
+
+        /// <summary>
+        /// Loads the roster and gadget tables.
+        ///
+        /// <paramref name="dataDir"/> defaults to <c>AppContext.BaseDirectory/Data</c>, which is
+        /// what every normal caller wants and what the game has always used. It is overridable
+        /// for ONE reason: `--backfill-balance` replays recorded games against the historical
+        /// CSVs pulled out of git, to work out which balance data each was actually played
+        /// under. Swapping files in the build output would work too and is what a first cut did
+        /// by hand -- but that mutates the very directory the "is my build stale" check reads,
+        /// which is the trap CLAUDE.md already records twice.
+        ///
+        /// NOT THREAD SAFE, and cannot be made so cheaply: Teams and Gadgets are static, so a
+        /// caller sweeping several historical versions must finish one before starting the
+        /// next. BalanceBackfill parallelises WITHIN a version for exactly this reason.
+        /// </summary>
+        public static void Initialize(string dataDir = null)
         {
+            dataDir ??= Path.Combine(AppContext.BaseDirectory, "Data");
+            DataDirectory = dataDir;
+
             Teams.Clear();
             Gadgets.Clear();
 
-            LoadGadgetsFromCsv();
-            LoadTeamsFromCsv();
+            LoadGadgetsFromCsv(dataDir);
+            LoadTeamsFromCsv(dataDir);
+
+            // Fingerprint what was actually loaded, from the same directory the loaders
+            // read, so the recorded hash always describes the bytes the game ran on rather
+            // than whatever is in the source tree.
+            GadgetsFileHash = HashDataFile(Path.Combine(dataDir, "master_gadgets.csv"));
+            RosterFileHash = HashDataFile(Path.Combine(dataDir, "master_roster.csv"));
         }
 
-        private static void LoadTeamsFromCsv()
+        private static void LoadTeamsFromCsv(string dataDir)
         {
-            var filePath = Path.Combine(AppContext.BaseDirectory, "Data", "master_roster.csv");
+            var filePath = Path.Combine(dataDir, "master_roster.csv");
 
             if (!File.Exists(filePath))
             {
@@ -200,9 +265,9 @@ namespace CastleDefense.Engine.Data
             }
         }
 
-        private static void LoadGadgetsFromCsv()
+        private static void LoadGadgetsFromCsv(string dataDir)
         {
-            var filePath = Path.Combine(AppContext.BaseDirectory, "Data", "master_gadgets.csv");
+            var filePath = Path.Combine(dataDir, "master_gadgets.csv");
 
             if (!File.Exists(filePath))
             {

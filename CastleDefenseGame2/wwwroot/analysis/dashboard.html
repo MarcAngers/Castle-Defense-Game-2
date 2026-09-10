@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Balance dashboard — Castle Defense Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/analysis/analysis.css">
+</head>
+<body>
+<div id="bar"></div>
+<div class="wrap" style="max-width:none">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button id="run" class="primary">Update dashboard</button>
+    <input id="args" type="text" placeholder="extra args, e.g. --games 4" size="24">
+    <span class="note" id="state" style="margin:0"></span>
+    <a class="btn" href="/analysis/dashboard" target="_blank" style="margin-left:auto">Open full page ↗</a>
+  </div>
+  <div class="log" id="log" hidden></div>
+  <iframe id="frame" class="frame" title="Balance dashboard" src="/analysis/dashboard"></iframe>
+</div>
+
+<script type="module">
+import { topBar, getJson, fmt } from '/analysis/analysis.js';
+document.getElementById('bar').replaceWith(topBar('/analysis/dashboard.html'));
+
+const runBtn = document.getElementById('run');
+const argsIn = document.getElementById('args');
+const state  = document.getElementById('state');
+const log    = document.getElementById('log');
+const frame  = document.getElementById('frame');
+
+// THE WHOLE POINT OF --no-open: the sweep no longer launches a browser tab, so when it
+// finishes we reload the frame that is already showing the dashboard. One window, and it
+// updates in place.
+function reloadFrame() { frame.src = '/analysis/dashboard?t=' + Date.now(); }
+
+async function refresh() {
+  const s = await getJson('/api/analysis/dashboard/status');
+  if (!s.available) {
+    runBtn.disabled = true;
+    state.textContent = 'update-dashboard.bat not found — this is not a source checkout.';
+  } else if (!s.allowed) {
+    runBtn.disabled = true;
+    runBtn.title = 'Only available from the machine running the server.';
+    state.textContent = (s.generated ? `Generated ${s.generated}. ` : '') + 'Updating is localhost-only.';
+  } else if (!s.running) {
+    state.textContent = s.generated ? `Generated ${s.generated}.` : 'Never generated.';
+  }
+  return s;
+}
+
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  log.hidden = false;
+  try {
+    for (;;) {
+      const s = await getJson('/api/analysis/dashboard/status');
+      log.textContent = (s.log || []).join('\n');
+      log.scrollTop = log.scrollHeight;
+      if (!s.running) {
+        if (s.exitCode === 0) {
+          state.innerHTML = `<strong>Done</strong> in ${fmt.secs(s.elapsedSeconds)} — reloaded below.`;
+          reloadFrame();
+        } else {
+          state.innerHTML = `<strong>Failed</strong> (exit ${s.exitCode}) — the previous dashboard is untouched.`;
+        }
+        runBtn.disabled = false;
+        runBtn.innerHTML = 'Update dashboard';
+        break;
+      }
+      state.innerHTML = `<span class="spinner"></span> Sweeping — ${fmt.secs(s.elapsedSeconds)} elapsed (~2 min).`;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  } finally { polling = false; }
+}
+
+runBtn.addEventListener('click', async () => {
+  runBtn.disabled = true;
+  runBtn.innerHTML = '<span class="spinner"></span> Running…';
+  state.textContent = 'Starting…';
+  log.textContent = '';
+  try {
+    const r = await fetch('/api/analysis/dashboard/run', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ args: argsIn.value })
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    poll();
+  } catch (e) {
+    state.textContent = 'Could not start: ' + e.message;
+    runBtn.disabled = false;
+    runBtn.innerHTML = 'Update dashboard';
+  }
+});
+
+(async () => { const s = await refresh(); if (s.running) { runBtn.disabled = true; poll(); } })();
+</script>
+</body>
+</html>

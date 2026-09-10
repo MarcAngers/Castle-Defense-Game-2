@@ -1,6 +1,8 @@
 using CastleDefense.Api.Data;
 using CastleDefense.Api.Services;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Data;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {
@@ -54,6 +56,9 @@ namespace CastleDefense.Simulation
             p1.SetLoadout(new[] { "nuke_2", "reinforcements", "cash" });   // END loadout differs from START
             var p2 = new PlayerState(); p2.Side = 2; p2.Team = TeamColour.Red;
             p2.SetLoadout(new[] { "freeze", "wall_2", "cash" });
+            // v4: asymmetric on purpose, so a reader that swapped the two bytes fails here.
+            p1.ArmageddonUsed = true;
+            p2.ArmageddonUsed = false;
 
             var db = new GameDatabase(dbPath);
             rec.Save(dir, p1, p2, winner: 1, durationTicks: 40, gameVersion: "test", db: db,
@@ -64,9 +69,10 @@ namespace CastleDefense.Simulation
             long size = new FileInfo(file).Length;
 
             var rf = ReplayFile.Read(file);
-            Console.WriteLine("-- v3 write -> read --");
-            Check("version", rf.Version, 3);
+            Console.WriteLine("-- v4 write -> read --");
+            Check("version", rf.Version, 4);
             Check("HasV3", rf.HasV3, true);
+            Check("HasV4", rf.HasV4, true);
             Check("game id", rf.GameId, "ZZ9XY7");
             Check("winner", rf.Winner, 1);
             Check("tick count", rf.TickCount, 40);
@@ -86,12 +92,37 @@ namespace CastleDefense.Simulation
             Check("target (7, side 2)", rf.GadgetTargets[(7, 2)], 1700);
             Check("target (19, side 1)", rf.GadgetTargets[(19, 1)], 300);
             Check("target (31, side 2)", rf.GadgetTargets[(31, 2)], 950);
+            Check("p1 ARMAGEDDON", rf.P1Armageddon, true);
+            Check("p2 ARMAGEDDON", rf.P2Armageddon, false);
+            Check("gadgets csv hash", rf.GadgetsHash, GameDataManager.GadgetsFileHash);
+            Check("roster csv hash", rf.RosterHash, GameDataManager.RosterFileHash);
+            // A fingerprint that is empty records nothing and would silently disable the
+            // whole staleness banner, so assert it is actually populated.
+            Check("gadgets hash is 16 hex chars", rf.GadgetsHash.Length, 16);
 
             // THE POINT OF THE WHOLE FORMAT CHANGE: the start loadout must NOT be the end one.
             bool distinct = rf.P1StartOff != rf.P1Off;
             Console.WriteLine($"  [{(distinct ? "PASS" : "FAIL")}] start loadout is distinct from end loadout"
                             + $"        {rf.P1StartOff} vs {rf.P1Off}");
             if (distinct) _pass++; else _fail++;
+
+            Console.WriteLine("\n-- v3 backwards compatibility --");
+            // Truncate the v4 tail and stamp the version byte back to 3. Its length is
+            // derived from what was just parsed rather than hardcoded, so this stays honest
+            // if the hash width ever changes.
+            var v4bytes = File.ReadAllBytes(file);
+            int v4TailLen = 2 + (1 + rf.GadgetsHash.Length) + (1 + rf.RosterHash.Length);
+            var v3 = v4bytes.Take(v4bytes.Length - v4TailLen).ToArray();
+            v3[4] = 3;
+            string v3File = Path.Combine(dir, "V3FILE.replay");
+            File.WriteAllBytes(v3File, v3);
+            var mid = ReplayFile.Read(v3File);
+            Check("v3 version", mid.Version, 3);
+            Check("v3 HasV4", mid.HasV4, false);
+            Check("v3 gadget targets still parse", mid.GadgetTargets.Count, 3);
+            Check("v3 engine seed still parses", mid.EngineSeed, 123456789);
+            Check("v3 ARMAGEDDON absent", mid.P1Armageddon, false);
+            Check("v3 balance hash absent", mid.GadgetsHash, "");
 
             Console.WriteLine("\n-- v2 backwards compatibility --");
             // Truncate the v3 tail and stamp the version byte back to 2: byte-for-byte what a

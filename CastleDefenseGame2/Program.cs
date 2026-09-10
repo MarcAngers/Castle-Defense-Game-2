@@ -1,6 +1,7 @@
 ﻿using CastleDefense.Api.Data;
 using CastleDefense.Api.Hubs;
 using CastleDefense.Api.Services;
+using CastleDefense.Api.Services.Analysis;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 
@@ -34,6 +35,15 @@ if (RecordingPaths.IsRedirected(builder.Configuration))
     Console.WriteLine($"[Recordings] REDIRECTED to {recordingsRoot} -- these games stay out of the human corpus.");
 builder.Services.AddSingleton(new GameDatabase(dbPath));
 
+// /analysis -- the recurring-analysis pages (replay browser, per-game economy report, and
+// the balance dashboard with its update button). Read-only over the recordings root and the
+// arena's dashboard folder; the one endpoint that executes anything is localhost-gated, see
+// DashboardRunner. ReplayIndex is a singleton because it caches replay headers by file
+// mtime, which is what keeps a 300-game list cheap to re-render on every load.
+builder.Services.AddSingleton<AnalysisPaths>();
+builder.Services.AddSingleton<ReplayIndex>();
+builder.Services.AddSingleton<DashboardRunner>();
+
 // Add CORS (Crucial for WebGL/Web clients)
 builder.Services.AddCors(options =>
 {
@@ -62,12 +72,54 @@ app.UseStaticFiles(new StaticFileOptions
         ctx.Context.Response.Headers.CacheControl = "no-cache";
     }
 });
+// THE MASTER CSVs ARE SERVED FROM THE ENGINE'S OWN COPY, NOT FROM wwwroot.
+//
+// They used to exist TWICE -- CastleDefense.Engine/Data/ for the server and
+// wwwroot/assets/ for the client -- and every balance change had to be made in both. That
+// is not merely tedious, it produces a SILENT AND CONFUSING failure: wwwroot is served
+// straight off the content root, so a client edit takes effect with no rebuild, while the
+// server reads AppContext.BaseDirectory/Data, which only updates on a successful build. Edit
+// one and not the other -- or rebuild while the dev server holds Engine.dll open, which makes
+// the build FAIL with MSB3027 -- and the shop button advertises one price while the engine
+// charges another. That cost a real debugging session on 2026-09-03.
+//
+// Now there is one file. The client fetches the same bytes GameDataManager loaded, so the two
+// halves cannot disagree: if the copy in Data is stale, the button and the charge are stale
+// TOGETHER, which is a symptom that points at the real cause.
+//
+// Mapped file by file rather than as a folder provider ON PURPOSE -- rooting a static-file
+// provider at Data/ would also publish counter_table.csv, human_policy_table.csv and the
+// trained ONNX model under /assets/.
+foreach (var masterCsv in new[] { "master_gadgets.csv", "master_roster.csv" })
+{
+    var csvName = masterCsv;
+    app.MapGet($"/assets/{csvName}", () =>
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Data", csvName);
+        return File.Exists(path)
+            ? Results.File(path, "text/csv")
+            : Results.NotFound($"{csvName} not found at {path}");
+    });
+}
+
 app.UseCors("AllowAll");
 app.MapControllers();
 app.MapHub<GameHub>("/gameHub");
 
 // Initialize game data
 GameDataManager.Initialize();
+
+// WHICH master_gadgets.csv DID WE ACTUALLY LOAD, AND HOW OLD IS IT. Printed for the same
+// reason the forced-loadout and forced-map lines below are: a balance edit that has not
+// reached this file is invisible from inside the game, and the build that copies it here
+// FAILS SILENTLY while the dev server holds Engine.dll open (MSB3027). A timestamp older than
+// the edit is the fastest way to see that -- stop the server, rebuild, restart.
+{
+    var gadgetCsv = Path.Combine(AppContext.BaseDirectory, "Data", "master_gadgets.csv");
+    Console.WriteLine(File.Exists(gadgetCsv)
+        ? $"[data] master_gadgets.csv loaded from {gadgetCsv} (modified {File.GetLastWriteTime(gadgetCsv):yyyy-MM-dd HH:mm:ss})"
+        : $"[data] WARNING: {gadgetCsv} NOT FOUND -- gadgets will be empty.");
+}
 
 // Singleplayer counter-picking. TopK = 1 plays the single best measured answer to the
 // human's loadout (maximum win rate, fully predictable); raising it samples uniformly

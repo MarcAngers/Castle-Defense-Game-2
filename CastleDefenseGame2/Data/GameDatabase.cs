@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 
 namespace CastleDefense.Api.Data;
 
@@ -90,6 +90,45 @@ public class GameDatabase
         // ReplayFile.SelectHumanGames drops both from the analysis corpus by default --
         // see IsRealResult, which is the single place that decision is made.
         AddColumnIfMissing(conn, "games", "end_reason", "TEXT");
+
+        // WHICH BALANCE DATA THIS GAME WAS PLAYED UNDER, for the games recorded before CDRP
+        // v4 started writing that down in the replay itself. Filled by
+        // `--backfill-balance`, which recovers it from git history and then VERIFIES the
+        // candidate by rebuilding the game against it -- see BalanceBackfill.
+        //
+        // SEPARATE FROM THE REPLAY'S OWN FIELDS ON PURPOSE. A v4 replay records what the
+        // engine actually loaded; these columns hold an INFERENCE. Writing the inference
+        // into the replay would destroy the only thing that makes the recorded fingerprint
+        // worth trusting, and nothing downstream could tell the two apart afterwards.
+        // `balance_inference_method` is how far to trust the row:
+        //   "verified"  the rebuild reproduces the recorded game exactly, and the game had
+        //               enough recorded actions for that to identify a version
+        //   "ambiguous" it reproduces, but so would other versions -- too few actions to tell
+        //   "dated"     nothing reproduced it; this is the commit timeline's best guess only
+        AddColumnIfMissing(conn, "games", "inferred_gadgets_hash", "TEXT");
+        AddColumnIfMissing(conn, "games", "inferred_roster_hash", "TEXT");
+        AddColumnIfMissing(conn, "games", "balance_inference_method", "TEXT");
+        AddColumnIfMissing(conn, "games", "balance_inference_detail", "TEXT");
+    }
+
+    /// <summary>Records a backfilled balance fingerprint. Upsert-by-update: the game row
+    /// already exists, and this never creates one.</summary>
+    public void SetInferredBalance(string gameId, string gadgetsHash, string rosterHash,
+                                   string method, string detail)
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE games SET inferred_gadgets_hash = $g, inferred_roster_hash = $r,
+                             balance_inference_method = $m, balance_inference_detail = $d
+            WHERE id = $id
+            """;
+        cmd.Parameters.AddWithValue("$g", (object)gadgetsHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$r", (object)rosterHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$m", (object)method ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$d", (object)detail ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$id", gameId);
+        cmd.ExecuteNonQuery();
     }
 
     private static void AddColumnIfMissing(SqliteConnection conn, string table, string column, string type)
@@ -200,6 +239,54 @@ public class GameDatabase
         }
         return results;
     }
+
+    /// <summary>
+    /// Every column the /analysis pages need, keyed by game id.
+    ///
+    /// SEPARATE FROM GetAllGames ON PURPOSE. That one feeds the in-game recordings list and
+    /// its record shape is part of that contract; widening it would push six more columns
+    /// through an endpoint that does not use them. The columns here are the ones captured
+    /// LIVE at game over (see the schema comment on p1_final_money), which is what makes
+    /// them the ground truth a reconstruction gets checked against.
+    /// </summary>
+    public Dictionary<string, AnalysisRow> GetAnalysisRows()
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, played_at, p1_team, p2_team,
+                   p1_gadget_off, p1_gadget_def, p1_gadget_sig,
+                   p2_gadget_off, p2_gadget_def, p2_gadget_sig,
+                   winner, duration_ticks, game_mode, opponent_type,
+                   p1_final_income, p2_final_income, p1_final_money, p2_final_money,
+                   p1_final_hp_pct, p2_final_hp_pct, end_reason,
+                   inferred_gadgets_hash, inferred_roster_hash,
+                   balance_inference_method, balance_inference_detail
+            FROM games
+            """;
+        using var reader = cmd.ExecuteReader();
+        var map = new Dictionary<string, AnalysisRow>(StringComparer.OrdinalIgnoreCase);
+        string S(int i) => reader.IsDBNull(i) ? null : reader.GetString(i);
+        double? D(int i) => reader.IsDBNull(i) ? null : reader.GetDouble(i);
+        while (reader.Read())
+        {
+            map[reader.GetString(0)] = new AnalysisRow(
+                reader.GetString(0), reader.GetInt64(1), S(2), S(3),
+                S(4), S(5), S(6), S(7), S(8), S(9),
+                reader.GetInt32(10), reader.GetInt64(11), S(12), S(13),
+                D(14), D(15), D(16), D(17), D(18), D(19), S(20),
+                S(21), S(22), S(23), S(24));
+        }
+        return map;
+    }
+
+    public record AnalysisRow(string Id, long PlayedAt, string P1Team, string P2Team,
+        string P1Off, string P1Def, string P1Sig, string P2Off, string P2Def, string P2Sig,
+        int Winner, long DurationTicks, string GameMode, string OpponentType,
+        double? P1FinalIncome, double? P2FinalIncome, double? P1FinalMoney, double? P2FinalMoney,
+        double? P1FinalHpPct, double? P2FinalHpPct, string EndReason,
+        string InferredGadgetsHash = null, string InferredRosterHash = null,
+        string BalanceInferenceMethod = null, string BalanceInferenceDetail = null);
 
     public bool DeleteGame(string id)
     {

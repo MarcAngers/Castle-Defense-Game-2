@@ -12,6 +12,20 @@
         "--RecordingsDir=recordings-agent"
       ],
       "port": 5168
+    },
+    {
+      "name": "castledefense-analysis",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "-c",
+        "Release",
+        "--urls",
+        "http://localhost:5169",
+        "--",
+        "--RecordingsDir=recordings-agent"
+      ],
+      "port": 5169
     }
   ]
 }

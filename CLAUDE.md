@@ -235,7 +235,69 @@ The opponent's action frequency is throttled by `speed // base_speed` to simulat
 - `master_roster.csv` — unit stats: one row per (team × tier). 8 teams × 8 tiers + special units.
 - `master_gadgets.csv` — gadget definitions with upgrade chains (e.g. `snipe → snipe_2 → snipe_3`), cooldowns, costs, and effect parameters.
 
-Both files live in `CastleDefense.Engine/Data/` and are copied to all output directories at build time.
+Both files live in `CastleDefense.Engine/Data/` and are copied to all output directories at
+build time.
+
+**THERE IS EXACTLY ONE COPY OF EACH, AND THAT IS LOAD-BEARING.** Until 2026-09-03 the client
+had its own duplicates in `wwwroot/assets/`, so every balance change had to be made twice.
+That produced a silent, confusing failure: wwwroot is served straight off the content root, so
+a client edit applies with NO rebuild, while the server reads `AppContext.BaseDirectory/Data`,
+which only updates on a SUCCESSFUL build. The shop button then advertises one price while the
+engine charges another — see "Editing the master CSVs" below. `Program.cs` now serves
+`/assets/master_gadgets.csv` and `/assets/master_roster.csv` from the engine's own copy, so the
+two halves read the same bytes and cannot disagree. `master_maps.csv` is still wwwroot-only;
+nothing server-side reads a map name.
+
+## Editing the master CSVs
+
+`CastleDefense.Engine/Data/master_gadgets.csv` and `master_roster.csv` are the ONLY copies.
+Edit them, rebuild, restart the server. The client fetches the same files over
+`/assets/<name>.csv`, so there is nothing to keep in sync.
+
+### THE TRAP: A REBUILD FAILS SILENTLY WHILE THE GAME IS RUNNING
+
+`dotnet run` holds `CastleDefense.Engine.dll` open, so rebuilding the web project **while the
+dev server is running** fails with:
+
+```
+error MSB3027: Could not copy ... CastleDefense.Engine.dll ...
+The file is locked by: "CastleDefenseGame2 (NNNNN)"
+```
+
+The build fails, `bin/<config>/net10.0/Data/master_gadgets.csv` never updates, and the game
+keeps playing by the old numbers. **Stop the server first.** This cost a debugging session on
+2026-09-03, when the shop button read $12 while the engine charged $30 — the client had the new
+CSV and the server had a months-old build output.
+
+Two aggravating details worth knowing:
+
+- **`dotnet run` builds DEBUG.** Rebuilding the solution in Release leaves the Debug output —
+  which is what the game actually runs — untouched. See the launch.json note in the agent
+  recordings section.
+- **`CastleDefense.BotArena` does NOT depend on the web project**, which is why
+  `update-dashboard.bat` builds only that project and works with the game still running.
+
+### `run-game.bat` does this for you
+
+```
+run-game
+```
+
+Stops whatever is serving 5168, rebuilds in **Debug**, starts the server. That ordering is the
+whole point -- it is the only way a rebuild reliably succeeds. Recordings are deliberately NOT
+redirected: it is Marc's own server and its games belong in the human corpus.
+
+### The startup line that makes it visible
+
+`Program.cs` prints, on every boot:
+
+```
+[data] master_gadgets.csv loaded from ...in\Debug
+et10.0\Data\master_gadgets.csv (modified 2026-09-03 19:22:55)
+```
+
+**If that timestamp is older than your edit, the build did not land.** That is the whole point
+of the line; check it before concluding a balance change did nothing.
 
 ## Measuring progress toward "a bot Marc cannot beat"
 
@@ -1188,6 +1250,37 @@ together.** The HUD is a DOM box in fixed CSS pixels (~100px); the canvas is sca
 a tall desktop window** — a constant tuned for either is wrong on the other. `wave-animator.js`
 reads `#hud-top`'s bottom once in the constructor and falls back to 133.
 
+### THE SPRITE IS CENTRED ON THE HITBOX'S LEADING EDGE, and P1 was off by the full width
+
+Fixed 2026-09-09. Marc: "when P2 uses the gadget it looks perfect, units caught in the middle of
+the wave are launched. But when the Wave is used by P1 the hitbox doesn't quite line up, so units
+appear to be flung away before the wave actually reaches them visually."
+
+**THE HITBOX IS TWICE THE WIDTH OF THE SPRITE.** `WaveEffect` builds the hazard with
+`Width = _def.Radius * 2`, and `WaveHazard.ProcessEffect` tests `[Position, Position + Width]` --
+so `Position` is the LEFT edge for BOTH sides, while the client draws the sprite `waveSize`
+(= `Radius`) wide. Which edge LEADS therefore depends on the direction of travel:
+
+| seat | travels | hitbox leading edge |
+|---|---|---|
+| P1 | right | `Position + Width` |
+| P2 | left | `Position` |
+
+The animator drew the sprite centred on `Position` for both. For P2 that is exactly the leading
+edge, which is why that seat looked perfect. For P1 it was short by the entire hazard Width --
+**800 game units at level 3, 40% of the map** -- so the wave launched units out of clear air well
+ahead of the visible crest.
+
+The fix centres the sprite on the LEADING edge rather than on `Position`. Centring there rather
+than on the hitbox's centre, or stretching the sprite across the whole footprint, is deliberate:
+it reproduces P2's rendering EXACTLY, so the seat that already looked right is untouched and only
+the broken one moves. The half of the hitbox trailing behind the sprite needs no art, because the
+wave sweeps -- anything back there was launched on an earlier tick.
+
+Verified by driving the shipped animator with a synthetic hazard and capturing what `drawImage`
+actually lands on in world space: **sprite centre equals the engine's leading edge to 0px at all
+three levels on both seats**, with P2's spans byte-identical to before.
+
 ### A string-vs-number bug this uncovered
 
 `asset-loader` stores every gadget CSV column as the **string** it parsed. `waveSize` had
@@ -1263,6 +1356,39 @@ sides. Every unordered matchup is therefore played TWICE, once in each seat. **1
 `--from-csv` rebuilds the HTML from an existing CSV without replaying anything, so a
 presentation tweak costs nothing.
 
+### Running it yourself: `update-dashboard.bat`
+
+```
+update-dashboard                 16,384 games, ~2 minutes
+update-dashboard --games 4       4x the games, 4x the time, half the noise
+```
+
+At the repo root. Builds, sweeps, opens the HTML; every argument is passed through to
+`balance-matrix`.
+
+**IT BUILDS ONLY `CastleDefense.BotArena`, ON PURPOSE.** A full `dotnet build` also builds the
+web project, which FAILS with `MSB3027 -- file locked` while the game's dev server is running,
+because the server holds `CastleDefense.Engine.dll` open. The arena does not depend on the web
+project, so building just it picks up engine and CSV edits **with the game still running** --
+which is the normal state during balance work.
+
+### The sweep is DETERMINISTIC, and that is what makes the delta column trustworthy
+
+Every cell's map and engine seed come from the loadout pair, not from a clock, so **an
+unchanged build reproduces the previous run byte for byte** -- verified by running it twice in
+a row and getting an identical CSV and sixteen deltas of exactly 0.0. A non-zero delta is
+therefore caused by the change, not by resampling.
+
+`balance_matrix_prev.csv` is rotated by the TOOL, not by the .bat, so it is correct however the
+exe is invoked, and `dashboard.html` gains a **&Delta; prev** column against it. The grey band
+on that column is the two confidence intervals in quadrature, which is deliberately
+CONSERVATIVE: the runs are paired, so that overstates the noise. What the pairing does not
+remove is that a rule change moves the trajectories themselves, and there is no closed form for
+that. Erring wide shows a few real effects in grey; erring narrow would have the dashboard
+inventing findings.
+
+**`--from-csv` rebuilds the HTML without replaying anything**, so presentation changes are free.
+
 ### Why neither existing sweep answered this
 
 | | `dashboard` | `counter-matrix` | `balance-matrix` |
@@ -1302,6 +1428,349 @@ team is on both sides, so the game lands in the bucket twice, once as a win and 
 and a mirror correctly reads ~50%. Counting it once instead scored every mirror as a guaranteed
 win and put the whole diagonal at 93-98% — caught on the first render, and the diagonal sitting
 near 50% is the check that it is still right.
+
+## Snipe picks the BEEFIEST unit near the click, not the nearest
+
+Fixed 2026-09-03. Marc: "the Snipe gadget is by far the worst, and I think some of it has to do
+with the targeting... I think we have a system that targets the highest HP unit in a radius."
+
+**There was no radius, and no highest-HP rule.** `SnipeEffect.Execute` took the enemy NEAREST
+the click. It had a max-health tiebreak, but only for units at *exactly* the same distance --
+a `==` between two floats that move by fractional amounts every tick, so it never fired in
+practice. Nearest always won. Against the one situation the gadget exists for, a tier 7 behind
+a screen of chumps, any chump a pixel closer to the click stole the shot.
+
+It now takes the highest `MaxHealth` enemy within **`SnipeEffect.AutoTargetRadius` = 300**
+(600 wide, about half a landscape phone's view of a 2,000-wide map), falling back to nearest
+when the click lands nowhere near anything so a stray click still fires.
+
+Three rules that are the content rather than bookkeeping:
+
+- **`MaxHealth`, not `CurrentHealth`.** The question is "which of these is the expensive one",
+  and that does not change as it takes damage: a tier 7 on its last 100 HP is still what the
+  shot is for, while CurrentHealth would steer onto whichever bystander happened to be
+  undamaged. It also prices Black's random-stat weirdo honestly.
+- **Walls are a last resort WITHIN the radius.** A wall's MaxHealth is 400 / 6,000 / 48,000, so
+  on raw health it out-ranks every real unit and every shot near one would hit scenery that
+  neither moves nor attacks. Excluding walls outright would make a wall unsnipeable, which is a
+  legitimate play -- so a wall is taken only when nothing else is in range.
+- **The radius is NOT the CSV's `Radius` column**, which is 0 for snipe and means something
+  else: `GadgetTargeting.FindBestAoeTarget` reads `def.Radius` as the BLAST radius when aiming
+  area gadgets. Giving snipe a non-zero Radius to feed this would change how bots aim it and
+  would tell the Collection screen the shot has an area of effect.
+
+### THE DASHBOARD IS STRUCTURALLY BLIND TO THIS FIX
+
+`balance-matrix` moved snipe 34.6% -> 35.3%, which is inside the noise band. That is the
+expected result and not a disappointment: **the bug only ever hurt a human**. Bots cast through
+`GadgetTargeting.AutoTarget`, which returns a position sitting ON a unit, so nearest-wins
+already resolved to the unit the aimer intended. A bot never clicks 40px off into a crowd.
+
+So snipe's 35% in bot-vs-bot is a SEPARATE problem that targeting does not address, and the
+value of this change will only show up in Marc's own games. Do not read the flat delta as
+evidence the fix did nothing.
+
+**Guarded by `--snipe-check`**, which packs ten chumps around a tier 7 and asserts the shot
+finds the tier 7 from up to 270 away, stops finding it past the radius, never lets an
+80,000 HP wall_3 outrank a 4,690 HP tier 7, still hits a lone wall, and still resolves a bot's
+`-1` auto-aimed cast.
+
+`bot-checksum --games 24` moves to **`59581A87208601B4F91438AA44E1A482`**.
+
+## Snipe is a BURST weapon (2 shots at level 2, 10 at level 3)
+
+Rebalanced 2026-09-08 to Marc's design. Snipe was the worst offensive gadget in the game --
+**31.8%** on `balance-matrix` against firebomb's 56.0% -- and his diagnosis was that deleting
+ONE unit is rarely worth a cast. It now fires a burst.
+
+| level | shots | ticks between shots |
+|---|---|---|
+| 1 | 1 | -- |
+| 2 | 2 | 15 (0.5s) |
+| 3 | **10** | 5 (0.17s) |
+
+**THE COUNT IS A CSV COLUMN, NOT A CONSTANT**, which is what made it sweepable without a
+rebuild: `balance-matrix` reads `AppContext.BaseDirectory/Data`, so an arm is one patched line
+in the arena's build output. Two new columns, `Shots` and `ShotIntervalTicks`, sit before
+`Description` so the free-text column stays last.
+
+### Targeting: the aim, then the biggest things on the field
+
+`SnipeEffect.SelectTargets` returns up to `Shots` **distinct** targets, in firing order.
+
+- **Shot 0 is the player's aim**, resolved by the existing `SelectTarget` -- beefiest non-wall
+  within `AutoTargetRadius` (300), nearest as the out-of-range fallback.
+- **Every later shot takes the highest `MaxHealth` enemy not already picked, MAP-WIDE.** The
+  radius exists to interpret a click; the follow-ups do not have one. Marc's spec was "the next
+  highest HP unit on the screen".
+- **Follow-ups NEVER take a wall.** A wall out-ranks the whole roster on MaxHealth (400 / 6,000
+  / 48,000), so without this a level-3 cast would put nine shots into two walls while the army
+  walked past.
+
+**TARGETS ARE CHOSEN AT CAST TIME AND ARE DISTINCT, not re-aimed per shot.** Re-aiming sounds
+better and is worse: at 55,000 damage a level-3 shot kills essentially anything, so re-aiming
+would concentrate the burst on whatever survived the previous one. Distinct-at-cast is what
+makes ten shots hit ten units. A target killed by something else fizzles, which is the
+behaviour a single-shot snipe has had since 2026-07-28. Fewer targets than shots means fewer
+shots -- the surplus is NOT re-aimed at an already-listed unit.
+
+### Walls: clicking one works, being near one does not
+
+Marc's rule: "I don't want the auto-targeter to be completely drawn to the wall, but if the
+Snipe is targeted directly on an enemy wall, it should be used on the wall."
+
+1. A **direct hit** -- the click inside the wall's own footprint -- takes the wall outright.
+2. Otherwise walls are invisible to the auto-targeter, whatever their health.
+3. A wall in range is still the LAST RESORT when no real unit is in range, so a lone wall is
+   not immune.
+4. Follow-up shots never take one under any of the above.
+
+**`wall_3` IS 450 WIDE, AND THAT FORCED A CARVE-OUT.** Its half-width is 225 -- most of the
+300 auto-target radius -- so a bare direct-hit test would hand the shot to the wall whenever an
+enemy stood IN FRONT of it, which is exactly where enemies stand. A non-wall unit within
+`SnipeEffect.DirectClickPrecision` (40, about one sprite) of the click is therefore read as the
+player aiming at that unit. Click the wall, get the wall; click a unit on the wall, get the unit.
+
+### The animation is driven by the CSV, and that fixed an old desync
+
+`snipe-animator.js` reads `Delay`, `Shots` and `ShotIntervalTicks` rather than hardcoding, so a
+CSV tune moves the visuals with it. The old animator held its lock-on for a hardcoded **3000ms
+while `Delay` was 70 ticks = 2333ms**, so every bullet was drawn ~667ms AFTER its damage had
+already landed. That is now closed by construction.
+
+Several tracers are in flight at once, each shot gets a muzzle flash, and the gun sweeps between
+targets. Level 3 runs 4,183ms against the old 3,100ms.
+
+**SCREEN SHAKE 40 -> 7** (level 2: 10 -> 5). At 40 a single shot threw the whole canvas around;
+ten shots five ticks apart never stopped shaking and the board was unreadable. Per-shot decays
+now OVERLAP and sum, capped at 1.6x, so a burst still reads as heavy without becoming unusable.
+
+**THE FOLLOW-UP TARGETS ARE RE-DERIVED CLIENT-SIDE, and that is a two-sided contract.**
+`PlayGadgetAnimation` carries ONE target id and is deliberately left that way -- `GameRecorder`
+writes a cast from that same event, so firing it per shot would record one cast as ten. The
+client therefore reproduces `SelectTargets`' rule. Drift is cosmetic (the engine is
+authoritative for who dies) but it is a rule written in two places.
+
+The Collection card gains a **SHOTS** row, shown only when the count exceeds 1 and read from the
+CSV -- deliberately NOT written into the Description, because the level-3 count is a balance
+knob and a hand-written "fires 10 shots" is wrong the first time it moves. Same drift the
+map-effect table warns about.
+
+### Two traps this hit, both silent
+
+- **`asset-loader` LOWERCASES EVERY CSV HEADER** (`headers.map(h => h.toLowerCase())`), so the
+  column `Shots` is stored as `shots`. Reading the CSV's own casing returns `undefined` and
+  collapses the burst to a single shot with no error. It was caught only because the throwaway
+  filmstrip had built its own `gadgetData` with the original casing -- **the harness was testing
+  a path the game does not use**. Any new client code reading `gadgetData` must use lowercase,
+  and must `Number()` the result (see the wave's `"400" + 10` bug).
+- **A CSV-ONLY EDIT DOES NOT SURVIVE AN INCREMENTAL BUILD.** With no `.cs` change MSBuild treats
+  `CastleDefense.Engine` as up to date and skips its content copy, so
+  `Engine/bin/<cfg>/net10.0/Data/master_gadgets.csv` keeps the OLD file and the web project
+  copies that stale copy forward. Same symptom as the MSB3027 trap, different cause. The
+  `[data]` startup line catches it -- **read the timestamp**. `run-game.bat` now deletes the
+  Engine's copies before building so the copy step always runs.
+
+### Measured
+
+`balance-matrix`, 16,384 games, the two arms differing only in the `Shots` column:
+
+| offence | all levels 1 shot | 1 / 2 / 10 | delta |
+|---|---|---|---|
+| **snipe** | **31.80%** | **42.18%** | **+10.4** |
+| nuke | 53.27% | 49.65% | -3.6 |
+| freeze | 55.32% | 51.68% | -3.6 |
+| firebomb | 56.03% | 52.51% | -3.5 |
+
+**Second-largest single move in the balance record**, after speed's +13.9. Snipe is still last
+of four but clustered with the field rather than 24 points adrift.
+
+**THE LEVEL-3 COUNT SATURATES AT 10**, which is where Marc guessed:
+
+| L3 shots | 1 | 6 | 8 | **10** | 12 | 14 | 16 | 18 | 20 |
+|---|---|---|---|---|---|---|---|---|---|
+| snipe | 32.47% | 40.61% | 40.99% | **42.18%** | 42.16% | 42.41% | 42.26% | 42.16% | 42.22% |
+
+6 -> 10 climbs; 10 -> 20 sits inside +/-0.25pp, which is noise on a deterministic sweep. Every
+shot one-shots what it hits, so once the burst clears the units that mattered the surplus lands
+on chaff. **The `L3 = 1` column is NOT a "level 2 only" reference** -- it is a broken config
+where level 2 fires two shots and level 3 fires one, i.e. upgrading makes you worse, which is
+why it reads below the true 31.80% baseline.
+
+**Two reasons the measured effect is understated**: reaching `snipe_3` costs 13 casts of gadget
+XP, so many games never see level 3; and the dashboard is structurally blind to the TARGETING
+half of this, because bots cast through `GadgetTargeting.AutoTarget`, which returns a position
+sitting ON a unit -- a bot never clicks 40px into a crowd and never deliberately clicks a wall.
+Both the generous auto-target and the direct-hit wall rule are worth nothing in these numbers
+and will only show up in Marc's own games.
+
+Guarded by `--snipe-check`, which asserts distinct descending-health targets, no wall in any
+follow-up, all four wall rules, and the firing cadence through a real tick loop.
+
+`bot-checksum --games 24` moves `AD0EE3BE1E6CE7DF0D367BD5B8D9D987` ->
+**`9A77A06CE1969998842AA0B8CD108124`**.
+
+### Rebalanced again 2026-09-09: the shot table left the CSV, and the animation was re-anchored
+
+**THE COLUMNS ARE GONE.** `Shots` and `ShotIntervalTicks` lived in `master_gadgets.csv` for a
+single day, purely so the level-3 count could be swept without a rebuild. The sweep answered the
+question, so Marc removed them -- that file is read by the client, the engine and every arena,
+and he wants it pristine. Both tables are now hardcoded in `SnipeEffect.ShotsFor` /
+`ShotIntervalFor` (1/0, 2/15, 10/5), **mirrored in `snipe-animator.js`**. `Delay` is still a CSV
+column and is still read: it is shared with every other gadget and is the engine's own
+scheduling number.
+
+**THE BULLET NOW ARRIVES ON THE DAMAGE TICK INSTEAD OF LEAVING ON IT.** Marc, from playtesting:
+"the actual effect of the gadget doesn't happen for another few ticks after the animation... for
+this gadget in particular it's very important that the animation lines up with the effect."
+
+The engine fixes the impact instant and cannot move: `ProcessActions()` runs at the top of
+`Tick`, `ScheduleEffect` stamps `ExecuteAtTick = CurrentTick + Delay`, and the scheduled-effect
+loop runs in that same pass before `CurrentTick++`, so shot i lands exactly `Delay + i*interval`
+ticks after the cast. The animation is therefore solved BACKWARDS from it:
+
+```
+impact(i) = (Delay + i * interval) * MS_PER_TICK      <- the anchor, == the engine's tick
+fire(i)   = impact(i) - bulletDuration                <- derived
+```
+
+The previous cut anchored the FIRING time, which lands every bullet `bulletDuration` late --
+**300ms at level 1, 100ms at levels 2-3**. `duration` is now `impact(last) + 250ms`, so the
+animation also ENDS after the last hit rather than before it.
+
+This is the second correction to the same contract. The ORIGINAL animator held a hardcoded
+3000ms lock-on against a `Delay` of 70 ticks = 2333ms, so the bullet had not left the barrel
+until ~667ms AFTER the damage landed.
+
+**AND THAT WAS STILL NOT ENOUGH, BECAUSE A TICK IS NOT 33.33ms OF WALL CLOCK.**
+
+The first version of this fix was verified by asserting `impactTime(i)` against the engine's
+damage TICK, in ticks. It passed, and Marc still saw the unit outlive the bullet by "nearly a
+full second". **The check compared ticks to ticks and never touched wall time, which is
+precisely where the error lived** -- a self-consistent unit system agreeing with itself.
+
+`GameHostingService`'s loop is:
+
+```csharp
+var targetDelay = (1000 / GameEngine.TICKS_PER_SECOND) - (int)elapsed;
+if (targetDelay > 0) await Task.Delay(targetDelay, stoppingToken);
+```
+
+`1000 / 30` is **INTEGER division = 33**, and `Task.Delay` on Windows rounds up to the ~15.6ms
+system timer granularity, so each sleep lands near 46.8ms. Measured live from the browser
+against `state.currentTick` over 15 seconds:
+
+| | |
+|---|---|
+| measured tick rate | **21.45 Hz** (not 30) |
+| real ms per tick | **46.63 ms** (engine assumes 33.33) |
+| snipe's 70-tick delay, real time | **3,264 ms** |
+| what a wall-clock animator expects | 2,333 ms |
+| **drift** | **931 ms** |
+
+So `SnipeAnimator.update` now takes its clock from **`state.currentTick`**, not `deltaTime`,
+interpolating within the current tick off an EMA of the observed tick period so the burst still
+runs smoothly at 21 state updates a second. It falls back to wall clock when there is no state.
+Anchoring to ticks is correct at ANY server rate, including one that hitches under load, which
+a re-tuned constant would not be.
+
+Verified by driving the real animator with a synthetic tick stream: **every impact lands within
+one render frame of its damage tick at 46.63ms/tick, at 33.33ms/tick, and at a hitched
+60ms/tick.** Residual error is bounded by one tick (~47ms) instead of 931ms.
+
+```js
+// re-run in the game page's console; drives the shipped animator at any rate
+const SA=(await import('/src/animators/snipe-animator.js')).default;
+const a=new SA(1,1000,'x',3); let wall=0;
+for(let s=0;s<4000;s++){ wall+=8; a.update(8,{currentTick:500+Math.floor(wall/46.63)}); }
+```
+
+### THE SERVER RUNS AT 71% SPEED, AND THAT IS A SEPARATE, LARGER DEFECT
+
+21.45 Hz against an intended 30 Hz means **every live game runs at 71% of its designed pace** in
+wall-clock terms. Everything in the engine is counted in TICKS, so no balance number moves and
+no bot-vs-bot result is affected -- the arenas never sleep, they run flat out. What it changes
+is how the game FEELS: income arrives 40% slower in real seconds, units cross the map 40%
+slower, and every cooldown is 40% longer than its CSV value implies.
+
+**Deliberately NOT fixed here.** Correcting the loop speeds every live game up by 40%, which is
+a gameplay decision rather than an animation one, and Marc's balance intuitions were all formed
+at 21 Hz.
+
+**THE SAME BUG IS LATENT IN THE CASH ANIMATION.** Its contract is that the crate lands at
+`PLANE_MS + CRATE_FALL_MS` = 5,000ms and `Delay` is 150 ticks -- which is 5,000ms only at a
+true 30 Hz. At 46.63ms/tick the payout actually lands at **6,995ms**, so the crate touches down
+**~2 seconds before the money arrives**. Any animator that matches a `Delay` in milliseconds has
+it; the tick-anchored clock above is the pattern to copy.
+
+**One thing still unmeasured:** SignalR transport latency. The animation trigger and the state
+broadcast leave the server on the same tick so they should arrive together, but nothing here
+measures that.
+
+
+## Speed and Slow now scale ATTACK speed too
+
+Added 2026-09-03, Marc's idea: "every unit's AttackSpeed is a calculated value based on their
+movespeed and damage... it should be straightforward enough to have the speed boost also boost
+the attack speed."
+
+**The premise is correct.** `AttackSpeed` is not read from the roster CSV at all -- the column
+exists and is ignored. `GameDataManager` DERIVES it with the Doggo Formula
+(`k * Speed / Damage`, k = tier*2 / tier^2 / tier^3 by band) and clamps to
+`[MIN_ATTACK_SPEED, MAX_ATTACK_SPEED]`. So the stat was already proportional to move speed, and
+a gadget that changed one without the other contradicted the formula the stat comes from.
+
+`MoveAndFight` already computed `speedMod` -- the product of every Slow/Speed status value --
+and used it for movement only. Both places that set `AttackCooldown` now divide by
+`def.AttackSpeed * speedMod` instead. That covers **Speed (x1.5 / x2 / x10), Goo's slow
+(x0.5), Freeze's trailing slow (x0.25) and ARMAGEDDON's speed buff** in one line each, because
+they all land in the same status list.
+
+**DELIBERATELY NOT RE-CLAMPED.** Re-applying the 5.0 ceiling to the boosted value would hand
+exactly nothing to tier 4 and 5, which already sit on it -- and those are the units a speed
+build actually fields. The effective ceiling is the tick rate instead.
+
+### RATES ARE TICK-QUANTISED, which is not obvious and bit the guard first
+
+`AttackCooldown` is milliseconds, decremented once per tick, so a unit swings every
+`ceil(cooldownMs / 33.3)` TICKS and never on a fraction of one. A x10 buff on a 0.83/s unit
+therefore yields **7.5/s, not 8.33/s** (120ms rounds up to 4 ticks). The first version of
+`--attack-speed-mod-check` failed on exactly that and the expectation was wrong, not the code.
+The check now models the quantisation rather than widening its tolerance -- a loose tolerance
+would have accepted the multiplier being dropped entirely at the small end.
+
+The same quantisation is a hard ceiling of **30 swings/sec**, which is why an uncapped x10 does
+not run away.
+
+### Measured: this is the biggest single move in the balance record
+
+`balance-matrix`, 16,384 games:
+
+| defence | before | after | Δ |
+|---|---|---|---|
+| **speed** | 20.6% | **34.5%** | **+13.9** |
+| reinforcements | 66.2% | 62.6% | -3.6 |
+| wall | 59.2% | 55.0% | -4.2 |
+| heal | 49.5% | 44.1% | -5.4 |
+
+Speed's head-to-head against every other defence roughly tripled (vs reinforcements 8.0% ->
+24.3%, vs wall 7.8% -> 25.0%). It is still last of four, but it is no longer a trap pick -- it
+now sits about where snipe does rather than 30 points below everything.
+
+**Green +3.9 is the check that the SLOW half landed too.** Goo is Green's signature and the
+only source of a sustained slow, so a slow that now blunts attack rate should show up on Green
+specifically -- and it did, with no other team moving more than 2.3.
+
+`bot-checksum --games 24` moves to **`6645D418F632E0B0C3825016CEB95775`**.
+
+### One inconsistency this leaves standing
+
+`Unit.AttackSpeed` exists as a per-instance field and the combat loop does NOT read it -- both
+cooldown sites use `def.AttackSpeed`. That is the same shape as the bug the random-stat unit
+fixed for Damage and BaseSpeed, and it has a live consequence: the weirdo rolls its move speed
+in [0.5, 2.0], and by the Doggo Formula its attack speed should follow, but it does not,
+because AttackSpeed is fixed at load time from the roster row. Not fixed here because it is a
+separate balance change to a separate unit.
 
 ## Unit charges
 
@@ -1402,12 +1871,29 @@ than reading as a lever resting in the pulled position.
 the conveyor projects into the field. Safe for the readout: the castle sprite is under 5%
 opaque across the machine's panel.
 
-**The lever is RATE-matched, not phase-locked.** It fires on a client clock running at the
-level's real units-per-second (`AUTO_SPAWNER_RATE`, mirroring `PlayerState.AutoSpawnCycles`
-where the rate IS the cycle length), so pulls happen as often as spawns really happen but
-not necessarily on the same tick. Phase-locking would mean sending the engine's spawn
-accumulator every tick for both players -- a per-tick wire cost on a wire that was
-deliberately trimmed 3.95x -- to move the pull by a frame or two.
+**The lever is PHASE-LOCKED to the engine's own spawn counter** (corrected 2026-09-09).
+
+It used to be "rate-matched, not phase-locked": a client wall-clock timer firing every
+`1000 / rate` ms off a duplicated `AUTO_SPAWNER_RATE` table, on the argument that phase-locking
+would cost a wire field per player per tick "to move the pull by a frame or two". **Both halves
+of that were wrong.** Marc, from playtesting: "the lever appears to be moving at roughly the
+correct cadence, but it doesn't line up with when the units are actually being spawned."
+
+The phase was arbitrary -- nothing tied the client's timer to `AutoSpawnAccumulator`. And the
+RATE was wrong too, by 40%: the engine adds `perSecond` to an accumulator once per **TICK** and
+spawns each time it crosses 30, i.e. `rate` units per 30 ticks, while the client pulled `rate`
+times per real **SECOND**. Those agree only at a true 30Hz, and the server loop actually manages
+**~21.4** (see CLEANUP_BACKLOG.md), so the lever ran ~1.4x too fast and drifted continuously.
+
+`PlayerState.AutoSpawnCycleIndex` -- incremented once per spawn in `TickAutoSpawn` -- is now on
+the wire, and the lever throws whenever it CHANGES. Exact at any tick rate, and it needs no copy
+of the cadence table on the client, so `AUTO_SPAWNER_RATE` is deleted rather than left to drift
+against `PlayerState.AutoSpawnCycles`. **The cost is one int per player per tick, ~30 bytes
+against a 4,356-byte average tick (0.7%)** -- the honest price of the animation being correct
+rather than approximately correct.
+
+Guarded by `--auto-spawn-check` section 7, which runs the real tick loop at four levels and
+asserts the index goes up by exactly one per auto-spawned unit, on the same tick.
 
 **Geometry is authored from the castle's bottom-left corner, y UP**, because that is the
 frame in which "it lines up with the hole in the wall" is stable. The machine's bottom-left
@@ -1532,6 +2018,254 @@ priced by Marc playing.
 
 **Note this rung changes the OVERALL figure**, so OVERALL is not comparable across the commit
 that added it. The per-rung rows are.
+
+## `/analysis` â€” the recurring-analysis pages
+
+Added 2026-09-09 to Marc's spec. A dev-facing area served by the game server itself, reached
+by URL only â€” nothing in the game links to it and no existing screen changed.
+
+```
+http://localhost:5168/analysis/
+```
+
+| page | what it is |
+|---|---|
+| `/analysis/` | hub: dashboard state, replay counts, the update button |
+| `/analysis/dashboard.html` | the balance dashboard in a frame, with **Update dashboard** above it |
+| `/analysis/replays.html` | every recorded game, categorised, filterable, sortable on any column |
+| `/analysis/replay.html?id=XXXXXX` | one game: economy charts, breakdown, highlights, bot rationale |
+
+Static files under `wwwroot/analysis/`, backend in `Controllers/AnalysisController.cs` and
+`Services/Analysis/`. They deliberately share NOTHING with the game's `global-styles.css` â€”
+in particular not the portrait lock, which would blank a reading page on a phone held
+upright. Verified at 812x375: no page-level horizontal scroll, the top bar stops being
+sticky under 480px tall, and wide tables scroll inside their own container.
+
+### NOTHING IS CACHED, AND THAT IS THE POINT
+
+A per-game report is a full re-simulation (a few hundred ms for a five-minute game). Caching
+one would mean serving a report generated under balance data that may since have changed â€”
+which is the exact failure the whole feature exists to surface. Marc's call: a slow page load
+is fine, a stale report is not. The replay LIST is cached, by file mtime, because it only
+reads headers and resimulates nothing.
+
+### The update button, and why the script changed
+
+`update-dashboard.bat` gained **`--no-open`**, which the button passes. The page is already
+displaying the dashboard and reloads the frame when the run finishes, so a browser tab
+launched by the script would be a second, redundant window every time. Run the bat by hand
+with no flag and it still opens the result.
+
+**The run endpoint is LOCALHOST-ONLY** (`DashboardRunner`). It executes a batch script: the
+endpoint is the capability, not the script, and the fact that today's script is a harmless
+sweep is not the argument. The analysis PAGES stay viewable from anywhere on the network;
+only the button is gated, and the UI says so rather than showing a dead control. One run at a
+time â€” the sweep rotates `balance_matrix_prev.csv`, and two concurrent runs would interleave
+those writes and corrupt the delta column.
+
+Arguments typed into the box are passed through to `balance-matrix`, filtered to
+`[A-Za-z0-9._-]` tokens. That is why `--out <path>` cannot be driven from the UI: a permissive
+filter on a string handed to a shell is a command line waiting to happen, and the button
+exists to update THE dashboard rather than an arbitrary one.
+
+### Highlights: the economy lead is HIERARCHICAL
+
+Marc's definition, not a statistical one. **Being ahead on INCOME is being ahead
+economically, full stop** â€” a rung on the ladder is worth more than any amount of cash that
+has not bought one. Only when both sides sit on the same rung does money held decide it.
+
+A money lead additionally has to clear the other side by 5% or $40, whichever is larger, and
+hold for 4 seconds. Without that, two banks a few dollars apart trade the lead every second
+and the list is noise. Knobs are `ReplayAnalysis.Options`.
+
+**A swing caused by ARMAGEDDON is annotated as such.** The buyer's bank drops to nothing, so
+the other side "takes the economy lead" on the very tick it begins losing the game â€”
+1F3C07's last swing reads *"P2 takes the economy lead ... but P1 has just spent everything on
+ARMAGEDDON"*. Without the clause that entry is exactly backwards.
+
+The action list attached to each swing is INCLUSIVE of the swing's own tick. An exclusive
+bound drops the action most likely to have caused it, which it did: 12B538's swing at 0:04 is
+the invest at tick 120, and the window read `t < 120` and reported "P2 did nothing".
+
+### The bot rationale is RE-DERIVED, and the page says so
+
+`BotRationale` answers "what was the bot doing and why" at each swing, for singleplayer games
+only. Two halves with very different standing, and the distinction is load-bearing:
+
+- **What it did** is read off the recorded action stream. Ground truth.
+- **Why** re-evaluates the CONDITIONS `HeuristicBot`'s settings test â€” an enemy inside
+  `EnemyIsCloseDistance`, `InvestmentCount` against `AttackGateMinInvestment`, money against
+  the next rung, whether any affordable unit still holds a charge. Where a gate is a pure
+  function of state the value is exact. Where `Decide()` uses rolling internal state a rebuild
+  does not have â€” the HP window behind time-to-death, `_blockCredit`, the decision cadence â€”
+  it is **absent rather than guessed**.
+
+So it reports "these were the conditions", never "this is the branch that fired". Getting the
+latter honestly means instrumenting HeuristicBot to emit a real trace, which changes the bot
+and needs a `bot-checksum` run behind it. The profile is read from the recorded
+`opponent_type` (`heuristic_autospawn8` â†’ `EconomyBrakeAutoSpawnProfile`, etc.), never
+assumed â€” the wrong profile would re-derive the wrong thresholds and describe a bot that
+never played.
+
+The rationale flags one thing loudly: **a bot sitting at the top rung with ARMAGEDDON priced
+and unbought.** On 1F3C07 it tracks the bot closing on it â€” $10,461 (44s of income short),
+then $28,313 (37s short), then $109,356 (**5s short**) â€” and dying with it unbought. That is
+the "the bot lacks the strongest win condition" note in the strategy record, shown as it
+happens.
+
+### `ReplayFile` moved to the Engine
+
+`CastleDefense.Simulation` references `CastleDefenseGame2`, so the arrow only points one way
+and a reader living in Simulation was unreachable from the server. The FORMAT is now
+`CastleDefense.Engine/Replays/ReplayFile.cs`; the corpus-selection half â€” which replays are
+Marc's games, and `IsRealResult` â€” stayed behind as `ReplayCorpus`, because it depends on
+`GameDatabase` and is analysis policy rather than file format. **The win-by-default rule still
+has exactly one home.**
+
+`ReplayAnalysis` is likewise shared: `--replay-economy` and the web pages run the SAME
+sampler, verified by the CLI's CSV coming out byte-identical after the rewire. A second walk
+of the replay would let the page and the command line disagree with no symptom.
+
+### TWO FIDELITY TESTS, AND BOTH HAVE TO PASS
+
+The failed-action count is the sharp test â€” the recorder only ever writes an action the live
+engine accepted, so a refusal means the rebuild has drifted. **But it is only as strong as the
+number of actions there were to fail.** Game 12B538 has seven actions in the whole match,
+replays all seven, and still ends 161 ticks late on different money; reporting that as "exact"
+would be a lie told confidently. So the banner also compares the rebuilt outcome against the
+row captured live at game over, and claims exactness only when both agree.
+
+## CDRP v4 â€” the balance fingerprint and the ARMAGEDDON flags
+
+Added 2026-09-09, appended after the v3 tail for the same reason v3 was appended after v2:
+every byte above is unchanged, so a v3 reader skips it and a v3 file stays readable forever.
+`--replay-format-check` covers v4, v3 and v2 round trips (39 assertions).
+
+```
+[1]   p1_armageddon_used
+[1]   p2_armageddon_used
+[1+N] gadgets_csv_hash
+[1+N] roster_csv_hash
+```
+
+**ARMAGEDDON cannot be recovered from the action stream.** It is action 9 â€” the same byte as
+an ordinary invest â€” and is only ARMAGEDDON because `InvestmentCount` was already at the cap.
+It never reaches `gadget_uses` either, because `TriggerArmageddon` calls the effect directly
+instead of going through `UseGadget`, so no `OnGadgetCast` is raised. The replay LIST reads
+this flag; the per-game REPORT watches `PlayerState.ArmageddonUsed` during the rebuild
+instead, so it works on v3 files too.
+
+**THE FINGERPRINT EXISTS BECAUSE A REPLAY RECORDS THE ACTIONS BUT NOT THE RULES.** See the
+entry below; it cost a session. `GameDataManager.GadgetsFileHash` / `RosterFileHash` are
+SHA-256 over the newline-normalised file, first 8 bytes â€” normalised because git rewrites line
+endings on checkout here and a fingerprint that tripped on that would cry wolf on every clone.
+
+### `--backfill-balance` â€” recovering the fingerprint for pre-v4 games
+
+```
+CastleDefense.Simulation.exe --backfill-balance [--game ID] [--limit N] [--force]
+```
+
+Every game recorded before 2026-09-09 predates the v4 fingerprint. This recovers it from git
+history: each distinct historical content of `master_gadgets.csv` and `master_roster.csv` is
+pulled out of git into a cache, and each candidate is tried against each recorded game.
+
+Result over the 353 non-quarantined replays (2026-07-15 to 2026-09-09):
+
+| games | gadget CSV | from |
+|---|---|---|
+| 242 | `17a1979ecdac1a30` | `d179767a` 2026-07-09 |
+| 76 | `67b081f4a5cc4705` | `e603ea18` 2026-08-24 |
+| 25 | `e53e9b45a01bb5b5` | `259e1835` 2026-09-03 |
+| 6 | `94813bc82407ceaa` | `553cdef2` 2026-09-03 |
+| 4 | `8e83d43bef7574ef` | working tree |
+
+**The timeline is a good witness here precisely because the CSV was static.** The gadget file
+went untouched from 2026-07-09 to 2026-08-24, so all 242 games in that seven-week window have
+exactly one possible version and nothing to resolve. That is 69% of the corpus assigned with no
+ambiguity at all.
+
+**Results go into `game_records.db`, NOT into the .replay files.** Two reasons, both
+load-bearing: an inference is not a recording, and writing one into the v4 fields would destroy
+the only thing that makes a recorded fingerprint worth trusting; and the replay files are the
+durable artefact of the play record, which should not be rewritten in place to add derived
+metadata that improves every time more history is committed. Columns are
+`inferred_gadgets_hash`, `inferred_roster_hash`, `balance_inference_method` (`verified` /
+`ambiguous` / `dated`) and `balance_inference_detail`. `/analysis` merges the two and labels
+which it is showing; the replay list marks an inferred fingerprint with a trailing `*`.
+
+**The two copies of the CSV diverged at exactly ONE commit in 236** â€” `081dd3a`, the front-end
+commit that updated `wwwroot/assets/` an hour before `553cdef2` propagated it to the Engine.
+The server has always read the ENGINE copy, so the wwwroot history is irrelevant to
+reconstruction and only ever affected what the shop button displayed. That is the bug the
+consolidation fixed, visible in the history as a single one-hour window.
+
+### THE RECONSTRUCTION ORACLE DOES NOT WORK ON THIS CORPUS, AND THE REASON MATTERS
+
+The tool tries to CONFIRM each candidate by rebuilding the game against it -- the recorder only
+ever writes an action the live engine accepted, so a version under which every recorded action
+is legal and the outcome reproduces is the version that was used. Measured:
+
+**Only 4 of 353 games replay cleanly under ANY historical balance file.** Not four per version
+â€” four in total, and all four are ambiguous (several versions fit them equally). The failures
+are flat across the entire date range, including games played last week.
+
+**This is not a missing-CSV problem. The ENGINE has changed, not the balance data.** A recorded
+action is refused today for reasons no CSV can undo:
+
+- **unit charges** (2026-09-01) refuse the spam a pre-charge opponent recorded â€” game `408D85`,
+  a July practice game, has **716 of its 721 recorded P2 actions refused** under every single
+  historical CSV, at rates of 99.3% against 99.4%
+- **the opening squad and the $10 start** (2026-08-26) change every economy from tick 0
+- **map effects** (2026-08-27) change combat outright
+- and the working tree right now carries uncommitted changes to `GameEngine.cs`,
+  `HeuristicBot.cs`, `SnipeEffect.cs` and `GadgetDefinition.cs`
+
+So a failed rebuild says nothing about which CSV was loaded, and the tool must not report it as
+"CSV not found". It falls back to the timeline and records WHY confirmation failed in
+`balance_inference_detail`, including the observed refusal rate, so the claim can be checked.
+
+**THE COROLLARY IS THE IMPORTANT PART: the replay corpus no longer reconstructs under the
+current engine.** Every tool that rebuilds Marc's games â€” `--divergence`,
+`--export-policy-table`, `--replay-gauntlet`, `--replay-economy`, the `/analysis` reports â€” is
+replaying an action stream into a game that diverges almost immediately for 99% of the corpus.
+Marginal statistics survive that (they only re-bin the same recorded actions); anything
+CONDITIONED on the reconstructed state does not. This is the same failure class as the
+2026-07-28 phase trap, one layer down, and it is not yet reflected in any of the numbers those
+tools have produced. See CLEANUP_BACKLOG.md.
+
+### One game whose CSV is genuinely gone
+
+`1F3C07` (2026-09-09 13:42) reproduces bit-exactly under NO version in git. It was played under
+a working-tree state that existed only in `CastleDefenseGame2/bin/Debug/.../Data/` â€” the CSV
+was saved at 13:39, never built (the dev server held Engine.dll), so the game ran the 00:38
+build output, a state after `259e1835` but before the 13:39 edits, still carrying the
+short-lived `Shots` columns. That copy was overwritten on 2026-09-09 by a `find -delete` +
+rebuild done to make every build output match the source; the file is not recoverable from this
+repo. The `/analysis` report for that game shows the contradiction rather than a green tick:
+the timeline says the balance data is unchanged, the rebuild says the game does not replay, and
+both cannot be true.
+
+### THE TRAP: A REPLAY REBUILT AGAINST DIFFERENT BALANCE DATA DIVERGES SILENTLY
+
+Diagnosed 2026-09-09 on game 1F3C07, and it is worth reading in full because the failure is
+quiet, late, and looks like a bug in the reconstruction tooling rather than a data mismatch.
+
+The game was played with `freeze`'s `UpgradeCost` at **700** â€” seven casts to reach
+`freeze_2`, confirmed by `gadget_uses`, which stores the tier id per cast. It was rebuilt
+against **500**, so the rebuild upgraded on the FIFTH cast. `PlayerState.AddGadgetXp` stamps
+the new tier's FULL cooldown at the upgrade (line 509), so `freeze_2` got 560 ticks at tick
+6027, and the recorded cast at 6416 â€” 389 ticks later, legal under base freeze's 363 â€” was
+refused 171 ticks inside it. The rebuild then ended at tick 6718 against a recorded 8825:
+**70 seconds short, with the whole ARMAGEDDON finish missing.**
+
+Nothing about this looks like a data problem from the outside. Restoring the CSV the game was
+played under turns it into `0/77 P1 and 0/507 P2` failures and a bit-exact reproduction.
+
+**The cause was the documented build trap wearing a new hat**: the source CSV was edited at
+13:39, the web project's Debug output still held the 00:38 copy, and the game played at 13:42
+therefore ran the OLD numbers while a freshly built Release arena had the new ones. Check the
+`[data]` startup timestamp before concluding a balance change did or did not land.
 
 ## Cleanup backlog
 

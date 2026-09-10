@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using CastleDefense.Engine;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {
@@ -89,7 +90,7 @@ namespace CastleDefense.Simulation
                 return;
             }
 
-            var selected = ReplayFile.SelectHumanGames(replayDir, "policy-table", all, filter, half);
+            var selected = ReplayCorpus.SelectHumanGames(replayDir, "policy-table", all, filter, half);
             Console.WriteLine($"[policy-table] fitting from {selected.Count} human replays\n");
 
             var ticks = new long[NBins];

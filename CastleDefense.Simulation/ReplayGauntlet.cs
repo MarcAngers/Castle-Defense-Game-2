@@ -2,6 +2,7 @@
 using CastleDefense.Engine.Bot;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {
@@ -471,43 +472,35 @@ namespace CastleDefense.Simulation
             if (!File.Exists(path)) { Console.WriteLine($"No replay at {path}"); return; }
             outPath ??= $"economy_{Path.GetFileNameWithoutExtension(path)}.csv";
 
+            // THE SAMPLING LIVES IN ReplayAnalysis, not here. The /analysis web pages report
+            // the same numbers for the same game, and a second walk of the replay would let
+            // the two drift with no symptom until someone diffed them by hand.
             var rf = ReplayFile.Read(path);
-            var (state, engine) = rf.BuildStart();
-            long start = state.CurrentTick;
+            var res = ReplayAnalysis.Run(rf);
 
-            var gadget = new double[3];
-            engine.OnGadgetCast += (side, id, pos) =>
+            using (var w = new StreamWriter(outPath))
             {
-                var gd = engine.GetGadgetDefinition(id);
-                if (gd != null && side >= 1 && side <= 2) gadget[side] += gd.Cost;
-            };
-            var upgrades = new List<string>();
-            engine.OnGadgetUpgraded += (side, def) =>
-                upgrades.Add($"{(state.CurrentTick - start) / 30.0:F0},{side},{def.Id}");
-
-            using var w = new StreamWriter(outPath);
-            w.WriteLine("second,p1_money,p1_income,p1_invest,p1_hp_pct,p1_repairs,p1_units_spent,p1_gadget_spent," +
-                        "p2_money,p2_income,p2_invest,p2_hp_pct,p2_repairs,p2_units_spent,p2_gadget_spent");
-
-            while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
-            {
-                engine.Tick();
-                long i = state.CurrentTick - start;
-                if (i >= 0 && i < rf.A1.Length)
-                {
-                    if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
-                    if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
-                }
-                if (i % 30 != 0) continue;
-                var a = state.Player1; var b = state.Player2;
-                w.WriteLine($"{i / 30},{a.Money:F0},{a.Income:F0},{a.InvestmentCount},{Pct(a):F1}," +
-                            $"{LadderCost(a.RepairCount, true):F0},{engine.MoneySpentOnUnits[1]:F0},{gadget[1]:F0}," +
-                            $"{b.Money:F0},{b.Income:F0},{b.InvestmentCount},{Pct(b):F1}," +
-                            $"{LadderCost(b.RepairCount, true):F0},{engine.MoneySpentOnUnits[2]:F0},{gadget[2]:F0}");
+                w.WriteLine("second,p1_money,p1_income,p1_invest,p1_hp_pct,p1_repairs,p1_units_spent,p1_gadget_spent," +
+                            "p2_money,p2_income,p2_invest,p2_hp_pct,p2_repairs,p2_units_spent,p2_gadget_spent");
+                foreach (var s in res.Samples)
+                    w.WriteLine($"{s.Second},{s.Money[1]:F0},{s.Income[1]:F0},{s.Invest[1]},{s.HpPct[1]:F1}," +
+                                $"{s.RepairSpend[1]:F0},{s.UnitSpend[1]:F0},{s.GadgetSpend[1]:F0}," +
+                                $"{s.Money[2]:F0},{s.Income[2]:F0},{s.Invest[2]},{s.HpPct[2]:F1}," +
+                                $"{s.RepairSpend[2]:F0},{s.UnitSpend[2]:F0},{s.GadgetSpend[2]:F0}");
             }
-            Console.WriteLine($"wrote {outPath}  ({(state.CurrentTick - start) / 30}s, winner P{state.WinnerSide})");
+            Console.WriteLine($"wrote {outPath}  ({res.RebuiltTicks / 30}s, winner P{res.RebuiltWinner})");
+
+            // Fidelity is computed on every run now, so say so rather than letting a
+            // diverged rebuild be read as the recorded game -- see ReplayAnalysis.
+            if (!res.Fidelity.Perfect)
+                Console.WriteLine($"  WARNING: {res.Fidelity.Failed[1]}/{res.Fidelity.Attempted[1]} P1 and " +
+                                  $"{res.Fidelity.Failed[2]}/{res.Fidelity.Attempted[2]} P2 recorded actions FAILED; " +
+                                  $"nothing past {res.Fidelity.TrustedUntilSecond}s is trustworthy.");
+            if (res.Balance != ReplayAnalysis.BalanceStatus.Match && res.Balance != ReplayAnalysis.BalanceStatus.Unknown)
+                Console.WriteLine($"  WARNING: balance data has changed since this game was played ({res.Balance}).");
+
             Console.WriteLine("upgrades (second,side,gadget):");
-            foreach (var u in upgrades) Console.WriteLine("  " + u);
+            foreach (var u in res.Upgrades) Console.WriteLine($"  {u.second},{u.side},{u.gadgetId}");
         }
 
         /// <summary>

@@ -1,0 +1,171 @@
+/* ---------------------------------------------------------------------------
+   /analysis -- shared styling for the replay browser and the balance dashboard.
+
+   DELIBERATELY MATCHES CastleDefense.BotArena/dashboard/dashboard.html's palette
+   and type scale, because that page is embedded inside this one and two different
+   design languages either side of an iframe border looks like a bug.
+
+   It shares NOTHING with the game's own global-styles.css -- in particular not the
+   portrait lock, which would blank these pages on a phone held upright. These are
+   reading pages, not the game.
+--------------------------------------------------------------------------- */
+:root {
+  --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --ink3: #898781;
+  --line: #e1e0d9; --p1: #3987e5; --p2: #d97a1e; --acc: #8b5cf6;
+  --good: #0ca30c; --bad: #d03b3b; --warn: #c78100;
+  --chip: #f0efe9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0d0d; --card: #1a1a19; --ink: #fff; --ink2: #c3c2b7; --ink3: #898781;
+    --line: #2c2c2a; --p1: #5fa3f0; --p2: #e89a4a; --acc: #a78bfa;
+    --good: #4ade80; --bad: #e66767; --warn: #e0a83c;
+    --chip: #232321;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+a { color: var(--p1); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 24px 20px 64px; }
+h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: -.01em; }
+h2 { font-size: 13px; margin: 28px 0 6px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); }
+.sub { color: var(--ink3); font-size: 12.5px; margin: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+.note { color: var(--ink3); font-size: 12px; line-height: 1.55; margin: 8px 0 0; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* --- top bar ------------------------------------------------------------ */
+.bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line); padding: 10px 20px; background: var(--card);
+  position: sticky; top: 0; z-index: 20;
+}
+.bar .brand { font-weight: 700; letter-spacing: -.01em; }
+.bar nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.bar nav a {
+  text-decoration: none; color: var(--ink2); padding: 5px 11px; border-radius: 7px; font-size: 13px;
+}
+.bar nav a:hover { background: var(--chip); }
+.bar nav a[aria-current="page"] { background: var(--chip); color: var(--ink); font-weight: 600; }
+
+/* --- buttons ------------------------------------------------------------ */
+button, .btn {
+  font: inherit; font-size: 13px; padding: 6px 13px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--chip); color: var(--ink); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+button:hover:not(:disabled), .btn:hover { border-color: var(--ink3); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary { background: var(--p1); border-color: var(--p1); color: #fff; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+input[type=text] {
+  font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+
+/* --- chips / badges ----------------------------------------------------- */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--ink2);
+}
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+.chip .n { opacity: .6; margin-left: 4px; }
+.badge {
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px; background: var(--chip); color: var(--ink3);
+  white-space: nowrap;
+}
+.badge.good { color: var(--good); } .badge.bad { color: var(--bad); }
+.badge.warn { color: var(--warn); } .badge.acc { color: var(--acc); }
+.badge.p1 { color: var(--p1); } .badge.p2 { color: var(--p2); }
+
+/* --- tables ------------------------------------------------------------- */
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; vertical-align: top; }
+th {
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink3);
+  font-weight: 600; white-space: nowrap; position: sticky; top: 0; background: var(--card); z-index: 2;
+}
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th .arrow { opacity: .35; }
+th[data-dir] .arrow { opacity: 1; color: var(--ink); }
+td.num, th.num { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+tbody tr:hover { background: var(--chip); }
+tbody tr.clickable { cursor: pointer; }
+.scroll { overflow-x: auto; }
+
+/* --- callouts ----------------------------------------------------------- */
+.callout {
+  border-left: 3px solid var(--ink3); padding: 11px 15px; margin-top: 12px;
+  background: var(--card); border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.6; color: var(--ink2);
+}
+.callout.bad { border-left-color: var(--bad); }
+.callout.warn { border-left-color: var(--warn); }
+.callout.good { border-left-color: var(--good); }
+.callout strong { color: var(--ink); }
+
+/* --- charts ------------------------------------------------------------- */
+svg.chart { width: 100%; height: auto; display: block; margin-top: 8px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .ax { fill: var(--ink3); font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+.chart .l1 { fill: none; stroke: var(--p1); stroke-width: 2.1; stroke-linejoin: round; }
+.chart .l2 { fill: none; stroke: var(--p2); stroke-width: 2.1; stroke-linejoin: round; }
+.chart .d1 { fill: var(--p1); } .chart .d2 { fill: var(--p2); }
+.chart .mark { stroke: var(--acc); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.chart .markt { fill: var(--acc); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.chart .dead { fill: rgba(208,59,59,.08); }
+.chart .cut { stroke: var(--bad); stroke-width: 1.4; stroke-dasharray: 4 4; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink2); margin-top: 8px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: block; }
+.legend i.l1 { background: var(--p1); } .legend i.l2 { background: var(--p2); }
+
+/* --- highlights --------------------------------------------------------- */
+.hl { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 10px; background: var(--card); }
+.hl-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.hl-time { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--ink3); min-width: 46px; }
+.hl-title { font-weight: 600; font-size: 13.5px; flex: 1; min-width: 240px; }
+.hl-body { margin-top: 8px; font-size: 12.5px; color: var(--ink2); line-height: 1.6; }
+.hl-actions { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+.gates { margin-top: 8px; border-top: 1px solid var(--line); }
+.gates summary { cursor: pointer; font-size: 12px; color: var(--ink3); padding-top: 7px; }
+.gate { display: flex; gap: 9px; align-items: baseline; padding: 4px 0; font-size: 12px; }
+.gate .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 5px; background: var(--ink3); }
+.gate .dot.open { background: var(--good); } .gate .dot.shut { background: var(--bad); }
+.gate .gname { font-weight: 600; color: var(--ink2); min-width: 168px; }
+.gate .gsrc { color: var(--ink3); font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+
+/* --- misc --------------------------------------------------------------- */
+.log {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.5;
+  background: var(--chip); border-radius: 8px; padding: 10px 12px; max-height: 220px;
+  overflow: auto; white-space: pre-wrap; color: var(--ink2); margin-top: 10px;
+}
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.spinner {
+  width: 13px; height: 13px; border: 2px solid var(--ink3); border-top-color: transparent;
+  border-radius: 50%; animation: spin .7s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.muted { color: var(--ink3); }
+.frame { width: 100%; height: calc(100vh - 132px); min-height: 420px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+
+/* A landscape phone is ~375px tall and the game is built for exactly that, so these
+   pages have to survive it too: the top bar stops sticking (it would eat a third of
+   the viewport), and the dashboard frame gets a floor so it does not collapse. */
+@media (max-height: 480px) {
+  .bar { position: static; padding: 7px 12px; }
+  .wrap { padding: 12px 12px 32px; }
+  h2 { margin-top: 18px; }
+  .frame { height: calc(100vh - 96px); min-height: 240px; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 12px 12px 40px; }
+  .bar nav { margin-left: 0; width: 100%; }
+}

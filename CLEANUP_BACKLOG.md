@@ -455,3 +455,104 @@ testing the cap was built for. Fix them deliberately, and re-run `bot-checksum` 
   knockback CAP *does* read the CSV (`WaveEffect.CapFor` uses `BaseValue / 10`), so the two
   halves of the same gadget are now sourced differently — which is the real reason to close
   this rather than the discrepancy itself.
+
+- **`CommittedValueUncapsReactiveFlow` silently depends on `WaveWipeValue`.** The gate reads
+  `committedEnemyValue`, which is only accumulated inside `if (_settings.WaveWipeValue)`. That
+  flag is true by default and the shipped profile does not disable it, so the deployed bot is
+  correct — but turning `WaveWipeValue` off would disable the tier-8 defensive purchase
+  entirely, with no error and no symptom other than the bot going back to losing to a banked
+  alpha strike. Either fold the accumulation out of the flag or assert the pairing.
+
+- **`Investor` fell 98.5% -> 88.7% when `CommittedValueUncapsReactiveFlow` shipped**
+  (96.8% -> 83.3% on the headstart arm), and it is the only ladder rung that moved the wrong
+  way. It reproduces with `SurvivalInstinct` off, so it is the flow-cap bypass itself rather
+  than the trigger. Hypothesis worth testing first: Investor banks and then commits a large
+  force, which is exactly the shape the gate fires on, so the bot may be paying ace prices
+  against an opponent a cheaper answer would hold. See BOT_ITERATION_LOG.md 2026-09-08.
+
+- **`Unit.AttackSpeed` is still not read by the combat loop** (both cooldown sites use
+  `def.AttackSpeed`), so Black's weirdo rolls its move speed in [0.5, 2.0] and its attack speed
+  does not follow, contrary to the Doggo Formula that derives one from the other. Same shape as
+  the bug the random-stat unit fixed for `Damage` and `BaseSpeed`.
+
+- **The game loop runs at 21.45 Hz, not 30.** `GameHostingService` does
+  `Task.Delay((1000 / GameEngine.TICKS_PER_SECOND) - elapsed)`; `1000 / 30` is integer
+  division = 33, and `Task.Delay` on Windows rounds up to the ~15.6ms timer granularity, so a
+  tick takes ~46.6ms. Measured live at 46.63 ms/tick over 15s. Every live game therefore runs
+  at **71% of its designed pace** in wall-clock terms. No balance number is affected (the
+  engine counts ticks, and the arenas never sleep), but every animation timed in milliseconds
+  drifts from the effect it is supposed to match, and every CSV cooldown is 40% longer in real
+  seconds than it reads. Fixing it needs a higher-resolution wait (timeBeginPeriod, or a
+  spin/sleep hybrid) AND a decision from Marc, because it speeds every live game up by 40%.
+
+- **The cash crate lands ~2s before its money, for the reason above.** `CashAnimator`'s
+  contract is crate-down at `PLANE_MS + CRATE_FALL_MS` = 5,000ms against `Delay` = 150 ticks,
+  which is 5,000ms only at a true 30 Hz; at the real rate the payout lands at ~6,995ms. Copy
+  the tick-anchored clock now in `SnipeAnimator.update`.
+
+- **`BOT_MECHANICS.md` section 13 still says "Gadget target positions are not recorded in
+  `.replay`, only the action id. Every reconstruction re-aims with the auto-targeter."** That
+  has been false since v3 (2026-08-20), which records a sparse cast list and which
+  `ReplayFile.ApplyRecorded` uses. It remains true for v2 files and for `--replay-gauntlet`,
+  which re-aims ON PURPOSE. One line, but it is in the file CLAUDE.md tells you to read
+  INSTEAD of re-deriving the engine, so a wrong line there is worse than a wrong line
+  elsewhere.
+
+- **`--replay-economy`'s printed upgrade seconds now truncate instead of rounding.** They came
+  from `(CurrentTick - start) / 30.0:F0` and now come from the shared
+  `ReplayAnalysis.Upgrades`, which uses integer division so the value lines up with the CSV's
+  own `second` column. The CSV is byte-identical either way (verified on 170CA9); only the
+  console list moves, and only by at most one second. Noted so a diff against an old pasted
+  run is not read as a regression.
+
+- **Balance drift is undetectable on pre-v4 replays.** Every game recorded before 2026-09-09
+  carries no CSV fingerprint, so `/analysis` reports "cannot be known" and falls back to the
+  failed-action count alone. That is the weaker test â€” game 12B538 passes it with 7 actions
+  and still lands 161 ticks off. Nothing to fix; it is a property of the old files, and it
+  resolves on its own as new games are recorded.
+
+- **`ReplayIndex` reads every replay header on first load and caches by file mtime**, so the
+  353-game list costs one pass over ~4 MB per server lifetime. Fine now. If the corpus reaches
+  the thousands, move the header fields into `game_records.db` at record time rather than
+  making the cache smarter â€” the DB already has a row per game and a migration helper.
+
+
+- **THE REPLAY CORPUS NO LONGER RECONSTRUCTS UNDER THE CURRENT ENGINE, and nothing that reads
+  it has been re-audited since.** Measured 2026-09-10 by `--backfill-balance`, which rebuilds
+  every recorded game against every historical `master_gadgets.csv`/`master_roster.csv` in git:
+  **only 4 of 353 replay cleanly under any of them.** The cause is not the balance data â€” it is
+  engine code. Unit charges (2026-09-01) refuse the spam a pre-charge opponent recorded, the
+  opening squad and $10 start (2026-08-26) move every economy from tick 0, map effects
+  (2026-08-27) change combat. Game `408D85` has 716 of its 721 recorded P2 actions refused
+  under *every* CSV version, at rates between 99.3% and 99.4%.
+
+  Consequence: `--divergence`, `--export-policy-table`, `--replay-gauntlet`, `--replay-economy`
+  and the `/analysis` per-game reports all replay an action stream into a game that diverges
+  almost immediately for ~99% of the corpus. **Marginal statistics survive this** â€” they only
+  re-bin the recorded actions, which are untouched â€” but anything CONDITIONED on the
+  reconstructed state does not, and `timing_lift` and the fitted human policy table are both
+  conditional. This is the same shape as the 2026-07-28 phase trap one layer down, and the
+  fix is the same: an ORACLE that must return a known value, run over the CURRENT corpus rather
+  than assumed to still hold. Until then, treat every conditional number derived from replays
+  as unverified, and re-derive `--bot replay` (which must score exactly 1.000) before quoting
+  any of them.
+
+  Worth knowing before panicking: this does not invalidate the RECORDED facts â€” the action
+  streams, `game_records.db`'s live-captured finals, win/loss, durations and the human play
+  record are all untouched. It invalidates trajectories rebuilt from them.
+
+- **`--backfill-balance` should be re-run whenever more history reaches git.** It is
+  idempotent, skips replays that recorded their own v4 fingerprint, and takes about seven
+  seconds over the whole corpus. Every game currently labelled `dated` is one that a future
+  commit could upgrade to `verified` â€” though see the entry above for why most of them cannot
+  be, until the corpus can be reconstructed at all.
+
+- **The CSV that game `1F3C07` was played under is lost.** It existed only as
+  `CastleDefenseGame2/bin/Debug/net10.0/Data/master_gadgets.csv` (built 2026-09-09 00:38) â€” a
+  working-tree state after `259e1835` and before the 13:39 edits, still carrying the
+  short-lived `Shots`/`ShotIntervalTicks` columns. It was overwritten on 2026-09-09 by a
+  `find -delete` + rebuild intended to make every build output match the source. If a copy
+  survives elsewhere (another machine, a backup, a stashed branch), dropping it into a
+  directory and pointing `GameDataManager.Initialize(dataDir)` at it would make that game
+  reconstruct bit-exactly again â€” that is how it was proven in the first place.
+

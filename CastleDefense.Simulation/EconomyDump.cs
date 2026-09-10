@@ -1,5 +1,6 @@
 using CastleDefense.Engine;
 using CastleDefense.Engine.Models;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {

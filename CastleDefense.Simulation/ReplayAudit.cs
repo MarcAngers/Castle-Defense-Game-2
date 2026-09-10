@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CastleDefense.Engine.Replays;
 
 namespace CastleDefense.Simulation
 {
@@ -34,7 +35,7 @@ namespace CastleDefense.Simulation
             if (!Directory.Exists(dir)) { Console.WriteLine($"no such directory: {dir}"); return; }
 
             var files = Directory.GetFiles(dir, "*.replay").OrderBy(f => f).ToArray();
-            var modes = ReplayFile.LoadGameModes(dir, "replay-audit");
+            var modes = ReplayCorpus.LoadGameModes(dir, "replay-audit");
 
             Console.WriteLine($"[replay-audit] {files.Length} replay files in {dir}");
             Console.WriteLine($"[replay-audit] {modes.Count} rows of game metadata available\n");
@@ -59,13 +60,13 @@ namespace CastleDefense.Simulation
                 // A game the loser disconnected out of is EXPECTED to have a short, one-
                 // sided action stream, so it is not evidence of an abandoned human game --
                 // label it rather than letting it read as one.
-                string end = ReplayFile.IsRealResult(m.endReason) ? "-" : m.endReason;
+                string end = ReplayCorpus.IsRealResult(m.endReason) ? "-" : m.endReason;
 
                 // League-watch recordings are bot-vs-bot by design. A bot side that never
                 // acted is a real dud there too, but "P1 never acted" is not evidence of an
                 // abandoned human game, so they are reported separately and never moved
                 // unless asked for.
-                bool isHuman = m.mode == null || ReplayFile.IsHumanPlayed(m.mode, m.opponent);
+                bool isHuman = m.mode == null || ReplayCorpus.IsHumanPlayed(m.mode, m.opponent);
                 if (!isHuman) botGames++;
 
                 scanned++;

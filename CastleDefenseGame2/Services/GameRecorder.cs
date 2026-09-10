@@ -1,5 +1,6 @@
 using System.Linq;
 ﻿using CastleDefense.Api.Data;
+using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 using System.Text;
 
@@ -57,6 +58,29 @@ namespace CastleDefense.Api.Services;
 ///  * GADGET TARGETS. v2 stored only the discrete action id, so every reconstruction
 ///    re-aimed casts with the engine auto-targeter. Marc's gadget doctrine -- freeze and
 ///    blackhole at the enemy's end -- was invisible to every tool that read replays.
+///
+/// ── CDRP v4 (2026-09-09) ────────────────────────────────────────────────────────
+/// v4 appends the two facts a v3 replay could not express. Same append-only shape as v3,
+/// so a v4 reader handles v3 by skipping the tail and a v3 file stays readable forever.
+///
+///   [1]  p1_armageddon_used (0/1)
+///   [1]  p2_armageddon_used (0/1)
+///   [1+N] gadgets_csv_hash (length-prefixed)
+///   [1+N] roster_csv_hash  (length-prefixed)
+///
+///  * ARMAGEDDON. Not recoverable from the action stream: the purchase is action 9, the
+///    same byte as an ordinary invest, and it is only ARMAGEDDON because InvestmentCount
+///    was already at the cap. It never reaches gadget_uses either, because
+///    GameEngine.TriggerArmageddon calls the effect directly instead of going through
+///    UseGadget, so no OnGadgetCast is raised. Knowing whether a game ended this way
+///    without resimulating it is what makes the replay LIST able to say so.
+///  * BALANCE FINGERPRINT. A replay records the actions but not the RULES they were taken
+///    under, so replaying a game against an edited master_gadgets.csv silently produces a
+///    different game -- and it diverges deep into the match rather than at the seam. Game
+///    1F3C07 was played with freeze's UpgradeCost at 700 and rebuilt against 500; the
+///    rebuild upgraded two casts early and then refused a recorded cast that was inside
+///    the new tier's cooldown, ending 70 seconds before the real game did. See
+///    GameDataManager.GadgetsFileHash. ~34 bytes per replay.
 ///
 /// COST, measured over the 189 recordings in recordings/singleplayer before this change
 /// (mean 13.0 KB, 34.6 casts/game): the sparse cast list adds ~242 B and the fixed header
@@ -155,7 +179,7 @@ public class GameRecorder
         using var w = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
 
         w.Write((byte)'C'); w.Write((byte)'D'); w.Write((byte)'R'); w.Write((byte)'P');
-        w.Write((byte)3);
+        w.Write((byte)4);
         w.Write(Encoding.ASCII.GetBytes(_gameId)); // always 6 bytes
         w.Write(_startedAt);
 
@@ -195,6 +219,14 @@ public class GameRecorder
             // 2000 wide, so short is always sufficient.
             w.Write((short)position);
         }
+
+        // -- v4 tail --------------------------------------------------------------
+        // ArmageddonUsed comes off the LIVE PlayerState, like the winner byte, because a
+        // reconstruction is exactly what it exists to make trustworthy.
+        w.Write((byte)(p1.ArmageddonUsed ? 1 : 0));
+        w.Write((byte)(p2.ArmageddonUsed ? 1 : 0));
+        WriteStr(w, GameDataManager.GadgetsFileHash ?? "");
+        WriteStr(w, GameDataManager.RosterFileHash ?? "");
     }
 
     private static void WriteStr(BinaryWriter w, string s)
