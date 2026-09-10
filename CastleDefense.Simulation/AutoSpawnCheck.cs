@@ -1,4 +1,4 @@
-using CastleDefense.Engine;
+﻿using CastleDefense.Engine;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
 
@@ -266,6 +266,70 @@ namespace CastleDefense.Simulation
                 if (!ok) failures++;
             }
 
+
+            // ---- 7. AutoSpawnCycleIndex IS THE ANIMATION'S PHASE SIGNAL -----------------
+            //
+            // `View.drawAutoSpawner` throws the machine's lever whenever this number CHANGES,
+            // and that is the whole reason it is on the wire (GameStateWire.PlayerWire). It
+            // replaced a client wall-clock timer that was wrong twice over -- arbitrary phase,
+            // and a rate expressed per real SECOND against an engine that spawns per 30 TICKS
+            // on a loop that only achieves ~21.4 ticks a second.
+            //
+            // So the contract the animation depends on is: the index goes up by exactly one
+            // for each auto-spawned unit, on the same tick that unit appears. Asserted here by
+            // running the real tick loop and watching both at once, because nothing else in
+            // the project would notice this drifting.
+            {
+                Console.WriteLine();
+                Console.WriteLine("CYCLE INDEX TRACKS SPAWNS ONE FOR ONE (the lever's phase signal)");
+
+                foreach (int level in new[] { 1, 5, 8, 12 })
+                {
+                    var state = new GameState();
+                    state.Player1.Team = TeamColour.White;
+                    state.Player2.Team = TeamColour.White;
+                    string sig = GameDataManager.GetSignatureGadgetIdForTeam(TeamColour.White);
+                    state.Player1.SetLoadout(new[] { "nuke", "heal", sig });
+                    state.Player2.SetLoadout(new[] { "nuke", "heal", sig });
+                    // Indestructible, so a 20-second observation cannot end early.
+                    state.Player1.CastleHealth = state.Player1.CastleMaxHealth = 1_000_000_000;
+                    state.Player2.CastleHealth = state.Player2.CastleMaxHealth = 1_000_000_000;
+                    for (int i = 0; i < level; i++) state.Player1.ApplyAutoSpawnStep();
+
+                    var engine = new GameEngine(state, null, 4242);
+
+                    int prevCycle = state.Player1.AutoSpawnCycleIndex;
+                    var known = new HashSet<Guid>(state.Units.Where(u => u.Side == 1).Select(u => u.InstanceId));
+                    int mismatches = 0, increments = 0, spawns = 0;
+
+                    for (int t = 0; t < 600; t++)          // 20 s of game time
+                    {
+                        engine.Tick();
+
+                        int cycle = state.Player1.AutoSpawnCycleIndex;
+                        int delta = cycle - prevCycle;
+
+                        var now = state.Units.Where(u => u.Side == 1).Select(u => u.InstanceId).ToHashSet();
+                        int appeared = now.Count(id => !known.Contains(id));
+                        known = now;
+
+                        // The opening squad also spawns on ticks 1-121 and is NOT the machine,
+                        // so only ticks past it can compare the two counts directly.
+                        if (t > 130)
+                        {
+                            if (delta != appeared) mismatches++;
+                            increments += delta;
+                            spawns += appeared;
+                        }
+                        prevCycle = cycle;
+                    }
+
+                    bool ok = mismatches == 0 && increments > 0 && increments == spawns;
+                    Console.WriteLine($"  level {level,2}: {increments,4} increments, {spawns,4} spawns, " +
+                                      $"{mismatches} tick(s) disagreeing   {(ok ? "ok" : "FAIL")}");
+                    if (!ok) failures++;
+                }
+            }
             Console.WriteLine();
             Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
         }

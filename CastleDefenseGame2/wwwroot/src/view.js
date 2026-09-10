@@ -76,13 +76,11 @@ const AUTO_SPAWNER = {
     SHAKE_HZ_Y: 17,
 };
 
-// Units per second at each auto-spawner level -- index 0 is "not bought".
-// MIRRORS PlayerState.AutoSpawnCycles, where the rate IS the cycle length. Duplicated here
-// rather than sent over the wire because the client only needs it to pace an animation: the
-// lever pull is timed to the real spawn RATE but is not phase-locked to the server's actual
-// spawn ticks, which would cost a wire field per player per tick to do properly and would
-// still be a frame or two out from what the player sees.
-const AUTO_SPAWNER_RATE = [0, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6];
+// A per-level units-per-second table used to live here, mirroring PlayerState.AutoSpawnCycles,
+// so the lever could be paced without a wire field. It is GONE as of 2026-09-09: the lever is
+// now phase-locked to the engine's own `autoSpawnCycleIndex` (see drawAutoSpawner), which is
+// exact rather than rate-matched and needs no duplicate of the cadence table to drift out of
+// sync with the engine's.
 const MAX_AUTO_SPAWN_LEVEL = 19;
 
 class View {
@@ -112,8 +110,11 @@ class View {
         // games, which is fine: they are three free-running counters with no dependence on
         // game identity, so a stale value only shifts the belt phase by a frame.
         this.autoSpawnAnim = {
-            1: { beltMs: 0, spawnMs: 0, leverMs: 0 },
-            2: { beltMs: 0, spawnMs: 0, leverMs: 0 },
+            // lastCycle is the engine's autoSpawnCycleIndex as of the previous frame; null
+            // means "not adopted yet", which is what stops the lever firing on the first
+            // frame of a game already in progress. See drawAutoSpawner.
+            1: { beltMs: 0, leverMs: 0, lastCycle: null },
+            2: { beltMs: 0, leverMs: 0, lastCycle: null },
         };
 
         // Input State for Panning
@@ -692,16 +693,28 @@ class View {
         anim.beltMs += dt;
         const beltFrame = Math.floor(anim.beltMs / A.BELT_MS) % 2;   // 0 or 1
 
-        const rate = AUTO_SPAWNER_RATE[Math.min(level, MAX_AUTO_SPAWN_LEVEL)] || 0;
-        if (rate > 0) {
-            const period = 1000 / rate;
-            anim.spawnMs += dt;
-            if (anim.spawnMs >= period) {
-                // Modulo rather than reset to 0, so a rate faster than the frame rate does
-                // not silently drop pulls.
-                anim.spawnMs %= period;
-                anim.leverMs = A.LEVER_MS;
-            }
+        // --- THE LEVER IS PHASE-LOCKED TO THE ENGINE, not run off a client clock ---------
+        //
+        // Marc, 2026-09-09: "the lever appears to be moving at roughly the correct cadence,
+        // but it doesn't line up with when the units are actually being spawned."
+        //
+        // It used to advance `spawnMs` by wall-clock deltaTime and throw the lever every
+        // `1000 / rate` ms. That was wrong twice over. The PHASE was arbitrary -- nothing tied
+        // the client's timer to the engine's accumulator. And the RATE was wrong too: the
+        // engine adds `perSecond` to an accumulator once per TICK and spawns each time it
+        // crosses 30, i.e. `rate` units per 30 ticks, while this pulled `rate` times per real
+        // SECOND. Those are only the same at a true 30Hz, and the server loop actually
+        // achieves ~21.4 (see CLEANUP_BACKLOG.md), so the lever ran ~1.4x too fast.
+        //
+        // `autoSpawnCycleIndex` is the engine's own spawn counter, incremented once per
+        // spawn in GameEngine.TickAutoSpawn. Throwing the lever whenever it CHANGES is exact
+        // at any tick rate and needs no copy of the cadence arithmetic here.
+        const cycle = playerState.autoSpawnCycleIndex | 0;
+        if (anim.lastCycle === undefined || anim.lastCycle === null) {
+            anim.lastCycle = cycle;          // first frame: adopt, do not fire
+        } else if (cycle !== anim.lastCycle) {
+            anim.lastCycle = cycle;
+            anim.leverMs = A.LEVER_MS;
         }
         if (anim.leverMs > 0) anim.leverMs = Math.max(0, anim.leverMs - dt);
 

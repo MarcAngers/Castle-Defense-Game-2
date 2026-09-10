@@ -37,6 +37,15 @@ export default async function initGadgetInfo() {
         let statsHtml = `<span><strong>PRICE:</strong> <span style='color: #FFFF00'>$${data.cost || 0}</span></span>`;
         statsHtml += `<span><strong>COOLDOWN:</strong> ${data.cooldownms / 1000}s</span>`;
 
+        // SHOTS is shown only when there is more than one, so every single-shot gadget's card
+        // is untouched. Read from the CSV rather than written into the Description, because
+        // the level-3 snipe's count is a balance knob being swept -- a hand-written "fires 10
+        // shots" would be wrong the first time the number moved, which is exactly the
+        // engine-vs-blurb drift the map-effect table warns about.
+        if ((Number(data.shots) || 1) > 1) {
+            statsHtml += `<span><strong>SHOTS:</strong> ${Number(data.shots)}</span>`;
+        }
+
         if (data.statusname && data.statusname.trim() !== '') {
             statsHtml += `<span><strong>STATUS:</strong> ${data.statusname} `;
             if (data.statusname != 'BLACKHOLE')

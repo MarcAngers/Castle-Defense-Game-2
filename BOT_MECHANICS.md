@@ -114,6 +114,12 @@ tier >= 7  ->  tier^3     * Speed / Damage
 clamped to [0.33, 5.0]      # MIN/MAX_ATTACK_SPEED in GameDataManager
 ```
 
+**Slow/Speed statuses scale the SWING RATE as well as movement** (2026-09-03). `MoveAndFight`
+divides the attack cooldown by `def.AttackSpeed * speedMod`, the same product of Slow/Speed
+status values that scales `CurrentSpeed` -- so Speed x1.5/x2/x10, Goo's x0.5 and Freeze's
+trailing x0.25 all move both. It is NOT re-clamped; the real ceiling is the tick rate, since
+the cooldown decrements once per tick and so the achievable rate is `30 / ceil(cooldownTicks)`.
+
 This clamp is load-bearing for the survival law. **Every tier-8 unit clamps at the BOTTOM;
 tier-4/5 units clamp at the TOP (5.0/s).** That is why a tier-4 stream razes an undefended
 castle far faster per dollar than a tier 8, and why a steady chump feed holds any tier 8

@@ -62,6 +62,26 @@ public static class BalanceMatrix
         public int Winner;          // 1, 2, or 0 for a draw
         public bool TimeLimit;
         public long Ticks;
+
+        // WHY THE OUTCOME, not just what it was. A win rate says a loadout is strong; it
+        // cannot say whether that is because the gadget did something or because it spent
+        // nothing. These three are free at game end and separate those two:
+        //   - Invests: economy health. A gadget that drains the wallet shows up here.
+        //   - EndDefGadget: the LEVEL the defence gadget reached. Upgrades are bought with
+        //     CASTS, so a long cooldown means a gadget never upgrades and stays cheap --
+        //     which is a balance effect nothing else in this file would reveal.
+        //   - EndHp: how close the game was.
+        public int P1Invests, P2Invests;
+        public string P1EndDef, P2EndDef;
+        public int P1Hp, P2Hp;
+
+        // WHERE THE MONEY AND THE DECISIONS WENT. HeuristicBot takes at most one action per
+        // decision, so a gadget on a short cooldown competes with UNIT PURCHASES for slots,
+        // not just for money -- and since the charge change, bodies are the scarce resource.
+        // Units bought is the only way to see that trade from outside the bot.
+        public int P1Units, P2Units;
+        public int P1UnitSpend, P2UnitSpend;
+        public int P1DefCasts, P2DefCasts;
     }
 
     public static void Run(string[] args)
@@ -93,12 +113,13 @@ public static class BalanceMatrix
         Directory.CreateDirectory(outDir);
         string csvPath = Path.Combine(outDir, "balance_matrix.csv");
         string htmlPath = Path.Combine(outDir, "dashboard.html");
+        string prevPath = Path.Combine(outDir, "balance_matrix_prev.csv");
 
         if (fromCsv)
         {
             var reloaded = ReadCsv(csvPath);
             Console.WriteLine($"Rebuilding {htmlPath} from {reloaded.Length:N0} rows in {csvPath}");
-            WriteHtml(htmlPath, reloaded, games, threads, TimeSpan.Zero);
+            WriteHtml(htmlPath, reloaded, games, threads, TimeSpan.Zero, LoadPrev(prevPath));
             Console.WriteLine("Done.");
             return;
         }
@@ -145,8 +166,13 @@ public static class BalanceMatrix
 
         Console.WriteLine($"\n[{sw.Elapsed:hh\\:mm\\:ss}] {totalGames:N0} games done. Writing output...");
 
+        // ROTATE BEFORE OVERWRITING. Done here rather than in the .bat so it happens
+        // however the exe is invoked -- the previous run is the baseline every balance change
+        // is judged against, and losing it costs another sweep to get back.
+        if (File.Exists(csvPath)) File.Copy(csvPath, prevPath, true);
+
         WriteCsv(csvPath, results);
-        WriteHtml(htmlPath, results, games, threads, sw.Elapsed);
+        WriteHtml(htmlPath, results, games, threads, sw.Elapsed, LoadPrev(prevPath));
 
         Console.WriteLine($"Wrote {csvPath}");
         Console.WriteLine($"Wrote {htmlPath}");
@@ -186,6 +212,17 @@ public static class BalanceMatrix
                                          GameDataManager.GetSignatureGadgetIdForTeam(p2.Team) });
 
         var engine = new GameEngine(state, seed: CounterMatrix.Mix(pairSeed, 0x1234));
+
+        // Defence-gadget casts, counted by FAMILY so an upgrade mid-game still counts.
+        int defCasts1 = 0, defCasts2 = 0;
+        string fam1 = p1.Defense, fam2 = p2.Defense;
+        engine.OnGadgetCast += (side, gadgetId, pos) =>
+        {
+            string fam = gadgetId.Split('_')[0];
+            if (side == 1 && fam == fam1) defCasts1++;
+            else if (side == 2 && fam == fam2) defCasts2++;
+        };
+
         var b1 = CounterMatrix.MakeBot("heuristic", 1, CounterMatrix.Mix(pairSeed, 1));
         var b2 = CounterMatrix.MakeBot("heuristic", 2, CounterMatrix.Mix(pairSeed, 2));
 
@@ -203,6 +240,14 @@ public static class BalanceMatrix
             P1 = p1, P2 = p2,
             Map = state.Map, Shadow = state.ShadowMap,
             Winner = state.WinnerSide, TimeLimit = state.IsTimeLimit, Ticks = state.CurrentTick,
+            // No headstart in this sweep, so InvestmentCount at the end IS the earned count.
+            P1Invests = state.Player1.InvestmentCount, P2Invests = state.Player2.InvestmentCount,
+            P1EndDef = state.Player1.DefensiveGadget?.Id ?? "",
+            P2EndDef = state.Player2.DefensiveGadget?.Id ?? "",
+            P1Hp = (int)state.Player1.CastleHealth, P2Hp = (int)state.Player2.CastleHealth,
+            P1Units = (int)engine.UnitsPurchased[1], P2Units = (int)engine.UnitsPurchased[2],
+            P1UnitSpend = (int)engine.MoneySpentOnUnits[1], P2UnitSpend = (int)engine.MoneySpentOnUnits[2],
+            P1DefCasts = defCasts1, P2DefCasts = defCasts2,
         };
     }
 
@@ -214,7 +259,9 @@ public static class BalanceMatrix
     private static void WriteCsv(string path, GameRow[] rows)
     {
         using var w = new StreamWriter(path, false);
-        w.WriteLine("p1_team,p1_off,p1_def,p2_team,p2_off,p2_def,map,shadow,winner_side,decided,ticks,seconds");
+        w.WriteLine("p1_team,p1_off,p1_def,p2_team,p2_off,p2_def,map,shadow,winner_side,decided,ticks,seconds," +
+                    "p1_invests,p2_invests,p1_end_def,p2_end_def,p1_hp,p2_hp," +
+                    "p1_units,p2_units,p1_unitspend,p2_unitspend,p1_defcasts,p2_defcasts");
         foreach (var r in rows)
         {
             if (r == null) continue;
@@ -223,7 +270,9 @@ public static class BalanceMatrix
             w.WriteLine($"{r.P1.Team},{r.P1.Offense},{r.P1.Defense}," +
                         $"{r.P2.Team},{r.P2.Offense},{r.P2.Defense}," +
                         $"{r.Map},{(r.Shadow ? 1 : 0)},{r.Winner},{decided},{r.Ticks}," +
-                        $"{(r.Ticks / 30.0).ToString("F1", CultureInfo.InvariantCulture)}");
+                        $"{(r.Ticks / 30.0).ToString("F1", CultureInfo.InvariantCulture)}," +
+                        $"{r.P1Invests},{r.P2Invests},{r.P1EndDef},{r.P2EndDef},{r.P1Hp},{r.P2Hp}," +
+                        $"{r.P1Units},{r.P2Units},{r.P1UnitSpend},{r.P2UnitSpend},{r.P1DefCasts},{r.P2DefCasts}");
         }
     }
 
@@ -244,6 +293,20 @@ public static class BalanceMatrix
                 Winner = int.Parse(c[8]),
                 TimeLimit = c[9].StartsWith("timeout"),
                 Ticks = long.Parse(c[10]),
+                // Tolerant of a CSV written before these columns existed, so an old
+                // balance_matrix_prev.csv still yields a delta instead of throwing.
+                P1Invests = c.Length > 12 ? int.Parse(c[12]) : 0,
+                P2Invests = c.Length > 13 ? int.Parse(c[13]) : 0,
+                P1EndDef = c.Length > 14 ? c[14] : "",
+                P2EndDef = c.Length > 15 ? c[15] : "",
+                P1Hp = c.Length > 16 ? int.Parse(c[16]) : 0,
+                P2Hp = c.Length > 17 ? int.Parse(c[17]) : 0,
+                P1Units = c.Length > 18 ? int.Parse(c[18]) : 0,
+                P2Units = c.Length > 19 ? int.Parse(c[19]) : 0,
+                P1UnitSpend = c.Length > 20 ? int.Parse(c[20]) : 0,
+                P2UnitSpend = c.Length > 21 ? int.Parse(c[21]) : 0,
+                P1DefCasts = c.Length > 22 ? int.Parse(c[22]) : 0,
+                P2DefCasts = c.Length > 23 ? int.Parse(c[23]) : 0,
             });
         }
         return list.ToArray();
@@ -289,13 +352,28 @@ public static class BalanceMatrix
         return d;
     }
 
-    private static void WriteHtml(string path, GameRow[] rows, int games, int threads, TimeSpan elapsed)
+    /// <summary>The previous run, or null on the first one. Never fatal: a delta is a bonus.</summary>
+    private static GameRow[] LoadPrev(string prevPath)
+    {
+        try { return File.Exists(prevPath) ? ReadCsv(prevPath) : null; }
+        catch { return null; }
+    }
+
+    private static void WriteHtml(string path, GameRow[] rows, int games, int threads,
+                                  TimeSpan elapsed, GameRow[] prev)
     {
         var live = rows.Where(r => r != null).ToArray();
         var teams = Marginal(live, l => l.Team.ToString());
         var offs = Marginal(live, l => l.Offense);
         var defs = Marginal(live, l => l.Defense);
         var full = Marginal(live, l => $"{l.Team}/{l.Offense}/{l.Defense}");
+
+        // THE DELTA IS THE POINT OF THE WHOLE EXERCISE. A balance change is judged by what it
+        // MOVED, not by the standings it produced, and eyeballing two runs side by side is
+        // exactly the manual step this tool exists to remove.
+        var pTeams = prev == null ? null : Marginal(prev, l => l.Team.ToString());
+        var pOffs  = prev == null ? null : Marginal(prev, l => l.Offense);
+        var pDefs  = prev == null ? null : Marginal(prev, l => l.Defense);
 
         // Seat check. P1 win rate over the WHOLE matrix is the single number that says whether
         // the sweep is seat-balanced; every matchup appears in both seats, so anything far
@@ -361,10 +439,13 @@ public static class BalanceMatrix
         sb.Append(@"<h2>Marginals</h2>
 <p class=""sub"">Win rate averaged over every opponent and both seats. This is the balance
 signal: a team appears in 16 loadouts against 128 opponents, so even one game per cell gives
-it thousands of games.</p><div class=""grid"">");
-        sb.Append(MarginalTable("Team", teams));
-        sb.Append(MarginalTable("Offence", offs));
-        sb.Append(MarginalTable("Defence", defs));
+it thousands of games. <b>&Delta; prev</b> is the move since the last sweep. The sweep is
+deterministic &mdash; an unchanged build reproduces the previous run exactly and every delta
+reads 0.0 &mdash; so a non-zero delta is caused by your change. It is greyed out when it is
+small enough to be trajectory noise rather than a real effect.</p><div class=""grid"">");
+        sb.Append(MarginalTable("Team", teams, pTeams));
+        sb.Append(MarginalTable("Offence", offs, pOffs));
+        sb.Append(MarginalTable("Defence", defs, pDefs));
         sb.Append("</div>");
 
         // ---- SEAT CHECK -----------------------------------------------------------------
@@ -456,17 +537,41 @@ ordering has any claim to transfer.</p>");
         File.WriteAllText(path, sb.ToString());
     }
 
-    private static string MarginalTable(string title, Dictionary<string, Tally> d)
+    private static string MarginalTable(string title, Dictionary<string, Tally> d,
+                                        Dictionary<string, Tally> prev)
     {
         var sb = new StringBuilder();
-        sb.Append($@"<div class=""card""><table><tr><th>{title}</th><th>Win rate</th><th></th><th>95%</th></tr>");
+        sb.Append($@"<div class=""card""><table><tr><th>{title}</th><th>Win rate</th><th></th>" +
+                  (prev != null ? "<th>&Delta; prev</th>" : "") + @"<th>95%</th></tr>");
         foreach (var kv in d.OrderByDescending(kv => kv.Value.Rate))
         {
             double v = 100 * kv.Value.Rate;
             string cls = v >= 60 ? "hi" : v <= 40 ? "lo" : "";
             sb.Append($@"<tr><td>{kv.Key}</td><td class=""{cls}"">{v:F1}%</td>" +
-                      $@"<td style=""width:100%""><span class=""bar""><i style=""width:{v:F1}%""></i></span></td>" +
-                      $@"<td class=""ci"">&plusmn;{kv.Value.Ci95:F1}</td></tr>");
+                      $@"<td style=""width:100%""><span class=""bar""><i style=""width:{v:F1}%""></i></span></td>");
+
+            if (prev != null)
+            {
+                if (prev.TryGetValue(kv.Key, out var p))
+                {
+                    double delta = v - 100 * p.Rate;
+                    // GREYED OUT WHEN IT IS INSIDE THE NOISE, using the two intervals added in
+                    // quadrature. That band is DELIBERATELY CONSERVATIVE: the runs are not
+                    // independent samples, they are PAIRED -- every cell replays the same map
+                    // and the same engine seed -- so an identical build reproduces the previous
+                    // run byte for byte and every delta is exactly 0.0. What the pairing does
+                    // NOT remove is that a rule change moves the trajectories themselves, and
+                    // there is no closed form for how much of a shift that alone accounts for.
+                    // Erring wide costs a few true effects being shown in grey; erring narrow
+                    // means the dashboard starts inventing findings, which is worse.
+                    double band = Math.Sqrt(kv.Value.Ci95 * kv.Value.Ci95 + p.Ci95 * p.Ci95);
+                    string dcls = Math.Abs(delta) < band ? "ci" : delta > 0 ? "hi" : "lo";
+                    sb.Append($@"<td class=""{dcls}"">{delta:+0.0;-0.0;0.0}</td>");
+                }
+                else sb.Append(@"<td class=""ci"">&mdash;</td>");
+            }
+
+            sb.Append($@"<td class=""ci"">&plusmn;{kv.Value.Ci95:F1}</td></tr>");
         }
         return sb.Append("</table></div>").ToString();
     }

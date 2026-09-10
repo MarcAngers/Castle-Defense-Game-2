@@ -496,6 +496,39 @@ namespace CastleDefense.Api.Hubs
         }
 
         /// <summary>
+        /// The player who opened a lobby pressed EXIT. Throw the lobby away.
+        ///
+        /// WHY THIS EXISTS AT ALL, given OnDisconnectedAsync already discards a lobby whose
+        /// creator vanishes: pressing EXIT is not a disconnect. The client merely swaps to
+        /// the main-menu view, and the SignalR connection is a per-PAGE object that stays
+        /// open across that swap -- so the socket never closes, OnDisconnectedAsync never
+        /// runs, and the lobby sat in the browser list forever, unjoinable because its
+        /// creator was no longer looking at it. Only closing the tab cleaned one up.
+        ///
+        /// TAKES NO GAME ID ON PURPOSE. The seat is looked up from the CALLER'S OWN
+        /// connection, so this can only ever close a lobby the caller is actually sitting
+        /// in. An id parameter would be a request from the client to delete an arbitrary
+        /// game, and a game id is six characters that the browser list hands out freely.
+        ///
+        /// REFUSES ONCE THE GAME IS LIVE, which is the race worth guarding: an opponent can
+        /// join between the click and this message arriving, and discarding then would
+        /// destroy a game already in progress for BOTH players. A started game is left
+        /// alone -- leaving one is what the disconnect/rejoin path is for.
+        /// </summary>
+        public async Task LeaveLobby()
+        {
+            var seat = _reconnect.SeatOf(Context.ConnectionId);
+            if (seat == null) return;
+
+            string gameId = seat.Value.gameId;
+            if (_gameService.IsActive(gameId)) return;
+
+            _gameService.DiscardLobbyGame(gameId);
+            _reconnect.Release(gameId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, gameId);
+        }
+
+        /// <summary>
         /// Stop waiting and take the win. Only legal once the pause has passed
         /// ReconnectService.ClaimAfterSeconds, and only from a seat that is still connected.
         ///

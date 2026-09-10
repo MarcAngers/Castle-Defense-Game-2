@@ -509,6 +509,27 @@ class GameConnection {
         }
     }
 
+    /// Leave a lobby that never filled, and take it down with us.
+    ///
+    /// Pressing EXIT is NOT a disconnect -- the SignalR connection belongs to the page and
+    /// survives a view swap -- so without telling the server, the lobby stayed in the game
+    /// browser forever with nobody in it. The server resolves which lobby from this
+    /// connection's own seat and refuses if a game has since started, so this cannot close
+    /// anything but our own unstarted lobby.
+    ///
+    /// The saved session goes too: it points at a game that no longer exists, and leaving it
+    /// behind would offer a rejoin prompt for it on the next page load.
+    leaveLobby = async () => {
+        try {
+            await this.connection.invoke("LeaveLobby");
+        } catch (err) {
+            console.error('Leave lobby failed', err);
+        }
+        this.clearSession();
+        this.currentGameId = null;
+        this.latestState = null;
+    }
+
     createGame = async () => {
         const mode = connection.gameMode || 'mp';
         const response = await fetch(`/api/games`, { 

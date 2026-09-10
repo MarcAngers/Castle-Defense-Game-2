@@ -206,10 +206,37 @@ export default class WaveAnimator {
         // the engine's actual -100/2100). Only fall back to the local timer-
         // based estimate for the brief window before the first state update
         // naming this hazard arrives.
+        // ── THE SPRITE IS CENTRED ON THE HITBOX'S LEADING EDGE, NOT ON hazard.Position ──
+        //
+        // Marc, 2026-09-09: "when P2 uses the gadget it looks perfect... but when the Wave is
+        // used by P1 the hitbox doesn't quite line up, so units appear to be flung away before
+        // the wave actually reaches them visually."
+        //
+        // THE HITBOX IS TWICE THE WIDTH OF THE SPRITE, and that is the whole thing.
+        // `WaveEffect` builds the hazard with `Width = _def.Radius * 2`, and
+        // `WaveHazard.ProcessEffect` tests `[Position, Position + Width]` -- so Position is the
+        // LEFT edge for BOTH sides, while the sprite is drawn `waveSize` (= Radius) wide.
+        // Which edge LEADS therefore depends on the direction of travel:
+        //
+        //     side 1 travels RIGHT -> leading edge is Position + Width
+        //     side 2 travels LEFT  -> leading edge is Position
+        //
+        // Drawing centred on Position happened to be right for side 2 and wrong for side 1 by
+        // the full hazard Width -- 800 game units at level 3, 40% of the map. That is why one
+        // seat looked perfect and the other flung units out of clear air.
+        //
+        // Centring on the LEADING edge (rather than on the hitbox's centre, or stretching the
+        // sprite over the whole footprint) is deliberate: it reproduces side 2's current
+        // rendering EXACTLY -- for side 2 the leading edge already IS Position -- so the seat
+        // Marc says looks perfect is untouched, and only the broken seat moves. The half of the
+        // hitbox trailing behind the sprite needs no art: the wave sweeps, so anything back
+        // there was launched on an earlier tick.
         const hazard = this.#findHazard(state);
         let currentX;
         if (hazard) {
-            currentX = hazard.position ?? hazard.Position;
+            const hx = hazard.position ?? hazard.Position;
+            const hw = Number(hazard.width ?? hazard.Width) || 0;
+            currentX = this.side === 1 ? hx + hw : hx;
             this._lastX = currentX;
         } else if (this._falloutMs >= 0) {
             currentX = this._lastX;          // gone: hold station and sink

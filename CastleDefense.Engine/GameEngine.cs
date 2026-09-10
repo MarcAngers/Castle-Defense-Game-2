@@ -996,6 +996,31 @@ namespace CastleDefense.Engine
                     else if (status.Name == "Freeze" || status.Name == "Stun" || status.Name == "Knockback" || status.Name == "Blackhole") isHardCcd = true;
                 }
 
+                // ATTACK SPEED FOLLOWS MOVEMENT SPEED (2026-09-03).
+                //
+                // The roster's AttackSpeed is not read from the CSV at all -- GameDataManager
+                // DERIVES it as k * Speed / Damage (the Doggo Formula) and clamps the result.
+                // It is therefore already proportional to move speed, so a gadget that makes a
+                // unit move 1.5x faster and swing at the same rate was contradicting the very
+                // formula the stat comes from. `speedMod` is the same product of Slow/Speed
+                // status values that scales movement below, so applying it here makes Speed
+                // buff the swing and Goo's slow (x0.5) and Freeze's trailing slow (x0.25)
+                // genuinely blunt it.
+                //
+                // DELIBERATELY NOT RE-CLAMPED to [MIN_ATTACK_SPEED, MAX_ATTACK_SPEED]. Those
+                // bounds exist to tame the RAW formula, whose output spans two orders of
+                // magnitude across the roster; re-applying the 5.0 ceiling here would hand
+                // exactly nothing to tier 4 and 5, which already clamp at it -- and those are
+                // the units a speed build actually fields. The effective ceiling is the tick
+                // rate anyway: a cooldown below 33.3ms means one swing per tick, 30/s.
+                //
+                // The guard is on the PRODUCT, not on def.AttackSpeed alone, and it is load
+                // bearing for the same reason the original was: a wall has AttackSpeed 0, and
+                // 1000f/0 writes float.PositiveInfinity into serialisable state, which is the
+                // documented crash class (see the castle branch below). A hard slow that drove
+                // the product to zero would do the same.
+                float effectiveAps = def.AttackSpeed * speedMod;
+
                 // Decrement Attack Cooldown
                 if (unit.AttackCooldown > 0) unit.AttackCooldown -= (1000f / GameEngine.TICKS_PER_SECOND);
 
@@ -1015,9 +1040,9 @@ namespace CastleDefense.Engine
                 if (enemies.Count > 0)
                 {
                     unit.CurrentSpeed = 0;
-                    if (unit.AttackCooldown <= 0 && def.AttackSpeed > 0)
+                    if (unit.AttackCooldown <= 0 && effectiveAps > 0)
                     {
-                        unit.AttackCooldown = (1000f / def.AttackSpeed);
+                        unit.AttackCooldown = (1000f / effectiveAps);
 
                         float impactForce = def.PushForce;
                         if (def.AttackType == AttackType.Siege) impactForce *= 2;
@@ -1051,7 +1076,7 @@ namespace CastleDefense.Engine
                     // is fixed too, but the guard stays: a unit that cannot attack has no
                     // business attacking a castle, and nothing should be able to write a
                     // non-finite value into serialisable game state.
-                    if (unit.AttackCooldown <= 0 && def.AttackSpeed > 0)
+                    if (unit.AttackCooldown <= 0 && effectiveAps > 0)
                     {
                         // THE ONLY PLACE A UNIT DAMAGES A CASTLE. This was inlined from a
                         // separate AttackCastle() method so castle damage could be deferred
@@ -1062,7 +1087,7 @@ namespace CastleDefense.Engine
                         // float.PositiveInfinity and crashed live games by making the state
                         // unserialisable, and it read damage off the DEFINITION, which would
                         // now miss the weirdo's per-instance roll.
-                        unit.AttackCooldown = (1000f / def.AttackSpeed);
+                        unit.AttackCooldown = (1000f / effectiveAps);
                         var enemyPlayer = unit.Side == 1 ? _state.Player2 : _state.Player1;
                         float castleDamage = unit.Damage;
                         if (def.AttackType == AttackType.Siege) castleDamage *= 2;

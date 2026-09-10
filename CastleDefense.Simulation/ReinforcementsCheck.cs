@@ -41,38 +41,54 @@ namespace CastleDefense.Simulation
     /// </summary>
     public static class ReinforcementsCheck
     {
-        // The design table. Cost and multiplier are Marc's; the budget is HIS arithmetic,
-        // not Math.Ceiling's, which is the whole point of writing it out separately.
-        private static readonly (string Id, int Cost, double Multiplier, int Budget)[] Table =
+        // NO HARDCODED PRICE TABLE, DELIBERATELY -- AND IT USED TO HAVE ONE.
+        //
+        // The first version of this check transcribed cost/multiplier/budget for all three
+        // levels as "the design document, written down independently". That is the right shape
+        // for a fixed mechanism and the WRONG shape for a balance number: Marc retunes these
+        // in the CSV constantly, so within a day the check was reporting 22 failures for a
+        // rebalance that was entirely intentional. A guard that cries wolf on every deliberate
+        // change is a guard that gets ignored, which is worse than not having one.
+        //
+        // So this checks the MECHANISM, which is the code's business, and takes the NUMBERS
+        // from the CSV, which is Marc's:
+        //
+        //   - the budget is ceil(cost x multiplier), and CEILING specifically
+        //   - the composition matches an independent greedy written from the spec below
+        //   - order, spend and cadence invariants hold for every team and level
+        //
+        // The independent greedy is the real oracle. It is deliberately NOT a call into
+        // BuildSquad -- an expectation sourced from the code under test passes no matter what
+        // that code says -- but a second implementation of the same written rule:
+        //
+        //   walk the roster most-expensive first; take floor(remaining / cost) - 1 of each so
+        //   there is always room for one more, except the CHEAPEST unit which takes
+        //   floor(remaining / cost) outright because there is nothing below it to hand the
+        //   remainder down to; then if anything is still unspent, add one more of the tier-1.
+        private static List<int> IndependentGreedy(List<UnitDefinition> roster, int budget)
         {
-            ("reinforcements",     12, 1.33, 16),
-            ("reinforcements_2",  180, 1.5,  270),
-            ("reinforcements_3", 2000, 3.0,  6000),
-        };
+            var byPrice = roster.Where(u => u.Cost > 0)
+                                .OrderByDescending(u => u.Cost).ThenByDescending(u => u.Tier)
+                                .ToList();
+            var picked = new List<int>();
+            long left = budget;
+            for (int i = 0; i < byPrice.Count; i++)
+            {
+                long n = left / byPrice[i].Cost;
+                if (i != byPrice.Count - 1) n = Math.Max(0, n - 1);
+                for (long k = 0; k < n; k++) picked.Add(byPrice[i].Tier);
+                left -= n * byPrice[i].Cost;
+            }
+            if (left > 0)
+            {
+                var t1 = roster.FirstOrDefault(u => u.Tier == 1 && u.Cost > 0) ?? byPrice[^1];
+                picked.Add(t1.Tier);
+            }
+            picked.Reverse();               // spawn order: lowest first
+            return picked;
+        }
 
-        // White at level 3, worked by hand against the MOVE-ON-ONE-EARLY rule (each tier
-        // stops while one more copy would still fit, and hands that budget down):
-        //
-        //   $6,000  legg   $2,066  floor 2 -> take 1   ->  $3,934 left
-        //           bread  $  338  floor 11 -> take 10 ->  $  554 left
-        //           alpacco $  81  floor 6 -> take 5   ->  $  149 left
-        //           ringo  $   18  floor 8 -> take 7   ->  $   23 left
-        //           squirt $    9  floor 2 -> take 1   ->  $   14 left
-        //           catto  $    4  floor 3 -> take 2   ->  $    6 left
-        //           doggo  $    3  cheapest, take 2    ->  $    0 left
-        //
-        // 28 units for exactly $6,000, against 12 under the old take-all-you-can-afford rule.
-        // Written most-expensive-first, so the check reverses it to get the SPAWN order.
-        private static readonly int[] WhiteLevel3Composition =
-        {
-            7,
-            6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
-            5, 5, 5, 5, 5,
-            4, 4, 4, 4, 4, 4, 4,
-            3,
-            2, 2,
-            1, 1,
-        };
+        private static readonly string[] Levels = { "reinforcements", "reinforcements_2", "reinforcements_3" };
 
         public static void Run(string[] args)
         {
@@ -86,37 +102,47 @@ namespace CastleDefense.Simulation
             Console.WriteLine("=== REINFORCEMENTS CHECK ===");
             Console.WriteLine();
 
-            // ---- 1. THE CSV SAYS WHAT THE DESIGN SAYS ----------------------------------
-            Console.WriteLine("CSV AND BUDGET");
-            foreach (var row in Table)
+            // ---- 1. THE BUDGET IS A CEILING OF THE CSV'S OWN TWO COLUMNS ---------------
+            Console.WriteLine("BUDGET = ceil(cost x multiplier)");
+            foreach (var id in Levels)
             {
-                var def = GameDataManager.Gadgets.Find(g => g.Id == row.Id);
-                if (def == null) { Check($"{row.Id} exists", false); continue; }
+                var def = GameDataManager.Gadgets.Find(g => g.Id == id);
+                if (def == null) { Check($"{id} exists", false); continue; }
 
-                Check($"{row.Id} cost ${def.Cost}", def.Cost == row.Cost, $"design ${row.Cost}");
-                Check($"{row.Id} multiplier x{def.BaseValue}",
-                      Math.Abs(def.BaseValue - row.Multiplier) < 0.0005, $"design x{row.Multiplier}");
-                int budget = ReinforcementsEffect.BudgetFor(def);
-                Check($"{row.Id} budget ${budget}", budget == row.Budget, $"design ${row.Budget}");
+                double exact = def.Cost * (double)def.BaseValue;
+                int want = (int)Math.Ceiling(exact);
+                int got = ReinforcementsEffect.BudgetFor(def);
+                Check($"{id}: ${def.Cost} x {def.BaseValue} = {exact:F2} -> ${got}", got == want,
+                      $"expected ${want}");
+
+                // CEILING, NOT ROUND OR FLOOR, and only a fractional product can tell the
+                // three apart. Whenever the CSV happens to give one, assert the direction --
+                // this is the rule that makes a $12 x 1.33 cast worth $16 rather than $15.
+                if (Math.Abs(exact - Math.Truncate(exact)) > 1e-9)
+                    Check($"   ...rounded UP from {exact:F2}, not down", got > (int)exact,
+                          $"got ${got}");
             }
             Console.WriteLine();
 
-            // ---- 2. MARC'S WORKED EXAMPLE ----------------------------------------------
+            // ---- 2. COMPOSITION vs AN INDEPENDENT GREEDY -------------------------------
             //
-            // The one cell of the matrix that was computed by hand. If the greedy disagrees
-            // with it, every other cell is suspect however self-consistent it looks.
-            Console.WriteLine("WHITE, LEVEL 3 (the worked example)");
+            // Every team at every level, against the second implementation above. This is what
+            // the hand-worked White example used to do, except it cannot go stale when a price
+            // moves.
+            Console.WriteLine("COMPOSITION vs INDEPENDENT GREEDY (8 teams x 3 levels)");
+            foreach (var id in Levels)
             {
-                var def = GameDataManager.Gadgets.Find(g => g.Id == "reinforcements_3");
-                var team = GameDataManager.Teams.Find(t => t.Color == TeamColour.White);
-                var squad = ReinforcementsEffect.BuildSquad(def, team);
-
-                var want = WhiteLevel3Composition.Reverse().ToArray();   // spawn order
-                Check($"squad is exactly the worked {want.Length} units, lowest tier first",
-                      squad.Select(u => u.Tier).SequenceEqual(want),
-                      $"got [{string.Join(",", squad.Select(u => u.Tier))}] want [{string.Join(",", want)}]");
-                Check("spends the budget exactly", squad.Sum(u => u.Cost) == 6000,
-                      $"${squad.Sum(u => u.Cost)}");
+                var def = GameDataManager.Gadgets.Find(g => g.Id == id);
+                int budget = ReinforcementsEffect.BudgetFor(def);
+                foreach (var team in GameDataManager.Teams)
+                {
+                    var squad = ReinforcementsEffect.BuildSquad(def, team);
+                    var want = IndependentGreedy(team.Roster, budget);
+                    bool ok = squad.Select(u => u.Tier).SequenceEqual(want);
+                    Check($"{team.Color,-7} L{def.Level}  {squad.Count,2} units  ${squad.Sum(u => u.Cost),5}", ok,
+                          ok ? null : $"got [{string.Join(",", squad.Select(u => u.Tier))}] " +
+                                      $"want [{string.Join(",", want)}]");
+                }
             }
             Console.WriteLine();
 
@@ -127,9 +153,10 @@ namespace CastleDefense.Simulation
             // CLAUDE.md's measurement-pitfalls section is about. These four hold for any
             // roster and any budget, so they survive a rebalance of either.
             Console.WriteLine("ALL TEAMS x ALL LEVELS (invariants)");
-            foreach (var row in Table)
+            foreach (var id in Levels)
             {
-                var def = GameDataManager.Gadgets.Find(g => g.Id == row.Id);
+                var def = GameDataManager.Gadgets.Find(g => g.Id == id);
+                int rowBudget = ReinforcementsEffect.BudgetFor(def);
                 foreach (var team in GameDataManager.Teams)
                 {
                     var squad = ReinforcementsEffect.BuildSquad(def, team);
@@ -145,9 +172,9 @@ namespace CastleDefense.Simulation
                     // Nothing is left on the table. Either the budget is spent to within
                     // less than the cheapest unit, or the leftover rule overspent by exactly
                     // one of those -- there is no third case.
-                    bool spent = value <= row.Budget
-                        ? row.Budget - value < cheapest
-                        : value - row.Budget < cheapest;
+                    bool spent = value <= rowBudget
+                        ? rowBudget - value < cheapest
+                        : value - rowBudget < cheapest;
 
                     // MOVE-ON-ONE-EARLY, checked as an observable property rather than by
                     // re-running the algorithm: walk the roster top down, and after each unit
@@ -155,7 +182,7 @@ namespace CastleDefense.Simulation
                     // The cheapest type is exempt -- it buys outright, so the bound there is
                     // its own price, and the leftover rule may then overspend by one more.
                     bool greedy = true;
-                    long left = row.Budget;
+                    long left = rowBudget;
                     var desc = team.Roster.Where(u => u.Cost > 0)
                                           .OrderByDescending(u => u.Cost).ThenByDescending(u => u.Tier)
                                           .ToList();

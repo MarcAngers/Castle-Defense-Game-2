@@ -1177,3 +1177,99 @@ catches them once the margin is already thin.
 The open problem is therefore **a budget, not a gate**: eight individually-affordable purchases
 that are collectively decisive. Next candidate is a cumulative race-spend allowance over the
 endgame phase rather than a per-item test.
+
+---
+
+## 2026-09-08 — `CommittedValueUncapsReactiveFlow` — ACCEPTED, shipped at 10,000
+
+Marc played six singleplayer games on 2026-09-08 and went 5-1 using loadouts the balance
+dashboard rates worst in the game (snipe in all six, speed in three, Red/Orange), against a
+bot pinned to `White,firebomb,wall`. He lost the first, found a line, and won the next five.
+
+### The exploit, measured
+
+He spends **$3-$30 on units for the first three minutes**, banks everything, and then dumps
+~$30,000 of tier 6-8 in the last twenty seconds. In the three games sampled at one-second
+resolution he spent **99.9-100% of his entire army budget inside the final 30 seconds**; in
+the game he LOST that figure is 68.9%, because the bot pressured him early enough to stop it.
+
+The bot answered with tier-1 to tier-4 chumps and finished holding **$22,519 / $23,826 /
+$33,714 / $34,684**.
+
+### Root cause — an arithmetic ceiling, not a scoring or targeting error
+
+`SurvivalInstinct` sets `reactiveSpendBudget = me.Money`, but `ReactiveFlowCap` re-caps
+`spendable` four lines later to `income * ReactiveSpendFractionOfIncome(0.3) *
+ReactiveAllowanceCapSeconds(12)` = **income x 3.6**. At the game's MAXIMUM income of 2,500
+that is **$9,000**, and the cheapest tier 8 in the roster is Purple at $12,760 (White's is
+$23,000). **A defensive ace was unaffordable at every income the game can reach** — it would
+need income 3,544 to 6,389.
+
+The bot's own scorer was never the problem. `ScoreUnit(preferDefense: true)` ranks the ace
+**first** on both teams even at `UnitValueCostExponentDefense = 1.7`:
+
+```
+WHITE:  T8 > T7 > T4 > T1 > T6 > T5 > T3 > T2
+RED:    T8 > T4 > T7 > T5 > T1 > T2 > T6 > T3
+```
+
+It wanted the ace all along and could not afford one. Marc predicted exactly this before any
+of it was measured ("the correct play was to spawn a defensive T8").
+
+### Why the trigger is COMMITTED VALUE and not SurvivalInstinct
+
+Both were built and swept. `SurvivalInstinct` + the unlock (`SurvivalUncapsReactiveFlow`)
+closes the exploit completely but is a bad trade on the ladder, because `timeToDeath <= N` is
+equally true during ordinary attrition:
+
+| arm | OVERALL | mirror | Tier4Spam | earned inv |
+|---|---|---|---|---|
+| reference | 89.9% | 47.2% | 76.7% | 7.36 |
+| `SurvivalEmergencySeconds=8` + unlock | 87.0% | **30.7%** | 76.2% | 6.72 |
+| `=60`, no unlock | 78.0% | **19.7%** | 44.8% | 6.62 |
+| `=25` + unlock | 75.2% | **15.7%** | 29.8% | 5.45 |
+
+The mechanism of the loss is the documented one — a new spending channel funded out of the
+economy — plus a second effect specific to this flag: `survivalEmergency` forces `inDanger`,
+which routes the decision through `preferDefense`, and the auto-spawner substitution is guarded
+`!preferDefense`. **A frequently-firing hatch starves the machine**: auto-spawner level fell
+5.9 -> 0.0-0.5 at the high thresholds.
+
+`committedEnemyValue` — already computed one block above for the wave-wipe rule, so it costs
+nothing — is a THREAT trigger rather than a TIME trigger, and it has none of those side
+effects. **The signal is bimodal**, which is why it discriminates: every threshold from $1,000
+to $20,000 behaves identically on all six replays and $40,000 fails outright, i.e. the value
+near the castle is either attrition (well under $1k) or a committed strike (well over $20k).
+
+### Measured — this is not a trade
+
+| | OVERALL | mirror | Tier4Spam | Investor | HumanClone | earned inv |
+|---|---|---|---|---|---|---|
+| reference | 89.9% | 47.2% | 76.7% | 98.5% | 98.7% | 7.36 |
+| **`= 10000`** | **90.9%** | **56.5%** | **84.3%** | 88.7% | 100.0% | **7.69** |
+
+Headstart arm agrees: OVERALL 90.6% -> 90.5%, mirror 51.7% -> **60.5%**. The mirror intervals
+do not overlap ([43.2, 51.2] vs [52.5, 60.4]). **Earned investments went UP**, which is the
+opposite of the failure mode that sank the four rejected predecessors.
+
+Replay gauntlet over Marc's six games: **33.3% -> 100.0%**, auto-spawner 5.9 -> 6.4.
+
+$2,000 measures marginally better on the mirror (57.8%) and every other rung is identical
+across 2k/10k/20k; **10,000 was chosen for margin against board states neither instrument
+covers**, not because it scored best.
+
+### Scope
+
+`bot-checksum --games 24` is **UNCHANGED** at `AD0EE3BE1E6CE7DF0D367BD5B8D9D987`, because that
+harness runs `EconomyBrakeProfile` and this is enabled only in `EconomyBrakeAutoSpawnProfile`,
+the deployed singleplayer opponent. Bot-vs-bot benchmarks, the counter table and
+`FLAGSHIP_BASELINE.md` are therefore all still comparable.
+`HeuristicBotSettings.PreCommittedValueUncap` reproduces the previous deployed behaviour.
+
+### Open
+
+- **`Investor` 98.5% -> 88.7%** (96.8% -> 83.3% headstart) is the one rung that moved the wrong
+  way, in every arm including those with `SurvivalInstinct` off, so it is the unlock itself.
+  Not diagnosed.
+- The gauntlet's replayed opponent cannot adapt, so 100% overstates the real effect against
+  Marc. The mechanism is solid; the rate is optimistic.

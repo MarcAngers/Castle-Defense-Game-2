@@ -129,6 +129,25 @@ namespace CastleDefense.Api.Services
         public double AutoSpawnPrice { get; init; }
 
         /// <summary>
+        /// Monotonic count of auto-spawner cycles, and the ONLY reason it is on the wire: it
+        /// phase-locks the machine's lever animation to the actual spawns.
+        ///
+        /// `View.drawAutoSpawner` used to pull the lever on a client wall-clock timer at the
+        /// level's units-per-second, which the auto-spawner section of CLAUDE.md called
+        /// "RATE-matched, not phase-locked" and justified by the per-tick wire cost of the
+        /// alternative. Both halves of that turned out to be wrong. The phase was arbitrary,
+        /// AND the rate was wrong too: the engine spawns N units per 30 TICKS while the client
+        /// pulled N times per real SECOND, and the server loop only achieves ~21.4 ticks a
+        /// second (see CLEANUP_BACKLOG.md), so the lever ran about 1.4x too fast and drifted.
+        ///
+        /// One int per player per tick is ~30 bytes against a 4,356-byte average tick -- 0.7%
+        /// -- which is the honest price of the animation being correct rather than
+        /// approximately correct. It is a COUNTER rather than the accumulator so the client
+        /// needs no copy of the cadence arithmetic: the lever throws when the number changes.
+        /// </summary>
+        public int AutoSpawnCycleIndex { get; init; }
+
+        /// <summary>
         /// Unit charges and their regeneration timers, for the cooldown wash on the unit
         /// buttons.
         ///
@@ -169,6 +188,7 @@ namespace CastleDefense.Api.Services
                 RepairCount = p.RepairCount,
                 AutoSpawnLevel = p.AutoSpawnLevel,
                 AutoSpawnPrice = p.AutoSpawnPrice,
+                AutoSpawnCycleIndex = p.AutoSpawnCycleIndex,
                 // Only what is not at rest -- see the note on the properties.
                 UnitCharges = p.UnitCharges
                     .Where(kv => kv.Value < PlayerState.UnitMaxCharges)
@@ -188,7 +208,8 @@ namespace CastleDefense.Api.Services
     /// <summary>
     /// A gadget as the game screen needs it. Description and the IGadgetEffect object are
     /// the two heavy fields and neither is read from state -- the Collection and gadget-info
-    /// screens take their text from wwwroot/assets/master_gadgets.csv, not from here.
+    /// screens take their text from master_gadgets.csv (served from the engine's Data copy
+    /// at /assets/master_gadgets.csv), not from here.
     ///
     /// These change only when a gadget upgrades, which is rare, but they stay in the
     /// per-tick payload rather than being cached client-side off GadgetUpgraded: at this

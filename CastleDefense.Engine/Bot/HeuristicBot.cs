@@ -1112,6 +1112,78 @@ namespace CastleDefense.Engine.Bot
         public bool SurvivalInstinct { get; init; } = false;
         public float SurvivalEmergencySeconds { get; init; } = 12f;
 
+        /// <summary>
+        /// Let a survival emergency bypass ReactiveFlowCap as well as reactiveSpendBudget.
+        ///
+        /// WHY THIS IS SEPARATE FROM SurvivalInstinct, and why the flag exists at all.
+        /// SurvivalInstinct sets `reactiveSpendBudget = me.Money`, which reads as "spend
+        /// whatever it takes". It does not, because ReactiveFlowCap (flag 14, default ON)
+        /// re-caps `spendable` immediately afterwards to
+        ///     income * ReactiveSpendFractionOfIncome * ReactiveAllowanceCapSeconds
+        /// = income * 3.6. At the game's MAXIMUM income of 2500 that ceiling is $9,000,
+        /// while the CHEAPEST tier 8 in the roster is Purple at $12,760 and White's is
+        /// $23,000. So the reactive branch cannot buy a tier 8 at any income the game can
+        /// reach -- it would need income 3,544 to 6,389 -- and the survival hatch silently
+        /// tops out at tier 7 however much money is in the bank.
+        ///
+        /// That matters because a lone blocking body is exactly what the survival law says
+        /// to buy, and against a committed high-tier push the highest-HP body available is
+        /// the one that buys the most swings. killerInstinct already bypasses the whole
+        /// reactive cap chain for the mirror-image reason (finishing a won fight is not a
+        /// savings question); dying is not a savings question either.
+        ///
+        /// KEPT BEHIND ITS OWN FLAG because it is a genuinely different claim from
+        /// SurvivalInstinct -- that one unblocks spending, this one unblocks the TOP of the
+        /// roster -- and the two want measuring apart.
+        /// </summary>
+        public bool SurvivalUncapsReactiveFlow { get; init; } = false;
+
+        /// <summary>
+        /// Minimum enemy dollars COMMITTED near our castle before SurvivalUncapsReactiveFlow
+        /// is allowed to fire. 0 = no requirement (the unconditional unlock).
+        ///
+        /// WHY THE UNLOCK NEEDS A SECOND CONDITION. On its own it is triggered by
+        /// `timeToDeath &lt;= SurvivalEmergencySeconds` and nothing else, which is true both
+        /// when a human dumps a $30,000 army at once AND during ordinary bot-vs-bot
+        /// attrition. Measured on the ladder at threshold 8: OVERALL 89.9% -> 87.0% and the
+        /// HeuristicBot mirror 47.2% -> 30.7%, with earned investments 7.36 -> 6.72 -- the
+        /// documented failure mode of every new spending channel in this file, which is that
+        /// it is funded out of the economy. Meanwhile the same flag takes Marc's six recorded
+        /// losses from 33.3% to 100%.
+        ///
+        /// So the flag is not wrong, it is untargeted. `committedEnemyValue` -- already
+        /// computed one block above for the wave-wipe rule, so this costs nothing -- is the
+        /// quantity that separates the two cases: a committed alpha strike is tens of
+        /// thousands of roster dollars inside WaveWipeRadius, where attrition is hundreds.
+        ///
+        /// DEPENDS ON WaveWipeValue BEING ON (it is, by default, and the shipped profile does
+        /// not disable it). With it off `committedEnemyValue` is always 0 and any non-zero
+        /// threshold here disables the unlock entirely rather than failing loudly.
+        /// </summary>
+        public double SurvivalUncapMinCommittedValue { get; init; } = 0;
+
+        /// <summary>
+        /// Lift ReactiveFlowCap whenever this many enemy dollars are committed near our
+        /// castle, INDEPENDENTLY of SurvivalInstinct. 0 = off.
+        ///
+        /// Marc's ask, 2026-09-08: "test this on its own as well, SurvivalInstinct may not be
+        /// a good system in general." The two are separable and the distinction is real --
+        /// SurvivalInstinct is a TIME trigger (am I about to die) that additionally forces
+        /// inDanger and blocks investing, while this is a THREAT trigger (is a real army
+        /// here) that does nothing but grant permission to spend on the reactive path the
+        /// bot was already taking.
+        ///
+        /// That matters because SurvivalInstinct's other effects have their own cost: forcing
+        /// inDanger routes the decision through preferDefense, and the auto-spawner
+        /// substitution is guarded `!preferDefense`, so a frequently-firing hatch starves the
+        /// machine. Measured at SurvivalEmergencySeconds 25-60, auto-spawner level fell from
+        /// 5.9 to 0.0-0.5 and the ladder lost 12-17 points. This flag has no such side effect.
+        ///
+        /// Like the survival gate it depends on WaveWipeValue being on for
+        /// committedEnemyValue to be non-zero.
+        /// </summary>
+        public double CommittedValueUncapsReactiveFlow { get; init; } = 0;
+
         // (5) ARMAGEDDON RUSH -- TESTED AND TABLED. Correctly targeted, but at a regime
         // too rare to matter. Ladder 300 setups x 2 sides x 2 modes vs the default
         // reference: mirror 44.3%/44.5% against the reference's 44.8%/46.0%, earned
@@ -2449,6 +2521,24 @@ namespace CastleDefense.Engine.Bot
             // The gauntlet's opponent is a passive replay that cannot punish an idle bot, so
             // it cannot see this. Do not retry ArmageddonCommit without making the commit
             // CONDITIONAL on the rung being reachable and on nothing needing to be answered.
+            // PROMOTED 2026-09-08. Marc's six recorded losses that day were all the same play:
+            // bank everything for three minutes, then dump ~$30,000 of tier 6-8 in twenty
+            // seconds. The bot held $22,000-$38,000 through it and answered with tier-1
+            // chumps, because ReactiveFlowCap caps reactive spending at income * 3.6 --
+            // $9,000 at the game's MAXIMUM income, below the price of every tier 8 in the
+            // roster. Its own scorer already ranks the ace first for defence; it could never
+            // afford one.
+            //
+            // Replay gauntlet over those six games: 33.3% -> 100.0%.
+            // Ladder (4,800 games/arm): OVERALL 89.9% -> 90.9%, HeuristicBot mirror
+            // 47.2% -> 56.5%, Tier4Spam 76.7% -> 84.3%, earned investments 7.36 -> 7.69.
+            // Investor 98.5% -> 88.7% is the one rung that moved the wrong way and is NOT yet
+            // explained -- see CLEANUP_BACKLOG.md.
+            //
+            // SurvivalInstinct was measured alongside it and REJECTED: the same gate plus the
+            // hatch scores OVERALL 89.8% / mirror 50.7%, i.e. below this AND below the old
+            // default. See SurvivalUncapsReactiveFlow for the mechanism.
+            CommittedValueUncapsReactiveFlow = 10000,
         };
 
         /// <summary>Shipped profile + the single-chipper investment clock. Marc's rule.</summary>
@@ -2645,6 +2735,20 @@ namespace CastleDefense.Engine.Bot
             KillerInstinctPushLatch = true,
             AutoSpawnerInsteadOfUnits = true,
             AutoSpawnMaxLevel = 8, RaceAwareSpending = true, ArmageddonCommit = true,
+        };
+
+        /// <summary>The deployed profile as it stood BEFORE CommittedValueUncapsReactiveFlow
+        /// was promoted on 2026-09-08. Reproduces every bot-vs-bot number recorded up to that
+        /// date -- same reason PreChargeAware and PreRungCommit exist.</summary>
+        public static readonly HeuristicBotSettings PreCommittedValueUncap = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
         };
 
         // ── Named presets for temporary ladder contenders ──
@@ -3244,6 +3348,8 @@ namespace CastleDefense.Engine.Bot
         // Enemy $ currently committed within WaveWipeRadius of our castle -- the AoE
         // wipe opportunity. 0 when flag (12) is off.
         public double LastWaveWipeValue { get; private set; }
+        /// <summary>Did this decision lift ReactiveFlowCap? Diagnostic for replay analysis.</summary>
+        public bool LastSurvivalUncappedFlow { get; private set; }
 
         // Last geometric t_death reading, for diagnostics. Untouched when the flag is off.
         public float LastGeoTimeToDeathSeconds { get; private set; } = EffectivelyInfiniteSeconds;
@@ -3943,6 +4049,19 @@ namespace CastleDefense.Engine.Bot
             if (survivalEmergency) reactiveSpendBudget = me.Money;
             LastSurvivalEmergency = survivalEmergency;
 
+            // Whether this emergency also lifts ReactiveFlowCap -- see
+            // SurvivalUncapsReactiveFlow for what that unblocks (the top of the roster) and
+            // SurvivalUncapMinCommittedValue for why it needs the committed-value condition.
+            // committedEnemyValue is the block above's, so this adds no work.
+            bool survivalUncapsFlow =
+                   (survivalEmergency
+                        && _settings.SurvivalUncapsReactiveFlow
+                        && committedEnemyValue >= _settings.SurvivalUncapMinCommittedValue)
+                // ...or the threat trigger on its own. See CommittedValueUncapsReactiveFlow.
+                || (_settings.CommittedValueUncapsReactiveFlow > 0
+                        && committedEnemyValue >= _settings.CommittedValueUncapsReactiveFlow);
+            LastSurvivalUncappedFlow = survivalUncapsFlow;
+
             // EXPERIMENT: castleHpPct < 0.9f dropped from this OR -- traced a v4 matchup
             // (trace v4, fine-grained log) where HP sat flat at exactly 90% (a stale,
             // non-recovering deficit from an earlier, now-resolved skirmish) while a
@@ -4456,7 +4575,7 @@ namespace CastleDefense.Engine.Bot
             }
             else if (inDanger && !boughtWiper)
             {
-                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget);
+                SpendOnUnits(engine, me, teamDef.Roster, preferDefense: true, enemyUnits, reactiveSpendBudget: reactiveSpendBudget, survivalUncapsFlow: survivalUncapsFlow);
             }
 
             // --- BLOCK A LONE CHIPPER (flag 3) ---------------------------------------
@@ -5669,7 +5788,7 @@ namespace CastleDefense.Engine.Bot
         // (they just queue up waiting for a turn to attack).
         private const int MaxOwnUnitsOnField = 120;
 
-        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false, double reactiveSpendBudget = double.MaxValue, bool hasIncomeAdvantage = false)
+        private void SpendOnUnits(GameEngine engine, PlayerState me, List<UnitDefinition> roster, bool preferDefense, List<Unit> enemyUnits, bool killerInstinct = false, double reactiveSpendBudget = double.MaxValue, bool hasIncomeAdvantage = false, bool survivalUncapsFlow = false)
         {
             LastUnitsPurchased = 0;
             int ownUnitCount = engine._state.Units.Count(u => u.Side == _side);
@@ -5991,7 +6110,11 @@ namespace CastleDefense.Engine.Bot
                 // produce sustained competent pressure -- the exact state where this binds.
                 // This is not a fifth attempt at the same measurement; it is the first with
                 // evidence the instrument was blind.
-                if (_settings.ReactiveFlowCap && me.Income > 0)
+                // A survival emergency bypasses the flow cap the same way killerInstinct
+                // bypasses this whole branch. See SurvivalUncapsReactiveFlow: without it the
+                // hatch's `reactiveSpendBudget = me.Money` is immediately undone here, and
+                // the ceiling lands below the price of every tier 8 in the game.
+                if (_settings.ReactiveFlowCap && me.Income > 0 && !survivalUncapsFlow)
                 {
                     double reactiveRate = me.Income * _settings.ReactiveSpendFractionOfIncome;
                     _reactiveSpendAllowance = Math.Min(

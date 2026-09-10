@@ -29,7 +29,14 @@ export default function initLobby() {
     };
 
     btnExit.onclick = () => {
-        // Delete Lobby here somehow?
+        // Tear the lobby down on the way out. Leaving is a VIEW change, not a disconnect, so
+        // the server's OnDisconnectedAsync cleanup never fired for this path and the empty
+        // lobby lingered in the game browser until the tab was closed.
+        //
+        // Not awaited: the menu should appear the instant it is pressed rather than after a
+        // round trip, and leaveLobby swallows its own errors. Nothing after this depends on
+        // the result -- if the call fails the lobby is no worse off than it was before.
+        connection.leaveLobby();
         showScreen('main-menu');
     };
 }
