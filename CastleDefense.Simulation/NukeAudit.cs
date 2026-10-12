@@ -129,93 +129,92 @@ namespace CastleDefense.Simulation
             int casts = 0;
             for (int i = 0; i < rf.TickCount; i++)
             {
-                byte a1 = rf.A1[i], a2 = rf.A2[i];
+                int entry = i;
+                // Inspected on the board the cast actually met: after the other seat's action
+                // when that one lands first. ReplayFile.Step owns the order.
+                rf.Step(engine, before: (s, a) => { if (s == side && a == 11) InspectCast(entry); });
+                if (state.IsGameOver) break;
+            }
 
-                if ((side == 1 ? a1 : a2) == 11)
+            void InspectCast(int i)
+            {
+                var me = side == 1 ? state.Player1 : state.Player2;
+                // Re-read: the equipped gadget changes tier as XP accrues.
+                def = me.OffensiveGadget;
+                bool onCd = me.GadgetCooldowns.TryGetValue(def.Id, out long cd) && cd > 0;
+                bool affordable = me.Money >= def.Cost;
+                var enemies = state.Units.Where(u => u.Side != side).ToList();
+                var mine = state.Units.Where(u => u.Side == side).ToList();
+
+                // LEGACY mirror of GameEngine.UseGadget's auto-target branch as it stood
+                // UP TO 2026-08-21. Deliberately kept verbatim rather than re-pointed at
+                // the new GadgetTargeting: every recording in the corpus was played under
+                // THIS rule, so it is the only thing the recorded target can be compared
+                // against to tell the two code paths apart. Re-pointing it would silently
+                // reclassify history.
+                int pos;
+                if (enemies.Count > 0)
+                    pos = side == 1
+                        ? (int)enemies.OrderBy(e => e.Position).First().Position - 300
+                        : (int)enemies.OrderByDescending(e => e.Position).First().Position + 300;
+                else
+                    pos = side == 1 ? GameEngine.MAP_WIDTH : 0;
+                pos = Math.Max(300, Math.Min(GameEngine.MAP_WIDTH - 300, pos));
+
+                // The target that was ACTUALLY used, when the file records it.
+                bool haveReal = rf.GadgetTargets.TryGetValue(((int)(rf.StartingTick + i), side), out short realPos);
+                int tgt = haveReal ? realPos : pos;
+
+                // WHICH CODE PATH FIRED IT. ApplyAction(side, 11) hands UseGadget -1 and
+                // gets `pos`; HeuristicBot passes its own computed target. So an exact
+                // match means the cast bypassed every friendly-fire check in the bot.
+                string path = !haveReal ? "?" : (realPos == pos ? "AUTO" : "heur");
+
+                int ownHit = mine.Count(u => Math.Abs(u.Position - tgt) <= def.Radius);
+                int enemyHit = enemies.Count(u => Math.Abs(u.Position - tgt) <= def.Radius);
+
+                // COUNTERFACTUAL: what the CURRENT targeter would do on this exact board.
+                // For an AUTO cast this is the whole verification of the 2026-08-21 fix --
+                // same recorded boards, no new games needed. `refuse` means it declines to
+                // cast at all, which for these gadgets is the correct answer more often
+                // than not.
+                int? newAim = GadgetTargeting.AutoTarget(engine, side, def);
+                string newCol;
+                if (!newAim.HasValue) newCol = "refuse";
+                else
                 {
-                    var me = side == 1 ? state.Player1 : state.Player2;
-                    // Re-read: the equipped gadget changes tier as XP accrues.
-                    def = me.OffensiveGadget;
-                    bool onCd = me.GadgetCooldowns.TryGetValue(def.Id, out long cd) && cd > 0;
-                    bool affordable = me.Money >= def.Cost;
-                    var enemies = state.Units.Where(u => u.Side != side).ToList();
-                    var mine = state.Units.Where(u => u.Side == side).ToList();
-
-                    // LEGACY mirror of GameEngine.UseGadget's auto-target branch as it stood
-                    // UP TO 2026-08-21. Deliberately kept verbatim rather than re-pointed at
-                    // the new GadgetTargeting: every recording in the corpus was played under
-                    // THIS rule, so it is the only thing the recorded target can be compared
-                    // against to tell the two code paths apart. Re-pointing it would silently
-                    // reclassify history.
-                    int pos;
-                    if (enemies.Count > 0)
-                        pos = side == 1
-                            ? (int)enemies.OrderBy(e => e.Position).First().Position - 300
-                            : (int)enemies.OrderByDescending(e => e.Position).First().Position + 300;
-                    else
-                        pos = side == 1 ? GameEngine.MAP_WIDTH : 0;
-                    pos = Math.Max(300, Math.Min(GameEngine.MAP_WIDTH - 300, pos));
-
-                    // The target that was ACTUALLY used, when the file records it.
-                    bool haveReal = rf.GadgetTargets.TryGetValue((i, side), out short realPos);
-                    int tgt = haveReal ? realPos : pos;
-
-                    // WHICH CODE PATH FIRED IT. ApplyAction(side, 11) hands UseGadget -1 and
-                    // gets `pos`; HeuristicBot passes its own computed target. So an exact
-                    // match means the cast bypassed every friendly-fire check in the bot.
-                    string path = !haveReal ? "?" : (realPos == pos ? "AUTO" : "heur");
-
-                    int ownHit = mine.Count(u => Math.Abs(u.Position - tgt) <= def.Radius);
-                    int enemyHit = enemies.Count(u => Math.Abs(u.Position - tgt) <= def.Radius);
-
-                    // COUNTERFACTUAL: what the CURRENT targeter would do on this exact board.
-                    // For an AUTO cast this is the whole verification of the 2026-08-21 fix --
-                    // same recorded boards, no new games needed. `refuse` means it declines to
-                    // cast at all, which for these gadgets is the correct answer more often
-                    // than not.
-                    int? newAim = GadgetTargeting.AutoTarget(engine, side, def);
-                    string newCol;
-                    if (!newAim.HasValue) newCol = "refuse";
-                    else
-                    {
-                        int np = Math.Max(300, Math.Min(GameEngine.MAP_WIDTH - 300, newAim.Value));
-                        int no = mine.Count(u => Math.Abs(u.Position - np) <= def.Radius);
-                        int ne = enemies.Count(u => Math.Abs(u.Position - np) <= def.Radius);
-                        newCol = $"{np}:{no}/{ne}";
-                    }
-
-                    var enemyP = side == 1 ? state.Player2 : state.Player1;
-                    string flag = !affordable ? "  (UNAFFORDABLE - would fail)"
-                                : onCd ? "  (ON COOLDOWN - would fail)"
-                                : enemies.Count == 0 ? "  <-- NO ENEMY UNITS" : "";
-                    Console.WriteLine(
-                        $"    {state.CurrentTick,5}  {state.CurrentTick / 30,4}  {def.Id,-7} {def.Cost,5}  "
-                        + $"{me.Money,6:F0}  {me.CastleHealth,6}  {enemyP.CastleHealth,6}  "
-                        + $"{enemies.Count,5}  {mine.Count,4}  {tgt,6}  {pos,7}  {path,-5}  {ownHit,4} /{enemyHit,3}   {newCol,-14}{flag}");
-
-                    if (affordable && !onCd && ownHit > 0 && enemyHit == 0)
-                        Console.WriteLine($"           ^^ PURE OWN-GOAL: {ownHit} own unit(s) in blast, zero enemy. "
-                                        + $"Cost ${def.Cost}, self-castle damage {(int)def.BaseValue / 2}.");
-
-                    // The 15 ticks before the cast, so a press-macro wave is visible as what
-                    // it is: a run of spawns on consecutive ticks with 11/12/13 on the tail.
-                    // A cast that is the tail of a QUEUE was not decided at this tick at all,
-                    // which is why asking "what would search choose here" answers nothing.
-                    var window = new List<string>();
-                    for (int k = Math.Max(0, i - 14); k <= i; k++)
-                    {
-                        byte a = side == 1 ? rf.A1[k] : rf.A2[k];
-                        if (a != 0) window.Add($"t{k}:{a}");
-                    }
-                    Console.WriteLine("           preceding 15 ticks of P" + side + " actions: "
-                                    + (window.Count > 0 ? string.Join(" ", window) : "(none)"));
-                    casts++;
+                    int np = Math.Max(300, Math.Min(GameEngine.MAP_WIDTH - 300, newAim.Value));
+                    int no = mine.Count(u => Math.Abs(u.Position - np) <= def.Radius);
+                    int ne = enemies.Count(u => Math.Abs(u.Position - np) <= def.Radius);
+                    newCol = $"{np}:{no}/{ne}";
                 }
 
-                if (a1 != 0) rf.ApplyRecorded(engine, 1, i, a1);
-                if (a2 != 0) rf.ApplyRecorded(engine, 2, i, a2);
-                engine.Tick();
-                if (state.IsGameOver) break;
+                var enemyP = side == 1 ? state.Player2 : state.Player1;
+                string flag = !affordable ? "  (UNAFFORDABLE - would fail)"
+                            : onCd ? "  (ON COOLDOWN - would fail)"
+                            : enemies.Count == 0 ? "  <-- NO ENEMY UNITS" : "";
+                Console.WriteLine(
+                    $"    {state.CurrentTick,5}  {state.CurrentTick / 30,4}  {def.Id,-7} {def.Cost,5}  "
+                    + $"{me.Money,6:F0}  {me.CastleHealth,6}  {enemyP.CastleHealth,6}  "
+                    + $"{enemies.Count,5}  {mine.Count,4}  {tgt,6}  {pos,7}  {path,-5}  {ownHit,4} /{enemyHit,3}   {newCol,-14}{flag}");
+
+                if (affordable && !onCd && ownHit > 0 && enemyHit == 0)
+                    Console.WriteLine($"           ^^ PURE OWN-GOAL: {ownHit} own unit(s) in blast, zero enemy. "
+                                    + $"Cost ${def.Cost}, self-castle damage {(int)def.BaseValue / 2}.");
+
+                // The 15 ticks before the cast, so a press-macro wave is visible as what
+                // it is: a run of spawns on consecutive ticks with 11/12/13 on the tail.
+                // A cast that is the tail of a QUEUE was not decided at this tick at all,
+                // which is why asking "what would search choose here" answers nothing.
+                var window = new List<string>();
+                for (int k = Math.Max(0, i - 14); k <= i; k++)
+                {
+                    byte a = side == 1 ? rf.A1[k] : rf.A2[k];
+                    if (a != 0) window.Add($"t{k}:{a}");
+                }
+                Console.WriteLine("           preceding 15 ticks of P" + side + " actions: "
+                                + (window.Count > 0 ? string.Join(" ", window) : "(none)"));
+                casts++;
             }
             Console.WriteLine($"\n    {casts} offensive-gadget casts by P{side}");
 

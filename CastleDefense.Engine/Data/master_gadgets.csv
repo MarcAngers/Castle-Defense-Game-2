@@ -20,8 +20,8 @@ wall_3,The Biggest Wall,Defense,,1,5000,,48000,HP,0,0,0,0,,0,10000,"Spawns an ne
 speed,Speed Boost,Defense,speed_2,0,12,700,1.5,SPD MULT,0,0,0,0,SPEED,90,5000,Boosts movement speed and attack speed of all allied units.
 speed_2,Mega Speed Boost,Defense,speed_3,0,180,1500,2,SPD MULT,0,0,0,0,SPEED,150,5000,Significantly boosts movement speed and attack speed of all allied units.
 speed_3,Turbo Speed Boost,Defense,,0,1440,,10,SPD MULT,0,0,0,0,SPEED,300,10000,Boosts movement speed and attack speed of all allied units to the max!
-reinforcements,Reinforcements,Defense,reinforcements_2,0,15,1000,1.05,EFFICIENCY,0,0,0,0,,0,20000,Spawns a small wave reinforcement units.
-reinforcements_2,Reinforcements,Defense,reinforcements_3,0,225,2000,1.1,EFFICIENCY,0,0,0,0,,0,30000,Spawns a large wave of reinforcement units.
+reinforcements,Reinforcements,Defense,reinforcements_2,0,15,400,1.05,EFFICIENCY,0,0,0,0,,0,20000,Spawns a small wave reinforcement units.
+reinforcements_2,Reinforcements,Defense,reinforcements_3,0,225,700,1.1,EFFICIENCY,0,0,0,0,,0,30000,Spawns a large wave of reinforcement units.
 reinforcements_3,Reinforcements,Defense,,0,4000,,1.5,EFFICIENCY,0,0,0,0,,0,60000,Spawns a wave of some of the strongest available units!
 cash,Cash Drop,Signature,cash_2,0,80,500,100,CASH AMOUNT,0,110,0,0,,0,20000,Air drops a quick cash injection.
 cash_2,Mega Cash Drop,Signature,cash_3,0,1200,900,1500,CASH AMOUNT,0,110,0,0,,0,22000,Air drops a large crate of cash.

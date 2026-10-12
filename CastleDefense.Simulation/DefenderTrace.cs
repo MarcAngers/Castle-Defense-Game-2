@@ -71,13 +71,10 @@ namespace CastleDefense.Simulation
             var (state, engine) = rf.BuildStart();
             state.Player1.SetLoadout(new[] { Bs(rf.P1Off), Bs(rf.P1Def), Bs(rf.P1Sig) });
             state.Player2.SetLoadout(new[] { Bs(rf.P2Off), Bs(rf.P2Def), Bs(rf.P2Sig) });
-            for (int i = 0; i < rf.TickCount && state.CurrentTick < target; i++)
-            {
-                if (rf.A1[i] != 0) engine.ApplyAction(1, rf.A1[i]);
-                if (rf.A2[i] != 0) engine.ApplyAction(2, rf.A2[i]);
-                engine.Tick();
-                if (state.IsGameOver) break;
-            }
+            // Fast-forward in the live order (ReplayFile.Step). reaim: this tool has always
+            // re-aimed casts with ApplyAction, and it overrides the start loadout above anyway.
+            while (rf.EntryIndex(state) >= 0 && state.CurrentTick < target && !state.IsGameOver)
+                rf.Step(engine, reaim: true);
 
             Console.WriteLine();
             Console.WriteLine("=== " + rf.GameId + " @ tick " + state.CurrentTick

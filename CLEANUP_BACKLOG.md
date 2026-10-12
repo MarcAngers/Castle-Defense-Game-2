@@ -50,6 +50,14 @@ the critical path clear while making sure nothing gets silently forgotten.
   roughly 2.1. The log has a correction entry, but the older sections were not edited
   in place and still read as authoritative.
 
+- [ ] **CLAUDE.md's "current" `bot-checksum --games 24` is stale** (noted 2026-09-10). The last
+  value it records is `9A77A06CE1969998842AA0B8CD108124` (snipe burst, 2026-09-08). A clean
+  worktree of HEAD `86987c7` returns **`F7273B2DE9DFFB0FCC82B7C98B79AB2E`** -- the 2026-09-09
+  snipe re-anchoring (shot table moved out of the CSV) and/or the wave/reinforcements edits
+  moved it without the doc being updated. Anyone comparing against the documented value will
+  conclude their change moved the default bot when it did not. Re-derive, then update the
+  snipe section's closing line.
+
 ## Measurement tools not yet re-audited
 
 Two of two instruments examined were broken. These are the same shape and have not been
@@ -556,3 +564,45 @@ testing the cap was built for. Fix them deliberately, and re-run `bot-checksum` 
   directory and pointing `GameDataManager.Initialize(dataDir)` at it would make that game
   reconstruct bit-exactly again â€” that is how it was proven in the first place.
 
+- **The balance dashboard's win-rate bars never render.** `BalanceMatrix.MarginalTable` draws
+  each bar as `<span class="bar"><i>`, and `.bar` sets a height but no `display`, so the span
+  stays inline and collapses to nothing — every Marginals row has an empty bar column. Found
+  2026-09-12 while adding the ARMAGEDDON section (which deliberately has no bars). The fix is
+  `display:block` on `.bar`; check the column still fits at 812x375 when it appears.
+
+- **RESOLVED 2026-09-14, and the diagnosis was wrong: replay readers applied actions in the wrong
+  SEAT order, not one tick late.** Found building `--tier8-cap trace`. A tick-first loop lands every
+  entry at the same instant as apply-then-Tick (nothing runs between two Ticks); it only dropped
+  entry 0. The real defect: the bot in seat 2 acts IMMEDIATELY in `Update` while the human's click
+  is queued into `ProcessActions`, so live the bot's action lands first, and every reader applied
+  P1 first. On DB3C84 the 2x2 (loop placement x seat order) moves only with seat order: 408s -> the
+  recorded 410.8s on the DB finals. The order now lives in `ReplayFile.Step` and every
+  `ReplayFile` reader uses it; `--replay-format-check` asserts it. Corpus effect, dry run: 3 -> 4
+  of 353 pre-v4 games, 3 -> 6 of 376 overall (two of those from also counting rebuilt length in
+  passes). So the offset was NOT what broke the corpus -- engine drift still is. Full write-up in
+  CLAUDE.md, "Replay rebuild order". Leftovers, below.
+
+- **`AnalysisController.Replay` does not set `rf.P1ActsFirst`.** One line after the DB row lookup:
+  `if (row != null) rf.P1ActsFirst = ReplayFile.P1ActsFirstFor(row.GameMode, row.OpponentType);`.
+  Only the six `leaguewatch:castle_defense_p1_v4_vs_heuristic` games rebuild differently without it.
+  Not applied 2026-09-14 because the agent session could not edit under `CastleDefenseGame2/`.
+
+- **The legacy raw-byte replay readers in `Simulation/Program.cs` still apply P1 before P2**:
+  `--export-bc`, the invest-availability dump, the eval-calibration dump and `--trace-human`. They
+  parse bytes themselves (v1 support) rather than using `ReplayFile`, so they could not simply move
+  onto `Step`; flipping the two `ApplyAction` lines is the minimum. They also still re-aim casts.
+
+- **Re-derive what the order fix moved, before quoting any of it**: the `--divergence` standings
+  table for `heuristic` and `clone` (only the oracle and control were re-run), and
+  `human_policy_table.csv` via `--export-policy-table` (not re-exported). Both are conditional on
+  the rebuilt state, which is exactly what changed.
+
+- **CA5CF2 rebuilds with 0 refused actions, the recorded pass count and winner, and still ends
+  with P1 $12,000 richer than `game_records.db`.** Unexplained; a per-second diff of
+  `--replay-economy` against a live-bot `--tier8-cap trace CA5CF2` would show where money departs.
+
+- **Every v4 game from 2026-09-10 refuses ~2 recorded actions (action 9 at the invest cap)** under
+  its own fingerprinted CSV, because the working tree's uncommitted `PlayerState.cs` raises the top
+  invest rung (40,000 -> 45,296) and ARMAGEDDON (121,221 -> 242,442). The v4 fingerprint covers the
+  CSVs, not code, so it reports those games as "balance unchanged". A code-version stamp in the
+  replay would close that hole.

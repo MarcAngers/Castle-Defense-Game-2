@@ -82,6 +82,14 @@ public static class BalanceMatrix
         public int P1Units, P2Units;
         public int P1UnitSpend, P2UnitSpend;
         public int P1DefCasts, P2DefCasts;
+
+        // Whether each side bought ARMAGEDDON before the game ended. Read off
+        // PlayerState.ArmageddonUsed, NOT inferred from the action stream: ARMAGEDDON is
+        // action 9, the same id as an ordinary invest, and never raises OnGadgetCast.
+        public bool P1Arma, P2Arma;
+        // False for a row read from a CSV written before the columns existed, so an old
+        // balance_matrix_prev.csv shows no delta rather than a fake "0% ARMAGEDDON" baseline.
+        public bool HasArma = true;
     }
 
     public static void Run(string[] args)
@@ -248,6 +256,7 @@ public static class BalanceMatrix
             P1Units = (int)engine.UnitsPurchased[1], P2Units = (int)engine.UnitsPurchased[2],
             P1UnitSpend = (int)engine.MoneySpentOnUnits[1], P2UnitSpend = (int)engine.MoneySpentOnUnits[2],
             P1DefCasts = defCasts1, P2DefCasts = defCasts2,
+            P1Arma = state.Player1.ArmageddonUsed, P2Arma = state.Player2.ArmageddonUsed,
         };
     }
 
@@ -261,7 +270,8 @@ public static class BalanceMatrix
         using var w = new StreamWriter(path, false);
         w.WriteLine("p1_team,p1_off,p1_def,p2_team,p2_off,p2_def,map,shadow,winner_side,decided,ticks,seconds," +
                     "p1_invests,p2_invests,p1_end_def,p2_end_def,p1_hp,p2_hp," +
-                    "p1_units,p2_units,p1_unitspend,p2_unitspend,p1_defcasts,p2_defcasts");
+                    "p1_units,p2_units,p1_unitspend,p2_unitspend,p1_defcasts,p2_defcasts," +
+                    "p1_armageddon,p2_armageddon");
         foreach (var r in rows)
         {
             if (r == null) continue;
@@ -272,7 +282,8 @@ public static class BalanceMatrix
                         $"{r.Map},{(r.Shadow ? 1 : 0)},{r.Winner},{decided},{r.Ticks}," +
                         $"{(r.Ticks / 30.0).ToString("F1", CultureInfo.InvariantCulture)}," +
                         $"{r.P1Invests},{r.P2Invests},{r.P1EndDef},{r.P2EndDef},{r.P1Hp},{r.P2Hp}," +
-                        $"{r.P1Units},{r.P2Units},{r.P1UnitSpend},{r.P2UnitSpend},{r.P1DefCasts},{r.P2DefCasts}");
+                        $"{r.P1Units},{r.P2Units},{r.P1UnitSpend},{r.P2UnitSpend},{r.P1DefCasts},{r.P2DefCasts}," +
+                        $"{(r.P1Arma ? 1 : 0)},{(r.P2Arma ? 1 : 0)}");
         }
     }
 
@@ -307,6 +318,9 @@ public static class BalanceMatrix
                 P2UnitSpend = c.Length > 21 ? int.Parse(c[21]) : 0,
                 P1DefCasts = c.Length > 22 ? int.Parse(c[22]) : 0,
                 P2DefCasts = c.Length > 23 ? int.Parse(c[23]) : 0,
+                P1Arma = c.Length > 24 && c[24] == "1",
+                P2Arma = c.Length > 25 && c[25] == "1",
+                HasArma = c.Length > 25,
             });
         }
         return list.ToArray();
@@ -413,6 +427,7 @@ public static class BalanceMatrix
   .bar{position:relative;height:9px;border-radius:5px;background:var(--bar2);min-width:120px}
   .bar>i{position:absolute;inset:0 auto 0 0;border-radius:5px;background:var(--bar);display:block}
   .ci{color:var(--ink3);font-size:12px}
+  .big{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
   .hi{color:var(--good);font-weight:600}.lo{color:var(--bad);font-weight:600}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
   .scroll{overflow-x:auto}
@@ -458,6 +473,9 @@ small enough to be trajectory noise rather than a real effect.</p><div class=""g
 A large gap is the engine's seat asymmetry showing through, not a balance finding — see
 CLAUDE.md's seat-bias entry. It does not distort the marginals above, which count both seats
 equally by construction.</p></div>");
+
+        sb.Append(ArmageddonSection(live, prev));
+        sb.Append(TimeCapSection(live, prev));
 
         // ---- MAPS -----------------------------------------------------------------------
         sb.Append(@"<h2>Maps</h2>
@@ -535,6 +553,168 @@ ordering has any claim to transfer.</p>");
 
         sb.Append("</div></body></html>");
         File.WriteAllText(path, sb.ToString());
+    }
+
+    /// <summary>
+    /// How often a game ends in ARMAGEDDON -- i.e. at least one side bought it before the game
+    /// was over. "Ended in" rather than "was won by": the buyer does not always win, and the
+    /// buyer's win rate is shown separately so the two are not confused.
+    /// </summary>
+    private static string ArmageddonSection(GameRow[] live, GameRow[] prev)
+    {
+        int n = live.Length;
+        int p1Only = live.Count(r => r.P1Arma && !r.P2Arma);
+        int p2Only = live.Count(r => r.P2Arma && !r.P1Arma);
+        int both   = live.Count(r => r.P1Arma && r.P2Arma);
+        int any    = p1Only + p2Only + both;
+
+        // Buyer win rate only where exactly ONE side bought it; when both did, "the buyer"
+        // won by definition and the number would be meaningless.
+        int soloBuyerWins = live.Count(r => (r.P1Arma && !r.P2Arma && r.Winner == 1) ||
+                                            (r.P2Arma && !r.P1Arma && r.Winner == 2));
+        int solo = p1Only + p2Only;
+
+        double armaSec  = any > 0 ? live.Where(r => r.P1Arma || r.P2Arma).Average(r => r.Ticks) / 30.0 : 0;
+        double otherSec = n - any > 0 ? live.Where(r => !r.P1Arma && !r.P2Arma).Average(r => r.Ticks) / 30.0 : 0;
+
+        string Pct(int k) => n > 0 ? FmtPct(100.0 * k / n) : "&mdash;";
+
+        var sb = new StringBuilder();
+        sb.Append($@"<h2>ARMAGEDDON</h2>
+<p class=""sub"">Share of games in which at least one side bought ARMAGEDDON before the game ended.</p>
+<div class=""grid""><div class=""card"">");
+        sb.Append(ShareHeadline(live, prev, r => r.P1Arma || r.P2Arma, "of games end in ARMAGEDDON",
+                                prevUsable: prev != null && prev.All(r => r.HasArma)));
+        sb.Append($@"<table style=""margin-top:10px""><tr><th>Bought by</th><th>Games</th><th>Share</th></tr>
+<tr><td>P1 only</td><td>{p1Only:N0}</td><td>{Pct(p1Only)}</td></tr>
+<tr><td>P2 only</td><td>{p2Only:N0}</td><td>{Pct(p2Only)}</td></tr>
+<tr><td>Both sides</td><td>{both:N0}</td><td>{Pct(both)}</td></tr>
+<tr><td>Neither</td><td>{n - any:N0}</td><td>{Pct(n - any)}</td></tr></table>
+<p class=""note"">When only one side bought it, that side won
+<b>{(solo > 0 ? $"{100.0 * soloBuyerWins / solo:F1}%" : "&mdash;")}</b> of the time
+({soloBuyerWins:N0} of {solo:N0}). Average length: {armaSec:F0}s with ARMAGEDDON,
+{otherSec:F0}s without.</p></div>");
+
+        // Which teams reach the top rung at all: the share of a team's sides that bought it.
+        sb.Append(PerTeamCard(live, "Bought it", (r, side) => side == 1 ? r.P1Arma : r.P2Arma,
+            "Share of that team's sides that bought ARMAGEDDON, both seats pooled."));
+        return sb.Append("</div>").ToString();
+    }
+
+    /// <summary>
+    /// How often a game runs to the 10-minute cap (`GameEngine.MAX_TICKS`, 18,000 ticks) instead
+    /// of ending with a castle destroyed. At the cap the engine awards the game to whichever
+    /// castle has more HP and calls it a draw only when they are exactly level, so a capped game
+    /// usually still has a winner; the breakdown shows how it was settled.
+    ///
+    /// No new column was needed: `IsTimeLimit` has been in the CSV's `decided` field since the
+    /// sweep was written, so this statistic has a delta against any previous run.
+    /// </summary>
+    private static string TimeCapSection(GameRow[] live, GameRow[] prev)
+    {
+        int n = live.Length;
+        var capped = live.Where(r => r.TimeLimit).ToArray();
+        int p1Ahead = capped.Count(r => r.Winner == 1);
+        int p2Ahead = capped.Count(r => r.Winner == 2);
+        int level   = capped.Count(r => r.Winner == 0);
+        int withArma = capped.Count(r => r.P1Arma || r.P2Arma);
+
+        string Pct(int k) => n > 0 ? FmtPct(100.0 * k / n) : "&mdash;";
+
+        // Overlap with ARMAGEDDON only means something when this CSV recorded ARMAGEDDON.
+        string armaNote = live.All(r => r.HasArma)
+            ? $@" ARMAGEDDON was bought in {withArma:N0} of the {capped.Length:N0} capped games."
+            : "";
+
+        var sb = new StringBuilder();
+        sb.Append(@"<h2>Time cap</h2>
+<p class=""sub"">Share of games that reached the 10-minute cap instead of ending with a castle destroyed.</p>
+<div class=""grid""><div class=""card"">");
+        sb.Append(ShareHeadline(live, prev, r => r.TimeLimit, "of games reach the 10-minute cap",
+                                prevUsable: prev != null));
+        sb.Append($@"<table style=""margin-top:10px""><tr><th>Settled by</th><th>Games</th><th>Share</th></tr>
+<tr><td>P1 more castle HP</td><td>{p1Ahead:N0}</td><td>{Pct(p1Ahead)}</td></tr>
+<tr><td>P2 more castle HP</td><td>{p2Ahead:N0}</td><td>{Pct(p2Ahead)}</td></tr>
+<tr><td>Level HP (draw)</td><td>{level:N0}</td><td>{Pct(level)}</td></tr>
+<tr><td>Not capped</td><td>{n - capped.Length:N0}</td><td>{Pct(n - capped.Length)}</td></tr></table>
+<p class=""note"">At the cap the castle with more HP wins; it is a draw only when both are
+exactly level.{armaNote}</p></div>");
+
+        // A capped game is capped for BOTH sides, so each side's team takes it once -- the same
+        // per-side counting as everything else, which keeps the table seat-unbiased.
+        sb.Append(PerTeamCard(live, "Reached cap", (r, side) => r.TimeLimit,
+            "Share of that team's games that reached the cap, both seats pooled."));
+        return sb.Append("</div>").ToString();
+    }
+
+    /// <summary>
+    /// The big number, its 95% interval, and the move since the previous sweep, for a statistic
+    /// that is the share of games matching <paramref name="pred"/>. Pass
+    /// <paramref name="prevUsable"/> false when the previous CSV could not have recorded it, so
+    /// the dashboard says so instead of reporting a delta against a fake 0% baseline.
+    /// </summary>
+    private static string ShareHeadline(GameRow[] live, GameRow[] prev, Func<GameRow, bool> pred,
+                                        string label, bool prevUsable)
+    {
+        static (double share, double ci) ShareCi(GameRow[] rows, Func<GameRow, bool> p)
+        {
+            if (rows.Length == 0) return (0, 0);
+            double s = (double)rows.Count(p) / rows.Length;
+            return (100 * s, 196.0 * Math.Sqrt(Math.Max(s * (1 - s), 1e-9) / rows.Length));
+        }
+
+        var (share, ci) = ShareCi(live, pred);
+        string deltaHtml = "";
+        if (prev != null && prev.Length > 0 && prevUsable)
+        {
+            var (pShare, pCi) = ShareCi(prev, pred);
+            double delta = share - pShare;
+            // Same conservative quadrature band as the marginal tables. Neither direction is
+            // "good" for these statistics, so a real move is bold rather than green or red.
+            string cls = Math.Abs(delta) < Math.Sqrt(ci * ci + pCi * pCi) ? "ci" : "";
+            // Two decimals for a rare statistic, or a real move reads as +0.0.
+            string fmt = Math.Max(share, pShare) < 1 ? "+0.00;-0.00;0.00" : "+0.0;-0.0;0.0";
+            deltaHtml = $@" &middot; <span class=""{cls}""><b>{delta.ToString(fmt, CultureInfo.InvariantCulture)}</b> vs prev</span>";
+        }
+        else if (prev != null)
+            deltaHtml = @" &middot; <span class=""ci"">no prev (previous CSV predates this column)</span>";
+
+        return $@"<div class=""big"">{FmtPct(share)}</div>
+<p class=""sub"" style=""margin:0"">{label} ({live.Count(pred):N0} of {live.Length:N0}) &middot;
+<span class=""ci"">&plusmn;{FmtPct(ci).TrimEnd('%')}</span>{deltaHtml}</p>";
+    }
+
+    /// <summary>
+    /// A percentage with enough decimals to stay non-zero. The time cap is reached in about one
+    /// game in 16,000; at one decimal that prints "0.0%", which reads as "never".
+    /// </summary>
+    private static string FmtPct(double pct) =>
+        (pct == 0 || pct >= 1 ? pct.ToString("F1", CultureInfo.InvariantCulture)
+         : pct >= 0.1 ? pct.ToString("F2", CultureInfo.InvariantCulture)
+         : pct.ToString("F3", CultureInfo.InvariantCulture)) + "%";
+
+    /// <summary>
+    /// Per team, counted PER SIDE like every other tally here: for each team, the share of its
+    /// appearances (either seat) for which <paramref name="hit"/>(row, side) is true.
+    /// </summary>
+    private static string PerTeamCard(GameRow[] live, string column, Func<GameRow, int, bool> hit, string note)
+    {
+        var teamRows = Enum.GetValues<TeamColour>().Select(t =>
+        {
+            int apps = 0, hits = 0;
+            foreach (var r in live)
+            {
+                if (r.P1.Team == t) { apps++; if (hit(r, 1)) hits++; }
+                if (r.P2.Team == t) { apps++; if (hit(r, 2)) hits++; }
+            }
+            return (team: t.ToString(), apps, rate: apps > 0 ? 100.0 * hits / apps : 0);
+        }).Where(x => x.apps > 0).OrderByDescending(x => x.rate).ToList();
+
+        var sb = new StringBuilder();
+        sb.Append($@"<div class=""card""><table><tr><th>Team</th><th>{column}</th></tr>");
+        foreach (var x in teamRows)
+            sb.Append($@"<tr><td>{x.team}</td><td>{FmtPct(x.rate)}</td></tr>");
+        return sb.Append($@"</table><p class=""note"">{note}</p></div>").ToString();
     }
 
     private static string MarginalTable(string title, Dictionary<string, Tally> d,

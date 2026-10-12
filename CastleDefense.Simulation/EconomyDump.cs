@@ -98,7 +98,6 @@ namespace CastleDefense.Simulation
 
             for (int i = 0; i < rf.TickCount && !state.IsGameOver; i++)
             {
-                int tick = (int)state.CurrentTick;
                 byte a1 = rf.A1[i], a2 = rf.A2[i];
                 if (shadow != null)
                 {
@@ -128,10 +127,10 @@ namespace CastleDefense.Simulation
                                         + $"ownUnits={state.Units.Count(u => u.Side == 2),3}  foeUnits={state.Units.Count(u => u.Side == 1),3}");
                 }
 
-                if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
+                // Live order (ReplayFile.Step): a live P2 bot decides first, then the recorded
+                // actions in seat order, then the tick.
                 if (bot2 != null) bot2.Update(engine);
-                else if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
-                engine.Tick();
+                rf.Step(engine, p2: bot2 == null);
 
                 if (i % every == 0)
                     w.WriteLine($"{state.CurrentTick},{state.Player1.CastleHealth},{state.Player1.CastleMaxHealth},"

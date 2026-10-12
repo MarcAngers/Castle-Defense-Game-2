@@ -41,7 +41,6 @@ namespace CastleDefense.Simulation
                 state.Player2.SetLoadout(new[] { B(rf.P2Off), B(rf.P2Def), B(rf.P2Sig) });
             }
             var me = side == 1 ? state.Player1 : state.Player2;
-            var acts = side == 1 ? rf.A1 : rf.A2;
 
             Console.WriteLine();
             Console.WriteLine("=== INVESTMENT OPPORTUNITIES DECLINED: " + rf.GameId + ", P" + side + " ===");
@@ -59,18 +58,27 @@ namespace CastleDefense.Simulation
             for (int i = 0; i < rf.TickCount; i++)
             {
                 bool inWindow = state.CurrentTick >= from && state.CurrentTick <= to;
-                double before = me.Money;
+                double before = 0;
+                bool affordableNow = false;
 
-                if (acts[i] != 0)
-                {
-                    bool affordableNow = me.Money >= me.InvestmentPrice;
-                    rf.ApplyRecorded(engine, side, i, acts[i]);
-                    double cost = before - me.Money;
-                    if (inWindow && cost > 0.001)
+                // Both sides' actions in the live seat order, then the tick (ReplayFile.Step).
+                // The other side's still have to run or the game is not the same game. The
+                // affordability check sits between the actions and the tick, where it always did.
+                rf.Step(engine,
+                    before: (s, a) =>
                     {
-                        var cur = spend.TryGetValue(acts[i], out var v) ? v : (0.0, 0);
-                        spend[acts[i]] = (cur.Item1 + cost, cur.Item2 + 1);
-                        if (affordableNow && acts[i] != 9)
+                        if (s != side) return;
+                        before = me.Money;
+                        affordableNow = me.Money >= me.InvestmentPrice;
+                    },
+                    after: (s, a, ok) =>
+                    {
+                        if (s != side) return;
+                        double cost = before - me.Money;
+                        if (!inWindow || cost <= 0.001) return;
+                        var cur = spend.TryGetValue(a, out var v) ? v : (0.0, 0);
+                        spend[a] = (cur.Item1 + cost, cur.Item2 + 1);
+                        if (affordableNow && a != 9)
                         {
                             declinedDecisions++;
                             spentWhileAffordable += cost;
@@ -79,34 +87,28 @@ namespace CastleDefense.Simulation
                                 + before.ToString("F0").PadLeft(6) + "  rung cost $"
                                 + me.InvestmentPrice.ToString("F0").PadLeft(6)
                                 + "   spent $" + cost.ToString("F0").PadLeft(5)
-                                + " on " + Name(acts[i]));
+                                + " on " + Name(a));
                         }
-                    }
-                }
-                // The other side's actions still have to run or the game is not the same game.
-                var other = side == 1 ? rf.A2 : rf.A1;
-                if (other[i] != 0) rf.ApplyRecorded(engine, side == 1 ? 2 : 1, i, other[i]);
-
-                if (inWindow)
-                {
-                    bool affordable = me.Money >= me.InvestmentPrice;
-                    if (affordable)
+                    },
+                    beforeTick: _ =>
                     {
-                        ticksAffordable++;
-                        if (openTick < 0) { openTick = (int)state.CurrentTick; peak = me.Money; windows++; }
-                        if (me.Money > peak) peak = me.Money;
-                    }
-                    else if (openTick >= 0)
-                    {
-                        lines.Add("    WINDOW  ticks " + openTick + "-" + state.CurrentTick
-                                + "  (" + ((state.CurrentTick - openTick) / 30.0).ToString("F1")
-                                + "s affordable, peak $" + peak.ToString("F0") + ")");
-                        openTick = -1;
-                    }
-                }
-
+                        if (!inWindow) return;
+                        bool affordable = me.Money >= me.InvestmentPrice;
+                        if (affordable)
+                        {
+                            ticksAffordable++;
+                            if (openTick < 0) { openTick = (int)state.CurrentTick; peak = me.Money; windows++; }
+                            if (me.Money > peak) peak = me.Money;
+                        }
+                        else if (openTick >= 0)
+                        {
+                            lines.Add("    WINDOW  ticks " + openTick + "-" + state.CurrentTick
+                                    + "  (" + ((state.CurrentTick - openTick) / 30.0).ToString("F1")
+                                    + "s affordable, peak $" + peak.ToString("F0") + ")");
+                            openTick = -1;
+                        }
+                    });
                 if (state.IsGameOver) break;
-                engine.Tick();
             }
             if (openTick >= 0)
                 lines.Add("    WINDOW  ticks " + openTick + "-" + state.CurrentTick

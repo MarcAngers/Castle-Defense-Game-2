@@ -214,6 +214,20 @@ namespace CastleDefense.Simulation
                 return;
             }
 
+            // Does a human's auto-spawner provoke an outsized bot reaction? See AutoSpawnReaction.cs.
+            if (args.Length >= 1 && args[0] == "--autospawn-reaction")
+            {
+                AutoSpawnReaction.Run(args, FindRecordingsDir());
+                return;
+            }
+
+            // Marc's DB3C84: should the bot be capped at two tier 8s on the field? See Tier8Cap.cs.
+            if (args.Length >= 1 && args[0] == "--tier8-cap")
+            {
+                Tier8Cap.Run(args, FindRecordingsDir());
+                return;
+            }
+
             if (args.Length >= 1 && args[0] == "--replay-why")
             {
                 GameDataManager.Initialize();

@@ -49,7 +49,6 @@ namespace CastleDefense.Simulation
                 state.Player2.SetLoadout(new[] { B(rf.P2Off), B(rf.P2Def), B(rf.P2Sig) });
             }
             var me = side == 1 ? state.Player1 : state.Player2;
-            var acts = side == 1 ? rf.A1 : rf.A2;
 
             Console.WriteLine();
             Console.WriteLine("=== REPAIR AUDIT: " + rf.GameId + ", P" + side + "  (margin " + margin + ") ===");
@@ -61,8 +60,12 @@ namespace CastleDefense.Simulation
             int refused = 0, accepted = 0;
             for (int i = 0; i < rf.TickCount; i++)
             {
-                if (acts[i] == 10)
+                int entry = i;
+                // Audited on the board the repair was actually applied to -- after the other
+                // seat's action when that one lands first. ReplayFile.Step owns the order.
+                rf.Step(engine, before: (s2, a) =>
                 {
+                    if (s2 != side || a != 10) return;
                     n++;
                     var (nextHealth, _) = me.PreviewRepairStep();
                     double hpGain = nextHealth - me.CastleHealth;
@@ -77,8 +80,8 @@ namespace CastleDefense.Simulation
                     if (ok) accepted++; else refused++;
 
                     Console.WriteLine("   " + n.ToString().PadLeft(2)
-                        + i.ToString().PadLeft(6)
-                        + (i / 30).ToString().PadLeft(6)
+                        + entry.ToString().PadLeft(6)
+                        + (entry / 30).ToString().PadLeft(6)
                         + me.RepairPrice.ToString("F0").PadLeft(8)
                         + Fmt(rawCost).PadLeft(8)
                         + hpGain.ToString("F0").PadLeft(8)
@@ -87,14 +90,8 @@ namespace CastleDefense.Simulation
                         + Fmt(geoTtd).PadLeft(8)
                         + Fmt(bought).PadLeft(10)
                         + ("   " + (ok ? "ACCEPT" : "REFUSE") + "  (cost capped to " + Fmt(cost) + ")"));
-                }
-                for (int s2 = 1; s2 <= 2; s2++)
-                {
-                    byte a = s2 == 1 ? rf.A1[i] : rf.A2[i];
-                    if (a != 0) rf.ApplyRecorded(engine, s2, i, a);
-                }
+                });
                 if (state.IsGameOver) break;
-                engine.Tick();
             }
 
             Console.WriteLine();

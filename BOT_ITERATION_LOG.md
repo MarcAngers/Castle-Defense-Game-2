@@ -1273,3 +1273,440 @@ the deployed singleplayer opponent. Bot-vs-bot benchmarks, the counter table and
   Not diagnosed.
 - The gauntlet's replayed opponent cannot adapt, so 100% overstates the real effect against
   Marc. The mechanism is solid; the rate is optimistic.
+
+---
+
+## 2026-09-10 — the auto-spawner reaction. `MatchEnemyAutoSpawner` NOT KEPT; `CarveOutMinValueFraction` 0.25 RECOMMENDED, NOT YET SHIPPED (Marc's call)
+
+Marc: *"I will spend $100 on the auto-spawner and instead of responding with its own
+auto-spawner the bot will spend hundreds of dollars on defensive units and gadgets."* His
+suspect: the auto-spawner is not in the bot's defensive logic.
+
+New tool: `CastleDefense.Simulation --autospawn-reaction` (`AutoSpawnReaction.cs`), three
+modes, weakest to strongest evidence — `recorded` (real games, confounded), `gauntlet`
+(CAUSAL: the live bot vs Marc's recorded stream, as recorded / first 2 presses only / every
+press deleted, paired seeds, `--maps`), `synthetic` (ISOLATED: a human that only invests and
+buys machine levels 0/1/2 at 60s). Every dollar is attributed by delta around the call that
+spent it, and every gadget cast records which justification it passed.
+
+### 1. The observation is correct
+
+All ten of 2026-09-10's games rebuild exactly (100% action fidelity, recorded winner). Marc won
+5 of the 7 in which he bought the machine and lost all 3 in which he did not. Counterfactually,
+over those 7 games x 16 map-varied replays, **deleting his auto-spawner presses takes his win
+rate from 42.0% to 0.0% in every single game**; keeping only his first two presses ($230)
+leaves 23.2% (313BC4: 75% on two levels alone).
+
+Isolated (synthetic, 64 paired seeds, human does nothing but invest): one $102 level at 60s
+takes the bot's reaction spend (units + all gadgets + repairs) from **$123 to $3,452** before
+it reaches ARMAGEDDON, and its danger-mode share from 0.2% to 5%.
+
+### 2. What it is spent on, and why — instrumented, not read
+
+| bucket (synthetic, L1) | $ | why it fired |
+|---|---|---|
+| firebomb (offence) | $2,080 of $2,099 | **14.9 of 15.9 casts passed ONLY on TargetValueJustified's `Income >= 50` carve-out** |
+| divine (signature) | $646 | all "in danger" — `inDanger && enemyUnits.Count >= 3`, and a stream is always >= 3 |
+| reactive units | $567 | `inDanger` when the stream gets inside 700px |
+
+The carve-out approves an offensive cast at ANY target once income reaches investment 5, so an
+enemy machine is a standing order: there is always a unit on the field, the gadget fires on
+every cooldown, levels up on XP to firebomb_2 at $270 a cast, and the 30% drain cap does not bind
+at that price once income passes ~113/s. The bot also prices each free stream unit at roster
+cost — the same flaw item 23 found with free reinforcements squads.
+
+**CORRECTION made during the run, recorded so it is not repeated.** The first synthetic let the
+scripted human invest "ASAP", which included ARMAGEDDON. Its shield rewrites
+`InvulnerableUntilTick` and its nukes hit both castles, so every late-game figure — a "bot castle
+destroyed by the stream in 28% of games", $18,592 of repairs — was an ARMAGEDDON race, not the
+stream. With the human capped at rung 8 the stream destroys the bot's castle in **0%** of games.
+The early-window numbers were unaffected.
+
+**And the reaction is not outsized in RACE terms.** L1 costs the bot 7.3s to ARMAGEDDON and costs
+the human 6s; L2 costs 10.8s and 12s. The machine wins Marc games because deleting it leaves him
+0% — it is doing its work on HIS side of the board (a free chump wall, per the survival law, is
+the likely mechanism; not directly measured), not mainly by baiting the bot.
+
+### 3. Does the defensive logic ever consider the machine? No
+
+The only purchase on the shipped path is AutoSpawnerInsteadOfUnits, scoped to `!preferDefense`
+(its own doc: "REACTIVE SPENDING IS UNTOUCHED") and gated behind `!inDanger`,
+`InvestmentCount >= 6` and the race gate.
+
+### 4. `MatchEnemyAutoSpawner` (flag 22) — Marc's fix — NOT KEPT
+
+Hold our machine at the enemy's level (+margin), bought after the invest claim and before the
+gadget layer. Reading the enemy level is fair (it is painted on the machine).
+
+| | synthetic reaction L1 | bot ARMAGEDDON L0/L1/L2 | Marc's 7 games, as recorded | first 2 only |
+|---|---|---|---|---|
+| deployed | $3,452 | 244.4 / 251.7 / 255.2s | 42.0% | 23.2% |
+| match +0 | $2,066 | 244.4 / 252.5 / 259.9s | 39.3% | 25.9% |
+| match +1 | $1,173 | 244.4 / 258.6 / 268.2s | 41.1% | 12.5% |
+
+It does what it says — reaction spend falls 40-66%, danger share 5% -> 0.2-0.8% — and buys
+nothing with it. The $102-$391 is paid early, when a dollar is several seconds of rung time; the
+gadget spend it saves is late, when dollars are cheap. The race is the same or worse, and on
+Marc's games the averages do not move while individual games swing +-60 points IN BOTH
+DIRECTIONS (8348F4: 0% -> 87.5% for Marc at +1), which is a knife edge being nudged, not a fix.
+It also leaves the carve-out firing: 12 firebomb casts a game against the mid-field stream.
+
+### 5. `CarveOutMinValueFraction` (flag 23) — the carve-out still needs SOME target
+
+| | synthetic reaction L1 / L2 | bot ARMAGEDDON L1 / L2 | Marc's 7 games, as recorded | first 2 only |
+|---|---|---|---|---|
+| deployed | $3,452 / $2,795 | 251.7 / 255.2s | 42.0% | 23.2% |
+| **0.25** | **$779 / $2,155** | **249.2 / 253.2s** | **21.4%** | **11.6%** |
+| 0.50 | $714 / $2,121 | 248.8 / 252.9s | 20.5% | 7.1% |
+| 0.25 + match | $360 / $460 | 250.9 / 259.1s | 20.5% | 14.3% |
+
+Per game (as recorded), deployed -> 0.25: 56 -> 12.5, 75 -> 31, 12.5 -> 0, 50 -> 37.5,
+100 -> 69, 0 -> 0, 0 -> 0 — **better in all five games Marc won any of, worse in none.** Adding
+the match on top buys nothing further (20.5% vs 21.4%). Marc's three machine-free games stay at
+100% bot wins either way (`--replay-gauntlet --maps`), i.e. at a ceiling, so they cannot see a
+cost.
+
+**Ladder**, 400 setups x both modes x two seeds, referenced against
+`EconomyBrakeAutoSpawnProfile` (the deployed bot), with the new opt-in `--machine-rungs`
+(`MachineInvestor` = Investor + machine L2 after rung 3; `DeployedBot` = the shipped profile as an
+OPPONENT, which buys the machine -- no default rung ever does, so without these the ladder could
+only see this change's cost):
+
+| arm | OVERALL s12345 ns/hs | OVERALL s777 ns/hs | vs DeployedBot | vs HeuristicBot | MachineInvestor | Chipper |
+|---|---|---|---|---|---|---|
+| deployed (reference) | 85.5 / 85.8 | 86.4 / 86.0 | 42.8 / 43.9 / 46.8 / 43.6 | 52.5 / 59.1 / 58.8 / 56.6 | 91.4 / 88.8 / 94.0 / 90.9 | 98.4 / 97.4 / 99.4 / 98.0 |
+| **carve-out 0.25** | **88.2 / 89.5** | **88.2 / 89.4** | **54.4 / 58.2 / 57.2 / 56.6** | **67.0 / 68.8 / 66.5 / 68.5** | 93.4 / 95.6 / 94.4 / 95.6 | 96.4 / 97.2 / 96.1 / 97.0 |
+| carve-out 0.50 | -- | 88.2 / 89.7 | 57.5 / 60.2 | 68.6 / 69.5 | 94.8 / 95.8 | **92.4 / 94.5** |
+| match +0 | 85.1 / 85.2 | -- | 41.6 / 43.0 | 52.5 / 59.1 | **89.2 / 83.5** | 98.4 / 97.4 |
+| match + carve 0.25 | 87.9 / 88.6 | 87.4 / 88.6 | 52.4 / 55.1 / 53.4 / 54.0 | = carve | 92.8 / 90.4 / 90.6 / 89.8 | = carve |
+
+(Cells with four numbers are s12345 ns / hs / s777 ns / hs.)
+
+**0.25 is +1.8 to +3.7 OVERALL in all four arms, intervals clear of the reference's.** Earned
+investments rise on every economy rung (mirror 7.74 -> 7.80, 7.75 -> 7.82; Investor 6.26 -> 6.34),
+i.e. this is a leak closed, not a spending channel opened -- the only shape iterations 1-7 ever
+accepted. And it is NOT a machine-only effect: the biggest moves are against the bare-default
+HeuristicBot (+7.7 to +14.5) and head-to-head against the deployed bot itself (+10.4 to +14.3).
+The carve-out was a general bleed; a free unit stream merely guarantees it a target on every
+cooldown.
+
+**The one cost, consistent and not diagnosed: Chipper -2.0 / -0.2 / -3.3 / -1.0**, with end castle
+HP UP 7-9 points in every arm. The carve-out is what used to firebomb a lone $3 chipper; why
+losing that lowers win rate while raising HP is open. 0.50 triples the cost (-7.0 / -3.5) for no
+OVERALL gain, which is why 0.25 is the recommendation.
+
+**`MatchEnemyAutoSpawner` is rejected on the ladder too**: -0.4 / -0.6 OVERALL alone, and stacked
+on the carve-out it LOSES the MachineInvestor rung it exists for (95.6 -> 90.4, 94.4 -> 90.6). Kept
+in the tree behind its flag, not in any shipped profile.
+
+`bot-checksum --games 24` is **UNCHANGED** — both flags default off. Note the current value is
+`F7273B2DE9DFFB0FCC82B7C98B79AB2E`, verified identical on a clean HEAD worktree; CLAUDE.md's last
+recorded value (`9A77A06C…`) is stale since the 2026-09-09 snipe re-anchoring.
+
+**Caveat that applies to every gauntlet number above:** the replayed stream cannot react, so
+"Marc's win rate" is against a de-fanged Marc. The direction is the evidence; the rates are not.
+
+**To ship:** add `CarveOutMinValueFraction = 0.25` to `EconomyBrakeAutoSpawnProfile`. It then
+reaches only the singleplayer opponent -- `bot-checksum`, the balance dashboard and the counter
+table all run other profiles and stay comparable. `ShipCarveOut25` is that profile today, for A/B.
+
+---
+
+## 2026-09-10 (round 2) — Marc's three problems, each measured alone. Candidate `ShipRound2NoBlocker`, NOT SHIPPED
+
+Marc: (1) defensive spending drains too fast, `Income >= 50` is a weak gate, a drain cap would
+help, and FREE auto-spawned units are valued at full roster cost; (2) the auto-spawner should be
+a defensive option valued by what it DOES -- bodies over time -- not by matching the enemy level;
+(3) the bot firebombs its own units, and spawning defenders while also firebombing the same
+attack is strictly wasteful. "Don't ship anything yet."
+
+Every candidate is `EconomyBrakeAutoSpawnProfile` plus the named flags, checked by
+`--autospawn-reaction profile-diff`. `bot-checksum --games 24` is unchanged at
+`F7273B2DE9DFFB0FCC82B7C98B79AB2E` throughout -- every new flag defaults off.
+
+A factual correction on the way in: level 1 is **one** tier-1 per game-second, not one per 0.5s
+(`PlayerState.AutoSpawnCycles`); 2/s is level 2. On the live server (~21 Hz, CLAUDE.md) that is
+one per ~1.4 wall-clock seconds.
+
+### New instruments (`AutoSpawnReaction.cs`)
+
+- **Friendly fire, exactly.** `FireHazard` stamps the caster's side on every `Burn`, so the probe
+  counts each own unit our own firebomb ignites and classifies it: on the field at the cast,
+  PAID for after it, or FREE (reinforcements / auto-spawner) after it. ARMAGEDDON's random
+  firebombs are excluded.
+- **`duel` mode**: probed profile A vs profile B (or the scripted `Chipper`), seat-alternated,
+  random loadouts, optional `--offense` pin, with loss attribution (opponent ARMAGEDDON vs not).
+- Counters for how often flags 26/27 actually fire -- an inert fix and a useless one look the same
+  on a ladder, and the first cut of flag 26 turned out to be inert.
+
+### (3) Friendly fire: the observation is right, and it is half of what Marc described
+
+Duel, deployed vs deployed, firebomb pinned on the probed side, 300 games:
+
+| per game | |
+|---|---|
+| firebomb casts | 16.0 |
+| OWN units ignited | **66.9** ($10,038 of roster value) |
+| ... on the field at the cast | 30.9 |
+| ... **paid for after the cast** | **29.3** |
+| ... free, spawned after the cast | 6.6 |
+| own burn damage / enemy burn damage | 24,043 / 39,672 -- **38% of all its burn lands on itself** |
+
+`FirebombSweptFriendlyFireCheck` -- which addresses the "on the field" half -- was never enabled;
+it was rejected alone on 2026-07-31 because it skips casts.
+
+**`FireSpawnExclusion` (flag 27)** records our own firebombs (strip, first and last burning tick)
+and HOLDS any paid spawn -- reactive, attack, wiper, chip block -- and any reinforcements cast
+while a unit leaving our castle now would walk into a live or pending strip before it goes out.
+The fire keeps its turn; the bodies wait. A survival emergency overrides.
+
+| | own ignited | paid-after | own/enemy burn | duel win | pinned ladder OVERALL ns/hs |
+|---|---|---|---|---|---|
+| deployed | 66.9 | 29.3 | 24.0k / 39.7k | 54.0% | 82.9 / 85.0 |
+| exclusion | 37.6 | **2.1** | 15.7k / 39.6k | 52.7% | **84.0 / 85.8** |
+| exclusion + swept aim | 19.8 | 1.5 | 2.5k / **21.1k** | 52.3% | **84.8 / 86.1** |
+
+The exclusion kills the paid-after category outright and keeps every point of enemy damage; the
+swept aim removes the rest of the self-burn but halves the damage the fire does to the enemy,
+which is its July failure mode again. Both are small, real gains at full firebomb exposure; on
+Marc's 7 machine games the exclusion alone takes his replayed win rate **42.0% -> 22.3%**
+(self-ignited 48.5 -> 19.7 a game). The unpinned ladder cannot see it (firebomb is 1 of 4).
+
+### (1) The gadget gate: free units at $0, and one drain cap for every gadget
+
+- **`FreeUnitValueWeight` (flag 24).** `OpponentEconomy` already decided, per enemy unit, whether it
+  matched an owed free spawn -- it now records that (`IsFree`). The gadget layer's value tests
+  (TargetValueJustified, the drain cap's pays-for-itself override) price free units at this
+  weight. The danger path is untouched: a free unit's THREAT is still read off the board.
+- **`GadgetSharedDrainFraction` (flag 25).** Flag 18's drain cap is per family at 30%, so three
+  slots can burn ~90% of income, and firebomb_2 ($270/8s) slips under its own 30% above
+  ~$113/s income. The new one is ONE allowance for all gadgets at 30% of income, banked up to
+  20 s, spent only by casts that are neither under attack nor paying for themselves.
+
+Ladder, 400 setups x both modes x two seeds, reference = the deployed profile:
+
+| | OVERALL s12345 ns/hs | s777 ns/hs | Tier4Spam | vs DeployedBot | Chipper |
+|---|---|---|---|---|---|
+| deployed | 85.5 / 85.8 | 86.4 / 86.0 | 83.4 / 88.6 / 78.2 / 88.6 | 42.8 / 43.9 / 46.8 / 43.6 | 98.4 / 97.4 / 99.4 / 98.0 |
+| free units $0 + 0.25 floor | 87.9 / 89.4 | 88.2 / 89.8 | ~flat | 56.2 / 59.0 / 58.5 / 60.0 | 91.2 / 93.2 / 90.1 / 93.5 |
+| **+ shared drain 30%** | **91.0 / 91.3** | **91.0 / 91.9** | **87.8 / 93.4 / 85.6 / 92.4** | **64.2 / 63.4 / 66.6 / 65.1** | 93.4 / 94.5 / 91.5 / 95.6 |
+
+**+4.6 to +5.9 OVERALL in all four arms, and Tier4Spam +3.8 to +7.4 -- the standing weakness
+nothing in this log had moved by more than ~5 before.** Earned investments rise on every economy
+rung. Marc's 7 machine games: **42.0% -> 9.8%** (first two levels only: 23.2% -> 3.6%), better or
+equal in every game. Synthetic: reaction $3,452 -> $394 against one L1 machine, ARMAGEDDON 4.5 s
+sooner.
+
+**The one cost is Chipper, -2.4 to -7.9 -- and it is not chip damage.** `duel --b Chipper`, 400
+games per arm: the bot never loses to the chip; end castle HP RISES 47.5% -> 57.2%. Every loss is
+the Chipper winning the ARMAGEDDON race (0-2%), plus draws. The old carve-out spent ~$2,400/game
+of snipe and ~$8,300 of signature gadget on a lone $3 unit, which incidentally ended games early;
+without it the games against a passive investor run long and a few are lost at the end.
+
+### (2) The machine as a blocker (`AutoSpawnerAsBlocker`, flag 26)
+
+Where it lives, from reading the code: the only place that already prices "bodies arriving over
+time" is `DefensiveResponse` (the survival law: required block rate over a planning window,
+priced against seconds x income) -- but it runs only under `DefenceOnly`. The shipped reactive
+path, `SpendOnUnits(preferDefense)`, scores single units with no notion of rate. So flag 26 sits
+at the top of the reactive path and reuses the ThreatModel's law:
+
+- **need** = `RequiredBlockRate(target)` above what our machine already supplies (the law already
+  says a tier-1 stream against a repaired castle needs nothing -- the case matching got wrong);
+- **price of the alternative** = the charge rule: bought bodies sustain ~1/s PER UNIT TYPE, so the
+  k-th body per second costs the k-th cheapest price;
+- **buy** the next level that raises bodies/s (priced cumulatively) when it repays in bought
+  bodies within 60 s.
+
+**The first cut was inert (0.08 levels a game)** -- it sat after the charge fallback's "every unit
+is drained" early return, i.e. unreachable exactly under the pressure where charge-free bodies
+matter, and priced every body at the tier-1 price. Fixed; it then fires ~2 levels a game.
+
+| | Marc's 7 games | ladder OVERALL (4 arms) | synthetic ARMAGEDDON L1 / L2 |
+|---|---|---|---|
+| deployed | 42.0% | 85.5 / 85.8 / 86.4 / 86.0 | 251.7 / 255.2 s |
+| blocker alone | **27.7%** | 85.8 / 86.5 / 86.5 / 86.4 | 252.9 / **259.6 s** |
+| all but blocker | 9.8% | 91.3 / 91.4 / 91.1 / 92.1 | 247.2 / 252.7 s |
+| all three | 7.1% | 91.0 / 91.6 / 91.2 / 92.3 | 248.1 / **257.3 s** |
+
+**Real alone, redundant in combination.** On its own it takes Marc's replayed win rate 42% ->
+28%. On top of the gadget fix it adds nothing either instrument can resolve (7.1% vs 9.8% is three
+games in 112; ladder -0.3 to +0.2) and it costs 4.6 s of ARMAGEDDON race against a lone L2 stream,
+where it buys levels early. Once the gadget layer stops overspending there is little reactive
+spend left for the machine to replace. Kept behind its flag.
+
+### Recommendation (Marc's call; nothing shipped)
+
+**`ShipRound2NoBlocker`** = free units at $0 + carve-out floor 0.25 + shared drain 30% + fire
+exclusion. +4.7 to +6.1 OVERALL in all four arms; Marc's replayed win rate 42% -> 9.8%; own units
+ignited by own fire 48.5 -> 3.9 a game on his games. Known cost: Chipper -2.4 to -7.9 via the
+ARMAGEDDON race. (It is FOUR flags on top of the deployed profile, not five as first written.)
+
+Still open: the swept aim was measured alone and with the exclusion (+1.9 / +1.1 pinned) but not
+on top of the gadget fix; the fire exclusion's hold ignores map speed effects and contact stops,
+so it errs toward holding; and `DefensiveResponse` itself does not yet apply the fire hold.
+
+**Caveat on every gauntlet number:** the replayed stream cannot react, so these rates are against
+a de-fanged Marc; trust the direction.
+
+### SHIPPED 2026-09-10 22:26 -04:00 (unix 1789093568), Marc's call
+
+`EconomyBrakeAutoSpawnProfile` -- the singleplayer opponent -- now carries the four flags:
+`CarveOutMinValueFraction = 0.25`, `FreeUnitValueWeight = 0`, `GadgetSharedDrainFraction = 0.30`,
+`FireSpawnExclusion = true`. `profile-diff` confirms it is now field-for-field identical to
+`ShipRound2NoBlocker`, and `PreRound2` (new) reproduces the bot it replaced -- which is the
+profile every A/B above was referenced against. Smoke test under the deployed name: 313BC4
+gauntlet returns Marc 12.5%, the same as the candidate.
+
+`bot-checksum --games 24` is UNCHANGED at `F7273B2DE9DFFB0FCC82B7C98B79AB2E` -- that harness runs
+a different profile, so the balance dashboard, counter table and FLAGSHIP_BASELINE are untouched.
+
+**RECORDINGS CANNOT TELL THE TWO BOTS APART.** `GameHostingService` still writes
+`opponent_type = heuristic_autospawn8` for this profile, exactly as before. Split Marc's games
+against the old and new bot by `played_at`: everything up to `0F6CEB` (1789064746) is the old
+bot; anything after 1789093568 is this one. `/analysis`'s bot rationale maps the tag to the
+CURRENT profile, so its re-derived thresholds for pre-ship games now describe the new bot's
+gadget gates, not the ones those games were played against.
+
+## 2026-09-14 -- DB3C84: the tier-8 dump against a level-18 auto-spawner (flag 28, NOT shipped)
+
+Marc: at ~320s his auto-spawner reached level 18, a tier-7 army walked in, and the bot "went into
+panic mode" and bought a pile of tier 8s. Proposal: cap it at two tier 8s on the field, since AoE
+makes ten of them little better than one.
+
+### What the bot was thinking -- exact, not re-derived
+
+`--tier8-cap trace DB3C84` drives the LIVE bot against Marc's recorded stream and reproduces the
+recorded bot **action for action, 0 mismatches over 12,324 ticks**, ending on the DB's live-captured
+finals (bot bank $5,097, Marc's castle 93%). So the flags below are what the bot actually read.
+
+- **All 12 corns ($276,000) were `reactive` purchases.** Ten landed between 313s and 341s, eight of
+  them in the three seconds from 313.5s. At the first one the bot held **$200,298 against a
+  $242,442 ARMAGEDDON -- 17 seconds from winning** -- and ended the spree on $23k.
+- **It was not the survival emergency.** `SurvivalInstinct` is off in this profile. The flow cap
+  was lifted by `CommittedValueUncapsReactiveFlow`: $20,920 of Marc's units within 500px (17 units,
+  including an Orange tier 8 at 50px from the wall, geometric TTD 3.2s).
+- **THE BUDGET GROWS AS IT SPENDS, and that is the dump.** `reactiveSpendBudget = (timeToInvest -
+  TTD) * income * 1.5`. Every $23,000 corn pushes timeToInvest out by 9.2s at $2,500/s, i.e. RAISES
+  the budget by $34,500, while it adds only ~2.2s of TTD. Measured: spendable $51k -> $77k -> $104k
+  -> $126k across the first four buys, then capped only by money. The "runway deficit" framing
+  reads spending the savings as a bigger deficit to bridge.
+
+### The test: cap at 2 on the field
+
+`ShipTier8Cap2` (downgrade to the next-best unit at the cap) and `ShipTier8Cap2Hold` (a decision
+that still wants a tier 8 buys nothing). `profile-diff` confirms each differs from the shipped
+profile only in the new fields; the shipped-profile trace is still an exact reproduction with the
+code present, so flag 28 off is a no-op.
+
+**Marc's actual game (recorded seed and map):**
+
+| arm | result | tier 8s bought | max up | tier 7s | bot bank at end |
+|---|---|---|---|---|---|
+| shipped | loses at 411s | 12 ($276k) | 10 | 80 | $5,097 |
+| cap 2 | loses at 411s | 8 ($184k) | 2 | 91 | $77,812 |
+| cap 2 hold | **loses at 348s** | 4 ($92k) | 2 | 13 | $184,240 |
+
+Neither arm saves it. The cap limits bodies ON THE FIELD, not purchases: corns keep dying and being
+replaced, and the downgrade arm pours the rest into 91 tier 7s. The hold arm keeps the money but dies
+63s sooner, holding $184k, about 23 seconds of income short of ARMAGEDDON.
+
+**Gauntlet, 400 paired games x 2 seeds, maps swept** (`--tier8-cap test DB3C84 --games 400 --maps`):
+
+| arm | bot win (s4242 / s777) | unit $ / game | tier 7s | end bank |
+|---|---|---|---|---|
+| shipped | 80.8% / 81.0% | $105.6k / $103.8k | 16.0 / 15.3 | $24.0k / $25.0k |
+| cap 2 | 81.0% / 81.5% | $112.9k / $109.7k | 22.5 / 21.6 | $27.9k / $28.8k |
+| cap 2 hold | 81.8% / 81.5% | $78.7k / $80.3k | 11.9 / 12.2 | $40.0k / $41.4k |
+
+The shipped bot exceeds two tier 8s in 40-41 of 400 games and **loses every one of them (0%)**.
+Paired flips, loss->win vs win->loss: cap 2 **1-0 and 2-0**; hold **4-0 and 2-0**. The direction is
+consistent, and not one game went the other way. The size is small: 3-10% of the games where it binds.
+The downgrade arm spends MORE on units than the shipped bot, so it is not the economy fix it looks like.
+
+Replayed-stream caveat as always: the stream cannot react, and the bot wins ~81% against it.
+
+### Reading
+
+The tier-8 count is a symptom. The bot overspends because the reactive budget feeds on its own
+spending, and it overspends in the one state where saving wins the game (at the ARMAGEDDON rung,
+17s out). A cap on one unit type moves the money sideways (downgrade) or stalls the defence (hold).
+Candidates for the next iteration: price the reactive budget against TTD alone rather than a deficit
+that grows as the bank empties, or apply the priced race test (flag 12b) to reactive purchases while
+the rung is close. Both built and measured below.
+
+## 2026-09-14 (cont.) -- the reactive budget: TTD-only REJECTED, spend memory NEUTRAL-PLUS, race-priced defence MIXED. Nothing shipped.
+
+### History checked first -- nothing emulated either proposal
+
+- The runway-deficit budget itself (`ReactiveSpendEVMultiplier`, 2026-07) was VALIDATED against the ONNX
+  models (Tier4 +5.5, v4 +2, v7 +2.8) as the fix for D3596E's overspending on a weak threat.
+- `SurvivalInstinct` is the only TTD rule and it is a TRIGGER (`TTD <= N` -> budget = all money, forces
+  inDanger, blocks investing): a trade at 12/8/6s; with the flow unlock the mirror fell 47.2 -> 30.7 /
+  15.7 at 8/25s. It failed on attrition tripping it and on starving the auto-spawner.
+- Four July reactive-spend caps (defenceScore ratio, refuse fodder, proactive repair, repair reserve)
+  capped WHAT was bought, not the budget's size -- and were judged on ONNX models, not this ladder.
+- `RacePricePurchases` is offence-only by Marc's rule; item 27 listed "a cumulative race-spend
+  allowance" as the next candidate and it was never built.
+
+### Three flags, each alone on the shipped profile (`profile-diff`: one field each)
+
+- **(29) `ReactiveBudgetTtdHorizonSeconds`** -- budget = `max(0, H - TTD) * income * 1.5`. H = 15, 30.
+- **(30) `RacePriceReactivePurchases`** -- within 30s of ARMAGEDDON, hold a reactive buy that would put
+  the bot behind the modelled opponent.
+- **(31) `ReactiveBudgetSpendMemorySeconds`** -- the deficit as before, but timeToInvest read as if the
+  last 20s of reactive unit spend were still banked. Added after (29) failed; see why below.
+
+With all three off, `--tier8-cap trace DB3C84` still reproduces the recorded bot exactly.
+
+### DB3C84 gauntlet (400 paired games, maps swept)
+
+| arm | bot win | unit $ | reactive $ | bot ARMAGEDDON | flips vs shipped |
+|---|---|---|---|---|---|
+| shipped | 80.8% | $105.6k | $73.2k | 276 | -- |
+| TTD budget 15 | **52.0%** | **$306.4k** | $273.4k | 158 | 28 loss->win, **143 win->loss** |
+| TTD budget 30 | **52.5%** | $246.7k | $214.7k | 160 | 26 / **139** |
+| race-priced defence | 80.8% | identical | identical | 276 | 0 / 0 (never fired) |
+| **spend memory 20s** | **86.2%** | $67.1k | **$33.7k** | **301** | **39 / 17** |
+
+**WHY THE TTD-ONLY BUDGET FAILS, and it inverts the premise of proposal 1.** `inDanger` requires
+`TTD < 1.4 * timeToInvest + 2`. Whenever TTD sits between timeToInvest and that bound, the deficit
+budget is **$0** -- that is its timeToInvest half REFUSING to spend when the rung is close. A horizon
+budget is positive there, so the bot spends its savings on every near-rung scare and loses the race
+(ARMAGEDDON 276 -> 158). The sixth instance of the file's dominant failure mode. Only the SELF-FEEDING
+half of the deficit is the bug, which is exactly what (31) removes.
+
+Race-priced defence never fired on DB3C84, as predicted: after Marc's $128k machine buy the tracker
+modelled him 88s from ARMAGEDDON, so every corn still left the bot "ahead".
+
+### Ladder, 400 setups x both modes x seeds 12345 / 777, `--reference EconomyBrakeAutoSpawnProfile --machine-rungs`
+
+Deltas vs shipped, per run (s12345 ns / hs, s777 ns / hs):
+
+| arm | OVERALL | Investor | HeuristicBot | DeployedBot | MachineInvestor |
+|---|---|---|---|---|---|
+| TTD 15 | -1.3 / -0.5 / -1.2 / -0.9 | **-7.7 / -4.6 / -6.1 / -6.3** | -1.1 / +1.8 / -0.5 / -0.1 | -3.4 / +0.3 / -2.2 / -0.2 | -0.8 / -1.9 / -3.0 / -1.4 |
+| TTD 30 | -0.6 / -0.2 / -0.6 / -0.2 | -3.2 / -1.7 / -2.9 / -3.1 | +0.2 / +1.8 / -2.0 / +2.0 | -1.4 / -0.5 / -0.5 / +0.3 | -0.7 / -1.0 / -0.1 / -0.6 |
+| race-priced | +0.2 / +0.1 / +0.2 / +0.2 | 0.0 / 0.0 / 0.0 / -0.2 | **+2.7 / +1.7 / +2.9 / +1.9** | -0.6 / -0.8 / -0.6 / +0.1 | 0.0 everywhere |
+| spend memory | 0.0 / -0.1 / 0.0 / +0.1 | +0.2 / 0.0 / -0.2 / -0.2 | -0.9 / +0.1 / -0.4 / -0.6 | +0.1 / -0.4 / +0.9 / +1.8 | 0.0 / -0.4 / -0.3 / 0.0 |
+
+Shipped OVERALL 89.7 / 89.7 / 89.4 / 90.1. Chipper and Tier4Spam within 1 point for every arm; earned
+investments unchanged to two decimals everywhere. Per-rung 95% intervals are about +/-3 points.
+
+Marc's 53 real games vs this bot type (47 with a machine press), 8 seeds each: the replayed human wins
+4.0-5.1% against EVERY arm, so that instrument is saturated. Spend memory cuts reactive spend there
+$23.2k -> $16.2k (-30%) with no change in outcome.
+
+### Reading
+
+- **TTD-only budget: REJECTED.** Negative on every instrument, and the mechanism is understood.
+- **Spend memory (31): the candidate.** Ladder-neutral (it only binds in large reactive bursts, which
+  ladder rungs rarely produce), +5.4 points and half the reactive spend against DB3C84's stream, -30%
+  reactive spend on Marc's corpus. It does NOT save DB3C84 itself: one corn instead of twelve, then
+  dies at 392s holding $224,688, ~$18k short of ARMAGEDDON.
+- **Race-priced defence (30): mixed.** A consistent +2 on the default-HeuristicBot rung in all four
+  runs, but -0.6 on the DeployedBot rung in three of four, and inert in the game that motivated it.
+  Not recommended without a better reason.
+- Caveat: `bot-checksum --games 24` reads `337EE99734B101FCEF6D38FAC43AA224`, not the 09-10 value, but
+  the working tree already carried uncommitted balance/bot edits when this session started, so that
+  move is not attributable here. The flags default off.

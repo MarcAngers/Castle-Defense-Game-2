@@ -108,11 +108,73 @@ namespace CastleDefense.Engine.Models
             new[] { 5, 4, 4, 2, 2, 2 },          // 16: 6/s
             new[] { 6, 5, 4, 3, 2, 1 },          // 17
             new[] { 7, 6, 6, 5, 5, 4 },          // 18
-            new[] { 8, 7, 7, 6, 6, 5 },          // 19
+            new[] { 7, 6, 6, 5, 5, 5 },          // 19 (every 10th cycle promoted, below)
         };
 
         /// <summary>
-        /// The tier cycle at <paramref name="level"/>, empty when not bought.
+        /// Levels whose cycle is periodically PROMOTED: every <c>Every</c>-th cycle (the 10th,
+        /// 20th, ...) plays <c>Cycle</c> in place of the base pattern. Level 19 is
+        /// [7,6,6,5,5,5], and every 10th round its tier 7 becomes a tier 8 and the tier 6
+        /// behind it a tier 7: [8,7,6,5,5,5]. That is one free ace every 10 seconds rather
+        /// than one a second.
+        ///
+        /// The promoted cycle MUST be the same length as the base one -- units per second is
+        /// the cycle length, so a different length would change the rate on promoted rounds.
+        /// </summary>
+        private static readonly (int Level, int Every, int[] Cycle)[] AutoSpawnPromotions =
+        {
+            (19, 10, new[] { 8, 7, 6, 5, 5, 5 }),
+        };
+
+        /// <summary>
+        /// The tier the auto-spawner produces for the <paramref name="index"/>-th spawn at
+        /// <paramref name="level"/> (index counted from the last upgrade), or 0 for nothing.
+        /// The single source of truth for the stream, promotions included -- the engine and
+        /// OpponentEconomy's mirror of it both read this, so they cannot disagree about
+        /// which unit was free.
+        /// </summary>
+        public static int AutoSpawnTierAt(int level, int index)
+        {
+            if (level <= 0 || level >= AutoSpawnCycles.Length) return 0;
+            var cycle = AutoSpawnCycles[level];
+            int len = cycle.Length;
+            if (len == 0) return 0;
+
+            // Floor division/modulo, so a negative index can never index out of range.
+            int pos = ((index % len) + len) % len;
+            int round = (index - pos) / len;
+
+            foreach (var promo in AutoSpawnPromotions)
+            {
+                if (promo.Level != level) continue;
+                if ((((round % promo.Every) + promo.Every) % promo.Every) == promo.Every - 1)
+                    return promo.Cycle[pos];
+            }
+            return cycle[pos];
+        }
+
+        /// <summary>
+        /// Average roster-dollar value per second of the free stream at
+        /// <paramref name="level"/>, promotions included. A value model that summed only the
+        /// base cycle would never see level 19's tier 8.
+        /// </summary>
+        public static double AutoSpawnAverageValuePerSecond(int level, Func<int, double> costOfTier)
+        {
+            int len = AutoSpawnUnitsPerSecond(level);
+            if (len == 0) return 0;
+            int rounds = 1;
+            foreach (var promo in AutoSpawnPromotions)
+                if (promo.Level == level) rounds = promo.Every;
+
+            double total = 0;
+            for (int i = 0; i < len * rounds; i++)
+                total += costOfTier(AutoSpawnTierAt(level, i));
+            return total / rounds;
+        }
+
+        /// <summary>
+        /// The BASE tier cycle at <paramref name="level"/>, empty when not bought. Does not
+        /// include promotions -- use <see cref="AutoSpawnTierAt"/> for the actual stream.
         ///
         /// Exposed so a bot can PRICE a level rather than just read its rate: the rate alone
         /// cannot distinguish level 2 ([1,1]) from level 3 ([2,1]) -- both deliver 2 units/s
@@ -132,15 +194,7 @@ namespace CastleDefense.Engine.Models
         /// The tier this player's auto-spawner should produce next, or 0 for "nothing".
         /// Wraps the cycle itself so callers never have to know the pattern length.
         /// </summary>
-        public int NextAutoSpawnTier()
-        {
-            if (AutoSpawnLevel <= 0 || AutoSpawnLevel >= AutoSpawnCycles.Length) return 0;
-            var cycle = AutoSpawnCycles[AutoSpawnLevel];
-            if (cycle.Length == 0) return 0;
-            // Modulo rather than a wrapping increment so a level change mid-cycle (which
-            // shortens the array) can never index out of range.
-            return cycle[((AutoSpawnCycleIndex % cycle.Length) + cycle.Length) % cycle.Length];
-        }
+        public int NextAutoSpawnTier() => AutoSpawnTierAt(AutoSpawnLevel, AutoSpawnCycleIndex);
 
         /// <summary>
         /// Cost of auto-spawner <paramref name="level"/>.
@@ -161,7 +215,8 @@ namespace CastleDefense.Engine.Models
             // serialisable-state crash if it reaches AutoSpawnPrice; see ApplyAutoSpawnStep.
             if (level <= 0 || level > MaxAutoSpawnLevel) return double.PositiveInfinity;
             if (level == 17) return 43614;
-            if (level == 18 || level == 19) return 100000;
+            if (level == 18) return 133406;
+            if (level == 19) return 145406;
 
             double x = 2.5 + 0.25 * (level - 1);
             return WholeDollars(EconomyCurve(x) * (x * 4 + 7));
@@ -418,12 +473,12 @@ namespace CastleDefense.Engine.Models
             if (InvestmentCount == 7)
             {
                 Income = 750;
-                InvestmentPrice = 40000;
+                InvestmentPrice = 45296;
             }
             if (InvestmentCount == 8)
             {
                 Income = 2500;
-                InvestmentPrice = 121221;
+                InvestmentPrice = 242442;
             }
         }
 

@@ -409,23 +409,26 @@ namespace CastleDefense.Simulation
                     var clone = engine.Clone(rngSeed: 777);
                     for (int k = 0; k < interval && !clone._state.IsGameOver; k++)
                     {
+                        // Seat 2 first, as in the live loop and ReplayFile.Step: the recorded
+                        // opponent's action lands before seat 1's within a tick.
+                        rf.ApplyEntry(clone, 2, (int)(t + k), reaim: true);
                         var pre = CloneStateOnly(clone._state);
                         shadow.Step(clone, a1[t + k]);
                         botWindow.Add(Diff(pre, clone._state, 1));
-                        clone.ApplyAction(2, a2[t + k]);
                         clone.Tick();
                     }
                 }
 
                 // ── What the HUMAN actually committed to over the SAME window ─────────
+                // reaim: the shadow re-aims its casts too (ApplyAction), so both sides of the
+                // comparison cast the same way. Order and indexing come from ReplayFile.Step.
                 var humanWindow = Spend.New();
                 for (int k = 0; k < interval && !state.IsGameOver; k++)
                 {
-                    var pre = CloneStateOnly(state);
-                    engine.ApplyAction(1, a1[t + k]);
-                    humanWindow.Add(Diff(pre, state, 1));
-                    engine.ApplyAction(2, a2[t + k]);
-                    engine.Tick();
+                    GameState pre = null;
+                    rf.Step(engine, reaim: true,
+                            before: (side, _) => { if (side == 1) pre = CloneStateOnly(state); },
+                            after: (side, _, _) => { if (side == 1) humanWindow.Add(Diff(pre, state, 1)); });
                 }
 
                 tally.Observe(humanWindow, botWindow);

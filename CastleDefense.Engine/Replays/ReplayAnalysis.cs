@@ -194,16 +194,29 @@ namespace CastleDefense.Engine.Replays
                           ? new BotRationale(opt.BotSide, opt.BotSettings) : null;
             var pendingStates = new Dictionary<long, BotRationale.Snapshot>();
 
+            var fid = res.Fidelity;
+            long steps = 0;
             while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
             {
-                engine.Tick();
-                long i = state.CurrentTick - start;
-
-                if (i >= 0 && i < rf.A1.Length)
+                steps++;
+                // Recorded entry for this tick first, then the tick -- ReplayFile.Step owns
+                // the order. The after-hook runs before Tick, so CurrentTick is still the
+                // tick the action was recorded at.
+                int entry = rf.Step(engine, after: (side, a, ok) =>
                 {
-                    if (rf.A1[i] != 0) Apply(rf, engine, 1, state, i, res.Fidelity);
-                    if (rf.A2[i] != 0) Apply(rf, engine, 2, state, i, res.Fidelity);
-                }
+                    fid.Attempted[side]++;
+                    if (ok) return;
+                    fid.Failed[side]++;
+                    if (fid.FirstFailureTick < 0)
+                    {
+                        fid.FirstFailureTick = state.CurrentTick;
+                        fid.FirstFailureSide = side;
+                        fid.FirstFailureAction = a;
+                    }
+                });
+                // A SAMPLE AT TICK T IS THE BOARD AT THE START OF TICK T: every entry before T
+                // applied and played, entry T not yet. That is what a live bot sees at T.
+                long i = state.CurrentTick - start;
 
                 for (int side = 1; side <= 2; side++)
                 {
@@ -212,7 +225,7 @@ namespace CastleDefense.Engine.Replays
                     {
                         armaSeen[side] = true;
                         res.Armageddon[side] = true;
-                        res.ArmageddonSecond[side] = (int)(i / GameEngine.TICKS_PER_SECOND);
+                        res.ArmageddonSecond[side] = (int)((entry >= 0 ? entry : i) / GameEngine.TICKS_PER_SECOND);
                     }
                 }
 
@@ -226,7 +239,12 @@ namespace CastleDefense.Engine.Replays
             }
 
             res.RebuiltWinner = state.WinnerSide;
-            res.RebuiltTicks = state.CurrentTick - start;
+            // PASSES, not CurrentTick - start. The recorder writes one entry per loop pass, and
+            // a pass whose Tick ends the game BEFORE advancing CurrentTick (a delayed nuke
+            // detonating in the scheduled-effect phase) still records its entry. Counting ticks
+            // reported games AF4665 and 7A49A8 as "-1 tick off" while they matched the DB's live
+            // duration_ticks and finals exactly.
+            res.RebuiltTicks = steps;
             for (int side = 1; side <= 2; side++)
             {
                 var p = side == 1 ? state.Player1 : state.Player2;
@@ -245,22 +263,6 @@ namespace CastleDefense.Engine.Replays
                         h.BotThinking = rationale.Explain(snap, h);
 
             return res;
-        }
-
-        private static void Apply(ReplayFile rf, GameEngine engine, int side, GameState state,
-                                  long i, FidelityResult fid)
-        {
-            byte a = side == 1 ? rf.A1[i] : rf.A2[i];
-            fid.Attempted[side]++;
-            bool ok = rf.ApplyRecorded(engine, side, (int)state.CurrentTick, a);
-            if (ok) return;
-            fid.Failed[side]++;
-            if (fid.FirstFailureTick < 0)
-            {
-                fid.FirstFailureTick = state.CurrentTick;
-                fid.FirstFailureSide = side;
-                fid.FirstFailureAction = a;
-            }
         }
 
         private static Sample Sampled(GameState state, GameEngine engine, double[] gadgetSpend,
@@ -385,12 +387,13 @@ namespace CastleDefense.Engine.Replays
                 int endTick = (int)h.Tick;
                 int startTick = Math.Max(0, endTick - opt.ActionWindowSeconds * GameEngine.TICKS_PER_SECOND);
                 long baseTick = rf.StartingTick;
-                // INCLUSIVE OF endTick. The sample is taken at that tick and the recorded
-                // action for it is applied in the same pass, so an exclusive bound drops the
-                // one action most likely to have CAUSED the swing -- which it did: game
-                // 12B538's swing at 0:04 is the invest at tick 120, and the window read
-                // t < 120 and reported "P2 did nothing".
-                for (long t = startTick - baseTick; t <= endTick - baseTick && t < rf.A1.Length; t++)
+                // EXCLUSIVE OF endTick, and that bound is tied to the rebuild order. A sample at
+                // tick T is the board at the START of T (ReplayFile.Step): entries before T have
+                // been applied and played, entry T has not, so it cannot have caused the swing.
+                // This read INCLUSIVE while the rebuild ran tick-first, when the sample at T did
+                // include entry T -- game 12B538's swing at 0:04 was the invest at tick 120.
+                // Under the live order that invest lands in the 0:05 sample instead.
+                for (long t = startTick - baseTick; t < endTick - baseTick && t < rf.A1.Length; t++)
                 {
                     if (t < 0) continue;
                     if (rf.A1[t] != 0) h.P1Actions.Add(ActionName(rf.A1[t], 1, rf, t + baseTick));

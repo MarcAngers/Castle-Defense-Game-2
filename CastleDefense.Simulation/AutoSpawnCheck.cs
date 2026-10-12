@@ -52,9 +52,24 @@ namespace CastleDefense.Simulation
             (15,   7827, 5, new[] { 5, 4, 3, 2, 2 }),
             (16,  12283, 6, new[] { 5, 4, 4, 2, 2, 2 }),
             (17,  43614, 6, new[] { 6, 5, 4, 3, 2, 1 }),
-            (18, 100000, 6, new[] { 7, 6, 6, 5, 5, 4 }),
-            (19, 100000, 6, new[] { 8, 7, 7, 6, 6, 5 }),
+            (18, 133406, 6, new[] { 7, 6, 6, 5, 5, 4 }),
+            (19, 145406, 6, new[] { 7, 6, 6, 5, 5, 5 }),
         };
+
+        // Levels whose every N-th cycle (the 10th, 20th, ...) is promoted, from the spec:
+        // level 19's tier 7 becomes a tier 8 and the tier 6 behind it a tier 7.
+        private static readonly Dictionary<int, (int Every, int[] Tiers)> Promotions = new()
+        {
+            [19] = (10, new[] { 8, 7, 6, 5, 5, 5 }),
+        };
+
+        private static int ExpectedTier(int level, int[] baseTiers, int i)
+        {
+            int round = i / baseTiers.Length, pos = i % baseTiers.Length;
+            if (Promotions.TryGetValue(level, out var promo) && round % promo.Every == promo.Every - 1)
+                return promo.Tiers[pos];
+            return baseTiers[pos];
+        }
 
         public static void Run(string[] args)
         {
@@ -159,7 +174,7 @@ namespace CastleDefense.Simulation
                 bool orderOk = true;
                 for (int i = 0; i < fromAuto.Count; i++)
                 {
-                    if (fromAuto[i] != row.Tiers[i % row.Tiers.Length]) { orderOk = false; break; }
+                    if (fromAuto[i] != ExpectedTier(row.Level, row.Tiers, i)) { orderOk = false; break; }
                 }
 
                 string cycle = string.Join(",", row.Tiers);
@@ -167,6 +182,7 @@ namespace CastleDefense.Simulation
                 if (!rateOk || !orderOk) failures++;
 
                 Console.WriteLine($"  L{row.Level,-2} rate {measuredRate,5:0.00}/s (want {row.PerSecond})  cycle [{cycle}]  {status}"
+                    + (Promotions.TryGetValue(row.Level, out var pr) ? $" every {pr.Every}th [{string.Join(",", pr.Tiers)}]" : "")
                     + (orderOk ? "" : $"  got [{string.Join(",", fromAuto.Take(row.Tiers.Length * 2))}]"));
             }
             }

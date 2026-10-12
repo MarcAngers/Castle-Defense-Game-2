@@ -1429,6 +1429,24 @@ and a mirror correctly reads ~50%. Counting it once instead scored every mirror 
 win and put the whole diagonal at 93-98% — caught on the first render, and the diagonal sitting
 near 50% is the check that it is still right.
 
+**The ARMAGEDDON section** (added 2026-09-12) is the share of games in which at least one side
+bought ARMAGEDDON before the game ended, read off `PlayerState.ArmageddonUsed` into the CSV's
+`p1_armageddon` / `p2_armageddon` columns. It can't be worked out from actions, because
+ARMAGEDDON is action 9, the same id as an invest. It also shows who bought it, how often a
+lone buyer won, and a per-team purchase rate. A CSV from before these columns existed shows
+"no prev" rather than a fake 0% baseline, so **the first sweep after this change has no delta
+on it**, and `--from-csv` on an old CSV shows 0%. First measurement, 16,384 games: **52.1%**
+(±0.8), a lone buyer won 99.9% of the time, and White bought it on 39.6% of its sides while
+Purple bought it on 16.2%.
+
+**The Time cap section** (added 2026-09-12) is the share of games that ran to `MAX_TICKS`
+(18,000 ticks = 10 minutes) instead of ending with a castle destroyed. It needed no new column
+(`IsTimeLimit` has always been in `decided`), so it has a delta against any previous CSV. At the
+cap the castle with more HP wins, and the game is a draw only when both are exactly level. **It
+is almost never reached: 1 game in 16,384.** Shares on the dashboard switch to two or three
+decimals below 1%, because at one decimal that prints "0.0%". The 305 `draw` rows are NOT
+time-cap games; they ended before the cap with no winner.
+
 ## Snipe picks the BEEFIEST unit near the click, not the nearest
 
 Fixed 2026-09-03. Marc: "the Snipe gadget is by far the worst, and I think some of it has to do
@@ -1839,7 +1857,7 @@ single source of truth for `e^(0.0109x^3 + 0.0011x^2 + 0.4351x + 0.5268)`, used 
 repair and the auto-spawner. Investing walks it one integer step per purchase; the
 auto-spawner starts at **x = 2.5 and steps 0.25**, with multiplier `(x*4 + 7)` against
 investing's `(x*4 + 8)`. That is what makes this ladder 19 rungs where investing is 8.
-Levels 17/18/19 are hardcoded (43614 / 100000 / 100000), same reasoning as investing's top
+Levels 17/18/19 are hardcoded (43614 / 133406 / 145406), same reasoning as investing's top
 two. Prices go through `WholeDollars` (ceiling) like every other price.
 
 **The cadence accumulator is an INTEGER counting ticks**, not a double counting fractions of
@@ -2019,6 +2037,52 @@ priced by Marc playing.
 **Note this rung changes the OVERALL figure**, so OVERALL is not comparable across the commit
 that added it. The per-rung rows are.
 
+### The auto-spawner reaction (2026-09-10) -- and the two instruments it added
+
+Marc's report: one $102 machine level makes the bot spend hundreds on gadgets and units. **True,
+and the cause is not the one suspected.** Full record: `BOT_ITERATION_LOG.md`, last entry.
+
+```
+CastleDefense.Simulation.exe --autospawn-reaction recorded <ids...>
+CastleDefense.Simulation.exe --autospawn-reaction gauntlet <id> [--games N] [--maps] [--keep K] [--variant P]
+CastleDefense.Simulation.exe --autospawn-reaction synthetic [--levels 0,1,2] [--at SEC] [--variant P]
+CastleDefense.Simulation.exe --autospawn-reaction profile-diff <profileA> <profileB>
+CastleDefense.Simulation.exe --autospawn-reaction duel --a P [--a P2 ...] --b P|Chipper [--offense firebomb]
+CastleDefense.BotArena.exe ladder ... --machine-rungs
+```
+
+`gauntlet` plays the live bot against Marc's stream as recorded / first K presses / every press
+deleted; `synthetic` isolates the machine against a human who only invests. Both attribute every
+dollar by delta and log WHY each gadget cast was allowed. `--machine-rungs` adds `MachineInvestor`
+and `DeployedBot` to the ladder, because **no default rung ever buys the auto-spawner** -- the same
+one-sided-instrument trap as Chipper. `profile-diff` checks by reflection that a candidate profile
+differs from the shipped one only where intended (profiles are spelled out field by field).
+
+- **~60% of the reaction is TargetValueJustified's `Income >= 50` carve-out**, which approves an
+  offensive cast at ANY target from investment 5. A stream is always on the field, so the gadget
+  fires every cooldown. `CarveOutMinValueFraction` (flag 23) alone was +1.8 to +3.7 OVERALL.
+- **Round 2 supersedes it: free units valued at $0 by the gadget layer (flag 24, `OpponentEconomy.IsFree`)
+  plus ONE drain cap across all gadgets (flag 25) is +4.6 to +5.9 OVERALL in all four arms and
+  Tier4Spam +3.8 to +7.4.** With `FireSpawnExclusion` (flag 27) added it is profile
+  `ShipRound2NoBlocker`: Marc's replayed win rate over his 7 machine games 42% -> 9.8%. **SHIPPED
+  2026-09-10 22:26 into `EconomyBrakeAutoSpawnProfile`** (the singleplayer opponent); `PreRound2`
+  reproduces the bot it replaced. Known cost: Chipper -2.4 to -7.9, entirely ARMAGEDDON-race losses
+  in long games (`duel --b Chipper` -- the chip itself never wins). **Recordings still tag both bots
+  `heuristic_autospawn8`** -- split Marc's games by `played_at` (after unix 1789093568 = new bot).
+- **The bot burned its own army.** With firebomb, 67 own units ignited a game (38% of its burn
+  damage); 29 of them were bodies it PAID FOR after casting. `FireSpawnExclusion` holds paid spawns
+  and reinforcement casts that would walk into our live fire -- paid-after 29 -> 2, enemy damage
+  unchanged. `FirebombSweptFriendlyFireCheck` removes the rest but halves the enemy damage.
+- **Answering the machine with ours was measured twice and is not recommended.** Matching the level
+  (flag 22) did nothing. Valuing it as a blocker through the survival law and the charge rule
+  (flag 26, `TryAutoSpawnerAsBlocker`) is real ALONE (Marc's games 42% -> 28%) but redundant on top
+  of the gadget fix, and costs ARMAGEDDON race time against a lone stream. Its first cut was inert
+  because it sat behind the charge fallback's early return -- check a new mechanism actually fires.
+- **The synthetic's scripted human must never buy ARMAGEDDON.** The first version did, and its
+  shield rewrites `InvulnerableUntilTick` while its nukes hit both castles -- every late-game figure
+  became an ARMAGEDDON race, including a spurious "the stream destroys the bot's castle 28% of the
+  time" (the real figure is 0%).
+
 ## `/analysis` â€” the recurring-analysis pages
 
 Added 2026-09-09 to Marc's spec. A dev-facing area served by the game server itself, reached
@@ -2135,11 +2199,87 @@ replays all seven, and still ends 161 ticks late on different money; reporting t
 would be a lie told confidently. So the banner also compares the rebuilt outcome against the
 row captured live at game over, and claims exactness only when both agree.
 
+**Rebuilt length is counted in PASSES, not `CurrentTick - start`** (fixed 2026-09-14). The
+recorder writes one entry per loop pass, and a pass whose Tick ends the game BEFORE advancing
+CurrentTick -- a delayed nuke detonating in the scheduled-effect phase -- still records its
+entry. Counting ticks reported AF4665 and 7A49A8 as "-1 tick off" when both matched the DB's
+`duration_ticks` and finals exactly. (That also means `duration_ticks` can be one less than the
+replay's entry count, legitimately.)
+
+### Replay rebuild order -- ONE place, and what the order actually is
+
+Added 2026-09-14. Every tool that rebuilds a game from a `.replay` now goes through
+`ReplayFile.Step` (or `EntryIndex` / `ApplyEntry` for the pieces), and must keep doing so:
+
+```
+i = CurrentTick - StartingTick;   apply A2[i], then A1[i];   engine.Tick();
+```
+
+It encodes two facts about the live loop (`bot.Update` -> `engine.Tick` -> `RecordTick`):
+
+- **WHEN.** Entry i happened at CurrentTick start + i, before that tick was played.
+- **WHICH SEAT FIRST -- this is the one that mattered.** HeuristicBot and RolloutSearchBot act
+  IMMEDIATELY inside `Update`; a human's click is only QUEUED by GameHub and runs in Tick's
+  `ProcessActions`. So in every bot-in-seat-2 mode the bot's action lands BEFORE the human's
+  within a tick. The readers applied P1 first.
+
+**The backlog entry that prompted this diagnosed "one tick late", and that was wrong.** A loop
+that Ticks first and then applies `A[CurrentTick - start]` lands every entry at the same instant
+as apply-then-Tick, because nothing runs between the end of one Tick and the start of the next.
+It only ever (a) never applied entry 0 -- non-empty in 14 of 376 files -- and (b) sampled a
+board that already included entry T's actions. Measured on DB3C84 with both factors crossed:
+
+| loop | seat order | rebuild ends | P1 castle |
+|---|---|---|---|
+| tick-first | P1 first (old) | 408s | 94.1% |
+| apply-first | P1 first | 408s | 94.1% |
+| tick-first | **P2 first** | **410.8s** | **92.5%** |
+| apply-first (shipped) | **P2 first** | **410.8s** | **92.5%** |
+
+Shipped, it lands on the DB's live finals to the cent (P1 $18,291.5, P2 $5,096.5, 12,324 ticks),
+refuses 0 of 1,311 actions, and `--replay-why` at 313s shows the 17 enemy units ($20,920) the
+bot measured live, where the old order showed none. **Zero refused actions did not catch the
+old order** -- it refused nothing and still rebuilt a different game.
+
+Seat order by mode, from GameHostingService, and `ReplayFile.P1ActsFirstFor(mode, opponent)`:
+
+| mode | first | why |
+|---|---|---|
+| `sp`, `practice`, `accept`, defence watch, search-vs-heuristic watch | P2 | bot/opponent acts in `Update` or the %3 gate; human (or P1 search) after |
+| `leaguewatch:castle_defense_p1_*`, `watch` | P1 | P1's ONNX / random dummy sits in the %3 gate ahead of seat 2 |
+| `mp` | unknowable | both seats queued by the hub in arrival order, which was never recorded; keeps the default |
+
+`ReplayFile` does not know its mode, so the default is P2-first (right for every human
+analysis); `--backfill-balance` sets it from the DB row. **`AnalysisController` does not yet**
+-- it only matters for the six v4-ONNX league-watch games.
+
+Things that moved with it, so a diff against an old run is not read as a regression:
+
+- `--replay-why` feeds `OpponentEconomy` and reads the gates on the board BEFORE either action for
+  the tick (what the bot saw), not after the human's click.
+- `/analysis` highlight windows are now EXCLUSIVE of the sample tick: a sample at T is the board
+  at the START of T, so entry T cannot have caused it (12B538's invest at tick 120 moves from
+  the 0:04 swing to 0:05).
+- `--replay-gauntlet`, `--tier8-cap test`, `--autospawn-reaction gauntlet` now call the bot
+  before the human's click, and from tick 0 rather than tick 1. `--autospawn-reaction` arms use
+  `ReplayFile.WithActions` for their edited streams.
+- `--divergence` applies seat 2 first in both the human window and the shadow clone; it still
+  re-aims casts (`reaim: true`) so both sides of the comparison cast the same way. Oracle and
+  control unchanged (1.000 / 0); the full-corpus oracle's `timing_lift` moved 64.52 -> 64.63
+  and windows 85,668 -> 84,962. The heuristic and clone standings above were NOT re-run.
+- `--export-policy-table`, `--defender-trace`, `--score-decomp` keep their ApplyAction casting
+  (`reaim: true`); only the order changed. The policy table was not re-exported.
+
+**Not migrated:** the legacy raw-byte readers in `Simulation/Program.cs` (`--export-bc`, the
+invest-availability and eval-calibration dumps, `--trace-human`) parse v1 files themselves
+and apply P1 before P2. `--replay-format-check` now asserts the order (seat order both ways,
+entry 0 consumed, the hook sees the recorded tick, exactly TickCount passes).
+
 ## CDRP v4 â€” the balance fingerprint and the ARMAGEDDON flags
 
 Added 2026-09-09, appended after the v3 tail for the same reason v3 was appended after v2:
 every byte above is unchanged, so a v3 reader skips it and a v3 file stays readable forever.
-`--replay-format-check` covers v4, v3 and v2 round trips (39 assertions).
+`--replay-format-check` covers v4, v3 and v2 round trips plus the rebuild order (51 assertions).
 
 ```
 [1]   p1_armageddon_used
@@ -2163,8 +2303,12 @@ endings on checkout here and a fingerprint that tripped on that would cry wolf o
 ### `--backfill-balance` â€” recovering the fingerprint for pre-v4 games
 
 ```
-CastleDefense.Simulation.exe --backfill-balance [--game ID] [--limit N] [--force]
+CastleDefense.Simulation.exe --backfill-balance [--game ID] [--limit N] [--force] [--dry-run] [--verbose]
 ```
+
+`--dry-run` scores and prints but writes nothing to the DB; `--verbose` prints each game's best
+verdict. `--force` includes v4 games, which is how to measure reconstruction over the WHOLE
+corpus rather than only the pre-v4 games that need a fingerprint.
 
 Every game recorded before 2026-09-09 predates the v4 fingerprint. This recovers it from git
 history: each distinct historical content of `master_gadgets.csv` and `master_roster.csv` is
@@ -2209,6 +2353,28 @@ is legal and the outcome reproduces is the version that was used. Measured:
 **Only 4 of 353 games replay cleanly under ANY historical balance file.** Not four per version
 â€” four in total, and all four are ambiguous (several versions fit them equally). The failures
 are flat across the entire date range, including games played last week.
+
+**RE-MEASURED 2026-09-14 after the rebuild-order fix** (see "Replay rebuild order" above), dry
+run, same criterion (0 refused, recorded pass count and winner, DB finals within $1):
+
+| population | old readers, today's CSVs | fixed |
+|---|---|---|
+| pre-v4 (the 353 above) | 3 | **4** |
+| whole corpus (`--force`, 376) | 3 | **6** |
+
+The 353 figure's own "4" was measured against an older working-tree CSV, so 3 -> 4 is the
+like-for-like comparison. Of the +3 on the whole corpus, DB3C84 is the seat-order fix and
+AF4665 / 7A49A8 are the pass-counting fix. **So the order was NOT what broke the corpus** --
+engine drift still is. Zero refused actions under some version: 68 of 376.
+
+Two more findings from the per-game verdicts, neither fixed:
+
+- **Every v4 game from 2026-09-10 refuses ~2 actions (action 9 at the invest cap)**, even
+  under its own fingerprinted CSV. The working tree carries an UNCOMMITTED `PlayerState.cs`
+  change that moves the top rung 40,000 -> 45,296 and ARMAGEDDON 121,221 -> 242,442. That is
+  code, not CSV, so the fingerprint cannot see it.
+- **CA5CF2 (2026-09-14)** reproduces pass count, winner and every action, and still ends with
+  P1 $12,000 richer than the DB. Unexplained.
 
 **This is not a missing-CSV problem. The ENGINE has changed, not the balance data.** A recorded
 action is refused today for reasons no CSV can undo:
@@ -2325,6 +2491,12 @@ with suspicion.
   on spawn, which changes combat targeting — two runs of the same binary over the same
   replays disagreed on castle HP in 3 of 141 games. Now seeded from the game id
   (`ReplayFile.BuildStart`). Anything else reconstructing replays must do the same.
+- **A rebuild that refuses ZERO actions can still be a different game.** Replay readers
+  applied P1's action before P2's within a tick; live, the bot in seat 2 acts first and the
+  human's queued click after it. DB3C84 refused nothing under the wrong order and ended ~3s
+  short with the wrong castle HP. The order lives in `ReplayFile.Step` -- use it, and check a
+  rebuild against the DB's live-captured finals, not just the refusal count. See "Replay
+  rebuild order".
 - **`.replay` never recorded gadget target positions**, only the discrete action id, so
   every reconstruction re-aims casts with the engine's auto-target. `--trace-human` was
   known to have this; `--divergence`, `--export-bc` and `--export-policy-table` all

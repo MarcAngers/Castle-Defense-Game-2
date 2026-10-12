@@ -117,9 +117,9 @@ namespace CastleDefense.Simulation
                     byte a = rf.A1[t];
                     if (a > 0 && a < NActions) counts[bin, a]++;
 
-                    engine.ApplyAction(1, rf.A1[t]);
-                    engine.ApplyAction(2, rf.A2[t]);
-                    engine.Tick();
+                    // Live order via ReplayFile.Step; reaim keeps this exporter's historical
+                    // ApplyAction casting, so only the ordering changed.
+                    rf.Step(engine, reaim: true);
                 }
             }
 

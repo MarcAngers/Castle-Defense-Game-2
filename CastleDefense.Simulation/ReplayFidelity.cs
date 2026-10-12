@@ -109,39 +109,33 @@ namespace CastleDefense.Simulation
 
             for (int i = 0; i < rf.TickCount; i++)
             {
-                if (rf.A1[i] != 0)
+                int entry = i;
+                // ReplayFile.Step owns the order; the row prints between the actions and the tick.
+                rf.Step(engine, after: (side, a, ok) =>
                 {
-                    act1++;
-                    if (!rf.ApplyRecorded(engine, 1, i, rf.A1[i]))
-                    {
-                        fail1++;
-                        if (firstFailTick < 0) { firstFailTick = i; firstFailSide = 1; firstFailAction = rf.A1[i]; }
-                    }
-                }
-                if (rf.A2[i] != 0)
+                    if (side == 1) act1++; else act2++;
+                    if (ok) return;
+                    if (side == 1) fail1++; else fail2++;
+                    if (firstFailTick < 0) { firstFailTick = entry; firstFailSide = side; firstFailAction = a; }
+                },
+                beforeTick: _ => { if (entry % every == 0 || entry == rf.TickCount - 1) PrintRow(entry); });
+                if (state.IsGameOver)
                 {
-                    act2++;
-                    if (!rf.ApplyRecorded(engine, 2, i, rf.A2[i]))
-                    {
-                        fail2++;
-                        if (firstFailTick < 0) { firstFailTick = i; firstFailSide = 2; firstFailAction = rf.A2[i]; }
-                    }
+                    if (entry < rf.TickCount - 1) PrintRow(entry);
+                    break;
                 }
-
-                if (i % every == 0 || i == rf.TickCount - 1)
-                    Console.WriteLine("    " + i.ToString().PadLeft(5) + (i / 30).ToString().PadLeft(6) + " |"
-                        + p1.Money.ToString("F0").PadLeft(8) + p1.Income.ToString("F1").PadLeft(8)
-                        + p1.InvestmentCount.ToString().PadLeft(5) + p1.RepairCount.ToString().PadLeft(4)
-                        + (100.0 * p1.CastleHealth / Math.Max(p1.CastleMaxHealth, 1)).ToString("F0").PadLeft(5)
-                        + "  |" + p2.Money.ToString("F0").PadLeft(8) + p2.Income.ToString("F1").PadLeft(8)
-                        + p2.InvestmentCount.ToString().PadLeft(5) + p2.RepairCount.ToString().PadLeft(4)
-                        + (100.0 * p2.CastleHealth / Math.Max(p2.CastleMaxHealth, 1)).ToString("F0").PadLeft(5)
-                        + "  |" + (fail1 + fail2).ToString().PadLeft(6)
-                        + (state.IsGameOver ? "   <-- REBUILD ENDED EARLY (winner P" + state.WinnerSide + ")" : ""));
-
-                if (state.IsGameOver) break;
-                engine.Tick();
             }
+
+            void PrintRow(int i) =>
+                Console.WriteLine("    " + i.ToString().PadLeft(5) + (i / 30).ToString().PadLeft(6) + " |"
+                    + p1.Money.ToString("F0").PadLeft(8) + p1.Income.ToString("F1").PadLeft(8)
+                    + p1.InvestmentCount.ToString().PadLeft(5) + p1.RepairCount.ToString().PadLeft(4)
+                    + (100.0 * p1.CastleHealth / Math.Max(p1.CastleMaxHealth, 1)).ToString("F0").PadLeft(5)
+                    + "  |" + p2.Money.ToString("F0").PadLeft(8) + p2.Income.ToString("F1").PadLeft(8)
+                    + p2.InvestmentCount.ToString().PadLeft(5) + p2.RepairCount.ToString().PadLeft(4)
+                    + (100.0 * p2.CastleHealth / Math.Max(p2.CastleMaxHealth, 1)).ToString("F0").PadLeft(5)
+                    + "  |" + (fail1 + fail2).ToString().PadLeft(6)
+                    + (state.IsGameOver && i < rf.TickCount - 1 ? "   <-- REBUILD ENDED EARLY (winner P" + state.WinnerSide + ")" : ""));
 
             Console.WriteLine();
             Console.WriteLine("  CHECK 1 -- recorded actions that FAILED in the rebuild:");

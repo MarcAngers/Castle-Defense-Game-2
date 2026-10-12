@@ -169,20 +169,16 @@ namespace CastleDefense.Simulation
                 var before = new HashSet<Guid>(
                     state.Units.Where(u => u.Side == 2).Select(u => u.InstanceId));
 
-                byte a1 = rf.A1[i], a2 = rf.A2[i];
-                if (a1 != 0) rf.ApplyRecorded(engine, 1, tick, a1);
-                if (a2 != 0) rf.ApplyRecorded(engine, 2, tick, a2);
-
-                // Units bought while the flag is up ARE the attack.
-                if (live && cur != null)
+                // ReplayFile.Step owns the order. Units bought while the flag is up ARE the
+                // attack, so they are collected after the actions and before the tick.
+                rf.Step(engine, beforeTick: _ =>
                 {
+                    if (!live || cur == null) return;
                     cur.Spend = engine.MoneySpentOnUnits[2] - cur.Spend0;
                     foreach (var u in state.Units)
                         if (u.Side == 2 && !before.Contains(u.InstanceId))
                             cur.Units.Add(u.InstanceId);
-                }
-
-                engine.Tick();
+                });
 
                 foreach (var atk in open)
                 {

@@ -144,24 +144,14 @@ namespace CastleDefense.Simulation
 
                 while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
                 {
-                    engine.Tick();
-                    long idx = state.CurrentTick - start;
-
-                    // The human's recorded action for this tick. Past the end of the stream he
-                    // simply stops acting -- the recording ended because the game ended, and
-                    // inventing behaviour past it would be fabricating a player.
-                    if (idx >= 0 && idx < rf.A1.Length)
-                    {
-                        byte a = rf.A1[idx];
-                        if (a != 0)
-                        {
-                            attempted++;
-                            // ApplyAction, NOT ApplyRecorded -- see the class note on re-aiming.
-                            if (engine.ApplyAction(1, a)) landed++;
-                        }
-                    }
-
+                    // The live loop's order (ReplayFile.Step): the bot decides, then the human's
+                    // recorded click for this tick lands, then the tick. Past the end of the
+                    // stream he simply stops acting -- the recording ended because the game
+                    // ended, and inventing behaviour past it would be fabricating a player.
+                    // reaim: ApplyAction, NOT ApplyRecorded -- see the class note on re-aiming.
                     bot.Update(engine);
+                    rf.Step(engine, p2: false, reaim: true,
+                            after: (_, _, ok) => { attempted++; if (ok) landed++; });
 
                     if (humanArmaTick < 0 && state.Player1.ArmageddonUsed) humanArmaTick = state.CurrentTick - start;
                     if (botArmaTick < 0 && state.Player2.ArmageddonUsed) botArmaTick = state.CurrentTick - start;
@@ -323,12 +313,8 @@ namespace CastleDefense.Simulation
 
             while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
             {
-                engine.Tick();
-                long i = state.CurrentTick - startTick;
-                if (i < 0 || i >= rf.A1.Length) continue;
-                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
-                if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
-
+                long i = rf.Step(engine);
+                if (i < 0) continue;
                 if (armaTick[1] < 0 && state.Player1.ArmageddonUsed) armaTick[1] = i;
                 if (armaTick[2] < 0 && state.Player2.ArmageddonUsed) armaTick[2] = i;
             }
@@ -437,13 +423,7 @@ namespace CastleDefense.Simulation
             engine.OnGadgetCast += (side, id, pos) => { if (side >= 1 && side <= 2) casts[side]++; };
 
             while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
-            {
-                engine.Tick();
-                long i = state.CurrentTick - start;
-                if (i < 0 || i >= rf.A1.Length) continue;
-                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
-                if (rf.A2[i] != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, rf.A2[i]);
-            }
+                rf.Step(engine);
 
             Console.WriteLine($"=== UPGRADE TIMELINE -- {rf.GameId} ===");
             Console.WriteLine($"  reconstructed {(state.CurrentTick - start) / 30.0:F0}s, winner P{state.WinnerSide}" +
@@ -488,7 +468,10 @@ namespace CastleDefense.Simulation
                                 $"{s.Money[2]:F0},{s.Income[2]:F0},{s.Invest[2]},{s.HpPct[2]:F1}," +
                                 $"{s.RepairSpend[2]:F0},{s.UnitSpend[2]:F0},{s.GadgetSpend[2]:F0}");
             }
-            Console.WriteLine($"wrote {outPath}  ({res.RebuiltTicks / 30}s, winner P{res.RebuiltWinner})");
+            Console.WriteLine($"wrote {outPath}  ({res.RebuiltTicks / 30.0:F1}s, winner P{res.RebuiltWinner}; " +
+                              $"recorded {res.RecordedTicks / 30.0:F1}s, winner P{res.RecordedWinner})");
+            Console.WriteLine($"  rebuilt finals: P1 ${res.FinalMoney[1]:F1} (income {res.FinalIncome[1]:F0}), " +
+                              $"P2 ${res.FinalMoney[2]:F1} (income {res.FinalIncome[2]:F0}) -- compare game_records.db");
 
             // Fidelity is computed on every run now, so say so rather than letting a
             // diverged rebuild be read as the recorded game -- see ReplayAnalysis.
@@ -535,14 +518,15 @@ namespace CastleDefense.Simulation
             var oppEcon = new CastleDefense.Engine.Bot.OpponentEconomy(1);
             while (!state.IsGameOver && state.CurrentTick < GameEngine.MAX_TICKS)
             {
-                engine.Tick();
-                long i = state.CurrentTick - start;
-                if (i < 0 || i >= rf.A1.Length) continue;
-                if (rf.A1[i] != 0) rf.ApplyRecorded(engine, 1, (int)state.CurrentTick, rf.A1[i]);
-
+                // THE BOT'S VIEW AT TICK T is the board BEFORE either recorded action for T: in
+                // the live loop it decided first and the human's click landed after it. So the
+                // tracker is fed and the gates are read here, and ReplayFile.Step applies both
+                // sides at the bottom. This used to apply the human's action first, i.e. showed
+                // the bot a click it could not yet have seen.
+                int i = rf.EntryIndex(state);
                 oppEcon.Update(engine);
 
-                byte a = rf.A2[i];
+                byte a = i >= 0 ? rf.A2[i] : (byte)0;
                 if (a >= 1 && a <= 8 && botTeam != null && a - 1 < botTeam.Roster.Count)
                 {
                     var def = botTeam.Roster[a - 1];
@@ -614,7 +598,7 @@ namespace CastleDefense.Simulation
                         Console.WriteLine();
                     }
                 }
-                if (a != 0) rf.ApplyRecorded(engine, 2, (int)state.CurrentTick, a);
+                rf.Step(engine);
             }
         }
 

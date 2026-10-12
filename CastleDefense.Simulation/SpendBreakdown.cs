@@ -41,22 +41,20 @@ namespace CastleDefense.Simulation
                                 new Dictionary<int, (double t, int n)>(),
                                 new Dictionary<int, (double t, int n)>() };
 
+            double before = 0;
             for (int i = 0; i < rf.TickCount; i++)
             {
-                for (int side = 1; side <= 2; side++)
-                {
-                    byte a = side == 1 ? rf.A1[i] : rf.A2[i];
-                    if (a == 0) continue;
-                    var p = side == 1 ? state.Player1 : state.Player2;
-                    double before = p.Money;
-                    rf.ApplyRecorded(engine, side, i, a);
-                    double cost = before - p.Money;
-                    if (cost <= 0.001) continue;
-                    var cur = spend[side].TryGetValue(a, out var v) ? v : (0.0, 0);
-                    spend[side][a] = (cur.Item1 + cost, cur.Item2 + 1);
-                }
+                // ReplayFile.Step owns the order; the hooks bracket each side's own action.
+                rf.Step(engine,
+                    before: (side, a) => before = (side == 1 ? state.Player1 : state.Player2).Money,
+                    after: (side, a, ok) =>
+                    {
+                        double cost = before - (side == 1 ? state.Player1 : state.Player2).Money;
+                        if (cost <= 0.001) return;
+                        var cur = spend[side].TryGetValue(a, out var v) ? v : (0.0, 0);
+                        spend[side][a] = (cur.Item1 + cost, cur.Item2 + 1);
+                    });
                 if (state.IsGameOver) break;
-                engine.Tick();
             }
 
             var p1 = state.Player1;

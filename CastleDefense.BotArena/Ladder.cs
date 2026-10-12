@@ -370,6 +370,20 @@ namespace CastleDefense.BotArena
                 ("HeuristicBot",  side => new HeuristicBotAdapter(side)),
             };
 
+            // --machine-rungs. NO DEFAULT RUNG EVER BUYS THE AUTO-SPAWNER, so the ladder was
+            // structurally blind to any change that answers one -- the same instrument gap
+            // ChipperBaseline was added to close. Opt-in so OVERALL stays comparable with every
+            // earlier run unless asked for.
+            if (args.Contains("--machine-rungs"))
+            {
+                // Investor + auto-spawner L2 once three rungs are in: Marc's opening.
+                ladder.Add(("MachineInvestor", side => new InvestorBaseline(side, autoLevels: 2)));
+                // The bot Marc actually faces. It buys the machine (attack branch, cap 8),
+                // which the bare-default HeuristicBot rung above never does.
+                ladder.Add(("DeployedBot", side => new HeuristicBotAdapter(side,
+                    HeuristicBotSettings.EconomyBrakeAutoSpawnProfile)));
+            }
+
             // ── Contenders: HeuristicBot as the reference, plus every ONNX checkpoint ──
             // THE REFERENCE ARM. Defaults to bare HeuristicBotSettings.Default, which is what
             // it has always silently been -- and that is a trap: the DEPLOYED singleplayer bot

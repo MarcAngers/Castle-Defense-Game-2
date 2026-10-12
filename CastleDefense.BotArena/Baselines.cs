@@ -99,8 +99,13 @@ namespace CastleDefense.BotArena
         private const int SaveUntilInvestCount = 3;
         private const float ThreatRange = 600f;
         private long _next;
+        // 0 = the original rung, byte for byte. Above 0 this is the MachineInvestor rung
+        // (--machine-rungs): the same investor, plus the auto-spawner up to this level once
+        // three rungs are in -- the line Marc plays (L1-L2 at ~60-90s), and the one no other
+        // rung plays, so the ladder could never see a change that answers it.
+        private readonly int _autoLevels;
 
-        public InvestorBaseline(int side) => _side = side;
+        public InvestorBaseline(int side, int autoLevels = 0) { _side = side; _autoLevels = autoLevels; }
 
         public void Update(GameEngine engine)
         {
@@ -118,6 +123,11 @@ namespace CastleDefense.BotArena
             {
                 return;
             }
+
+            if (_autoLevels > 0 && me.InvestmentCount >= SaveUntilInvestCount
+                && me.AutoSpawnLevel < _autoLevels && me.Money >= me.AutoSpawnPrice
+                && engine.UpgradeAutoSpawn(_side))
+                return;
 
             // Save through the opening — but never while something is walking at the
             // castle, or this degenerates into a bot that dies rich.

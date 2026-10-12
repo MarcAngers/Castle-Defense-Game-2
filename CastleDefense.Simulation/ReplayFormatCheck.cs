@@ -140,6 +140,35 @@ namespace CastleDefense.Simulation
             Check("v2 action p1@5 still parses", old.A1[5], 9);
             Check("v2 no gadget targets", old.GadgetTargets.Count, 0);
 
+            Console.WriteLine("\n-- rebuild order (ReplayFile.Step) --");
+            // The order is invisible when wrong: DB3C84 refused ZERO actions under the old
+            // P1-first order and still rebuilt a game ~3s shorter. So assert the order itself.
+            // Both seats act on tick 0 -- the entry a tick-first loop never applied.
+            var a1 = new byte[rf.TickCount]; var a2 = new byte[rf.TickCount];
+            a1[0] = 1; a2[0] = 1; a1[7] = 1;
+            foreach (bool p1First in new[] { false, true })
+            {
+                var sr = rf.WithActions(a1, a2);
+                sr.P1ActsFirst = p1First;
+                var (st, eng) = sr.BuildStart();
+                var order = new List<string>();
+                long hookTick = -1;
+                int consumed = sr.Step(eng, before: (side, _) => { order.Add("P" + side); hookTick = st.CurrentTick; });
+                string tag = p1First ? "P1ActsFirst" : "default";
+                Check($"{tag}: seat order within a tick", string.Join(",", order), p1First ? "P1,P2" : "P2,P1");
+                Check($"{tag}: entry 0 consumed", consumed, 0);
+                Check($"{tag}: hook sees the recorded tick", hookTick, 0);
+                Check($"{tag}: tick advanced after actions", st.CurrentTick, 1);
+                while (sr.EntryIndex(st) >= 0 && sr.EntryIndex(st) < 7) sr.Step(eng);
+                sr.Step(eng, beforeTick: e => hookTick = st.CurrentTick);
+                Check($"{tag}: entry 7 applied at CurrentTick 7", hookTick, 7);
+            }
+            var tail = rf.WithActions(new byte[rf.TickCount], new byte[rf.TickCount]);
+            var (tst, teng) = tail.BuildStart();
+            while (tail.EntryIndex(tst) >= 0 && !tst.IsGameOver) tail.Step(teng);
+            Check("EntryIndex past the stream is -1", tail.EntryIndex(tst), -1);
+            Check("stream consumed in exactly TickCount steps", tst.CurrentTick, rf.TickCount);
+
             Console.WriteLine($"\n  file size {size} bytes for a 40-tick game with 3 casts");
             Console.WriteLine($"  {_pass} passed, {_fail} failed");
             if (_fail > 0) Console.WriteLine("\n  *** THE REPLAY FORMAT IS BROKEN -- DO NOT RECORD GAMES ***");

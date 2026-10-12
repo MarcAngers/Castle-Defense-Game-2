@@ -63,8 +63,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem ---------------------------------------------------------------------------
+rem  OPEN TO THE LAN, the same as the Visual Studio "CastleDefenseGame2" launch
+rem  profile (applicationUrl http://0.0.0.0:5168), so a phone or a second PC on
+rem  the network can join. Binding "localhost" would listen on loopback only.
+rem  http://localhost:5168 still works on this machine.
+rem ---------------------------------------------------------------------------
 echo.
 echo Starting. Watch for the [data] line - if its timestamp is older than your
 echo CSV edit, the edit did not make it into this build.
 echo.
-dotnet run --project CastleDefenseGame2 -c Debug --no-build --urls http://localhost:5168
+echo Open to the LAN. From another device on the network, browse to:
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do (
+    for /f "tokens=*" %%b in ("%%a") do echo    http://%%b:5168
+)
+echo.
+dotnet run --project CastleDefenseGame2 -c Debug --no-build --urls http://0.0.0.0:5168

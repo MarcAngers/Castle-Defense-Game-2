@@ -96,6 +96,133 @@ namespace CastleDefense.Engine.Replays
             return engine.ApplyAction(side, action);
         }
 
+        // ── THE REBUILD ORDER ────────────────────────────────────────────────────────────
+        //
+        // The live loop (GameHostingService) is, per pass at CurrentTick T:
+        //
+        //     engine.ResetLastActions();  bot.Update(engine);  engine.Tick();  recorder.RecordTick(...)
+        //
+        // Two facts about that loop decide how a rebuild must apply entry i:
+        //
+        //  1. WHEN. Everything recorded in entry i happened at CurrentTick start + i, before
+        //     the tick at start + i was played. So: i = CurrentTick - StartingTick, apply, Tick.
+        //     (A loop that Ticks first and then applies A[CurrentTick - start] lands every entry
+        //     at the same instant -- nothing runs between the end of one Tick and the start of
+        //     the next -- but it never applies entry 0, and a sample taken after its apply
+        //     includes an entry the board at that tick has not played yet.)
+        //
+        //  2. WHICH SEAT FIRST. HeuristicBot / RolloutSearchBot act IMMEDIATELY inside Update,
+        //     while a human's click is only QUEUED by GameHub and runs in Tick's ProcessActions.
+        //     So in every bot-in-seat-2 mode the BOT'S action lands before the HUMAN'S within
+        //     the same tick. Both change state (money, charges, spawn order, the seeded Rng that
+        //     rolls spawn y), so applying P1 first rebuilds a different game whenever both
+        //     sides acted on one tick. This, not (1), is what moved DB3C84's rebuild from 408s
+        //     to the recorded 410.8s. See CLAUDE.md, "Replay rebuild order".
+        //
+        // Every reader goes through EntryIndex / ApplyEntry / Step rather than spelling this out.
+
+        /// <summary>
+        /// Within-tick seat order for <see cref="Step"/>. Default false = P2 FIRST, which is the
+        /// live order for sp, practice, accept, defwatch and search-vs-heuristic watch (see the
+        /// note above). Set it with <see cref="P1ActsFirstFor"/> when the game mode is known.
+        /// </summary>
+        public bool P1ActsFirst;
+
+        /// <summary>
+        /// The seat order the LIVE loop used for a game of this mode, from game_records.db.
+        /// P1 first only where P1 is a bot that acts before seat 2's: the old v4-ONNX league
+        /// watch (its P1 ran inside the %3 gate, ahead of the HeuristicBot) and the random-dummy
+        /// "watch" mode. Multiplayer has BOTH seats queued by the hub in arrival order, which
+        /// was never recorded, so no choice is exact there; it keeps the default.
+        /// </summary>
+        public static bool P1ActsFirstFor(string gameMode, string opponentType) =>
+            gameMode == "watch" ||
+            (opponentType != null && opponentType.StartsWith("leaguewatch:castle_defense_p1_", StringComparison.Ordinal));
+
+        /// <summary>
+        /// The same game with EDITED action streams, for counterfactual arms (delete a
+        /// purchase, keep only the first N) that still need the rebuild order from
+        /// <see cref="Step"/>. Both arrays must be the original length. Shallow: the header and
+        /// the gadget-target table are shared, and neither is mutated by a rebuild.
+        /// </summary>
+        public ReplayFile WithActions(byte[] a1, byte[] a2)
+        {
+            if (a1.Length != TickCount || a2.Length != TickCount)
+                throw new ArgumentException("edited streams must keep the recorded length");
+            var c = (ReplayFile)MemberwiseClone();
+            c.A1 = a1;
+            c.A2 = a2;
+            return c;
+        }
+
+        /// <summary>
+        /// The recorded entry that belongs to the tick the engine is ABOUT to play, i.e. the
+        /// one to apply before the next <c>engine.Tick()</c>. Returns -1 before the stream
+        /// begins or after it ends, where there is nothing recorded to apply.
+        /// </summary>
+        public int EntryIndex(GameState state)
+        {
+            long i = state.CurrentTick - StartingTick;
+            return i >= 0 && i < TickCount ? (int)i : -1;
+        }
+
+        /// <summary>
+        /// Applies one side's recorded action for <paramref name="entry"/>. A wait (0) is a
+        /// no-op that returns true. The gadget-target key is the ABSOLUTE tick the recorder
+        /// stamped, StartingTick + entry -- several readers used to pass the relative index,
+        /// which is only the same number for a game that started at tick 0.
+        /// <paramref name="reaim"/> routes through ApplyAction instead, ignoring the recorded
+        /// target: correct for the replay gauntlet, which plays the stream on a DIFFERENT
+        /// board where the recorded aim means nothing.
+        /// </summary>
+        public bool ApplyEntry(GameEngine engine, int side, int entry, bool reaim = false)
+        {
+            byte a = side == 1 ? A1[entry] : A2[entry];
+            if (a == 0) return true;
+            return reaim ? engine.ApplyAction(side, a)
+                         : ApplyRecorded(engine, side, (int)(StartingTick + entry), a);
+        }
+
+        /// <summary>
+        /// One rebuild step in the live order: this tick's recorded actions for the requested
+        /// sides, in <see cref="P1ActsFirst"/> order, then <c>engine.Tick()</c>.
+        ///
+        /// A caller driving seat 2 with a LIVE bot calls <c>bot.Update(engine)</c> first and
+        /// passes <paramref name="p2"/> false, which is exactly the live loop: bot, then the
+        /// human's queued click, then Tick.
+        ///
+        /// <paramref name="before"/> fires just before a non-wait action is applied and
+        /// <paramref name="after"/> just after it with the success flag; one side completes
+        /// before the other starts, so a per-side money diff taken in them is clean. Both run
+        /// before the Tick, so CurrentTick in them is still the tick the action was recorded at.
+        /// <paramref name="beforeTick"/> fires once, after both sides' actions and before the
+        /// Tick, with the entry index. Like the live loop, the Tick runs even if an action has
+        /// just ended the game (past game over it only drains queued input and due effects).
+        /// Returns the entry index that was consumed (-1 if none).
+        /// </summary>
+        public int Step(GameEngine engine, bool p1 = true, bool p2 = true,
+                        Action<int, byte> before = null, Action<int, byte, bool> after = null,
+                        bool reaim = false, Action<int> beforeTick = null)
+        {
+            int i = EntryIndex(engine._state);
+            if (i >= 0)
+            {
+                for (int k = 0; k < 2; k++)
+                {
+                    int side = (k == 0) == P1ActsFirst ? 1 : 2;
+                    if (side == 1 ? !p1 : !p2) continue;
+                    byte a = side == 1 ? A1[i] : A2[i];
+                    if (a == 0) continue;
+                    before?.Invoke(side, a);
+                    bool ok = ApplyEntry(engine, side, i, reaim);
+                    after?.Invoke(side, a, ok);
+                }
+            }
+            beforeTick?.Invoke(i);
+            engine.Tick();
+            return i;
+        }
+
         /// <summary>True when the human in seat 1 never acted. Marc re-rolls until he gets
         /// the matchup he wants and the discarded attempts still record; 11 were quarantined
         /// on 2026-08-05 but the pattern recurs, and such a game is all "wait".</summary>

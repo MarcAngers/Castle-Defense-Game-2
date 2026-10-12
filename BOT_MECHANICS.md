@@ -231,7 +231,7 @@ repair 1, and repair 8 costs more than ARMAGEDDON.
 ### Auto-spawner — 19 rungs, and the bot cannot buy it
 
 Same curve at a different scale: `x = 2.5 + 0.25*(L-1)`, multiplier `(x*4 + 7)`.
-Levels 17/18/19 are hardcoded (43,614 / 100,000 / 100,000).
+Levels 17/18/19 are hardcoded (43,614 / 133,406 / 145,406).
 
 | L | price | cumulative | free units/s | tier cycle |
 |---|---|---|---|---|
@@ -252,8 +252,8 @@ Levels 17/18/19 are hardcoded (43,614 / 100,000 / 100,000).
 | 15 | 7,828 | 24,529 | 5 | [5,4,3,2,2] |
 | 16 | 12,284 | 36,813 | 6 | [5,4,4,2,2,2] |
 | 17 | 43,614 | 80,427 | 6 | [6,5,4,3,2,1] |
-| 18 | 100,000 | 180,427 | 6 | [7,6,6,5,5,4] |
-| 19 | 100,000 | 280,427 | 6 | [8,7,7,6,6,5] |
+| 18 | 133,406 | 213,833 | 6 | [7,6,6,5,5,4] |
+| 19 | 145,406 | 359,239 | 6 | [7,6,6,5,5,5], every 10th cycle [8,7,6,5,5,5] |
 
 **Units per second IS the cycle length** — deliberately not a separate column.
 The accumulator is an integer counting ticks, never a float.

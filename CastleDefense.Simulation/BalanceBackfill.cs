@@ -82,6 +82,8 @@ namespace CastleDefense.Simulation
             if (repoRoot == null) { Console.WriteLine("Not inside a git checkout."); return; }
 
             bool force = args.Contains("--force");
+            // --dry-run scores every game and prints the verdicts, but writes nothing to the DB.
+            bool dryRun = args.Contains("--dry-run");
             int limit = 0;
             string only = null;
             for (int i = 1; i < args.Length; i++)
@@ -125,6 +127,9 @@ namespace CastleDefense.Simulation
                 // A v4 replay already KNOWS. Never overwrite a recording with an inference.
                 if (rf.HasV4 && !string.IsNullOrEmpty(rf.GadgetsHash) && !force) continue;
                 rows.TryGetValue(rf.GameId, out var row);
+                // The within-tick seat order depends on which seats were bots -- see
+                // ReplayFile.P1ActsFirst. Without the row it keeps the singleplayer default.
+                if (row != null) rf.P1ActsFirst = ReplayFile.P1ActsFirstFor(row.GameMode, row.OpponentType);
                 jobs.Add((f, rf, row));
                 if (limit > 0 && jobs.Count >= limit) break;
             }
@@ -267,6 +272,30 @@ namespace CastleDefense.Simulation
                                   $"{(ver == null ? "?" : ver.Sha + " " + ver.Date.ToString("yyyy-MM-dd"))}");
             }
 
+            // THE RECONSTRUCTION HEADLINE, stated directly rather than left to be added up from
+            // the labels above: a game counts when AT LEAST ONE version rebuilds it with zero
+            // refused actions, the recorded tick count and winner, and the DB's live finals.
+            // Default wins are split out because they cannot reproduce a tick count by nature.
+            bool IsDefault(GameDatabase.AnalysisRow r) => r?.EndReason is "disconnect" or "abandoned";
+            var anyExact = jobs.Where(j => trials[j.rf.GameId].Any(x => x.t.Exact)).ToList();
+            var anyClean = jobs.Where(j => trials[j.rf.GameId].Any(x => !x.t.Threw && x.t.Failed == 0)).ToList();
+            int real = jobs.Count(j => !IsDefault(j.row));
+            Console.WriteLine($"\n  REPRODUCED under at least one version: {anyExact.Count} of {jobs.Count} " +
+                              $"({anyExact.Count(j => !IsDefault(j.row))} of {real} excluding default wins)");
+            Console.WriteLine($"  zero refused actions under at least one version: {anyClean.Count} of {jobs.Count}");
+            foreach (var grp in jobs.GroupBy(j => j.row?.GameMode ?? "(no row)").OrderByDescending(g => g.Count()))
+                Console.WriteLine($"    {grp.Key,-10} {grp.Count(j => anyExact.Contains(j)),4} of {grp.Count(),4} reproduced");
+
+            if (args.Contains("--verbose"))
+                foreach (var j in jobs.OrderBy(j => j.row?.PlayedAt ?? 0))
+                {
+                    var best = trials[j.rf.GameId].OrderBy(x => x.t.Cost).First();
+                    Console.WriteLine($"    {j.rf.GameId} v{j.rf.Version} {j.row?.GameMode ?? "?",-8} {j.row?.EndReason ?? "normal",-10} " +
+                                      $"{(j.row == null ? "" : DateTimeOffset.FromUnixTimeSeconds(j.row.PlayedAt).LocalDateTime.ToString("MM-dd HH:mm"))}  " +
+                                      $"best {best.cand.Label}: {best.t.Why}");
+                }
+
+            if (dryRun) { Console.WriteLine("\n  --dry-run: nothing written to game_records.db"); return; }
             foreach (var kv in results)
                 db.SetInferredBalance(kv.Key, kv.Value.g, kv.Value.r, kv.Value.method, kv.Value.detail);
             Console.WriteLine($"\n  wrote {results.Count} rows to game_records.db");

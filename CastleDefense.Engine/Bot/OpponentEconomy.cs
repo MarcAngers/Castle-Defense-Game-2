@@ -114,6 +114,17 @@ namespace CastleDefense.Engine.Bot
 
         public OpponentEconomy(int enemySide) => _enemySide = enemySide;
 
+        // Every enemy unit this tracker matched to a FREE spawn (opening squad, auto-spawner,
+        // reinforcements) rather than charging it as a purchase. Recorded so the bot can value
+        // what killing a unit actually costs the opponent -- a free unit's roster price is not
+        // money they spent, and the auto-spawner makes another one next second regardless.
+        // Matching is by TIER against the owed schedule, so when a paid and a free unit of the
+        // same tier spawn together the two ids can swap; the COUNT of free units is exact.
+        private readonly HashSet<Guid> _freeIds = new HashSet<Guid>();
+
+        /// <summary>True if this enemy unit was matched to a free spawn rather than a purchase.</summary>
+        public bool IsFree(Guid instanceId) => _freeIds.Contains(instanceId);
+
         /// <summary>
         /// Charge an observed gadget cast, and credit what it pays back.
         ///
@@ -204,9 +215,9 @@ namespace CastleDefense.Engine.Bot
                     while (_autoAcc >= GameEngine.TICKS_PER_SECOND)
                     {
                         _autoAcc -= GameEngine.TICKS_PER_SECOND;
-                        var cycle = PlayerState.AutoSpawnCycle(_autoSpawnLevel);
-                        if (cycle.Count == 0) break;
-                        OweFree(cycle[((_autoCycleIndex % cycle.Count) + cycle.Count) % cycle.Count], 1);
+                        int tier = PlayerState.AutoSpawnTierAt(_autoSpawnLevel, _autoCycleIndex);
+                        if (tier <= 0) break;
+                        OweFree(tier, 1);
                         _autoCycleIndex++;
                     }
                 }
@@ -243,7 +254,7 @@ namespace CastleDefense.Engine.Bot
                     var u = state.Units[i];
                     if (u.Side != _enemySide) continue;
                     if (!_seen.Add(u.InstanceId)) continue;
-                    if (ClaimFree(u.Tier)) continue;     // opening squad / auto-spawn / reinforcements
+                    if (ClaimFree(u.Tier)) { _freeIds.Add(u.InstanceId); continue; }     // opening squad / auto-spawn / reinforcements
                     var def = roster.Find(d => d.Id == u.DefinitionId);
                     if (def != null) Spend(def.Cost);
                 }

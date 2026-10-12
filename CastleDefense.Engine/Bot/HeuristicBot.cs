@@ -2058,6 +2058,179 @@ namespace CastleDefense.Engine.Bot
         public bool AutoSpawnerInsteadOfUnits { get; init; } = false;
 
         /// <summary>
+        /// (22) ANSWER THE ENEMY'S AUTO-SPAWNER WITH OUR OWN. Marc, 2026-09-10: "I will spend
+        /// $100 on the auto-spawner and instead of responding with its own auto-spawner the
+        /// bot will spend hundreds of dollars on defensive units and gadgets."
+        ///
+        /// Until this flag, the ONLY auto-spawner purchase on the shipped path was the attack
+        /// branch's substitution (AutoSpawnerInsteadOfUnits), which is scoped to
+        /// `!preferDefense` and sits behind `!inDanger && InvestmentCount >= 6` and the race
+        /// gate. So the machine was never a DEFENSIVE option: an enemy stream could only ever
+        /// be answered by the reactive pipeline -- gadgets on cooldown and bought bodies --
+        /// which is a recurring cost against a one-off purchase that produces forever.
+        ///
+        /// Measured with `--autospawn-reaction synthetic` (a human that only invests and buys
+        /// ONE $102 level at 60s): the shipped bot's reaction spend over the next four minutes
+        /// went $2,987 -> $24,724, and its castle fell in 28% of games to that stream alone.
+        /// 16 of 17 firebomb casts passed ONLY on TargetValueJustified's Income>=50 carve-out.
+        ///
+        /// THE RULE: while the enemy has a machine, keep ours at least at their level (plus
+        /// MatchAutoSpawnMargin). A same-level stream meets theirs mid-field one-for-one, so a
+        /// one-off price answers a permanent threat. Reading the enemy's level is FAIR -- it
+        /// is painted on their machine (View.drawAutoSpawner), and OpponentEconomy reads it on
+        /// the same grounds.
+        ///
+        /// Placed AFTER the investment claim, like BuyAutoSpawner, so a rung we can afford is
+        /// always taken first. It is the same money the reactive pipeline would otherwise
+        /// spend, i.e. a re-allocation of defensive spend rather than a new channel -- the
+        /// shape BOT_ITERATION_LOG.md's iterations 1-7 found safe.
+        /// </summary>
+        public bool MatchEnemyAutoSpawner { get; init; } = false;
+
+        /// <summary>Levels above the enemy's to hold. 0 = mirror their level.</summary>
+        public int MatchAutoSpawnMargin { get; init; } = 0;
+
+        /// <summary>
+        /// Never climb past this level to match. The ladder's top rungs are $43,614,
+        /// $133,406 and $145,406, and the match should not buy those on reflex.
+        /// </summary>
+        public int MatchAutoSpawnMaxLevel { get; init; } = 16;
+
+        /// <summary>
+        /// (23) TargetValueJustified's `Income >= 50` carve-out approves an offensive cast at
+        /// ANY target once income reaches investment 5. Against an enemy auto-spawner that is a
+        /// standing order: there is always a unit on the field, so the offensive gadget fires on
+        /// every cooldown. `--autospawn-reaction synthetic` found 16 of 17 firebomb casts passing
+        /// ONLY on this carve-out -- $2,080 a game at firebomb_2's $270 -- against a stream the
+        /// opponent paid $102 for once.
+        ///
+        /// Above 0, the carve-out additionally requires the target to be worth this fraction of
+        /// the cast. 0 reproduces the old rule exactly.
+        /// </summary>
+        public double CarveOutMinValueFraction { get; init; } = 0;
+
+        /// <summary>
+        /// (24) FREE UNITS ARE FREE. Weight applied to an enemy unit's roster price wherever the
+        /// GADGET layer values its targets (TargetValueJustified, the drain cap's pays-for-itself
+        /// override, BigSpendJustified's target value) when OpponentEconomy matched that unit to
+        /// a free spawn -- opening squad, auto-spawner, reinforcements. Marc, 2026-09-10: "the
+        /// free auto-spawned units are evaluated at their full costs when we should be aware
+        /// that these are free units."
+        ///
+        /// Killing a free unit costs the opponent nothing -- the machine makes another next
+        /// second -- so as an ECONOMIC trade it is worth nothing. Its blocking/damage threat is
+        /// still real, and is still seen: the danger path (time-to-death, the survival law) reads
+        /// the board, not prices. 1.0 = the old rule. Needs OpponentEconomy, i.e.
+        /// RaceAwareSpending; without it this is a no-op.
+        /// </summary>
+        public double FreeUnitValueWeight { get; init; } = 1.0;
+
+        /// <summary>
+        /// (25) ONE DRAIN CAP ACROSS ALL GADGETS. The existing GadgetIncomeDrainCap (flag 18) is
+        /// PER FAMILY at 30% of income, so three slots may together burn ~90% of income, and
+        /// firebomb_2 ($270 / 8s) sits under its own 30% once income passes ~$113/s. Above 0,
+        /// every gadget cast that is neither under attack (TTD < DrainCapTtdSeconds) nor paying
+        /// for itself draws on a SHARED allowance accruing at this fraction of income, banked
+        /// up to GadgetSharedDrainCapSeconds of it. Additive to flag 18, not a replacement.
+        /// </summary>
+        public double GadgetSharedDrainFraction { get; init; } = 0;
+        public double GadgetSharedDrainCapSeconds { get; init; } = 20;
+
+        /// <summary>
+        /// (26) THE AUTO-SPAWNER AS A DEFENSIVE OPTION, valued by what it DOES. Marc: "evaluate
+        /// based on what the spawner actually does ... effective stall as well as unit clearing.
+        /// We should be able to adapt that system to multiple unit spawns over time."
+        ///
+        /// Sits in SpendOnUnits' REACTIVE path, mirroring the attack path's substitution: the
+        /// machine competes with the body this decision was about to buy, from the same budget.
+        /// A level is bought when BOTH hold:
+        ///   NEED   -- the survival law (ThreatModel.RequiredBlockRate over the same target
+        ///             DefensiveResponse plans against) asks for more bodies per second than our
+        ///             machine already delivers. The law already knows a stream of tier-1s against
+        ///             a repaired castle needs NOTHING, which is the case matching got wrong.
+        ///   PAYBACK -- the next level that actually raises bodies/sec, priced cumulatively,
+        ///             repays itself within BlockerAutoSpawnPaybackSeconds in the roster dollars
+        ///             of units it produces, counting only the share of that rate the threat needs.
+        /// One-off price for a permanent charge-free stream, against a recurring body bill.
+        /// </summary>
+        public bool AutoSpawnerAsBlocker { get; init; } = false;
+        // 60, not the 45 AutoSpawnPaybackSeconds uses: the cheapest tier 1 in the game is $2
+        // (Yellow), so level 1 ($102) repays in 51s of bought bodies and a 45s window could never
+        // approve it for that team whatever the need.
+        public double BlockerAutoSpawnPaybackSeconds { get; init; } = 60;
+        public int BlockerAutoSpawnMaxLevel { get; init; } = 12;
+
+        /// <summary>
+        /// (27) FIRE OR BODIES, NOT BOTH. Measured 2026-09-10 (`--autospawn-reaction duel`,
+        /// firebomb pinned): per game the bot's own fire ignited 67 of its own units ($10,038),
+        /// 38% of all its burn damage -- 31 already on the field at the cast, 29 PAID FOR AFTER
+        /// the cast. Marc: "make sure the bot only does one of these at a time."
+        ///
+        /// While one of our firebombs is pending or burning, a paid spawn (reactive, attack,
+        /// wiper, chip block) or a reinforcements cast is HELD if a unit leaving our castle now
+        /// would walk into the strip before it goes out. The fire keeps its turn; the bodies wait
+        /// for it. A survival emergency overrides. The other half -- not casting onto allies
+        /// already walking in -- is FirebombSweptFriendlyFireCheck (flag 1, rejected 2026-07-31
+        /// in isolation), measured again alongside this.
+        /// </summary>
+        public bool FireSpawnExclusion { get; init; } = false;
+
+        /// <summary>
+        /// (28) AT MOST N OF OUR OWN TIER 8s ON THE FIELD. Marc, 2026-09-14, on DB3C84: against a
+        /// level-18 auto-spawner the bot bought ten $23,000 corns in 27 seconds, every one of them
+        /// through REACTIVE spending. "A lot of things in this game are AoE, so a huge group of
+        /// tier 8 units is about as easy to deal with as a single tier 8."
+        ///
+        /// Counts tier-8 units on the field (the bot has no free source of them). While the count
+        /// is at or above the cap, paid purchases -- reactive, attack and wiper -- cannot pick a
+        /// tier 8. 0 disables.
+        /// </summary>
+        public int MaxOwnTier8OnField { get; init; } = 0;
+
+        /// <summary>
+        /// With MaxOwnTier8OnField reached: false removes tier 8 from the roster so the pipeline
+        /// picks its next-best unit; true HOLDS instead -- a decision that would still have bought a
+        /// tier 8 buys nothing, so the money stays in the bank rather than moving down a tier.
+        /// </summary>
+        public bool Tier8CapHolds { get; init; } = false;
+
+        /// <summary>
+        /// (29) PRICE THE REACTIVE BUDGET AGAINST TIME-TO-DEATH, NOT THE RUNWAY DEFICIT. Above 0,
+        /// `reactiveSpendBudget = max(0, H - TTD) * income * ReactiveSpendEVMultiplier` replaces
+        /// `max(0, timeToInvest - TTD) * income * multiplier`. The wave-wipe raise and the survival
+        /// override still apply on top. The budget is shared, so defensive gadget casts see it too.
+        ///
+        /// WHY (DB3C84, 2026-09-14): the deficit term feeds on its own spending. A purchase lowers
+        /// Money, which pushes timeToInvest out, which RAISES the next decision's budget -- a $23,000
+        /// corn at $2,500/s adds 9.2s of deficit ($34,500 of budget) while buying ~2.2s of TTD. The
+        /// bot spent $184k in three seconds 17s away from ARMAGEDDON. Against a fixed horizon the
+        /// feedback is negative: buying time raises TTD and the budget shrinks.
+        ///
+        /// NOT A RERUN OF SurvivalInstinct, which is a TTD TRIGGER that hands over the whole wallet,
+        /// forces inDanger and blocks investing. This changes no trigger, only how much a decision
+        /// that was already reactive may spend. 0 disables.
+        /// </summary>
+        public double ReactiveBudgetTtdHorizonSeconds { get; init; } = 0;
+
+        /// <summary>
+        /// (30) RACE-PRICE REACTIVE PURCHASES NEAR THE RUNG. RacePricePurchases (flag 12b) exempts
+        /// defence by Marc's rule. This applies the same per-purchase test to reactive unit buys, but
+        /// only once the bot is within RaceReactiveNearSeconds of ARMAGEDDON: a buy that would leave it
+        /// behind the modelled opponent is held rather than downgraded. Needs RaceAwareSpending.
+        /// </summary>
+        public bool RacePriceReactivePurchases { get; init; } = false;
+        public double RaceReactiveNearSeconds { get; init; } = 30;
+
+        /// <summary>
+        /// (31) THE DEFICIT MUST NOT COUNT THE DEFENCE IT PAID FOR. Keeps the runway-deficit budget
+        /// exactly, but reads timeToInvest as if every reactive unit purchase of the last N seconds
+        /// were still in the bank. Flag 29 measured why the deficit term cannot simply be dropped
+        /// (DB3C84 gauntlet 80.8% -> 52%, unit spend x3): its timeToInvest half is what refuses
+        /// defensive spending near a rung. Only its self-feeding half is the bug. 0 disables.
+        /// </summary>
+        public double ReactiveBudgetSpendMemorySeconds { get; init; } = 0;
+
+        /// <summary>
         /// (12) GATE OFFENSIVE SPENDING ON THE ECONOMY RACE. Marc's rule, 2026-09-02: the bot
         /// should be happy to spend offensively so long as the spend does not put it behind in
         /// the economic race, while defensive spend stays allowed so it does not die.
@@ -2539,6 +2712,328 @@ namespace CastleDefense.Engine.Bot
             // hatch scores OVERALL 89.8% / mirror 50.7%, i.e. below this AND below the old
             // default. See SurvivalUncapsReactiveFlow for the mechanism.
             CommittedValueUncapsReactiveFlow = 10000,
+
+            // SHIPPED 2026-09-10 on Marc's call -- ShipRound2NoBlocker. Marc's three problems:
+            // defensive spending drained too fast (the gadget layer's Income>=50 carve-out fired at
+            // anything, free units were priced as if paid for, and three per-family 30% caps let
+            // gadgets burn ~90% of income), and the bot firebombed its own army -- 67 own units a
+            // game with firebomb, 29 of them bodies it paid for AFTER casting.
+            //
+            // Ladder, 400 setups x both modes x two seeds vs this profile's previous self:
+            // OVERALL +4.7 to +6.1 in all four arms, Tier4Spam +3.8 to +7.4, head-to-head vs the
+            // old profile 43-47% -> 63-67%. Marc's 7 machine games replayed: his win rate 42% ->
+            // 9.8%; own units ignited by own fire 48.5 -> 3.9 a game.
+            // KNOWN COST: Chipper -2.4 to -7.9, all of it ARMAGEDDON-race losses in long games --
+            // the chip itself never wins (`--autospawn-reaction duel --b Chipper`).
+            // PreRound2 reproduces the previous deployed bot. BOT_ITERATION_LOG.md, 2026-09-10.
+            CarveOutMinValueFraction = 0.25,
+            FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+        };
+
+        /// <summary>
+        /// EconomyBrakeAutoSpawnProfile + MaxOwnTier8OnField = 2 (flag 28), downgrading to the
+        /// next-best unit at the cap. Marc's DB3C84 test. `--autospawn-reaction profile-diff`
+        /// checks it differs from the shipped profile only there.
+        /// </summary>
+        public static readonly HeuristicBotSettings ShipTier8Cap2 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            MaxOwnTier8OnField = 2,
+        };
+
+        /// <summary>Same cap, but a decision that still wants a tier 8 HOLDS its money instead of downgrading.</summary>
+        public static readonly HeuristicBotSettings ShipTier8Cap2Hold = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            MaxOwnTier8OnField = 2, Tier8CapHolds = true,
+        };
+
+        /// <summary>Shipped profile + flag 29: reactive budget priced against a 15s TTD horizon.</summary>
+        public static readonly HeuristicBotSettings ShipTtdBudget15 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            ReactiveBudgetTtdHorizonSeconds = 15,
+        };
+
+        /// <summary>Same at a 30s horizon.</summary>
+        public static readonly HeuristicBotSettings ShipTtdBudget30 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            ReactiveBudgetTtdHorizonSeconds = 30,
+        };
+
+        /// <summary>Shipped profile + flag 31: the deficit ignores the last 20s of its own reactive spend.</summary>
+        public static readonly HeuristicBotSettings ShipSpendMemory20 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            ReactiveBudgetSpendMemorySeconds = 20,
+        };
+
+        /// <summary>Shipped profile + flag 30: race-priced reactive purchases within 30s of ARMAGEDDON.</summary>
+        public static readonly HeuristicBotSettings ShipRaceReactive = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+            RacePriceReactivePurchases = true,
+        };
+
+        /// <summary>
+        /// EconomyBrakeAutoSpawnProfile as deployed BEFORE the 2026-09-10 round-2 ship -- every
+        /// A/B in that day's log was run against this. Kept so those games and numbers stay
+        /// reproducible by name, the same reason PreCommittedValueUncap exists.
+        /// </summary>
+        public static readonly HeuristicBotSettings PreRound2 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+        };
+
+        /// <summary>
+        /// EconomyBrakeAutoSpawnProfile + MatchEnemyAutoSpawner (flag 22). Every other field is
+        /// copied from the shipped profile verbatim; `--autospawn-reaction profile-diff`
+        /// asserts that by reflection, so the two cannot silently drift apart.
+        /// </summary>
+        public static readonly HeuristicBotSettings ShipMatchAutoSpawn = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            MatchEnemyAutoSpawner = true,
+        };
+
+        /// <summary>Same, holding one level ABOVE the enemy's machine.</summary>
+        public static readonly HeuristicBotSettings ShipMatchAutoSpawn1 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            MatchEnemyAutoSpawner = true, MatchAutoSpawnMargin = 1,
+        };
+
+        /// <summary>Shipped profile + CarveOutMinValueFraction (flag 23) at 0.25.</summary>
+        public static readonly HeuristicBotSettings ShipCarveOut25 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25,
+        };
+
+        /// <summary>Same at 0.5.</summary>
+        public static readonly HeuristicBotSettings ShipCarveOut50 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.5,
+        };
+
+        // ── 2026-09-10 round 2: Marc's three problems, each ALONE on the shipped profile ──
+        // Every one below is EconomyBrakeAutoSpawnProfile verbatim plus the named change;
+        // `--autospawn-reaction profile-diff` asserts that by reflection.
+
+        /// <summary>(1) Free units valued at zero by the gadget layer, plus the 0.25 carve-out floor.</summary>
+        public static readonly HeuristicBotSettings ShipFreeUnits = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+        };
+
+        /// <summary>(1) + one shared gadget drain cap at 30% of income.</summary>
+        public static readonly HeuristicBotSettings ShipFreeUnitsDrain = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+        };
+
+        /// <summary>(2) The auto-spawner valued as a blocker in the reactive path.</summary>
+        public static readonly HeuristicBotSettings ShipMachineBlocker = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            AutoSpawnerAsBlocker = true,
+        };
+
+        /// <summary>(3) Fire or bodies: hold paid spawns / reinforcements that would walk into our fire.</summary>
+        public static readonly HeuristicBotSettings ShipFireExclusion = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            FireSpawnExclusion = true,
+        };
+
+        /// <summary>(3) both halves: the spawn hold AND the swept aim (flag 1, rejected alone in July).</summary>
+        public static readonly HeuristicBotSettings ShipFireBoth = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            FireSpawnExclusion = true, FirebombSweptFriendlyFireCheck = true,
+        };
+
+        /// <summary>All three problems at once: free units + shared drain, machine as blocker, fire or bodies.</summary>
+        public static readonly HeuristicBotSettings ShipRound2 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            AutoSpawnerAsBlocker = true, FireSpawnExclusion = true,
+        };
+
+        /// <summary>ShipRound2 minus the machine blocker -- isolates flag 26 inside the combination.</summary>
+        public static readonly HeuristicBotSettings ShipRound2NoBlocker = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            CarveOutMinValueFraction = 0.25, FreeUnitValueWeight = 0,
+            GadgetSharedDrainFraction = 0.30,
+            FireSpawnExclusion = true,
+        };
+
+        /// <summary>Both halves: answer the machine with ours AND stop the carve-out.</summary>
+        public static readonly HeuristicBotSettings ShipMatchCarve25 = new HeuristicBotSettings
+        {
+            RepairPriceCheck = true, RepairHpFloorPct = 0.45f, RepairMinIntervalSeconds = 1.0,
+            HazardAttackBlackout = true, KillerInstinctInvestLockoutSeconds = 5.0,
+            KillerInstinctPushLatch = true,
+            AutoSpawnerInsteadOfUnits = true, AutoSpawnMaxLevel = 8,
+            RaceAwareSpending = true, RaceSafetySeconds = 0, RacePricePurchases = true,
+            ChipperInvestmentClock = true, ChipperTankSeconds = 30.0,
+            OneWiperAtATime = true, ChargeAwareEverywhere = true,
+            CommittedValueUncapsReactiveFlow = 10000,
+            MatchEnemyAutoSpawner = true, CarveOutMinValueFraction = 0.25,
         };
 
         /// <summary>Shipped profile + the single-chipper investment clock. Marc's rule.</summary>
@@ -3413,6 +3908,9 @@ namespace CastleDefense.Engine.Bot
         private const int HpHistoryWindow = 18;
         private readonly List<int> _recentCastleHealth = new List<int>();
 
+        // Flag 31: reactive unit purchases inside ReactiveBudgetSpendMemorySeconds, oldest first.
+        private readonly Queue<(long tick, double cost)> _recentReactiveSpend = new Queue<(long tick, double cost)>();
+
         private const float EffectivelyInfiniteSeconds = 999999f;
 
         // Distinguishes a static single-tier spam bot (never changes what it spawns,
@@ -3969,6 +4467,30 @@ namespace CastleDefense.Engine.Bot
             float runwayDeficitSeconds = Math.Max(0f, timeToInvestSeconds - timeToDeathSeconds);
             double reactiveSpendBudget = runwayDeficitSeconds * me.Income * _settings.ReactiveSpendEVMultiplier;
 
+            // TTD-HORIZON BUDGET (flag 29). The deficit above feeds on its own spending: every
+            // dollar spent pushes timeToInvest out, which RAISES the budget (DB3C84: $51k -> $77k
+            // -> $104k -> $126k across four $23,000 corns). Priced against a fixed horizon instead,
+            // a purchase that buys time lowers the next decision's budget. See the setting.
+            if (_settings.ReactiveBudgetTtdHorizonSeconds > 0)
+                reactiveSpendBudget = Math.Max(0.0, _settings.ReactiveBudgetTtdHorizonSeconds - timeToDeathSeconds)
+                                      * me.Income * _settings.ReactiveSpendEVMultiplier;
+
+            // SPEND MEMORY (flag 31). Same deficit, but timeToInvest is read as if the reactive
+            // money spent in the last N seconds were still in the bank, so this threat's own
+            // purchases cannot enlarge the deficit that authorises the next one.
+            if (_settings.ReactiveBudgetSpendMemorySeconds > 0 && me.Income > 0.01)
+            {
+                long horizonTick = state.CurrentTick - (long)(_settings.ReactiveBudgetSpendMemorySeconds * GameEngine.TICKS_PER_SECOND);
+                while (_recentReactiveSpend.Count > 0 && _recentReactiveSpend.Peek().tick < horizonTick)
+                    _recentReactiveSpend.Dequeue();
+                double recent = 0;
+                foreach (var s in _recentReactiveSpend) recent += s.cost;
+                double stillNeededIgnoringOwnSpend = Math.Max(0, me.InvestmentPrice - (me.Money + recent));
+                float ttiIgnoringOwnSpend = (float)(stillNeededIgnoringOwnSpend / me.Income);
+                reactiveSpendBudget = Math.Max(0f, ttiIgnoringOwnSpend - timeToDeathSeconds)
+                                      * me.Income * _settings.ReactiveSpendEVMultiplier;
+            }
+
             // --- SURVIVAL INSTINCT ---
             // Marc's report: "the bot dies with plenty of money when it is outmatched...
             // it feels like it gives up as I'm attacking." That is a real logic hole, not
@@ -4136,6 +4658,11 @@ namespace CastleDefense.Engine.Bot
             // chipWorthBlocking instead authorises ONE cheap dedicated purchase below.
             bool inDanger = (enemyIsClose && !investmentRunwayIsSafe) || survivalEmergency;
             LastDecisionWasDanger = inDanger;
+            _survivalEmergencyThisDecision = survivalEmergency;
+            _threatThisDecision = threat;   // same object the gadget layer later nets relief into
+            if (_settings.AutoSpawnerAsBlocker)
+                _defenceTargetThisDecision = Math.Min(SecondsToArmageddon(me), _settings.DefenceHorizonSeconds)
+                                             * _settings.DefenceTargetMultiplier + _settings.SafetyBufferSeconds;
             LastThreatScore = threatScore;
             LastDefenseScore = defenseScore;
             LastTimeToDeathSeconds = timeToDeathSeconds;
@@ -4334,6 +4861,24 @@ namespace CastleDefense.Engine.Bot
                 return;
             }
 
+            // --- ANSWER THEIR MACHINE WITH OURS (flag 22) ---------------------------------
+            // After the investment claim, BEFORE the gadget layer: the gadgets are what an
+            // unanswered stream bleeds (see MatchEnemyAutoSpawner), so the one-off answer gets
+            // the money first. enemyState is the opponent's PlayerState from the top of Decide.
+            if (_settings.MatchEnemyAutoSpawner && !survivalEmergency && !nukeEmergency
+                && enemyState.AutoSpawnLevel > 0)
+            {
+                int want = Math.Min(Math.Min(_settings.MatchAutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel),
+                                    enemyState.AutoSpawnLevel + _settings.MatchAutoSpawnMargin);
+                if (me.AutoSpawnLevel < want && me.Money >= me.AutoSpawnPrice
+                    && Act(() => engine.UpgradeAutoSpawn(_side)))
+                {
+                    AutoSpawnLevelsBought++;
+                    MatchAutoSpawnLevelsBought++;
+                    return;
+                }
+            }
+
             // --- GADGETS: cheap relative to overall spend, high impact, own cooldowns ---
             TryUseOffenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
             TryUseDefenseGadget(engine, me, myUnits, enemyUnits, myCastlePos, inDanger, reactiveSpendBudget);
@@ -4521,9 +5066,11 @@ namespace CastleDefense.Engine.Bot
                     }
                 }
                 UnitDefinition wiper = null;
+                bool wiperTier8Capped = Tier8CapReached(engine);
                 foreach (var d in teamDef.Roster)
                 {
                     if (d.Cost <= 0 || d.Cost > me.Money || d.Cost > maxWorth) continue;
+                    if (wiperTier8Capped && d.Tier == 8) continue;   // flag 28
                     // Same silent failure iteration 1 fixed in SpendOnUnits: without this the
                     // wiper is chosen on price alone, SpawnUnit refuses it for want of a
                     // charge, and the whole decision buys nothing while a charged alternative
@@ -4531,6 +5078,14 @@ namespace CastleDefense.Engine.Bot
                     if (_settings.ChargeAwareEverywhere && !me.HasUnitCharge(d.Id)) continue;
                     if (d.Damage < toughest) continue;
                     if (wiper == null || d.Cost < wiper.Cost) wiper = d;
+                }
+
+                // FIRE OR BODIES (flag 27): a wiper walking into our own fire is the same waste.
+                if (wiper != null && _settings.FireSpawnExclusion && !FireExclusionOverridden()
+                    && SpawnWalksIntoOwnFire(engine, wiper))
+                {
+                    FireHeldSpawns++;
+                    wiper = null;
                 }
 
                 if (wiper != null
@@ -4655,7 +5210,10 @@ namespace CastleDefense.Engine.Bot
                             if (cheapest == null || d.Cost < cheapest.Cost) cheapest = d;
                         }
 
-                        if (cheapest != null
+                        bool fireHeld = cheapest != null && _settings.FireSpawnExclusion
+                            && !FireExclusionOverridden() && SpawnWalksIntoOwnFire(engine, cheapest);
+                        if (fireHeld) FireHeldSpawns++;
+                        if (cheapest != null && !fireHeld
                             && engine._state.Units.Count(u => u.Side == _side) < MaxOwnUnitsOnField
                             && Act(() => engine.SpawnUnit(_side, cheapest.Id)))
                         {
@@ -5192,6 +5750,12 @@ namespace CastleDefense.Engine.Bot
         private bool RacePurchaseAffordable(PlayerState me, double cost)
         {
             if (!_settings.RacePricePurchases) return true;
+            return RacePurchaseAffordableIgnoringFlag(me, cost);
+        }
+
+        /// <summary>RacePurchaseAffordable without its own on/off flag, for flag 30's reactive gate.</summary>
+        private bool RacePurchaseAffordableIgnoringFlag(PlayerState me, double cost)
+        {
             if (!_settings.RaceAwareSpending || _oppEconomy == null) return true;
             if (me.ArmageddonUsed || cost <= 0) return true;
 
@@ -5818,6 +6382,12 @@ namespace CastleDefense.Engine.Bot
             bool richMode = me.Money >= topCost * 3;
             int cap = (richMode || ownUnitCount >= MaxOwnUnitsOnField) ? MaxOwnUnitsOnField * 2 : MaxOwnUnitsOnField;
 
+            // TIER-8 CAP (flag 28). Applied after richMode so the cap does not also lower the
+            // "rich" threshold by hiding the most expensive unit from topCost.
+            bool tier8Capped = Tier8CapReached(engine);
+            if (tier8Capped && !_settings.Tier8CapHolds)
+                roster = roster.Where(d => d.Tier != 8).ToList();
+
             // First cut of this fix applied richMode's RawPower scoring during REACTIVE
             // spending too (preferDefense:true) -- validated at full two-replicate
             // discipline and while it delivered the hoped-for spam gains (Tier1-4 all up,
@@ -5838,6 +6408,15 @@ namespace CastleDefense.Engine.Bot
             // broad gains elsewhere -- worth another look if those three specifically
             // become the priority again, but not blocking this fix.
             bool useRawPower = richMode && !preferDefense;
+
+            // THE AUTO-SPAWNER AS A BLOCKER (flag 26). Evaluated FIRST on the reactive path, ahead
+            // of every early return below. The first cut sat beside the attack path's
+            // substitution, after the pick -- which put it behind the charge fallback's "every
+            // affordable unit is drained, buy nothing" exit, i.e. unreachable in exactly the state
+            // where a charge-free source of bodies is worth most. Measured inert (0.08 levels a game).
+            if (_settings.AutoSpawnerAsBlocker && preferDefense && !killerInstinct
+                && TryAutoSpawnerAsBlocker(engine, me, roster))
+                return;
 
             if (ownUnitCount >= cap) return;
 
@@ -6379,12 +6958,39 @@ namespace CastleDefense.Engine.Bot
                 return;
             }
 
+            // RACE-PRICED DEFENCE NEAR THE RUNG (flag 30). Only within RaceReactiveNearSeconds of
+            // ARMAGEDDON, and only a purchase that would leave us behind the modelled opponent. Holds.
+            if (preferDefense && pick.def != null && _settings.RacePriceReactivePurchases
+                && !me.ArmageddonUsed && SecondsToArmageddon(me) <= _settings.RaceReactiveNearSeconds
+                && !RacePurchaseAffordableIgnoringFlag(me, pick.def.Cost))
+            {
+                RaceReactiveHolds++;
+                return;
+            }
+
+            // TIER-8 CAP, HOLD VARIANT (flag 28): the pipeline still wants a tier 8 and may not have one.
+            if (tier8Capped && pick.def.Tier == 8)
+            {
+                Tier8CapBlocks++;
+                return;
+            }
+
+            // FIRE OR BODIES (flag 27). Hold, do not downgrade: any body walks the same path.
+            if (_settings.FireSpawnExclusion && !FireExclusionOverridden()
+                && SpawnWalksIntoOwnFire(engine, pick.def))
+            {
+                FireHeldSpawns++;
+                return;
+            }
+
             if (Act(() => engine.SpawnUnit(_side, pick.def.Id)))
             {
                 LastSpawnReason = preferDefense ? "reactive" : killerInstinct ? "killerInstinct" : "attack";
                 if (preferDefense)
                 {
                     SpendReactive += pick.def.Cost;
+                    if (_settings.ReactiveBudgetSpendMemorySeconds > 0)
+                        _recentReactiveSpend.Enqueue((engine._state.CurrentTick, pick.def.Cost));   // flag 31
                     if (pick.def.Tier >= 1 && pick.def.Tier <= 8) ReactiveTierCounts[pick.def.Tier]++;
                     if (pick.def.Tier >= 5)
                     {
@@ -6411,22 +7017,82 @@ namespace CastleDefense.Engine.Bot
             }
         }
 
+        /// <summary>
+        /// Flag 26. The machine valued by WHAT IT DOES: bodies per second, for the rest of the
+        /// game, charge-free.
+        ///
+        /// NEED -- the survival law. ThreatModel.RequiredBlockRate over the same planning target
+        /// DefensiveResponse uses gives the bodies/sec that keep the castle alive; our machine
+        /// already supplies r0 of them. The law already knows a tier-1 stream against a repaired
+        /// castle needs nothing, which is why this does not simply match the opponent (flag 22).
+        ///
+        /// PRICE OF THE ALTERNATIVE -- the charge rule. Every unit id holds 5 charges and regains
+        /// one a second, so bought bodies can be sustained at about ONE PER SECOND PER UNIT TYPE.
+        /// The cheapest body per second costs the tier-1 price, the second needs the next-cheapest
+        /// unit, and so on. Replacing bodies a..b per second is therefore worth the sum of the
+        /// a-th..b-th cheapest prices per second -- counting each only as far as the law asks for.
+        /// Pricing every body at the tier-1 price (the first cut) undervalued exactly the bodies
+        /// the bot cannot buy cheaply.
+        ///
+        /// PAYBACK -- buy the next level that actually raises bodies/sec (priced cumulatively,
+        /// since levels 3/4, 6/7... only upgrade tiers) when that replaces its price in bought
+        /// bodies within BlockerAutoSpawnPaybackSeconds. Clearing value is ignored: conservative.
+        /// </summary>
+        private bool TryAutoSpawnerAsBlocker(GameEngine engine, PlayerState me, List<UnitDefinition> roster)
+        {
+            var threat = _threatThisDecision;
+            if (_survivalEmergencyThisDecision || threat == null || threat.Idle) return false;
+
+            int level = me.AutoSpawnLevel;
+            int capLevel = Math.Min(_settings.BlockerAutoSpawnMaxLevel, PlayerState.MaxAutoSpawnLevel);
+            if (level >= capLevel) return false;
+
+            float required = threat.RequiredBlockRate(_defenceTargetThisDecision);
+            int r0 = PlayerState.AutoSpawnUnitsPerSecond(level);
+            LastBlockerNeed = required;
+            if (required <= r0) return false;
+
+            int target = level;
+            double cumulative = 0;
+            while (target < capLevel)
+            {
+                target++;
+                cumulative += PlayerState.AutoSpawnPriceFor(target);
+                if (PlayerState.AutoSpawnUnitsPerSecond(target) > r0) break;
+            }
+            int r1 = PlayerState.AutoSpawnUnitsPerSecond(target);
+            if (r1 <= r0 || !double.IsFinite(cumulative)) return false;
+
+            var prices = roster.Where(d => d.Cost > 0).Select(d => (double)d.Cost).OrderBy(c => c).ToList();
+            double replaced = 0;                 // $ per second of bought bodies this level replaces
+            for (int k = r0 + 1; k <= r1 && k - 1 < prices.Count; k++)
+            {
+                double needed = Math.Clamp(required - (k - 1), 0.0, 1.0);   // share of body k the law needs
+                replaced += prices[k - 1] * needed;
+            }
+            if (replaced <= 0 || cumulative > replaced * _settings.BlockerAutoSpawnPaybackSeconds) return false;
+
+            double price = me.AutoSpawnPrice;    // captured: UpgradeAutoSpawn moves it
+            if (price > me.Money || !Act(() => engine.UpgradeAutoSpawn(_side))) return false;
+
+            AutoSpawnLevelsBought++;
+            BlockerAutoSpawnLevelsBought++;
+            // It is the reactive pipeline's money -- the body it replaces would have come out of it.
+            _reactiveSpendAllowance = Math.Max(0, _reactiveSpendAllowance - price);
+            return true;
+        }
+
         // Below ~1.5x the enemy's average hit, a unit is one-or-two-shot fodder that
         // never gets to swing back enough to matter -- crush its score rather than
         // excluding it outright (so it's still a fallback if literally nothing survives).
         /// <summary>
         /// Roster dollars of free units the auto-spawner delivers per second at
-        /// <paramref name="level"/>. The cycle repeats exactly once per second by
-        /// construction (units/sec IS the cycle length), so summing the cycle's unit costs
-        /// gives a per-second figure directly with no rate term.
+        /// <paramref name="level"/>, averaged over the promotion period so level 19's
+        /// every-10th-second tier 8 is priced in.
         /// </summary>
         private static double AutoSpawnValuePerSecond(List<UnitDefinition> roster, int level)
-        {
-            double total = 0;
-            foreach (int tier in PlayerState.AutoSpawnCycle(level))
-                if (tier >= 1 && tier <= roster.Count) total += roster[tier - 1].Cost;
-            return total;
-        }
+            => PlayerState.AutoSpawnAverageValuePerSecond(level,
+                tier => tier >= 1 && tier <= roster.Count ? roster[tier - 1].Cost : 0);
 
         private static double SurvivabilityMultiplier(UnitDefinition def, float enemyHitDamage)
         {
@@ -6662,6 +7328,69 @@ namespace CastleDefense.Engine.Bot
 
         private readonly Dictionary<string, long> _lastGadgetCastTick = new Dictionary<string, long>();
 
+        // Flag 25's shared gadget allowance. Accrues from tick 0 by elapsed ticks at each cast
+        // attempt, so it needs no per-tick upkeep. Plain value fields: a shallow
+        // GameEngine.Clone never sees the bot, and a cloned bot copies them by value.
+        private double _gadgetAllowance;
+        private long _gadgetAllowanceTick;
+
+        // Flag 27: our own firebombs, pending or burning -- (strip left, strip right, first
+        // burning tick, last burning tick). Pruned lazily by SpawnWalksIntoOwnFire.
+        private readonly List<(float left, float right, long start, long end)> _ownFires
+            = new List<(float, float, long, long)>();
+
+        /// <summary>Paid spawns and reinforcement casts held back by FireSpawnExclusion.</summary>
+        public long FireHeldSpawns { get; private set; }
+
+        // Set per decision in Decide(), read by the spawn sites that do not receive them.
+        private bool _survivalEmergencyThisDecision;
+        private ThreatModel _threatThisDecision;
+        private float _defenceTargetThisDecision;
+
+        /// <summary>
+        /// Would a unit of <paramref name="d"/> leaving our castle NOW walk into one of our own
+        /// fires while it is still burning? Movement is taken as linear at the roster MoveSpeed,
+        /// which ignores map speed effects and contact stops -- an ally that stops short of the
+        /// strip because it met the enemy first is still counted, which errs toward holding.
+        /// Spawn points are the engine's: P1 at `100 - Width`, P2 at 1900 (BOT_MECHANICS.md).
+        /// </summary>
+        private bool SpawnWalksIntoOwnFire(GameEngine engine, UnitDefinition d)
+        {
+            long now = engine._state.CurrentTick;
+            _ownFires.RemoveAll(f => f.end <= now);
+            if (_ownFires.Count == 0 || d == null) return false;
+            float v = d.MoveSpeed;                       // px per tick
+            if (v <= 0.01f) return false;
+            foreach (var f in _ownFires)
+            {
+                float tIn, tOut;
+                if (_side == 1)
+                {
+                    float left0 = 100 - d.Width;          // unit occupies [left0, left0 + Width]
+                    tIn = Math.Max(0, (f.left - (left0 + d.Width)) / v);
+                    tOut = (f.right - left0) / v;
+                }
+                else
+                {
+                    float left0 = GameEngine.MAP_WIDTH - 100;
+                    tIn = Math.Max(0, (left0 - f.right) / v);
+                    tOut = (left0 + d.Width - f.left) / v;
+                }
+                if (tOut < 0) continue;                  // strip is behind the spawn point
+                if (now + tIn < f.end && now + tOut > f.start) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// The fire does not get to hold bodies back while we are dying. Same line the repair
+        /// and the drain cap already draw: a survival emergency, or time-to-death under the
+        /// repair threshold.
+        /// </summary>
+        private bool FireExclusionOverridden()
+            => _survivalEmergencyThisDecision
+               || LastTimeToDeathSeconds < Math.Max(_settings.RepairTtdSeconds, _settings.DrainCapTtdSeconds);
+
         /// <summary>
         /// Single funnel for every gadget cast. Applies the income-drain cap (flag 18) and
         /// records the cast tick. Returns whether the cast actually happened.
@@ -6700,7 +7429,41 @@ namespace CastleDefense.Engine.Bot
                 }
             }
 
+            // SHARED DRAIN CAP (flag 25) -- one allowance for every gadget family together.
+            bool sharedDrainApplies = false;
+            if (_settings.GadgetSharedDrainFraction > 0 && me.Income > 0.01 && def.Cost > 0)
+            {
+                long nowTick = engine._state.CurrentTick;
+                double rate = me.Income * _settings.GadgetSharedDrainFraction;
+                _gadgetAllowance = Math.Min(
+                    _gadgetAllowance + rate * Math.Max(0, nowTick - _gadgetAllowanceTick) / 30.0,
+                    rate * _settings.GadgetSharedDrainCapSeconds);
+                _gadgetAllowanceTick = nowTick;
+                bool attacked = LastTimeToDeathSeconds < _settings.DrainCapTtdSeconds;
+                bool pays = estimatedEnemyValue >= def.Cost;
+                sharedDrainApplies = !attacked && !pays;
+                if (sharedDrainApplies && _gadgetAllowance < def.Cost) return false;
+            }
+
+            // FIRE OR BODIES (flag 27): a reinforcements squad walks out of our castle over the
+            // next few seconds, so it waits for our own fire exactly as a bought body does.
+            if (_settings.FireSpawnExclusion && def.Id.StartsWith("reinforcements")
+                && !FireExclusionOverridden())
+            {
+                var team = GameDataManager.Teams.FirstOrDefault(t => t.Color == me.Team);
+                var lead = team?.Roster.FirstOrDefault();
+                if (lead != null && SpawnWalksIntoOwnFire(engine, lead)) { FireHeldSpawns++; return false; }
+            }
+
             if (!Act(() => engine.UseGadget(_side, def.Id, position))) return false;
+            if (sharedDrainApplies) _gadgetAllowance = Math.Max(0, _gadgetAllowance - def.Cost);
+            if (def.Id.StartsWith("firebomb"))
+            {
+                // Recorded for FireSpawnExclusion. The strip is [pos - Radius, pos + Radius]
+                // (FirebombEffect) and burns from Delay to Delay + HazardDuration after the cast.
+                long start = engine._state.CurrentTick + Math.Max(0, def.Delay);
+                _ownFires.Add((position - def.Radius, position + def.Radius, start, start + Math.Max(0, def.HazardDuration)));
+            }
             _castsThisDecision.Add((def, position));
             _lastGadgetCastTick[def.Id.Split('_')[0].ToLowerInvariant()] = engine._state.CurrentTick;
             // Stagger clock covers TACTICAL casts too -- the point is that the three slots
@@ -6872,6 +7635,15 @@ namespace CastleDefense.Engine.Bot
         /// <summary>Auto-spawner levels bought this game. Diagnostic.</summary>
         public long AutoSpawnLevelsBought { get; private set; }
 
+        /// <summary>Levels bought by MatchEnemyAutoSpawner specifically (a subset of the above).</summary>
+        public long MatchAutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Levels bought by AutoSpawnerAsBlocker (flag 26). A subset of AutoSpawnLevelsBought.</summary>
+        public long BlockerAutoSpawnLevelsBought { get; private set; }
+
+        /// <summary>Bodies/sec the survival law asked for at the last reactive decision (flag 26).</summary>
+        public float LastBlockerNeed { get; private set; }
+
         /// <summary>
         /// Unit spend split by WHY the purchase was made. Added 2026-09-02 to settle whether the
         /// wiper or reactive defence is buying the expensive units -- Marc's 0240D8 question.
@@ -6883,6 +7655,19 @@ namespace CastleDefense.Engine.Bot
         public double SpendReactive { get; private set; }
         public double SpendAttack { get; private set; }
         public double SpendChipBlock { get; private set; }
+
+        /// <summary>Decisions whose pick was a tier 8 refused by the flag-28 cap (hold variant).</summary>
+        public int Tier8CapBlocks { get; private set; }
+
+        /// <summary>Flag 28: are MaxOwnTier8OnField of our tier 8s already on the field?</summary>
+        private bool Tier8CapReached(GameEngine engine)
+        {
+            if (_settings.MaxOwnTier8OnField <= 0) return false;
+            int n = 0;
+            foreach (var u in engine._state.Units)
+                if (u.Side == _side && u.Tier == 8) n++;
+            return n >= _settings.MaxOwnTier8OnField;
+        }
 
         /// <summary>Wiper purchases by the TIER of the unit bought. Diagnostic.</summary>
         public long[] WiperTierCounts { get; } = new long[9];
@@ -6950,6 +7735,9 @@ namespace CastleDefense.Engine.Bot
         /// <summary>Purchases refused by the PRICED race test. Diagnostic.</summary>
         public long RacePricedHolds { get; private set; }
 
+        /// <summary>Reactive purchases held by flag 30 (race-priced defence near the rung). Diagnostic.</summary>
+        public long RaceReactiveHolds { get; private set; }
+
         /// <summary>Seconds of race position the last priced purchase would have cost.</summary>
         public double LastRacePurchaseCostSeconds { get; private set; }
 
@@ -6965,6 +7753,28 @@ namespace CastleDefense.Engine.Bot
         // whether an AOE gadget cast is actually worth its cost (see BigSpendJustified).
         private static double EstimateEnemyValueNear(GameEngine engine, List<Unit> enemyUnits, float position, int radius)
             => Gadgets.GadgetTargeting.ValueNear(engine, enemyUnits, position, radius);
+
+        // The GADGET layer's view of a target's worth -- see FreeUnitValueWeight (flag 24).
+        // At weight 1.0, or with no OpponentEconomy to ask, these are exactly the two helpers
+        // above: no multiply happens, so the default bot is unchanged by construction.
+        private double GadgetUnitCost(GameEngine engine, Unit u)
+        {
+            double c = EstimateUnitCost(engine, u);
+            if (_settings.FreeUnitValueWeight < 1.0 && _oppEconomy != null
+                && u.Side != _side && _oppEconomy.IsFree(u.InstanceId))
+                c *= _settings.FreeUnitValueWeight;
+            return c;
+        }
+
+        private double GadgetValueNear(GameEngine engine, List<Unit> units, float position, int radius)
+        {
+            if (_settings.FreeUnitValueWeight >= 1.0 || _oppEconomy == null)
+                return EstimateEnemyValueNear(engine, units, position, radius);
+            double total = 0;
+            foreach (var u in units)
+                if (Math.Abs(u.Position - position) <= radius) total += GadgetUnitCost(engine, u);
+            return total;
+        }
 
         // Marc's direct playtest feedback: watched the bot spend $200+ (a huge fraction
         // of its money, with income nowhere near able to support it) on goo healing a
@@ -7002,10 +7812,12 @@ namespace CastleDefense.Engine.Bot
         // whole ant swarm for $18. These gadgets should never get BigSpendJustified's
         // "not actually a big spend" pass; only a real value comparison (or the same
         // already-won-the-economy income carve-out) justifies the cost.
-        private static bool TargetValueJustified(PlayerState me, GadgetDefinition def, double estimatedEnemyValue)
+        private bool TargetValueJustified(PlayerState me, GadgetDefinition def, double estimatedEnemyValue)
         {
             if (estimatedEnemyValue >= def.Cost) return true;
-            return me.Income >= 50;
+            // CarveOutMinValueFraction (flag 23): the income carve-out still needs SOME target.
+            return me.Income >= 50
+                && estimatedEnemyValue >= def.Cost * _settings.CarveOutMinValueFraction;
         }
 
         // The offense slot can be any of "nuke" / "firebomb" / "snipe" / "freeze" --
@@ -7052,8 +7864,8 @@ namespace CastleDefense.Engine.Bot
                     // comment can still be a net loss against adaptive opponents once
                     // actually measured -- don't re-attempt an inDanger-based snipe-firing
                     // relaxation without a genuinely different angle.
-                    if (TargetValueJustified(me, def, EstimateUnitCost(engine, nearest)))
-                        used = TryCast(engine, me, def, myCastlePos, EstimateUnitCost(engine, nearest), enemyUnits, myCastlePos);
+                    if (TargetValueJustified(me, def, GadgetUnitCost(engine, nearest)))
+                        used = TryCast(engine, me, def, myCastlePos, GadgetUnitCost(engine, nearest), enemyUnits, myCastlePos);
                     break;
                 }
 
@@ -7089,7 +7901,7 @@ namespace CastleDefense.Engine.Bot
                     // multiplier case below: a cast can be justified by either.
                     double freezeKillValue = enemyUnits
                         .Where(u => u.CurrentHealth + u.CurrentShield <= def.BaseValue)
-                        .Sum(u => EstimateUnitCost(engine, u));
+                        .Sum(u => GadgetUnitCost(engine, u));
                     bool killValueJustifies = TargetValueJustified(me, def, freezeKillValue);
 
                     // Beyond guaranteed kills, freeze's remaining value is a MULTIPLIER on
@@ -7190,8 +8002,8 @@ namespace CastleDefense.Engine.Bot
                         : !myUnits.Any(u => Math.Abs(u.Position - target.Value) <= radius));
                     if (survivesOwnBlast && target.HasValue && nukeable.Count >= 2
                         && nukeFriendlyOk
-                        && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, nukeable, target.Value, radius)))
-                        used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, nukeable, target.Value, radius), enemyUnits, myCastlePos);
+                        && TargetValueJustified(me, def, GadgetValueNear(engine, nukeable, target.Value, radius)))
+                        used = TryCast(engine, me, def, target.Value, GadgetValueNear(engine, nukeable, target.Value, radius), enemyUnits, myCastlePos);
                     break;
                 }
 
@@ -7263,8 +8075,8 @@ namespace CastleDefense.Engine.Bot
                             .ToList();
                         target = safe.Count > 0 ? (int)safe[0] : (int?)null;
                     }
-                    if (target.HasValue && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius)))
-                        used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius), enemyUnits, myCastlePos);
+                    if (target.HasValue && TargetValueJustified(me, def, GadgetValueNear(engine, enemyUnits, target.Value, radius)))
+                        used = TryCast(engine, me, def, target.Value, GadgetValueNear(engine, enemyUnits, target.Value, radius), enemyUnits, myCastlePos);
                     break;
                 }
             }
@@ -7528,8 +8340,8 @@ namespace CastleDefense.Engine.Bot
                     {
                         // Both of these only ever affect enemy units -- no friendly fire risk.
                         int? target = FindBestAoeTarget(enemyUnits, Math.Max(150, def.Radius), myCastlePos, def.Delay, clampToCastle: _settings.ClampProjectionToCastle);
-                        if (target.HasValue && TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius))))
-                            used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius)), enemyUnits, myCastlePos);
+                        if (target.HasValue && TargetValueJustified(me, def, GadgetValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius))))
+                            used = TryCast(engine, me, def, target.Value, GadgetValueNear(engine, enemyUnits, target.Value, Math.Max(150, def.Radius)), enemyUnits, myCastlePos);
                         // SIEGE PRE-CAST (Marc, 2026-08-12). These land after def.Delay, so
                         // dropping one on the enemy castle while we are already sieging pays
                         // even with NO enemy unit on the field: the defender's answer spawns
@@ -7579,8 +8391,8 @@ namespace CastleDefense.Engine.Bot
                         // dollar value caught.
                         bool bhBuyTime = _settings.BlackholeBuyTime && inDanger && def.Cost <= reactiveSpendBudget;
                         if (target.HasValue && !friendlyFire
-                            && (earlyStall || bhBuyTime || TargetValueJustified(me, def, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius))))
-                            used = TryCast(engine, me, def, target.Value, EstimateEnemyValueNear(engine, enemyUnits, target.Value, radius), enemyUnits, myCastlePos);
+                            && (earlyStall || bhBuyTime || TargetValueJustified(me, def, GadgetValueNear(engine, enemyUnits, target.Value, radius))))
+                            used = TryCast(engine, me, def, target.Value, GadgetValueNear(engine, enemyUnits, target.Value, radius), enemyUnits, myCastlePos);
                         break;
                     }
             }
