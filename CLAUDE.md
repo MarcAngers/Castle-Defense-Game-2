@@ -15,13 +15,18 @@ dotnet run --project CastleDefenseGame2
 ```
 Serves at `http://localhost:5168`. The AI opponent loads from `CastleDefenseGame2/AI_Models/castle_defense_bot.onnx`.
 
-That file is **git-ignored (`*.onnx`)**, so a fresh clone does not have it and it cannot be
-rebuilt without a PyTorch checkpoint — copy it between machines. The web host no longer dies
-without it: it logs a warning and disables only the plain ONNX opponent. Singleplayer (`sp`)
-is unaffected because it runs the search bot; `watch` and `vai` are the only modes that need
-the model, and they warn per-game when it is absent. `AIBrain` itself still throws on a
-missing file, so BotArena/Simulation measurement runs fail loudly rather than benchmarking
-nothing.
+The three model locations the game loads at runtime **are tracked** as of `9473adf`:
+`.gitignore` still ignores `*.onnx` wholesale (training checkpoints and GA runs are
+regenerable and were what made the repo unpushable) but un-ignores
+`CastleDefenseGame2/AI_Models/`, `CastleDefenseGame2/league_models/` and
+`CastleDefense.Engine/Data/AI/`. A fresh clone can therefore build **and** play.
+
+The web host nevertheless survives the model being absent — deleted locally, or a clone of
+a commit before `9473adf`. It logs a warning and disables only the plain ONNX opponent.
+Singleplayer (`sp`) is unaffected because it runs the search bot; `watch` and `vai` are the
+only modes that need the model, and they warn per-game when it is missing. `AIBrain` itself
+still throws on a missing file, so BotArena/Simulation measurement runs fail loudly rather
+than quietly benchmarking nothing.
 
 **LAN access:** the default `http` launch profile binds `0.0.0.0:5168`, so other devices
 reach the game at `http://<this-machine-ip>:5168`. Binding is not sufficient on its own —
