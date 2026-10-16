@@ -46,7 +46,9 @@
       "Bash(./CastleDefense.Simulation.exe --export-bc \"c:/repos/Castle-Defense-Game-2/CastleDefenseGame2/bin/Debug/net10.0/recordings\" \"c:/repos/Castle-Defense-Game-2/CastleDefense.PythonAI/bc_mp.bin\")",
       "Bash(./CastleDefense.Simulation.exe --export-bc \"c:/repos/Castle-Defense-Game-2/CastleDefenseGame2/bin/Debug/net10.0/recordings/singleplayer\" \"c:/repos/Castle-Defense-Game-2/CastleDefense.PythonAI/bc_sp.bin\" --p1-only --p1-wins-only)",
       "Bash(ai_env/Scripts/python bc_pretrain.py --model \"castle_defense_p1_v25\" --no-export --epochs 20)",
-      "Bash(xargs grep -l \"selectedLoadout\\\\|selectedTeam\")"
+      "Bash(xargs grep -l \"selectedLoadout\\\\|selectedTeam\")",
+      "PowerShell(dotnet --version)",
+      "PowerShell(dotnet build -c Release 2>&1)"
     ]
   }
 }

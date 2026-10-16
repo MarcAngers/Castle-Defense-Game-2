@@ -88,6 +88,8 @@ namespace CastleDefense.Api.Services
         /// (1s hold, 2s pan, 1s settle), so changing it here alone will desynchronise them.</summary>
         public const double PreGameSeconds = 4.0;
         private readonly IHubContext<GameHub> _hubContext;
+        // Null when no ONNX checkpoint shipped with this build -- see Program.cs.
+        // (No `?` annotation: this project compiles with nullable context disabled.)
         private readonly AIBrain _aiBrain;
         private readonly List<(string name, AIBrain brain)> _leagueModels = new();
         private readonly GameDatabase _db;
@@ -613,6 +615,18 @@ namespace CastleDefense.Api.Services
             var engine = new GameEngine(state, null, engineSeed);
             _gameSeeds[gameId] = engineSeed;
 
+            // "watch" and "vai" are the only modes whose side 2 is driven by the plain
+            // ONNX brain -- "sp" uses the search bot. With no checkpoint on this machine
+            // those two would run with an idle P2, which looks like a game rather than
+            // like a broken one, so say so out loud instead.
+            if (_aiBrain == null && (gameMode == "watch" || gameMode == "vai"))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[AI] Game {gameId} mode '{gameMode}' needs the ONNX model, which is not " +
+                                  "installed -- player 2 will not act. Other modes are unaffected.");
+                Console.ResetColor();
+            }
+
             engine.OnGadgetAnimation += (gadgetId, side, position, targetId) =>
             {
                 _hubContext.Clients.Group(gameId).SendAsync("PlayGadgetAnimation", gadgetId, side, position, targetId);
@@ -808,7 +822,8 @@ namespace CastleDefense.Api.Services
                             }
 
                             // P2 AI / opponent
-                            if ((engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
+                            if (_aiBrain != null
+                                && (engine._state.GameMode == "sp"  || engine._state.GameMode == "vai" ||
                                 engine._state.GameMode == "watch")
                                 && !_heuristicOpponents.ContainsKey(gameId)
                                 && !_searchOpponents.ContainsKey(gameId))

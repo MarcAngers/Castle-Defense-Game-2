@@ -4,6 +4,7 @@ using CastleDefense.Api.Services;
 using CastleDefense.Api.Services.Analysis;
 using CastleDefense.Engine.Data;
 using CastleDefense.Engine.Models;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,11 +14,43 @@ builder.Services.AddSignalR();
 // Rejoin tokens and the disconnect grace window. Singleton because it outlives any one
 // socket by design -- that is the entire point of it.
 builder.Services.AddSingleton<ReconnectService>();
-builder.Services.AddSingleton<GameHostingService>();
+// NOTE: GameHostingService is NOT registered by type here. It is registered further down
+// with an explicit factory, because its AIBrain argument is deliberately allowed to be
+// null when no ONNX checkpoint is installed and the container cannot supply a null
+// service. Registering it both ways would leave a type-based registration that throws
+// on construction whenever the model is absent.
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GameHostingService>());
 
+// The ONNX checkpoint is git-ignored (.gitignore: *.onnx), so a fresh clone on a new
+// machine does not have one. That used to kill the whole web host at startup, taking
+// down multiplayer, the search-bot singleplayer modes and the Acceptance Test along
+// with it -- none of which need this model. Boot without it instead and disable only
+// the plain ONNX opponent. AIBrain itself stays strict (it throws on a missing file)
+// because BotArena and Simulation construct it for measurement runs, where silently
+// having no model would produce a quietly meaningless benchmark.
 string modelPath = Path.Combine(AppContext.BaseDirectory, "AI_Models", "castle_defense_bot.onnx");
-builder.Services.AddSingleton<AIBrain>(new AIBrain(modelPath));
+AIBrain aiBrain = null;
+if (File.Exists(modelPath))
+{
+    aiBrain = new AIBrain(modelPath);
+}
+else
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"[AI] No ONNX model at {modelPath} -- the plain ONNX opponent is disabled.");
+    Console.WriteLine("[AI] Everything else (multiplayer, search/heuristic bots, Acceptance Test) still works.");
+    Console.WriteLine("[AI] To enable it: copy a castle_defense_bot.onnx into that folder, or run export_onnx.py.");
+    Console.ResetColor();
+}
+if (aiBrain != null) builder.Services.AddSingleton(aiBrain);
+
+builder.Services.AddSingleton<GameHostingService>(sp => new GameHostingService(
+    sp.GetRequiredService<IHubContext<GameHub>>(),
+    aiBrain,
+    sp.GetRequiredService<GameDatabase>(),
+    sp.GetRequiredService<ReconnectService>(),
+    sp.GetRequiredService<IConfiguration>(),
+    sp.GetRequiredService<IHostEnvironment>()));
 
 // Recordings used to live under AppContext.BaseDirectory (bin/<Config>/net10.0/recordings),
 // which is git-ignored, disposable build output -- a routine bin/obj cleanup permanently

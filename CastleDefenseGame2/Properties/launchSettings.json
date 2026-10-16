@@ -2,8 +2,18 @@
   "profiles": {
     "http": {
       "commandName": "Project",
+      "_comment": "0.0.0.0 binds every interface so other devices on the LAN can reach the game at http://<this-machine-ip>:5168. localhost here would bind the loopback only and refuse every non-local connection. launchBrowser is off because Chromium refuses to navigate to a 0.0.0.0 URL, which is what VS/dotnet run would auto-open from applicationUrl -- open http://localhost:5168 yourself instead. The old launchUrl was 'swagger', but this project configures no Swagger/OpenAPI, so it only ever opened a 404.",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://0.0.0.0:5168"
+    },
+    "http-localhost-only": {
+      "commandName": "Project",
+      "_comment": "Loopback-only variant for ordinary VS debugging when you do NOT want the game exposed to the LAN. Auto-opens a browser, which is safe here because localhost navigates fine.",
       "launchBrowser": true,
-      "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
@@ -29,7 +39,8 @@
     },
     "CastleDefenseGame2": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "_comment": "Same LAN binding as the 'http' profile; launchBrowser off for the same 0.0.0.0 reason.",
+      "launchBrowser": false,
       "applicationUrl": "http://0.0.0.0:5168",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"

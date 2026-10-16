@@ -15,6 +15,22 @@ dotnet run --project CastleDefenseGame2
 ```
 Serves at `http://localhost:5168`. The AI opponent loads from `CastleDefenseGame2/AI_Models/castle_defense_bot.onnx`.
 
+That file is **git-ignored (`*.onnx`)**, so a fresh clone does not have it and it cannot be
+rebuilt without a PyTorch checkpoint — copy it between machines. The web host no longer dies
+without it: it logs a warning and disables only the plain ONNX opponent. Singleplayer (`sp`)
+is unaffected because it runs the search bot; `watch` and `vai` are the only modes that need
+the model, and they warn per-game when it is absent. `AIBrain` itself still throws on a
+missing file, so BotArena/Simulation measurement runs fail loudly rather than benchmarking
+nothing.
+
+**LAN access:** the default `http` launch profile binds `0.0.0.0:5168`, so other devices
+reach the game at `http://<this-machine-ip>:5168`. Binding is not sufficient on its own —
+Windows Firewall must also allow inbound TCP 5168 **on the profile matching the current
+network's category** (`Get-NetConnectionProfile`; a network marked Public needs the rule
+scoped to Public, or the network re-categorised as Private). Testing from the host's own
+LAN IP does NOT prove this works: loopback traffic to a local address never crosses the
+firewall. Verify from an actual second device.
+
 **Run a single training arena (for debugging):**
 ```
 dotnet run --project CastleDefense.Simulation -- 5000
